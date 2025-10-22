@@ -11,12 +11,12 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/vanclief/compose/components/logger"
-	"github.com/vanclief/compose/components/scheduler"
 	"github.com/vanclief/agent-composer/runtime/orchestra"
 	"github.com/vanclief/agent-composer/server"
 	"github.com/vanclief/agent-composer/server/controller"
 	"github.com/vanclief/agent-composer/server/interfaces/rest"
+	"github.com/vanclief/compose/components/logger"
+	"github.com/vanclief/compose/components/scheduler"
 )
 
 const (

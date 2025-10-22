@@ -4,10 +4,10 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
-	"github.com/vanclief/compose/components/rest/requests"
-	"github.com/vanclief/compose/drivers/databases/relational/postgres/pagination"
 	"github.com/vanclief/agent-composer/runtime/events"
 	"github.com/vanclief/agent-composer/server/resources/hooks"
+	"github.com/vanclief/compose/components/rest/requests"
+	"github.com/vanclief/compose/drivers/databases/relational/postgres/pagination"
 )
 
 func (h *Handler) ListHooks(c echo.Context) error {

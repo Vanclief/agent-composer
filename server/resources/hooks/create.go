@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation"
-	"github.com/vanclief/ez"
 	"github.com/vanclief/agent-composer/models/hook"
+	"github.com/vanclief/ez"
 )
 
 type CreateRequest struct {

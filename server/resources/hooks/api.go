@@ -1,9 +1,9 @@
 package hooks
 
 import (
-	"github.com/vanclief/compose/drivers/databases/relational"
 	"github.com/vanclief/agent-composer/runtime/orchestra"
 	"github.com/vanclief/agent-composer/server/controller"
+	"github.com/vanclief/compose/drivers/databases/relational"
 )
 
 type API struct {

@@ -29,7 +29,7 @@ type ToolPolicy struct {
 // ---- Constructor ----
 
 func NewToolPolicy(mcpName string, tools []string) (*ToolPolicy, error) {
-	const op = "parrot.NewToolPolicy"
+	const op = "agent.NewToolPolicy"
 
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -134,7 +134,7 @@ func (tp *ToolPolicy) Delete(ctx context.Context, db bun.IDB) error {
 // ---- Queries ----
 
 func GetToolPolicyByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*ToolPolicy, error) {
-	const op = "parrot.GetToolPolicyByID"
+	const op = "agent.GetToolPolicyByID"
 
 	tp := new(ToolPolicy)
 	err := db.NewSelect().
@@ -151,7 +151,7 @@ func GetToolPolicyByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*ToolPoli
 }
 
 func GetToolPoliciesByMCP(ctx context.Context, db bun.IDB, mcpName string) ([]*ToolPolicy, error) {
-	const op = "parrot.GetToolPoliciesByMCP"
+	const op = "agent.GetToolPoliciesByMCP"
 
 	var policies []*ToolPolicy
 	err := db.NewSelect().

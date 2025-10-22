@@ -1,11 +1,11 @@
 package server
 
 import (
+	"github.com/vanclief/agent-composer/server/resources/agents/sessions"
+	"github.com/vanclief/agent-composer/server/resources/agents/specs"
+	"github.com/vanclief/agent-composer/server/resources/hooks"
 	"github.com/vanclief/compose/components/rest/requests"
 	"github.com/vanclief/ez"
-	"github.com/vanclief/agent-composer/server/resources/hooks"
-	"github.com/vanclief/agent-composer/server/resources/parrots/runs"
-	"github.com/vanclief/agent-composer/server/resources/parrots/templates"
 )
 
 // TODO: Add requester here
@@ -13,24 +13,26 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 	// Step 2: Handle unauthenticated requests
 	switch body := request.GetBody().(type) {
 
-	// Parrots
-	case *templates.ListRequest:
-		return s.ParrotsAPI.Templates.List(request.GetContext(), nil, body)
-	case *templates.GetRequest:
-		return s.ParrotsAPI.Templates.Get(request.GetContext(), nil, body)
-	case *templates.CreateRequest:
-		return s.ParrotsAPI.Templates.Create(request.GetContext(), nil, body)
-	case *templates.UpdateRequest:
-		return s.ParrotsAPI.Templates.Update(request.GetContext(), nil, body)
-	case *templates.DeleteRequest:
-		return s.ParrotsAPI.Templates.Delete(request.GetContext(), nil, body)
-	case *templates.RunRequest:
-		return s.ParrotsAPI.Templates.Run(request.GetContext(), nil, body)
+	// Agents
+	case *specs.ListRequest:
+		return s.AgentsAPI.AgentSpecs.List(request.GetContext(), nil, body)
+	case *specs.GetRequest:
+		return s.AgentsAPI.AgentSpecs.Get(request.GetContext(), nil, body)
+	case *specs.CreateRequest:
+		return s.AgentsAPI.AgentSpecs.Create(request.GetContext(), nil, body)
+	case *specs.UpdateRequest:
+		return s.AgentsAPI.AgentSpecs.Update(request.GetContext(), nil, body)
+	case *specs.DeleteRequest:
+		return s.AgentsAPI.AgentSpecs.Delete(request.GetContext(), nil, body)
+	case *specs.SessionRequest:
+		return s.AgentsAPI.AgentSpecs.StartSessions(request.GetContext(), nil, body)
 
-	case *runs.ListRequest:
-		return s.ParrotsAPI.Runs.List(request.GetContext(), nil, body)
-	case *runs.GetRequest:
-		return s.ParrotsAPI.Runs.Get(request.GetContext(), nil, body)
+	case *sessions.ListRequest:
+		return s.AgentsAPI.Sessions.List(request.GetContext(), nil, body)
+	case *sessions.GetRequest:
+		return s.AgentsAPI.Sessions.Get(request.GetContext(), nil, body)
+	case *sessions.DeleteRequest:
+		return s.AgentsAPI.Sessions.Delete(request.GetContext(), nil, body)
 
 		// Hooks
 	case *hooks.ListRequest:

@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/mark3labs/mcp-go/client"
-	"github.com/vanclief/ez"
 	"github.com/vanclief/agent-composer/mcp"
+	"github.com/vanclief/ez"
 )
 
 // NewClient returns an initialized MCP client backed by the in-process shell server.

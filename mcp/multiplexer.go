@@ -7,8 +7,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/client"
 	mcpproto "github.com/mark3labs/mcp-go/mcp"
-	"github.com/vanclief/ez"
 	"github.com/vanclief/agent-composer/runtime/llm"
+	"github.com/vanclief/ez"
 )
 
 type Mux struct {

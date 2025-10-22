@@ -4,10 +4,10 @@ import (
 	"context"
 	"strings"
 
-	"github.com/vanclief/compose/drivers/databases/relational/postgres/pagination"
-	"github.com/vanclief/ez"
 	"github.com/vanclief/agent-composer/models/hook"
 	"github.com/vanclief/agent-composer/runtime/events"
+	"github.com/vanclief/compose/drivers/databases/relational/postgres/pagination"
+	"github.com/vanclief/ez"
 )
 
 type ListRequest struct {

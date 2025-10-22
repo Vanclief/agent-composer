@@ -7,35 +7,35 @@ import (
 )
 
 type Event struct {
-	ID          uint64            `json:"id"`
-	Type        EventType         `json:"type"`
-	ParrotRunID uuid.UUID         `json:"parrot_run_id"`
-	ParrotName  string            `json:"parrot_name"`
-	Timestamp   types.UnixSeconds `json:"timestamp"`
-	Data        map[string]any    `json:"data"`
+	ID             uint64            `json:"id"`
+	Type           EventType         `json:"type"`
+	AgentSessionID uuid.UUID         `json:"agent_session_id"`
+	AgentName      string            `json:"agent_name"`
+	Timestamp      types.UnixSeconds `json:"timestamp"`
+	Data           map[string]any    `json:"data"`
 }
 
-func New(eventType EventType, parrotRunID uuid.UUID, parrotName string, data map[string]any) Event {
+func New(eventType EventType, agentSessionID uuid.UUID, agentName string, data map[string]any) Event {
 	return Event{
-		Type:        eventType,
-		ParrotRunID: parrotRunID,
-		ParrotName:  parrotName,
-		Data:        data,
+		Type:           eventType,
+		AgentSessionID: agentSessionID,
+		AgentName:      agentName,
+		Data:           data,
 	}
 }
 
 type EventType string
 
 const (
-	EventTypeRunStarted  EventType = "run_started"
-	EventTypeRunEnded    EventType = "run_ended"
-	EventTypePreToolUse  EventType = "pre_tool_use"
-	EventTypePostToolUse EventType = "post_tool_use"
+	EventTypeSessionStarted EventType = "session_started"
+	EventTypeSessionEnded   EventType = "session_ended"
+	EventTypePreToolUse     EventType = "pre_tool_use"
+	EventTypePostToolUse    EventType = "post_tool_use"
 )
 
 var evenTypeSet = enums.Set([]EventType{
-	EventTypeRunStarted,
-	EventTypeRunEnded,
+	EventTypeSessionStarted,
+	EventTypeSessionEnded,
 	EventTypePreToolUse,
 	EventTypePostToolUse,
 })

@@ -9,21 +9,23 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	// API
 	api := e.Group("/api")
 
-	// Parrots
-	parrots := api.Group("/parrots")
+	// Agents
+	agents := api.Group("/agents")
 
-	templates := parrots.Group("/templates")
-	templates.GET("", h.ListParrotTemplatess)
-	templates.GET("/:id", h.GetParrotTemplate)
-	templates.POST("", h.CreateParrotTemplate)
-	templates.PUT("/:id", h.UpdateParrotTemplate)
-	templates.DELETE("/:id", h.DeleteParrotTemplate)
-	templates.POST("/:id/run", h.RunParrotTemplate)
+	specs := agents.Group("/specs")
+	specs.GET("", h.ListAgentSpecs)
+	specs.GET("/:id", h.GetAgentSpec)
+	specs.POST("", h.CreateAgentSpec)
+	specs.PUT("/:id", h.UpdateAgentSpec)
+	specs.DELETE("/:id", h.DeleteAgentSpec)
 
-	runs := parrots.Group("/runs")
-	runs.GET("", h.ListParrotRuns)
-	runs.GET("/:id", h.GetParrotRun)
-	runs.DELETE("/:id", h.DeleteParrotRun)
+	// TODO: Move this to sessions
+	specs.POST("/:id/run", h.StartAgentSessions)
+
+	sessions := agents.Group("/sessions")
+	sessions.GET("", h.ListAgentSessions)
+	sessions.GET("/:id", h.GetAgentSession)
+	sessions.DELETE("/:id", h.DeleteAgentSession)
 
 	// Hooks
 	hooks := api.Group("/hooks")

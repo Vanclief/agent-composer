@@ -5,15 +5,15 @@ import "github.com/vanclief/compose/primitives/enums"
 type EventType string
 
 const (
-	EventTypeRunStarted  EventType = "run_started"
-	EventTypeRunEnded    EventType = "run_ended"
-	EventTypePreToolUse  EventType = "pre_tool_use"
-	EventTypePostToolUse EventType = "post_tool_use"
+	EventTypeSessionStarted EventType = "session_started"
+	EventTypeSessionEnded   EventType = "session_ended"
+	EventTypePreToolUse     EventType = "pre_tool_use"
+	EventTypePostToolUse    EventType = "post_tool_use"
 )
 
 var evenTypeSet = enums.Set([]EventType{
-	EventTypeRunStarted,
-	EventTypeRunEnded,
+	EventTypeSessionStarted,
+	EventTypeSessionEnded,
 	EventTypePreToolUse,
 	EventTypePostToolUse,
 })

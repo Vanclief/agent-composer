@@ -7,10 +7,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
+	"github.com/vanclief/agent-composer/server/controller"
 	"github.com/vanclief/compose/components/scheduler"
 	"github.com/vanclief/compose/drivers/databases/relational"
 	"github.com/vanclief/ez"
-	"github.com/vanclief/agent-composer/server/controller"
 )
 
 type Orchestrator struct {
@@ -40,32 +40,32 @@ func NewOrchestrator(rootCtx context.Context, ctrl *controller.Controller, sch *
 	return o, nil
 }
 
-func (o *Orchestrator) CreateRuns(ctx context.Context, templateID uuid.UUID, parrallelRuns int) ([]*ParrotRunInstance, error) {
-	const op = "orchestra.CreateRuns"
+func (o *Orchestrator) CreateSessions(ctx context.Context, agentSpecID uuid.UUID, parallelSessions int) ([]*AgentSessionInstance, error) {
+	const op = "orchestra.CreateSessions"
 
-	instances := make([]*ParrotRunInstance, 0, parrallelRuns)
+	instances := make([]*AgentSessionInstance, 0, parallelSessions)
 
-	for i := 0; i < parrallelRuns; i++ {
-		p, err := NewParrotRunInstance(ctx, o.db, templateID)
+	for i := 0; i < parallelSessions; i++ {
+		session, err := NewAgentSessionInstance(ctx, o.db, agentSpecID)
 		if err != nil {
 			return nil, ez.Wrap(op, err)
 		}
 
-		instances = append(instances, p)
+		instances = append(instances, session)
 	}
 
 	return instances, nil
 }
 
-func (o *Orchestrator) RunInstances(runs []*ParrotRunInstance, prompt string) error {
-	const op = "orchestra.RunInstances"
+func (o *Orchestrator) RunSessions(sessions []*AgentSessionInstance, prompt string) error {
+	const op = "orchestra.RunSessions"
 
-	for i := range runs {
-		runID := fmt.Sprintf("parrot:%s:%d:%d", runs[i].ID, time.Now().UnixNano(), i)
-		o.scheduler.RunOnce(o.rootCtx, runID, func(jobCtx context.Context) {
-			_, err := runs[i].Run(jobCtx, o, prompt)
+	for i := range sessions {
+		sessionID := fmt.Sprintf("agent:%s:%d:%d", sessions[i].ID, time.Now().UnixNano(), i)
+		o.scheduler.RunOnce(o.rootCtx, sessionID, func(jobCtx context.Context) {
+			_, err := sessions[i].Run(jobCtx, o, prompt)
 			if err != nil {
-				log.Error().Err(err).Str("parrot_run_id", runs[i].ID.String()).Msg("parrot run failed")
+				log.Error().Err(err).Str("agent_session_id", sessions[i].ID.String()).Msg("agent session failed")
 			}
 		})
 

@@ -4,8 +4,8 @@ import (
 	"context"
 
 	mcpproto "github.com/mark3labs/mcp-go/mcp"
-	"github.com/vanclief/ez"
 	"github.com/vanclief/agent-composer/runtime/llm"
+	"github.com/vanclief/ez"
 )
 
 func (client *Client) ListTools(ctx context.Context) ([]llm.ToolDefinition, error) {

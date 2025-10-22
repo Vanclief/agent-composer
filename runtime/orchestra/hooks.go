@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"github.com/uptrace/bun"
-	"github.com/vanclief/ez"
 	"github.com/vanclief/agent-composer/models/hook"
+	"github.com/vanclief/ez"
 )
 
 func loadInstanceHooks(ctx context.Context, db bun.IDB, templateName string) (map[hook.EventType][]hook.Hook, error) {

@@ -4,14 +4,14 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
-	"github.com/vanclief/compose/components/ratelimit"
-	"github.com/vanclief/compose/components/rest/requests"
-	"github.com/vanclief/ez"
 	"github.com/vanclief/agent-composer/models/user"
 	"github.com/vanclief/agent-composer/runtime/orchestra"
 	"github.com/vanclief/agent-composer/server/controller"
+	"github.com/vanclief/agent-composer/server/resources/agents"
 	"github.com/vanclief/agent-composer/server/resources/hooks"
-	"github.com/vanclief/agent-composer/server/resources/parrots"
+	"github.com/vanclief/compose/components/ratelimit"
+	"github.com/vanclief/compose/components/rest/requests"
+	"github.com/vanclief/ez"
 )
 
 type Server struct {
@@ -20,15 +20,15 @@ type Server struct {
 	Orchestrator *orchestra.Orchestrator
 
 	// Resources
-	ParrotsAPI *parrots.API
-	HooksAPI   *hooks.API
+	AgentsAPI *agents.API
+	HooksAPI  *hooks.API
 }
 
 func New(ctrl *controller.Controller, orchestrator *orchestra.Orchestrator) *Server {
 	// Initialize App
 	limiter := ratelimit.NewWindowCounter(ctrl.Config.App.RateLimitWindow, ctrl.Config.App.RateLimit)
 
-	parrotsAPI := parrots.NewAPI(ctrl, orchestrator)
+	agentsAPI := agents.NewAPI(ctrl, orchestrator)
 	hooksAPI := hooks.NewAPI(ctrl, orchestrator)
 
 	server := &Server{
@@ -36,7 +36,7 @@ func New(ctrl *controller.Controller, orchestrator *orchestra.Orchestrator) *Ser
 		Orchestrator: orchestrator,
 
 		RateLimiter: limiter,
-		ParrotsAPI:  parrotsAPI,
+		AgentsAPI:   agentsAPI,
 		HooksAPI:    hooksAPI,
 	}
 
