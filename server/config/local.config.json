@@ -1,0 +1,16 @@
+{
+  "app": {
+    "name": "agent-composer",
+    "port": "8080",
+    "debug": false,
+    "version": "0.1.0",
+    "rateLimit": 40,
+    "rateLimitWindow": 10
+  },
+  "postgres": {
+    "host": "localhost:5432",
+    "username": "agent_composer",
+    "database": "agent_composer",
+    "statementTimeout": 15000
+  }
+}
