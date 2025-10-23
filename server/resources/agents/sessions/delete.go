@@ -26,13 +26,13 @@ func (r DeleteRequest) Validate() error {
 	return nil
 }
 
-func (api *API) Delete(ctx context.Context, requester interface{}, request *DeleteRequest) (*agent.Session, error) {
+func (api *API) Delete(ctx context.Context, requester interface{}, request *DeleteRequest) (uuid.UUID, error) {
 	const op = "sessions.API.Delete"
 
 	// Step 1: Get the session
 	session, err := agent.GetAgentSessionByID(ctx, api.db, request.AgentSessionID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return uuid.Nil, ez.Wrap(op, err)
 	}
 
 	// TODO: Permissions check
@@ -40,8 +40,8 @@ func (api *API) Delete(ctx context.Context, requester interface{}, request *Dele
 	// Step 3: Delete the agent session
 	err = session.Delete(ctx, api.db)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return uuid.Nil, ez.Wrap(op, err)
 	}
 
-	return session, nil
+	return session.ID, nil
 }

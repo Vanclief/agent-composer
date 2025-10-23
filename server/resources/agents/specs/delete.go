@@ -26,22 +26,22 @@ func (r DeleteRequest) Validate() error {
 	return nil
 }
 
-func (api *API) Delete(ctx context.Context, requester interface{}, request *DeleteRequest) (*agent.Spec, error) {
+func (api *API) Delete(ctx context.Context, requester interface{}, request *DeleteRequest) (uuid.UUID, error) {
 	const op = "specs.API.Delete"
 
 	// Step 1: Get the agent spec
-	pt, err := agent.GetAgentSpecByID(ctx, api.db, request.AgentSpecID)
+	spec, err := agent.GetAgentSpecByID(ctx, api.db, request.AgentSpecID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return uuid.Nil, ez.Wrap(op, err)
 	}
 
 	// TODO: Permissions check
 
 	// Step 2: Delete the agent spec
-	err = pt.Delete(ctx, api.db)
+	err = spec.Delete(ctx, api.db)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return uuid.Nil, ez.Wrap(op, err)
 	}
 
-	return pt, nil
+	return spec.ID, nil
 }
