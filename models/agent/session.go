@@ -7,7 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
-	"github.com/vanclief/agent-composer/runtime/llm"
+	"github.com/vanclief/agent-composer/runtime/types"
+	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/compose/drivers/databases/relational"
 	"github.com/vanclief/ez"
 )
@@ -20,19 +21,21 @@ var (
 type Session struct {
 	bun.BaseModel `bun:"table:agent_sessions"`
 
-	ID           uuid.UUID            `bun:",pk,type:uuid" json:"id"`
-	AgentSpecID  uuid.UUID            `bun:"type:uuid" json:"agent_spec_id"`
-	Name         string               `json:"name"`
-	Provider     LLMProvider          `json:"provider"`
-	Instructions string               `json:"instructions"`
-	Tools        []llm.ToolDefinition `bun:"type:jsonb,nullzero" json:"-"`
-	Messages     []llm.Message        `bun:"type:jsonb,nullzero" json:"messages"`
-	Status       SessionStatus        `json:"status"`
+	ID              uuid.UUID                    `bun:",pk,type:uuid" json:"id"`
+	AgentSpecID     uuid.UUID                    `bun:"type:uuid" json:"agent_spec_id"`
+	Name            string                       `json:"name"`
+	Provider        LLMProvider                  `json:"provider"`
+	Model           string                       `json:"model"`
+	ReasoningEffort runtimetypes.ReasoningEffort `json:"reasoning_effort"`
+	Instructions    string                       `json:"instructions"`
+	Tools           []types.ToolDefinition       `bun:"type:jsonb,nullzero" json:"-"`
+	Messages        []types.Message              `bun:"type:jsonb,nullzero" json:"messages"`
+	Status          SessionStatus                `json:"status"`
 }
 
 // ---- Constructor ----
 
-func NewAgentSession(agentSpec *Spec, messages []llm.Message) (*Session, error) {
+func NewAgentSession(agentSpec *Spec, messages []types.Message) (*Session, error) {
 	const op = "agent.NewAgentSession"
 
 	id, err := uuid.NewV7()
@@ -41,13 +44,15 @@ func NewAgentSession(agentSpec *Spec, messages []llm.Message) (*Session, error) 
 	}
 
 	session := &Session{
-		ID:           id,
-		AgentSpecID:  agentSpec.ID,
-		Name:         agentSpec.Name,
-		Provider:     agentSpec.Provider,
-		Instructions: agentSpec.Instructions,
-		Messages:     messages,
-		Status:       SessionStatusQueued,
+		ID:              id,
+		AgentSpecID:     agentSpec.ID,
+		Name:            agentSpec.Name,
+		Provider:        agentSpec.Provider,
+		Model:           agentSpec.Model,
+		ReasoningEffort: agentSpec.ReasoningEffort,
+		Instructions:    agentSpec.Instructions,
+		Messages:        messages,
+		Status:          SessionStatusQueued,
 	}
 
 	err = session.Validate()

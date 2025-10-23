@@ -7,14 +7,14 @@ import (
 
 	"github.com/mark3labs/mcp-go/client"
 	mcpproto "github.com/mark3labs/mcp-go/mcp"
-	"github.com/vanclief/agent-composer/runtime/llm"
+	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/ez"
 )
 
 type Mux struct {
 	clients      []*client.Client
 	toolToClient map[string]int
-	mergedTools  []llm.ToolDefinition
+	mergedTools  []runtimetypes.ToolDefinition
 }
 
 // NewMux starts initialized clients list (already started/initialized) and builds an index.
@@ -40,7 +40,7 @@ func NewMux(ctx context.Context, clients ...*client.Client) (*Mux, error) {
 func (m *Mux) refreshTools(ctx context.Context) error {
 	const op = "mcp.Mux.refreshTools"
 
-	merged := make([]llm.ToolDefinition, 0, 16)
+	merged := make([]runtimetypes.ToolDefinition, 0, 16)
 	toolToClient := make(map[string]int)
 
 	for clientIndex, mc := range m.clients {
@@ -49,7 +49,7 @@ func (m *Mux) refreshTools(ctx context.Context) error {
 			return ez.Wrap(op, err)
 		}
 		for _, tool := range result.Tools {
-			// Convert mcp.Tool -> llm.ToolDefinition
+			// Convert mcp.Tool -> ToolDefinition
 			var schemaMap map[string]any
 			schemaBytes, marshalErr := json.Marshal(tool.InputSchema)
 			if marshalErr != nil {
@@ -60,7 +60,7 @@ func (m *Mux) refreshTools(ctx context.Context) error {
 				return ez.Wrap(op, unmarshalErr)
 			}
 
-			converted := llm.ToolDefinition{
+			converted := runtimetypes.ToolDefinition{
 				Name:        tool.Name,
 				Description: tool.Description,
 				JSONSchema:  schemaMap,
@@ -80,13 +80,13 @@ func (m *Mux) refreshTools(ctx context.Context) error {
 	return nil
 }
 
-// ListTools surfaces merged tools in llm.ToolDefinition form.
-func (m *Mux) ListTools(_ context.Context) ([]llm.ToolDefinition, error) {
+// ListTools surfaces merged tools in ToolDefinition form.
+func (m *Mux) ListTools(_ context.Context) ([]runtimetypes.ToolDefinition, error) {
 	return m.mergedTools, nil
 }
 
 // CallTool routes a call by tool name to the owning MCP client and returns a text payload for your LLM transcript.
-func (m *Mux) CallTool(ctx context.Context, call *llm.ToolCall) (string, error) {
+func (m *Mux) CallTool(ctx context.Context, call *runtimetypes.ToolCall) (string, error) {
 	const op = "mcp.Mux.CallTool"
 
 	if call == nil {

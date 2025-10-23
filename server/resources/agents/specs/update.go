@@ -6,7 +6,6 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation"
 	"github.com/google/uuid"
 	"github.com/vanclief/agent-composer/models/agent"
-	"github.com/vanclief/agent-composer/runtime/llm"
 	"github.com/vanclief/ez"
 )
 
@@ -36,7 +35,7 @@ func (api *API) Update(ctx context.Context, requester interface{}, request *Upda
 	const op = "specs.API.Update"
 
 	// Step 1: Get the agent spec
-	pt, err := agent.GetAgentSpecByID(ctx, api.db, request.AgentSpecID)
+	spec, err := agent.GetAgentSpecByID(ctx, api.db, request.AgentSpecID)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
@@ -48,24 +47,19 @@ func (api *API) Update(ctx context.Context, requester interface{}, request *Upda
 
 	// Step 3: Update the agent spec
 	if request.Name != nil {
-		pt.Name = *request.Name
+		spec.Name = *request.Name
 		shouldInsert = true
 	}
 
 	if request.Provider != nil {
-		pt.Provider = *request.Provider
+		spec.Provider = *request.Provider
 		shouldInsert = true
 	}
 
 	if request.Model != nil {
-		pt.Model = *request.Model
+		spec.Model = *request.Model
 
-		llmProvider, err := llm.NewOpenAI()
-		if err != nil {
-			return nil, ez.Wrap(op, err)
-		}
-
-		err = llmProvider.ValidateModel(ctx, pt.Model)
+		err = api.rt.ValidateModel(ctx, spec.Provider, spec.Model)
 		if err != nil {
 			return nil, ez.Wrap(op, err)
 		}
@@ -74,12 +68,7 @@ func (api *API) Update(ctx context.Context, requester interface{}, request *Upda
 	}
 
 	if request.Instructions != nil {
-		pt.Instructions = *request.Instructions
-		shouldInsert = true
-	}
-
-	if request.AllowedTools != nil {
-		pt.AllowedTools = *request.AllowedTools
+		spec.Instructions = *request.Instructions
 		shouldInsert = true
 	}
 
@@ -87,12 +76,12 @@ func (api *API) Update(ctx context.Context, requester interface{}, request *Upda
 		return nil, ez.New(op, ez.EINVALID, "No fields to update", nil)
 	}
 
-	pt.Version += 1
+	spec.Version += 1
 
-	err = pt.Update(ctx, api.db)
+	err = spec.Update(ctx, api.db)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
 
-	return pt, nil
+	return spec, nil
 }

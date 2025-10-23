@@ -11,7 +11,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/vanclief/agent-composer/runtime/orchestra"
+	"github.com/vanclief/agent-composer/runtime"
 	"github.com/vanclief/agent-composer/server"
 	"github.com/vanclief/agent-composer/server/controller"
 	"github.com/vanclief/agent-composer/server/interfaces/rest"
@@ -45,13 +45,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	orchestrator, err := orchestra.NewOrchestrator(rootCtx, ctrl, sch)
+	rt, err := runtime.New(rootCtx, ctrl, sch)
 	if err != nil {
-		log.Err(err).Msg("Error creating orchestrator")
+		log.Err(err).Msg("Error creating runtime")
 		os.Exit(1)
 	}
 
-	server := server.New(ctrl, orchestrator)
+	server := server.New(ctrl, rt)
 
 	group, gctx := errgroup.WithContext(rootCtx)
 

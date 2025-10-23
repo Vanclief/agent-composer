@@ -8,7 +8,7 @@ import (
 	"github.com/vanclief/ez"
 )
 
-// TODO: Add requester here
+// TODO: Add requester (user)
 func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 	// Step 2: Handle unauthenticated requests
 	switch body := request.GetBody().(type) {
@@ -24,17 +24,22 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.AgentsAPI.AgentSpecs.Update(request.GetContext(), nil, body)
 	case *specs.DeleteRequest:
 		return s.AgentsAPI.AgentSpecs.Delete(request.GetContext(), nil, body)
-	case *specs.SessionRequest:
-		return s.AgentsAPI.AgentSpecs.StartSessions(request.GetContext(), nil, body)
 
+		// Sessions
 	case *sessions.ListRequest:
 		return s.AgentsAPI.Sessions.List(request.GetContext(), nil, body)
 	case *sessions.GetRequest:
 		return s.AgentsAPI.Sessions.Get(request.GetContext(), nil, body)
+	case *sessions.CreateRequest:
+		return s.AgentsAPI.Sessions.Create(request.GetContext(), nil, body)
+	case *sessions.ForkRequest:
+		return s.AgentsAPI.Sessions.Fork(request.GetContext(), nil, body)
+	case *sessions.ResumeRequest:
+		return s.AgentsAPI.Sessions.Resume(request.GetContext(), nil, body)
 	case *sessions.DeleteRequest:
 		return s.AgentsAPI.Sessions.Delete(request.GetContext(), nil, body)
 
-		// Hooks
+	// Hooks
 	case *hooks.ListRequest:
 		return s.HooksAPI.List(request.GetContext(), nil, body)
 	case *hooks.GetRequest:

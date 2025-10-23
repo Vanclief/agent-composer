@@ -30,12 +30,12 @@ func (api *API) Get(ctx context.Context, requester interface{}, request *GetRequ
 	const op = "specs.API.Get"
 
 	// Step 1: Get the agent spec
-	pt, err := agent.GetAgentSpecByID(ctx, api.db, request.AgentSpecID)
+	spec, err := agent.GetAgentSpecByID(ctx, api.db, request.AgentSpecID)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
 
 	// TODO: Permissions check
 
-	return pt, nil
+	return spec, nil
 }

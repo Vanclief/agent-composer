@@ -5,17 +5,17 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation"
 	"github.com/vanclief/agent-composer/models/agent"
-	"github.com/vanclief/agent-composer/runtime/llm"
+	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/ez"
 )
 
 type CreateRequest struct {
-	Name            string              `json:"name"`
-	Provider        agent.LLMProvider   `json:"provider"`
-	Model           string              `json:"model"`
-	Instructions    string              `json:"instructions"`
-	ReasoningEffort llm.ReasoningEffort `json:"reasoning_effort"`
-	AllowedTools    []string            `json:"allowed_tools"`
+	Name            string                       `json:"name"`
+	Provider        agent.LLMProvider            `json:"provider"`
+	Model           string                       `json:"model"`
+	Instructions    string                       `json:"instructions"`
+	ReasoningEffort runtimetypes.ReasoningEffort `json:"reasoning_effort"`
+	AllowedTools    []string                     `json:"allowed_tools"`
 }
 
 func (r CreateRequest) Validate() error {
@@ -40,25 +40,20 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 
 	// TODO: Permissions check
 
-	pt, err := agent.NewAgentSpec(request.Name, request.Provider, request.Model, request.Instructions, request.ReasoningEffort, 1, request.AllowedTools)
+	spec, err := agent.NewAgentSpec(request.Name, request.Provider, request.Model, request.Instructions, request.ReasoningEffort, 1)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
 
-	llmProvider, err := llm.NewOpenAI()
+	err = api.rt.ValidateModel(ctx, spec.Provider, spec.Model)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
 
-	err = llmProvider.ValidateModel(ctx, pt.Model)
+	err = spec.Insert(ctx, api.db)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
 
-	err = pt.Insert(ctx, api.db)
-	if err != nil {
-		return nil, ez.Wrap(op, err)
-	}
-
-	return pt, nil
+	return spec, nil
 }

@@ -83,20 +83,3 @@ func (h *Handler) DeleteAgentSpec(c echo.Context) error {
 
 	return h.JSONResponse(c, op, request, requestBody)
 }
-
-func (h *Handler) StartAgentSessions(c echo.Context) error {
-	const op = "Handler.StartAgentSessions"
-
-	request := requests.New(c.Request().Header, c.RealIP())
-
-	resourceID, err := h.GetParameterUUID(c, "id")
-	if err != nil {
-		return h.ManageError(c, op, request, err)
-	}
-
-	requestBody := &specs.SessionRequest{
-		AgentSpecID: resourceID,
-	}
-
-	return h.BindedJSONResponse(c, op, request, requestBody)
-}

@@ -1,4 +1,4 @@
-package llm
+package types
 
 // MessageRole represents the role of a message in the conversation.
 type MessageRole string

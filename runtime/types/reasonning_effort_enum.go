@@ -1,4 +1,4 @@
-package llm
+package types
 
 import "github.com/vanclief/compose/primitives/enums"
 

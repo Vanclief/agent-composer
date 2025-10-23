@@ -1,41 +1,37 @@
-package llm
+package providers
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
 	"github.com/rs/zerolog/log"
+	"github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/ez"
 )
 
-type OpenAI struct {
+type ChatGPT struct {
 	client              *openai.Client
 	responsesToMessages map[string]int
 }
 
-func NewOpenAI() (Provider, error) {
-	const op = "llm.NewOpenAI"
+func NewChatGPT(client *openai.Client) (types.LLMProvider, error) {
+	const op = "providers.NewOpenAI"
 
-	openAI := openai.NewClient()
+	chatgpt := &ChatGPT{client: client, responsesToMessages: make(map[string]int)}
 
-	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
-	if apiKey == "" {
-		return nil, ez.New(op, ez.EINVALID, "missing env var OPENAI_API_KEY", nil)
-	}
-
-	oa := &OpenAI{client: &openAI, responsesToMessages: make(map[string]int)}
-
-	return oa, nil
+	return chatgpt, nil
 }
 
-func (provider *OpenAI) ValidateModel(ctx context.Context, model string) error {
-	const op = "OpenAI.ValidateModel"
+func (provider *ChatGPT) ValidateModel(ctx context.Context, model string) error {
+	const op = "ChatGPT.ValidateModel"
+
+	// NOTE: Probably we can get rid of this method, check once we add another
+	// LLM provider
 
 	if model == "" {
 		return ez.New(op, ez.EINVALID, "model is required", nil)
@@ -45,20 +41,26 @@ func (provider *OpenAI) ValidateModel(ctx context.Context, model string) error {
 	// Any 4xx/5xx from the API bubbles up here.
 	_, err := provider.client.Models.Get(ctx, model)
 	if err != nil {
-		errMsg := fmt.Sprintf("OpenAI model %s does not exist", model)
+		errMsg := fmt.Sprintf("ChatGPT model %s does not exist", model)
 		return ez.New(op, ez.EINVALID, errMsg, err)
 	}
 	return nil
 }
 
-func (provider *OpenAI) Chat(ctx context.Context, model string, request *ChatRequest) (ChatResponse, error) {
-	const op = "OpenAI.Chat"
+func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.ChatRequest) (types.ChatResponse, error) {
+	const op = "ChatGPT.Chat"
+
+	originalMessageCount := len(request.Messages)
 
 	// Step 1) Only pass the messages delta if continuing a previous response
 	if request.PreviousResponseID != "" {
 		lastMsg, ok := provider.responsesToMessages[request.PreviousResponseID]
 		if ok {
-			request.Messages = request.Messages[lastMsg:]
+			if lastMsg <= len(request.Messages) {
+				request.Messages = request.Messages[lastMsg:]
+			} else {
+				request.Messages = request.Messages[:0]
+			}
 		}
 	}
 
@@ -79,7 +81,7 @@ func (provider *OpenAI) Chat(ctx context.Context, model string, request *ChatReq
 	if len(request.Tools) > 0 {
 		tools, err := buildFunctionTools(request.Tools)
 		if err != nil {
-			return ChatResponse{}, ez.New(op, ez.EINVALID, "invalid tool definition", err)
+			return types.ChatResponse{}, ez.New(op, ez.EINVALID, "invalid tool definition", err)
 		}
 
 		params.Tools = tools
@@ -91,10 +93,10 @@ func (provider *OpenAI) Chat(ctx context.Context, model string, request *ChatReq
 		}
 	}
 
-	// Step 3) Call the OpenAI API
+	// Step 3) Call the ChatGPT API
 	response, err := provider.client.Responses.New(ctx, params)
 	if err != nil {
-		return ChatResponse{}, ez.New(op, ez.EINTERNAL, "Responses API call failed", err)
+		return types.ChatResponse{}, ez.New(op, ez.EINTERNAL, "Responses API call failed", err)
 	}
 
 	// Log token usage
@@ -110,7 +112,7 @@ func (provider *OpenAI) Chat(ctx context.Context, model string, request *ChatReq
 
 	// Exit 1) If the response is not empty, return it
 	if response.OutputText() != "" {
-		return ChatResponse{
+		return types.ChatResponse{
 			ID:    response.ID,
 			Text:  response.OutputText(),
 			Model: model,
@@ -118,17 +120,17 @@ func (provider *OpenAI) Chat(ctx context.Context, model string, request *ChatReq
 	}
 
 	// Step 4) Add the response ID to the map to track messages
-	provider.responsesToMessages[response.ID] = len(request.Messages)
+	provider.responsesToMessages[response.ID] = originalMessageCount
 
 	// Step 5) If the response is not empty, probably we have tool calls
-	var toolCalls []ToolCall
+	var toolCalls []types.ToolCall
 	for _, outputItem := range response.Output {
 		switch outputItem.Type {
 		case "function_call":
 
 			call := outputItem.AsFunctionCall()
 
-			toolCall := ToolCall{
+			toolCall := types.ToolCall{
 				Name:          call.Name,
 				CallID:        call.CallID,
 				Arguments:     call.Arguments,                  // string
@@ -150,7 +152,7 @@ func (provider *OpenAI) Chat(ctx context.Context, model string, request *ChatReq
 		}
 	}
 
-	return ChatResponse{
+	return types.ChatResponse{
 		ID:        response.ID,
 		Model:     model,
 		ToolCalls: toolCalls,
@@ -159,13 +161,13 @@ func (provider *OpenAI) Chat(ctx context.Context, model string, request *ChatReq
 
 // messagesToResponsesInputParam converts our generic Message slice into the Responses API's
 // ResponseInputParam union. It wraps user/system messages as input, and assistant messages as output.
-func messagesToResponsesInputParam(messages []Message) responses.ResponseInputParam {
+func messagesToResponsesInputParam(messages []types.Message) responses.ResponseInputParam {
 	items := make(responses.ResponseInputParam, 0, len(messages))
 
 	for _, m := range messages {
 		switch m.Role {
 
-		case MessageRoleSystem, MessageRoleUser:
+		case types.MessageRoleSystem, types.MessageRoleUser:
 			// History is sent as input messages (role: system/user/assistant)
 			inText := responses.ResponseInputContentParamOfInputText(m.Content)
 			inMsg := responses.ResponseInputItemMessageParam{
@@ -174,7 +176,7 @@ func messagesToResponsesInputParam(messages []Message) responses.ResponseInputPa
 			}
 			items = append(items, responses.ResponseInputItemUnionParam{OfInputMessage: &inMsg})
 
-		case MessageRoleAssistant:
+		case types.MessageRoleAssistant:
 			// Assistant history must be sent as *output_message* content,
 			// whose content types are 'output_text' or 'refusal'.
 			outText := responses.ResponseOutputTextParam{Text: m.Content}
@@ -189,7 +191,7 @@ func messagesToResponsesInputParam(messages []Message) responses.ResponseInputPa
 				OfOutputMessage: &outMsg,
 			})
 
-		case MessageRoleTool:
+		case types.MessageRoleTool:
 
 			// CRITICAL: send as function_call_output tied to the original call_id
 			out := responses.ResponseInputItemFunctionCallOutputParam{
@@ -211,8 +213,8 @@ func messagesToResponsesInputParam(messages []Message) responses.ResponseInputPa
 	return items
 }
 
-func buildFunctionTools(toolDefs []ToolDefinition) ([]responses.ToolUnionParam, error) {
-	const op = "OpenAI.buildFunctionTools"
+func buildFunctionTools(toolDefs []types.ToolDefinition) ([]responses.ToolUnionParam, error) {
+	const op = "ChatGPT.buildFunctionTools"
 
 	var toolParams []responses.ToolUnionParam
 

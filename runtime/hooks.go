@@ -1,4 +1,4 @@
-package orchestra
+package runtime
 
 import (
 	"bytes"
@@ -15,31 +15,6 @@ import (
 	"github.com/vanclief/ez"
 )
 
-func loadInstanceHooks(ctx context.Context, db bun.IDB, templateName string) (map[hook.EventType][]hook.Hook, error) {
-	const op = "Orchestrator.loadInstanceHooks"
-
-	var hooks []hook.Hook
-	err := db.NewSelect().
-		Model(&hooks).
-		Where("template_name = ?", templateName).
-		Where("enabled = ?", true).
-		Scan(ctx)
-	if err != nil {
-		return nil, ez.Wrap(op, err)
-	}
-
-	hookMap := make(map[hook.EventType][]hook.Hook)
-
-	for i := range hooks {
-		if hooks[i].Args == nil {
-			hooks[i].Args = make([]string, 0)
-		}
-		hookMap[hooks[i].EventType] = append(hookMap[hooks[i].EventType], hooks[i])
-	}
-
-	return hookMap, nil
-}
-
 type HookInput struct {
 	ID            string         `json:"id"`
 	RunID         string         `json:"run_id"`
@@ -51,7 +26,7 @@ type HookInput struct {
 }
 
 func RunHook(ctx context.Context, hook hook.Hook, runID uuid.UUID, templateName, lastResponse, toolName, toolArguments string) (HookResult, error) {
-	const op = "orchestra.RunHook"
+	const op = "runtime.RunHook"
 
 	e := HookInput{
 		ID:            hook.ID.String(),
@@ -88,10 +63,10 @@ type HookResult struct {
 	Stderr   []byte
 }
 
-// RunHook runs an external command with args, piping stdin to the process.
+// executeHook runs an external command with args, piping stdin to the process.
 // It respects ctx (cancel/timeout). Non-zero exit codes are returned in result.ExitCode and err.
 func executeHook(ctx context.Context, command string, args []string, stdin []byte) (HookResult, error) {
-	const op = "orchestra.RunHook"
+	const op = "runtime.executeHook"
 
 	if command == "" {
 		return HookResult{}, ez.New(op, ez.EINVALID, "empty command", nil)
@@ -137,4 +112,29 @@ func executeHook(ctx context.Context, command string, args []string, stdin []byt
 	}
 
 	return result, ez.New(op, ez.EINTERNAL, "hook process failed", err)
+}
+
+func loadInstanceHooks(ctx context.Context, db bun.IDB, templateName string) (map[hook.EventType][]hook.Hook, error) {
+	const op = "runtime.loadInstanceHooks"
+
+	var hooks []hook.Hook
+	err := db.NewSelect().
+		Model(&hooks).
+		Where("template_name = ?", templateName).
+		Where("enabled = ?", true).
+		Scan(ctx)
+	if err != nil {
+		return nil, ez.Wrap(op, err)
+	}
+
+	hookMap := make(map[hook.EventType][]hook.Hook)
+
+	for i := range hooks {
+		if hooks[i].Args == nil {
+			hooks[i].Args = make([]string, 0)
+		}
+		hookMap[hooks[i].EventType] = append(hookMap[hooks[i].EventType], hooks[i])
+	}
+
+	return hookMap, nil
 }

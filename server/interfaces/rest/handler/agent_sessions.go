@@ -67,6 +67,16 @@ func (h *Handler) GetAgentSession(c echo.Context) error {
 	return h.JSONResponse(c, op, request, requestBody)
 }
 
+func (h *Handler) CreateAgentSession(c echo.Context) error {
+	const op = "Handler.CreateAgentSession"
+
+	request := requests.New(c.Request().Header, c.RealIP())
+
+	requestBody := &sessions.CreateRequest{}
+
+	return h.BindedJSONResponse(c, op, request, requestBody)
+}
+
 func (h *Handler) DeleteAgentSession(c echo.Context) error {
 	const op = "Handler.DeleteAgentSession"
 
@@ -82,4 +92,38 @@ func (h *Handler) DeleteAgentSession(c echo.Context) error {
 	}
 
 	return h.JSONResponse(c, op, request, requestBody)
+}
+
+func (h *Handler) ForkAgentSession(c echo.Context) error {
+	const op = "Handler.ForkAgentSession"
+
+	request := requests.New(c.Request().Header, c.RealIP())
+
+	resourceID, err := h.GetParameterUUID(c, "id")
+	if err != nil {
+		return h.ManageError(c, op, request, err)
+	}
+
+	requestBody := &sessions.ForkRequest{
+		AgentSessionID: resourceID,
+	}
+
+	return h.JSONResponse(c, op, request, requestBody)
+}
+
+func (h *Handler) ResumeAgentSession(c echo.Context) error {
+	const op = "Handler.ResumeAgentSession"
+
+	request := requests.New(c.Request().Header, c.RealIP())
+
+	resourceID, err := h.GetParameterUUID(c, "id")
+	if err != nil {
+		return h.ManageError(c, op, request, err)
+	}
+
+	requestBody := &sessions.ResumeRequest{
+		AgentSessionID: resourceID,
+	}
+
+	return h.BindedJSONResponse(c, op, request, requestBody)
 }

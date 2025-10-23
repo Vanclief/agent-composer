@@ -5,7 +5,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/vanclief/agent-composer/models/user"
-	"github.com/vanclief/agent-composer/runtime/orchestra"
+	"github.com/vanclief/agent-composer/runtime"
 	"github.com/vanclief/agent-composer/server/controller"
 	"github.com/vanclief/agent-composer/server/resources/agents"
 	"github.com/vanclief/agent-composer/server/resources/hooks"
@@ -15,25 +15,25 @@ import (
 )
 
 type Server struct {
-	Ctrl         *controller.Controller
-	RateLimiter  *ratelimit.WindowCounter
-	Orchestrator *orchestra.Orchestrator
+	Ctrl        *controller.Controller
+	RateLimiter *ratelimit.WindowCounter
+	Runtime     *runtime.Runtime
 
 	// Resources
 	AgentsAPI *agents.API
 	HooksAPI  *hooks.API
 }
 
-func New(ctrl *controller.Controller, orchestrator *orchestra.Orchestrator) *Server {
+func New(ctrl *controller.Controller, rt *runtime.Runtime) *Server {
 	// Initialize App
 	limiter := ratelimit.NewWindowCounter(ctrl.Config.App.RateLimitWindow, ctrl.Config.App.RateLimit)
 
-	agentsAPI := agents.NewAPI(ctrl, orchestrator)
-	hooksAPI := hooks.NewAPI(ctrl, orchestrator)
+	agentsAPI := agents.NewAPI(ctrl, rt)
+	hooksAPI := hooks.NewAPI(ctrl, rt)
 
 	server := &Server{
-		Ctrl:         ctrl,
-		Orchestrator: orchestrator,
+		Ctrl:    ctrl,
+		Runtime: rt,
 
 		RateLimiter: limiter,
 		AgentsAPI:   agentsAPI,

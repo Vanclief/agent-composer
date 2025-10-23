@@ -4,11 +4,11 @@ import (
 	"context"
 
 	mcpproto "github.com/mark3labs/mcp-go/mcp"
-	"github.com/vanclief/agent-composer/runtime/llm"
+	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/ez"
 )
 
-func (client *Client) ListTools(ctx context.Context) ([]llm.ToolDefinition, error) {
+func (client *Client) ListTools(ctx context.Context) ([]runtimetypes.ToolDefinition, error) {
 	const op = "mcp.ListTools"
 
 	listToolsResult, err := client.c.ListTools(ctx, mcpproto.ListToolsRequest{})
@@ -16,14 +16,14 @@ func (client *Client) ListTools(ctx context.Context) ([]llm.ToolDefinition, erro
 		return nil, ez.Wrap(op, err)
 	}
 
-	toolDefinitions := make([]llm.ToolDefinition, 0, len(listToolsResult.Tools))
+	toolDefinitions := make([]runtimetypes.ToolDefinition, 0, len(listToolsResult.Tools))
 	for _, tool := range listToolsResult.Tools {
 		jsonSchema, err := extractToolSchema(tool)
 		if err != nil {
 			return nil, ez.Wrap(op, err)
 		}
 
-		toolDefinitions = append(toolDefinitions, llm.ToolDefinition{
+		toolDefinitions = append(toolDefinitions, runtimetypes.ToolDefinition{
 			Name:        tool.Name,
 			Description: tool.Description,
 			JSONSchema:  jsonSchema,
@@ -32,7 +32,7 @@ func (client *Client) ListTools(ctx context.Context) ([]llm.ToolDefinition, erro
 	return toolDefinitions, nil
 }
 
-func (client *Client) CallTool(ctx context.Context, toolCall *llm.ToolCall) (string, error) {
+func (client *Client) CallTool(ctx context.Context, toolCall *runtimetypes.ToolCall) (string, error) {
 	const op = "mcp.CallTool"
 
 	request := mcpproto.CallToolRequest{

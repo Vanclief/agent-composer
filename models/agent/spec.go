@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
-	"github.com/vanclief/agent-composer/runtime/llm"
+	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/compose/drivers/databases/relational"
 	"github.com/vanclief/ez"
 )
@@ -26,19 +26,18 @@ var (
 type Spec struct {
 	bun.BaseModel `bun:"table:agent_specs"`
 
-	ID              uuid.UUID           `bun:",pk,type:uuid" json:"id"`
-	Name            string              `json:"name"`
-	Provider        LLMProvider         `json:"provider"`
-	Model           string              `json:"model"`
-	ReasoningEffort llm.ReasoningEffort `json:"reasoning_effort"`
-	Instructions    string              `json:"instructions"`
-	AllowedTools    []string            `bun:"allowed_tools,type:jsonb,nullzero" json:"allowed_tools"`
-	Version         int                 `json:"version"`
+	ID              uuid.UUID                    `bun:",pk,type:uuid" json:"id"`
+	Name            string                       `json:"name"`
+	Provider        LLMProvider                  `json:"provider"`
+	Model           string                       `json:"model"`
+	ReasoningEffort runtimetypes.ReasoningEffort `json:"reasoning_effort"`
+	Instructions    string                       `json:"instructions"`
+	Version         int                          `json:"version"`
 }
 
 // ---- Constructor ----
 
-func NewAgentSpec(name string, prov LLMProvider, model, instructions string, reasoningEffort llm.ReasoningEffort, version int, allowedTools []string) (*Spec, error) {
+func NewAgentSpec(name string, prov LLMProvider, model, instructions string, reasoningEffort runtimetypes.ReasoningEffort, version int) (*Spec, error) {
 	const op = "agent.NewAgentSpec"
 
 	id, err := uuid.NewV7()
@@ -53,7 +52,6 @@ func NewAgentSpec(name string, prov LLMProvider, model, instructions string, rea
 		Model:           strings.TrimSpace(model),
 		Instructions:    strings.TrimSpace(instructions),
 		ReasoningEffort: reasoningEffort,
-		AllowedTools:    allowedTools,
 		Version:         version,
 	}
 
