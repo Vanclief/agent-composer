@@ -1,4 +1,4 @@
-package provider
+package agent
 
 import "github.com/vanclief/compose/primitives/enums"
 

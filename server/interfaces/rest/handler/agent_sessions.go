@@ -4,7 +4,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/vanclief/agent-composer/models/agent"
-	"github.com/vanclief/agent-composer/models/provider"
 	"github.com/vanclief/agent-composer/server/resources/agents/sessions"
 	"github.com/vanclief/compose/components/rest/requests"
 	"github.com/vanclief/compose/drivers/databases/relational/postgres/pagination"
@@ -33,7 +32,7 @@ func (h *Handler) ListAgentSessions(c echo.Context) error {
 	}
 
 	if providerParam := c.QueryParam("provider"); providerParam != "" {
-		prov := provider.LLMProvider(providerParam)
+		prov := agent.LLMProvider(providerParam)
 		if err := prov.Validate(); err != nil {
 			return h.ManageError(c, op, request, ez.New(op, ez.EINVALID, "invalid provider", err))
 		}

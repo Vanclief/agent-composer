@@ -5,7 +5,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/vanclief/agent-composer/models/agent"
-	"github.com/vanclief/agent-composer/models/provider"
 	"github.com/vanclief/compose/drivers/databases/relational/postgres/pagination"
 	"github.com/vanclief/ez"
 )
@@ -14,10 +13,10 @@ type ListRequest struct {
 	pagination.CursorRequest
 
 	// Optional filters
-	Provider    *provider.LLMProvider `json:"provider,omitempty"`
-	Search      string                `json:"search"`
-	AgentSpecID uuid.UUID             `json:"agent_spec_id,omitempty"`
-	Status      *agent.SessionStatus  `json:"status,omitempty"`
+	Provider    *agent.LLMProvider   `json:"provider,omitempty"`
+	Search      string               `json:"search"`
+	AgentSpecID uuid.UUID            `json:"agent_spec_id,omitempty"`
+	Status      *agent.SessionStatus `json:"status,omitempty"`
 }
 
 func (r *ListRequest) Validate() error {

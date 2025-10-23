@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
-	"github.com/vanclief/agent-composer/models/provider"
 	"github.com/vanclief/agent-composer/runtime/llm"
 	"github.com/vanclief/compose/drivers/databases/relational"
 	"github.com/vanclief/ez"
@@ -24,7 +23,7 @@ type Session struct {
 	ID           uuid.UUID            `bun:",pk,type:uuid" json:"id"`
 	AgentSpecID  uuid.UUID            `bun:"type:uuid" json:"agent_spec_id"`
 	Name         string               `json:"name"`
-	Provider     provider.LLMProvider `json:"provider"`
+	Provider     LLMProvider          `json:"provider"`
 	Instructions string               `json:"instructions"`
 	Tools        []llm.ToolDefinition `bun:"type:jsonb,nullzero" json:"-"`
 	Messages     []llm.Message        `bun:"type:jsonb,nullzero" json:"messages"`

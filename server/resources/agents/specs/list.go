@@ -7,15 +7,14 @@ import (
 	"github.com/vanclief/ez"
 
 	"github.com/vanclief/agent-composer/models/agent"
-	"github.com/vanclief/agent-composer/models/provider"
 )
 
 type ListRequest struct {
 	pagination.CursorRequest
 
 	// Optional filters
-	Provider *provider.LLMProvider `json:"provider,omitempty"`
-	Search   string                `json:"search"`
+	Provider *agent.LLMProvider `json:"provider,omitempty"`
+	Search   string             `json:"search"`
 }
 
 func (r *ListRequest) Validate() error {

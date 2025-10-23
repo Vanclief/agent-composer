@@ -6,18 +6,17 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation"
 	"github.com/google/uuid"
 	"github.com/vanclief/agent-composer/models/agent"
-	"github.com/vanclief/agent-composer/models/provider"
 	"github.com/vanclief/agent-composer/runtime/llm"
 	"github.com/vanclief/ez"
 )
 
 type UpdateRequest struct {
-	AgentSpecID  uuid.UUID             `json:"agent_spec_id"`
-	Provider     *provider.LLMProvider `json:"provider"`
-	Name         *string               `json:"name"`
-	Model        *string               `json:"model"`
-	Instructions *string               `json:"instructions"`
-	AllowedTools *[]string             `json:"allowed_tools"`
+	AgentSpecID  uuid.UUID          `json:"agent_spec_id"`
+	Provider     *agent.LLMProvider `json:"provider"`
+	Name         *string            `json:"name"`
+	Model        *string            `json:"model"`
+	Instructions *string            `json:"instructions"`
+	AllowedTools *[]string          `json:"allowed_tools"`
 }
 
 func (r UpdateRequest) Validate() error {
