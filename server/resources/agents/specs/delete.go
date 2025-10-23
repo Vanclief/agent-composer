@@ -37,17 +37,7 @@ func (api *API) Delete(ctx context.Context, requester interface{}, request *Dele
 
 	// TODO: Permissions check
 
-	// Step 2: Make sure there are no sessions for this agent spec
-	sessions, err := agent.GetAgentSessionsBySpecID(ctx, api.db, pt.ID)
-	if err != nil {
-		return nil, ez.Wrap(op, err)
-	}
-
-	if len(sessions) > 0 {
-		return nil, ez.New(op, ez.EINVALID, "Cannot delete agent spec with existing sessions", nil)
-	}
-
-	// Step 3: Delete the agent spec
+	// Step 2: Delete the agent spec
 	err = pt.Delete(ctx, api.db)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
