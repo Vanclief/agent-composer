@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"github.com/vanclief/agent-composer/mcp"
 	shellmcp "github.com/vanclief/agent-composer/mcp/shell"
 	"github.com/vanclief/agent-composer/models/agent"
@@ -128,4 +129,27 @@ func (rt *Runtime) newAgentInstance(ctx context.Context, session *agent.Session,
 		messages:        session.Messages,
 		hooks:           hooks,
 	}, nil
+}
+
+func (ai *AgentInstance) AddMessage(role types.MessageRole, content string) {
+	var msg types.Message
+
+	switch role {
+	case types.MessageRoleSystem:
+		msg = *types.NewSystemMessage(content)
+	case types.MessageRoleUser:
+		msg = *types.NewUserMessage(content)
+	case types.MessageRoleAssistant:
+		msg = *types.NewAssistantMessage(content)
+	default:
+		log.Error().Msg("Invalid message role")
+		return // Invalid role; do nothing
+	}
+
+	ai.messages = append(ai.messages, msg)
+}
+
+func (ai *AgentInstance) AddToolMessage(toolName, toolCallID, content string) {
+	msg := *types.NewToolMessage(toolName, toolCallID, content)
+	ai.messages = append(ai.messages, msg)
 }

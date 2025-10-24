@@ -8,135 +8,111 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/vanclief/agent-composer/models/agent"
 	"github.com/vanclief/agent-composer/models/hook"
-	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
+	types "github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/ez"
 )
 
 type toolCallKey struct{ name, args string }
 
-func (rt *Runtime) RunAgentInstance(instance *AgentInstance, prompt string) error {
+func (rt *Runtime) RunAgentInstance(ai *AgentInstance, prompt string) error {
 	const op = "runtime.RunSessions"
 
-	sessionID := fmt.Sprintf("agent:%s", instance.ID)
+	sessionID := fmt.Sprintf("agent:%s", ai.ID)
 
 	rt.scheduler.RunOnce(rt.rootCtx, sessionID, func(jobCtx context.Context) {
-		_, err := rt.runAgentInstance(jobCtx, instance, prompt)
+		err := rt.runAgentInstance(jobCtx, ai, prompt)
 		if err != nil {
-			log.Error().Err(err).Str("agent_session_id", instance.ID.String()).Msg("agent session failed")
+			log.Error().Err(err).Str("agent_session_id", ai.ID.String()).Msg("agent session failed")
 		}
 	})
 
 	return nil
 }
 
-func (rt *Runtime) runAgentInstance(ctx context.Context, p *AgentInstance, prompt string) (string, error) {
+func (rt *Runtime) runAgentInstance(ctx context.Context, ai *AgentInstance, prompt string) error {
 	const op = "runtime.AgentInstance.Run"
 
-	// Persist a context that survives cancellation but is bounded by timeout.
-	pCtx := context.WithoutCancel(ctx)
-
 	// Step 1: Append the user prompt to the messages and update the status
-	msg := runtimetypes.NewMessage(runtimetypes.MessageRoleUser, prompt) // Always make it user so we can chain agents
-	p.messages = append(p.messages, *msg)
+	ai.AddMessage(types.MessageRoleUser, prompt)
+	ai.session.Status = agent.SessionStatusRunning
 
-	p.session.Status = agent.SessionStatusRunning
-	err := p.session.Update(ctx, rt.db)
+	err := ai.session.Update(ctx, rt.db)
 	if err != nil {
-		return "", ez.Wrap(op, err)
+		return ez.Wrap(op, err)
 	}
 
-	for _, h := range p.hooks[hook.EventTypeSessionStarted] {
-		RunHook(ctx, h, p.ID, p.name, "", "", "")
+	// Step 2: Run any session started hooks
+	for _, h := range ai.hooks[hook.EventTypeSessionStarted] {
+		RunHook(ctx, h, ai.ID, ai.name, "", "", "")
 	}
 
-	// Step 2: Run the inference
-	inferenceErr := p.runInference(ctx, rt)
+	// Step 3: Run the inference
+	inferenceErr := rt.runInference(ctx, ai)
 	if inferenceErr != nil {
 		if strings.Contains(inferenceErr.Error(), "context canceled") {
-			p.session.Status = agent.SessionStatusCanceled
+			ai.session.Status = agent.SessionStatusCanceled
 		} else {
-			p.session.Status = agent.SessionStatusFailed
+			ai.session.Status = agent.SessionStatusFailed
 		}
-	} else {
-		p.session.Status = agent.SessionStatusSucceeded
 	}
 
-	p.session.Messages = p.messages
+	ai.session.Messages = ai.messages
 
-	err = p.session.Update(pCtx, rt.db)
+	pCtx := context.WithoutCancel(ctx)
+	err = ai.session.Update(pCtx, rt.db)
 	if err != nil {
-		return "", ez.Wrap(op, err)
+		return ez.Wrap(op, err)
 	}
 
 	if inferenceErr != nil {
-		return "", ez.Wrap(op, inferenceErr)
+		return ez.Wrap(op, inferenceErr)
 	}
 
-	// Step 3: If there was no error, return the last message content
-	lastMsg := p.messages[len(p.messages)-1]
+	// Step 4: If there was no error, return the last message content
+	// lastMsg := ai.messages[len(ai.messages)-1]
+	log.Info().Str("agent_session_id", ai.ID.String()).Msg("Finished running inference")
 
-	log.Info().Str("agent_session_id", p.ID.String()).Msg("Finished running inference")
-
-	return lastMsg.Content, nil
+	return nil
 }
 
-func (p *AgentInstance) runInference(ctx context.Context, o *Runtime) error {
+func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 	const op = "runtime.AgentInstance.runInference"
 
 	const maxSteps = 300
 
 	toolCalls := map[toolCallKey]int{}
-	var prevResponseID string
+	var prevResponseID string // This is for OpenAI
 
 	for step := 0; step < maxSteps; step++ {
 
-		log.Info().Int("step", step).Str("Name", p.session.Name).Msg("Agent session inference")
+		log.Info().Int("step", step).Str("Name", ai.session.Name).Msg("Agent session inference")
 
-		chatRequest := runtimetypes.ChatRequest{
-			Messages:           p.messages,
-			Tools:              p.tools,
+		// Step 1: Create the chat request
+		chatRequest := types.ChatRequest{
+			Messages:           ai.messages,
+			Tools:              ai.tools,
 			PreviousResponseID: prevResponseID,
-			ThinkingEffort:     string(p.reasoningEffort),
+			ThinkingEffort:     string(ai.reasoningEffort),
 		}
 
-		res, err := p.provider.Chat(ctx, p.model, &chatRequest)
+		// Step 2: Call the chat
+		res, err := ai.provider.Chat(ctx, ai.model, &chatRequest)
 		if err != nil {
 			log.Debug().Err(err).Msg("Model chat request failed")
 			return ez.Wrap(op, err)
 		}
 
-		// TODO: This only applies to OpenAI
-		prevResponseID = res.ID
+		prevResponseID = res.ID // NOTE: This only applies to OpenAI
 
-		if len(res.ToolCalls) == 0 {
-
-			lastResponse := *runtimetypes.NewAssistantMessage(res.Text)
-
-			p.messages = append(p.messages, lastResponse)
-
-			// Check if any hooks want to block the stop
-			blockStop := false
-			for _, h := range p.hooks[hook.EventTypeSessionEnded] {
-				out, _ := RunHook(ctx, h, p.ID, p.name, lastResponse.Content, "", "")
-				if out.ExitCode == 2 {
-					p.messages = append(p.messages, *runtimetypes.NewUserMessage(string(out.Stderr)))
-					blockStop = true
-				}
-			}
-
-			if !blockStop {
-				log.Info().Str("text", res.Text).Msg("Final assistant response received")
-				return nil
-			}
-		}
-
-		// Make every tool call before running inference again
+		// Step 3: If we do have tool calls, execute them
 		for _, call := range res.ToolCalls {
 
 			log.Info().Str("tool", call.Name).Str("args", call.Arguments).Msg("Agent calling tool")
 
+			// 3.1 Create a tool call key
 			callKey := toolCallKey{name: call.Name, args: call.Arguments}
 
+			// 3.2 Check that we are not in an infinite loop of tool calls with identical arguments
 			lastStepCall, found := toolCalls[callKey]
 
 			if found && step-lastStepCall <= 1 {
@@ -147,37 +123,78 @@ func (p *AgentInstance) runInference(ctx context.Context, o *Runtime) error {
 				// IMPORTANT: Always satisfy the protocol with a ToolMessage for this call_id.
 				// We send a synthetic error payload instead of executing the tool again.
 				synthetic := `{"error":"duplicate_tool_call","policy":"anti-loop","message":"Duplicate tool call with identical arguments within one step; tool execution skipped."}`
-				p.messages = append(p.messages, *runtimetypes.NewToolMessage(call.Name, call.CallID, synthetic))
+				ai.AddToolMessage(call.Name, call.CallID, synthetic)
 
 				continue
 			}
 
-			for _, h := range p.hooks[hook.EventTypePreToolUse] {
-				out, _ := RunHook(ctx, h, p.ID, p.name, "", call.Name, call.Arguments)
+			// 3.3 Run any pre-tool-use hooks
+			for _, h := range ai.hooks[hook.EventTypePreToolUse] {
+				out, _ := RunHook(ctx, h, ai.ID, ai.name, "", call.Name, call.Arguments)
 				if out.ExitCode == 2 {
-					p.messages = append(p.messages, *runtimetypes.NewUserMessage(string(out.Stderr)))
+					ai.AddMessage(types.MessageRoleUser, string(out.Stderr))
 				}
 			}
 
-			// TOOL Called
-			toolCallResponse, err := p.mcpMux.CallTool(ctx, &call)
+			// 3.4 Call the tool
+			toolCallResponse, err := ai.mcpMux.CallTool(ctx, &call)
 			if err != nil {
 				return ez.Wrap("agent.ExecuteTool", err)
 			}
 
 			log.Info().Str("tool", call.Name).Str("args", call.Arguments).Str("tool_response", toolCallResponse).Msg("Tool call response")
 
-			for _, h := range p.hooks[hook.EventTypePostToolUse] {
-				out, _ := RunHook(ctx, h, p.ID, p.name, "", call.Name, call.Arguments)
+			// 3.5 Run any post-tool-use hooks
+			for _, h := range ai.hooks[hook.EventTypePostToolUse] {
+				out, _ := RunHook(ctx, h, ai.ID, ai.name, "", call.Name, call.Arguments)
 				if out.ExitCode == 2 {
-					p.messages = append(p.messages, *runtimetypes.NewUserMessage(string(out.Stderr)))
+					ai.AddMessage(types.MessageRoleUser, string(out.Stderr))
 				}
 			}
 
+			// 3.6 Record the tool call step
 			toolCalls[callKey] = step
 
-			p.messages = append(p.messages, *runtimetypes.NewToolMessage(call.Name, call.CallID, toolCallResponse))
+			ai.AddToolMessage(call.Name, call.CallID, toolCallResponse)
 		}
+
+		// Step 4: If we don't have any tool calls
+		if len(res.ToolCalls) == 0 {
+
+			ai.AddMessage(types.MessageRoleAssistant, res.Text)
+
+			// 4.1 Update the session status to succeeded so that hook don't see it as running
+			ai.session.Status = agent.SessionStatusSucceeded
+			err = ai.session.Update(ctx, rt.db)
+			if err != nil {
+				return ez.Wrap(op, err)
+			}
+
+			// 4.2 Check if any hooks want to block the stop
+			blockStop := false
+			for _, h := range ai.hooks[hook.EventTypeSessionEnded] {
+
+				out, _ := RunHook(ctx, h, ai.ID, ai.name, res.Text, "", "")
+				if out.ExitCode == 2 {
+
+					blockStop = true
+					ai.AddMessage(types.MessageRoleUser, (string(out.Stderr)))
+
+					// Since a hook has requested more work, we set the session back to running
+					ai.session.Status = agent.SessionStatusRunning
+					err = ai.session.Update(ctx, rt.db)
+					if err != nil {
+						return ez.Wrap(op, err)
+					}
+				}
+			}
+
+			if !blockStop {
+				log.Info().Str("text", res.Text).Msg("Final assistant response received")
+				return nil
+			}
+		}
+
 	}
 
 	return ez.Root(op, ez.ERESOURCEEXHAUSTED, "exceeded maximum inference steps")

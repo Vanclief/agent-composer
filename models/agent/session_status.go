@@ -33,21 +33,3 @@ func (s SessionStatus) MarshalJSON() ([]byte, error) {
 func (s *SessionStatus) UnmarshalJSON(b []byte) error {
 	return enums.Unmarshal(b, s, sessionStatusSet)
 }
-
-func (s SessionStatus) IsTerminal() bool {
-	switch s {
-	case SessionStatusSucceeded, SessionStatusFailed, SessionStatusCanceled:
-		return true
-	default:
-		return false
-	}
-}
-
-func (s SessionStatus) InProgress() bool {
-	switch s {
-	case SessionStatusQueued, SessionStatusRunning, SessionStatusPaused:
-		return true
-	default:
-		return false
-	}
-}
