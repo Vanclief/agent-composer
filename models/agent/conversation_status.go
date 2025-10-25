@@ -7,7 +7,6 @@ type ConversationStatus string
 const (
 	ConversationStatusQueued    ConversationStatus = "queued"
 	ConversationStatusRunning   ConversationStatus = "running"
-	ConversationStatusPaused    ConversationStatus = "paused"
 	ConversationStatusSucceeded ConversationStatus = "succeeded"
 	ConversationStatusFailed    ConversationStatus = "failed"
 	ConversationStatusCanceled  ConversationStatus = "canceled"
@@ -16,7 +15,6 @@ const (
 var conversationStatusSet = enums.Set([]ConversationStatus{
 	ConversationStatusQueued,
 	ConversationStatusRunning,
-	ConversationStatusPaused,
 	ConversationStatusSucceeded,
 	ConversationStatusFailed,
 	ConversationStatusCanceled,
