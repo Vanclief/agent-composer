@@ -7,8 +7,9 @@ import (
 	"strings"
 
 	"github.com/openai/openai-go"
+
+	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/models/agent"
-	"github.com/vanclief/agent-composer/server/controller"
 	"github.com/vanclief/compose/components/scheduler"
 	"github.com/vanclief/compose/drivers/databases/relational"
 	"github.com/vanclief/ez"

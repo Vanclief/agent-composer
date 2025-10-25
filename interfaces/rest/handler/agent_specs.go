@@ -2,7 +2,8 @@ package handler
 
 import (
 	"github.com/labstack/echo/v4"
-	"github.com/vanclief/agent-composer/server/resources/agents/specs"
+
+	"github.com/vanclief/agent-composer/core/resources/agents/specs"
 	"github.com/vanclief/compose/components/rest/requests"
 	"github.com/vanclief/compose/drivers/databases/relational/postgres/pagination"
 )
