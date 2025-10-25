@@ -12,7 +12,7 @@ require (
 	github.com/pariz/gountries v0.1.6
 	github.com/rs/zerolog v1.34.0
 	github.com/uptrace/bun v1.1.16
-	github.com/vanclief/compose v1.6.0
+	github.com/vanclief/compose v1.6.1
 	github.com/vanclief/ez v1.4.0
 	golang.org/x/sync v0.13.0
 )

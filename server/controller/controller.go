@@ -39,6 +39,8 @@ func New() (*Controller, error) {
 	controller.EnvVars = e
 	controller.Config = c
 
+	controller.WithZerolog()
+
 	err = controller.Setup()
 	if err != nil {
 		return nil, ez.Wrap(op, err)
