@@ -2,7 +2,8 @@ package rest
 
 import (
 	"github.com/labstack/echo/v4"
-	"github.com/vanclief/agent-composer/server/interfaces/rest/handler"
+
+	"github.com/vanclief/agent-composer/interfaces/rest/handler"
 )
 
 func addAPIRoutes(e *echo.Echo, h *handler.Handler) {

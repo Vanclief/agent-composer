@@ -3,8 +3,8 @@ package handler
 import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/vanclief/agent-composer/core/resources/agents/conversations"
 	"github.com/vanclief/agent-composer/models/agent"
-	"github.com/vanclief/agent-composer/server/resources/agents/conversations"
 	"github.com/vanclief/compose/components/rest/requests"
 	"github.com/vanclief/compose/drivers/databases/relational/postgres/pagination"
 	"github.com/vanclief/ez"

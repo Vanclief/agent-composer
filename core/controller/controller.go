@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"github.com/rs/zerolog/log"
 	"github.com/vanclief/agent-composer/models"
 	"github.com/vanclief/compose/components/configurator"
 	"github.com/vanclief/compose/components/ctrl"
@@ -29,7 +28,7 @@ func New() (*Controller, error) {
 	opts := []configurator.Option{}
 	opts = append(opts, configurator.WithRequiredEnv("ENVIRONMENT"))
 	opts = append(opts, configurator.WithRequiredEnv("POSTGRES_PASSWORD"))
-	opts = append(opts, configurator.WithConfigPath("server/config/"))
+	opts = append(opts, configurator.WithConfigPath("core/config/"))
 
 	err := controller.LoadEnvVarsAndConfig(&e, &c, opts...)
 	if err != nil {
@@ -76,11 +75,6 @@ func (controller *Controller) Setup() error {
 	// }
 
 	controller.DB = db
-
-	log.Info().
-		Str("Env", controller.Environment).
-		Bool("Debug", controller.Config.App.Debug).
-		Msg("Instantiated controller")
 
 	return nil
 }

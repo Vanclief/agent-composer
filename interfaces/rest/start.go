@@ -9,11 +9,11 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/rs/zerolog"
 
-	"github.com/vanclief/agent-composer/server"
-	"github.com/vanclief/agent-composer/server/interfaces/rest/handler"
+	"github.com/vanclief/agent-composer/interfaces/rest/handler"
+	restserver "github.com/vanclief/agent-composer/interfaces/rest/server"
 )
 
-func Start(ctx context.Context, app *server.Server, log zerolog.Logger) {
+func Start(ctx context.Context, app *restserver.Server, log zerolog.Logger) {
 	ctrl := app.GetController()
 	e := echo.New()
 	h := handler.NewHandler(app)
