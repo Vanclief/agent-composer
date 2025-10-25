@@ -1,10 +1,10 @@
 package agents
 
 import (
+	"github.com/vanclief/agent-composer/core/controller"
+	"github.com/vanclief/agent-composer/core/resources/agents/conversations"
+	"github.com/vanclief/agent-composer/core/resources/agents/specs"
 	"github.com/vanclief/agent-composer/runtime"
-	"github.com/vanclief/agent-composer/server/controller"
-	"github.com/vanclief/agent-composer/server/resources/agents/conversations"
-	"github.com/vanclief/agent-composer/server/resources/agents/specs"
 	"github.com/vanclief/compose/drivers/databases/relational"
 )
 

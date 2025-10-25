@@ -1,8 +1,8 @@
 package specs
 
 import (
+	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/runtime"
-	"github.com/vanclief/agent-composer/server/controller"
 	"github.com/vanclief/compose/drivers/databases/relational"
 )
 
