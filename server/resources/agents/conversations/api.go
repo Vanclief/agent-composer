@@ -1,4 +1,4 @@
-package sessions
+package conversations
 
 import (
 	"github.com/vanclief/agent-composer/runtime"

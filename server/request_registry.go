@@ -1,7 +1,7 @@
 package server
 
 import (
-	"github.com/vanclief/agent-composer/server/resources/agents/sessions"
+	"github.com/vanclief/agent-composer/server/resources/agents/conversations"
 	"github.com/vanclief/agent-composer/server/resources/agents/specs"
 	"github.com/vanclief/agent-composer/server/resources/hooks"
 	"github.com/vanclief/compose/components/rest/requests"
@@ -25,19 +25,19 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 	case *specs.DeleteRequest:
 		return s.AgentsAPI.AgentSpecs.Delete(request.GetContext(), nil, body)
 
-		// Sessions
-	case *sessions.ListRequest:
-		return s.AgentsAPI.Sessions.List(request.GetContext(), nil, body)
-	case *sessions.GetRequest:
-		return s.AgentsAPI.Sessions.Get(request.GetContext(), nil, body)
-	case *sessions.CreateRequest:
-		return s.AgentsAPI.Sessions.Create(request.GetContext(), nil, body)
-	case *sessions.ForkRequest:
-		return s.AgentsAPI.Sessions.Fork(request.GetContext(), nil, body)
-	case *sessions.ResumeRequest:
-		return s.AgentsAPI.Sessions.Resume(request.GetContext(), nil, body)
-	case *sessions.DeleteRequest:
-		return s.AgentsAPI.Sessions.Delete(request.GetContext(), nil, body)
+	// Conversations
+	case *conversations.ListRequest:
+		return s.AgentsAPI.Conversations.List(request.GetContext(), nil, body)
+	case *conversations.GetRequest:
+		return s.AgentsAPI.Conversations.Get(request.GetContext(), nil, body)
+	case *conversations.CreateRequest:
+		return s.AgentsAPI.Conversations.Create(request.GetContext(), nil, body)
+	case *conversations.ForkRequest:
+		return s.AgentsAPI.Conversations.Fork(request.GetContext(), nil, body)
+	case *conversations.ResumeRequest:
+		return s.AgentsAPI.Conversations.Resume(request.GetContext(), nil, body)
+	case *conversations.DeleteRequest:
+		return s.AgentsAPI.Conversations.Delete(request.GetContext(), nil, body)
 
 	// Hooks
 	case *hooks.ListRequest:

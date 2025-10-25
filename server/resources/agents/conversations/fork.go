@@ -1,4 +1,4 @@
-package sessions
+package conversations
 
 import (
 	"context"
@@ -10,14 +10,14 @@ import (
 )
 
 type ForkRequest struct {
-	AgentSessionID uuid.UUID `json:"agent_session_id"`
+	ConversationID uuid.UUID `json:"conversation_id"`
 }
 
 func (r ForkRequest) Validate() error {
 	const op = "ForkRequest.Validate"
 
 	err := validation.ValidateStruct(&r,
-		validation.Field(&r.AgentSessionID, validation.Required),
+		validation.Field(&r.ConversationID, validation.Required),
 	)
 	if err != nil {
 		return ez.New(op, ez.EINVALID, err.Error(), nil)
@@ -26,17 +26,17 @@ func (r ForkRequest) Validate() error {
 	return nil
 }
 
-func (api *API) Fork(ctx context.Context, requester interface{}, request *ForkRequest) (*agent.Session, error) {
-	const op = "sessions.API.Fork"
+func (api *API) Fork(ctx context.Context, requester interface{}, request *ForkRequest) (*agent.Conversation, error) {
+	const op = "conversations.API.Fork"
 
-	// Step 1: Get the agent session
-	session, err := agent.GetAgentSessionByID(ctx, api.db, request.AgentSessionID)
+	// Step 1: Get the conversation
+	conversation, err := agent.GetConversationByID(ctx, api.db, request.ConversationID)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
 
-	// Step 2: Create a new session from that OG session
-	fork := session
+	// Step 2: Create a new conversation from that OG conversation
+	fork := conversation
 	fork.ID = uuid.Nil // Reset ID for new insert
 
 	err = fork.Insert(ctx, api.db)
@@ -44,5 +44,5 @@ func (api *API) Fork(ctx context.Context, requester interface{}, request *ForkRe
 		return nil, ez.Wrap(op, err)
 	}
 
-	return session, nil
+	return conversation, nil
 }

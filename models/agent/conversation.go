@@ -14,12 +14,12 @@ import (
 )
 
 var (
-	_ relational.PaginableModel = (*Session)(nil)
-	_ relational.DBModel        = (*Session)(nil)
+	_ relational.PaginableModel = (*Conversation)(nil)
+	_ relational.DBModel        = (*Conversation)(nil)
 )
 
-type Session struct {
-	bun.BaseModel `bun:"table:agent_sessions"`
+type Conversation struct {
+	bun.BaseModel `bun:"table:conversations"`
 
 	ID              uuid.UUID                    `bun:",pk,type:uuid" json:"id"`
 	AgentSpecID     uuid.UUID                    `bun:"type:uuid" json:"agent_spec_id"`
@@ -30,20 +30,20 @@ type Session struct {
 	Instructions    string                       `json:"instructions"`
 	Tools           []types.ToolDefinition       `bun:"type:jsonb,nullzero" json:"-"`
 	Messages        []types.Message              `bun:"type:jsonb,nullzero" json:"messages"`
-	Status          SessionStatus                `json:"status"`
+	Status          ConversationStatus           `json:"status"`
 }
 
 // ---- Constructor ----
 
-func NewAgentSession(agentSpec *Spec, messages []types.Message) (*Session, error) {
-	const op = "agent.NewAgentSession"
+func NewConversation(agentSpec *Spec, messages []types.Message) (*Conversation, error) {
+	const op = "agent.NewConversation"
 
 	id, err := uuid.NewV7()
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
 
-	session := &Session{
+	conversation := &Conversation{
 		ID:              id,
 		AgentSpecID:     agentSpec.ID,
 		Name:            agentSpec.Name,
@@ -52,60 +52,58 @@ func NewAgentSession(agentSpec *Spec, messages []types.Message) (*Session, error
 		ReasoningEffort: agentSpec.ReasoningEffort,
 		Instructions:    agentSpec.Instructions,
 		Messages:        messages,
-		Status:          SessionStatusQueued,
+		Status:          ConversationStatusQueued,
 	}
 
-	err = session.Validate()
+	err = conversation.Validate()
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
 
-	return session, nil
+	return conversation, nil
 }
 
 // ---- Validation ----
 
-func (s *Session) Validate() error {
-	const op = "Session.Validate"
+func (c *Conversation) Validate() error {
+	const op = "Conversation.Validate"
 
-	if s.AgentSpecID == uuid.Nil {
+	if c.AgentSpecID == uuid.Nil {
 		return ez.New(op, ez.EINVALID, "agent_spec_id is required", nil)
 	}
 
-	if s.Name == "" {
+	if c.Name == "" {
 		return ez.New(op, ez.EINVALID, "name is required", nil)
 	}
 
-	if s.Instructions == "" {
+	if c.Instructions == "" {
 		return ez.New(op, ez.EINVALID, "instructions are required", nil)
 	}
 
-	if err := s.Provider.Validate(); err != nil {
+	if err := c.Provider.Validate(); err != nil {
 		return ez.Wrap(op, err)
 	}
 
 	return nil
 }
 
-// ---- CRUD ----
+func (c *Conversation) Insert(ctx context.Context, db bun.IDB) error {
+	const op = "Conversation.Insert"
 
-func (s *Session) Insert(ctx context.Context, db bun.IDB) error {
-	const op = "Session.Insert"
-
-	if s.ID == uuid.Nil {
+	if c.ID == uuid.Nil {
 		id, err := uuid.NewV7()
 		if err != nil {
 			return ez.Wrap(op, err)
 		}
-		s.ID = id
+		c.ID = id
 	}
 
-	err := s.Validate()
+	err := c.Validate()
 	if err != nil {
 		return ez.Wrap(op, err)
 	}
 
-	_, err = db.NewInsert().Model(s).Exec(ctx)
+	_, err = db.NewInsert().Model(c).Exec(ctx)
 	if err != nil {
 		return ez.Wrap(op, err)
 	}
@@ -113,19 +111,19 @@ func (s *Session) Insert(ctx context.Context, db bun.IDB) error {
 	return nil
 }
 
-func (s *Session) Update(ctx context.Context, db bun.IDB) error {
-	const op = "Session.Update"
+func (c *Conversation) Update(ctx context.Context, db bun.IDB) error {
+	const op = "Conversation.Update"
 
-	if s.ID == uuid.Nil {
+	if c.ID == uuid.Nil {
 		return ez.New(op, ez.EINVALID, "id is required", nil)
 	}
 
-	err := s.Validate()
+	err := c.Validate()
 	if err != nil {
 		return ez.Wrap(op, err)
 	}
 
-	_, err = db.NewUpdate().Model(s).WherePK().Exec(ctx)
+	_, err = db.NewUpdate().Model(c).WherePK().Exec(ctx)
 	if err != nil {
 		return ez.Wrap(op, err)
 	}
@@ -133,14 +131,14 @@ func (s *Session) Update(ctx context.Context, db bun.IDB) error {
 	return nil
 }
 
-func (s *Session) Delete(ctx context.Context, db bun.IDB) error {
-	const op = "Session.Delete"
+func (c *Conversation) Delete(ctx context.Context, db bun.IDB) error {
+	const op = "Conversation.Delete"
 
-	if s.ID == uuid.Nil {
+	if c.ID == uuid.Nil {
 		return ez.New(op, ez.EINVALID, "id is required", errors.New("nil uuid"))
 	}
 
-	_, err := db.NewDelete().Model(s).WherePK().Exec(ctx)
+	_, err := db.NewDelete().Model(c).WherePK().Exec(ctx)
 	if err != nil {
 		return ez.Wrap(op, err)
 	}
@@ -149,55 +147,55 @@ func (s *Session) Delete(ctx context.Context, db bun.IDB) error {
 
 // ---- Queries ----
 
-func GetAgentSessionByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*Session, error) {
-	const op = "agent.GetAgentSessionByID"
+func GetConversationByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*Conversation, error) {
+	const op = "agent.GetConversationByID"
 
-	session := new(Session)
+	conversation := new(Conversation)
 	err := db.NewSelect().
-		Model(session).
-		Where("session.id = ?", id).
+		Model(conversation).
+		Where("conversation.id = ?", id).
 		Scan(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return session, ez.New(op, ez.ENOTFOUND, "agent session not found", err)
+			return conversation, ez.New(op, ez.ENOTFOUND, "conversation not found", err)
 		}
-		return session, ez.Wrap(op, err)
+		return conversation, ez.Wrap(op, err)
 	}
-	return session, nil
+	return conversation, nil
 }
 
-func GetAgentSessionsBySpecID(ctx context.Context, db bun.IDB, agentSpecID uuid.UUID) ([]*Session, error) {
-	const op = "agent.GetAgentSessionsBySpecID"
+func GetConversationsBySpecID(ctx context.Context, db bun.IDB, agentSpecID uuid.UUID) ([]*Conversation, error) {
+	const op = "agent.GetConversationsBySpecID"
 
-	var sessions []*Session
+	var conversations []*Conversation
 	err := db.NewSelect().
-		Model(&sessions).
-		Where("session.agent_spec_id = ?", agentSpecID).
+		Model(&conversations).
+		Where("conversation.agent_spec_id = ?", agentSpecID).
 		Scan(ctx)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
-	return sessions, nil
+	return conversations, nil
 }
 
 // ---- Pagination helpers ----
 
-func (s Session) GetCursor() string {
-	return s.ID.String()
+func (c Conversation) GetCursor() string {
+	return c.ID.String()
 }
 
-func (s Session) GetSortField() string {
-	return "session.id"
+func (c Conversation) GetSortField() string {
+	return "conversation.id"
 }
 
-func (s Session) GetSortValue() interface{} {
-	return s.ID
+func (c Conversation) GetSortValue() interface{} {
+	return c.ID
 }
 
-func (s Session) GetUniqueField() string {
-	return "session.id"
+func (c Conversation) GetUniqueField() string {
+	return "conversation.id"
 }
 
-func (s Session) GetUniqueValue() interface{} {
-	return s.ID
+func (c Conversation) GetUniqueValue() interface{} {
+	return c.ID
 }

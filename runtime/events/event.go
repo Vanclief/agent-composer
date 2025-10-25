@@ -9,16 +9,16 @@ import (
 type Event struct {
 	ID             uint64            `json:"id"`
 	Type           EventType         `json:"type"`
-	AgentSessionID uuid.UUID         `json:"agent_session_id"`
+	ConversationID uuid.UUID         `json:"conversation_id"`
 	AgentName      string            `json:"agent_name"`
 	Timestamp      types.UnixSeconds `json:"timestamp"`
 	Data           map[string]any    `json:"data"`
 }
 
-func New(eventType EventType, agentSessionID uuid.UUID, agentName string, data map[string]any) Event {
+func New(eventType EventType, conversationID uuid.UUID, agentName string, data map[string]any) Event {
 	return Event{
 		Type:           eventType,
-		AgentSessionID: agentSessionID,
+		ConversationID: conversationID,
 		AgentName:      agentName,
 		Data:           data,
 	}
@@ -27,15 +27,15 @@ func New(eventType EventType, agentSessionID uuid.UUID, agentName string, data m
 type EventType string
 
 const (
-	EventTypeSessionStarted EventType = "session_started"
-	EventTypeSessionEnded   EventType = "session_ended"
-	EventTypePreToolUse     EventType = "pre_tool_use"
-	EventTypePostToolUse    EventType = "post_tool_use"
+	EventTypeConversationStarted EventType = "conversation_started"
+	EventTypeConversationEnded   EventType = "conversation_ended"
+	EventTypePreToolUse          EventType = "pre_tool_use"
+	EventTypePostToolUse         EventType = "post_tool_use"
 )
 
 var evenTypeSet = enums.Set([]EventType{
-	EventTypeSessionStarted,
-	EventTypeSessionEnded,
+	EventTypeConversationStarted,
+	EventTypeConversationEnded,
 	EventTypePreToolUse,
 	EventTypePostToolUse,
 })

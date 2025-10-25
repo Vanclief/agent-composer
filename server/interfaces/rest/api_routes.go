@@ -19,13 +19,13 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	specs.PUT("/:id", h.UpdateAgentSpec)
 	specs.DELETE("/:id", h.DeleteAgentSpec)
 
-	sessions := agents.Group("/sessions")
-	sessions.GET("", h.ListAgentSessions)
-	sessions.POST("", h.CreateAgentSession)
-	sessions.GET("/:id", h.GetAgentSession)
-	sessions.POST("/:id/fork", h.ForkAgentSession)
-	sessions.POST("/:id/resume", h.ResumeAgentSession)
-	sessions.DELETE("/:id", h.DeleteAgentSession)
+	conversations := agents.Group("/conversations")
+	conversations.GET("", h.ListConversations)
+	conversations.POST("", h.CreateConversation)
+	conversations.GET("/:id", h.GetConversation)
+	conversations.POST("/:id/fork", h.ForkConversation)
+	conversations.POST("/:id/resume", h.ResumeConversation)
+	conversations.DELETE("/:id", h.DeleteConversation)
 
 	// Hooks
 	hooks := api.Group("/hooks")

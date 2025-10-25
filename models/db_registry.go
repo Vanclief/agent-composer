@@ -11,7 +11,7 @@ var REGISTRABLE = []interface{}{}
 
 var ALL = []interface{}{
 	(*hook.Hook)(nil),
-	(*agent.Session)(nil),
+	(*agent.Conversation)(nil),
 	(*agent.Spec)(nil),
 	(*user.User)(nil),
 }

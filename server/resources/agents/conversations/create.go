@@ -1,4 +1,4 @@
-package sessions
+package conversations
 
 import (
 	"context"
@@ -11,9 +11,9 @@ import (
 )
 
 type CreateRequest struct {
-	AgentSpecID      uuid.UUID `json:"agent_spec_id"`
-	Prompt           string    `json:"prompt"`
-	ParallelSessions int       `json:"parallel_sessions"`
+	AgentSpecID           uuid.UUID `json:"agent_spec_id"`
+	Prompt                string    `json:"prompt"`
+	ParallelConversations int       `json:"parallel_conversations"`
 }
 
 func (r CreateRequest) Validate() error {
@@ -36,7 +36,7 @@ type CreateResponse struct {
 }
 
 func (api *API) Create(ctx context.Context, requester interface{}, request *CreateRequest) (*CreateResponse, error) {
-	const op = "sessions.API.Create"
+	const op = "conversations.API.Create"
 
 	// Step 1: Get the agent spec
 	spec, err := agent.GetAgentSpecByID(ctx, api.db, request.AgentSpecID)
@@ -46,13 +46,13 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 
 	// TODO: Permissions check
 
-	if request.ParallelSessions < 1 {
-		request.ParallelSessions = 1
+	if request.ParallelConversations < 1 {
+		request.ParallelConversations = 1
 	}
 
-	instances := make([]*runtime.AgentInstance, 0, request.ParallelSessions)
+	instances := make([]*runtime.AgentInstance, 0, request.ParallelConversations)
 
-	for i := 0; i < request.ParallelSessions; i++ {
+	for i := 0; i < request.ParallelConversations; i++ {
 		instance, err := api.rt.NewAgentInstanceFromSpec(ctx, spec.ID)
 		if err != nil {
 			return nil, ez.Wrap(op, err)

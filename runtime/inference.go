@@ -15,14 +15,14 @@ import (
 type toolCallKey struct{ name, args string }
 
 func (rt *Runtime) RunAgentInstance(ai *AgentInstance, prompt string) error {
-	const op = "runtime.RunSessions"
+	const op = "runtime.RunConversations"
 
 	sessionID := fmt.Sprintf("agent:%s", ai.ID)
 
 	rt.scheduler.RunOnce(rt.rootCtx, sessionID, func(jobCtx context.Context) {
 		err := rt.runAgentInstance(jobCtx, ai, prompt)
 		if err != nil {
-			log.Error().Err(err).Str("agent_session_id", ai.ID.String()).Msg("agent session failed")
+			log.Error().Err(err).Str("conversation_id", ai.ID.String()).Msg("conversation failed")
 		}
 	})
 
@@ -34,15 +34,15 @@ func (rt *Runtime) runAgentInstance(ctx context.Context, ai *AgentInstance, prom
 
 	// Step 1: Append the user prompt to the messages and update the status
 	ai.AddMessage(types.MessageRoleUser, prompt)
-	ai.session.Status = agent.SessionStatusRunning
+	ai.conversation.Status = agent.ConversationStatusRunning
 
-	err := ai.session.Update(ctx, rt.db)
+	err := ai.conversation.Update(ctx, rt.db)
 	if err != nil {
 		return ez.Wrap(op, err)
 	}
 
 	// Step 2: Run any session started hooks
-	for _, h := range ai.hooks[hook.EventTypeSessionStarted] {
+	for _, h := range ai.hooks[hook.EventTypeConversationStarted] {
 		RunHook(ctx, h, ai.ID, ai.name, "", "", "")
 	}
 
@@ -50,16 +50,16 @@ func (rt *Runtime) runAgentInstance(ctx context.Context, ai *AgentInstance, prom
 	inferenceErr := rt.runInference(ctx, ai)
 	if inferenceErr != nil {
 		if strings.Contains(inferenceErr.Error(), "context canceled") {
-			ai.session.Status = agent.SessionStatusCanceled
+			ai.conversation.Status = agent.ConversationStatusCanceled
 		} else {
-			ai.session.Status = agent.SessionStatusFailed
+			ai.conversation.Status = agent.ConversationStatusFailed
 		}
 	}
 
-	ai.session.Messages = ai.messages
+	ai.conversation.Messages = ai.messages
 
 	pCtx := context.WithoutCancel(ctx)
-	err = ai.session.Update(pCtx, rt.db)
+	err = ai.conversation.Update(pCtx, rt.db)
 	if err != nil {
 		return ez.Wrap(op, err)
 	}
@@ -70,7 +70,7 @@ func (rt *Runtime) runAgentInstance(ctx context.Context, ai *AgentInstance, prom
 
 	// Step 4: If there was no error, return the last message content
 	// lastMsg := ai.messages[len(ai.messages)-1]
-	log.Info().Str("agent_session_id", ai.ID.String()).Msg("Finished running inference")
+	log.Info().Str("conversation_id", ai.ID.String()).Msg("Finished running inference")
 
 	return nil
 }
@@ -85,7 +85,7 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 
 	for step := 0; step < maxSteps; step++ {
 
-		log.Info().Int("step", step).Str("Name", ai.session.Name).Msg("Agent session inference")
+		log.Info().Int("step", step).Str("Name", ai.conversation.Name).Msg("Conversation inference")
 
 		// Step 1: Create the chat request
 		chatRequest := types.ChatRequest{
@@ -163,16 +163,16 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 
 			ai.AddMessage(types.MessageRoleAssistant, res.Text)
 
-			// 4.1 Update the session status to succeeded so that hook don't see it as running
-			ai.session.Status = agent.SessionStatusSucceeded
-			err = ai.session.Update(ctx, rt.db)
+			// 4.1 Update the conversation status to succeeded so that hook don't see it as running
+			ai.conversation.Status = agent.ConversationStatusSucceeded
+			err = ai.conversation.Update(ctx, rt.db)
 			if err != nil {
 				return ez.Wrap(op, err)
 			}
 
 			// 4.2 Check if any hooks want to block the stop
 			blockStop := false
-			for _, h := range ai.hooks[hook.EventTypeSessionEnded] {
+			for _, h := range ai.hooks[hook.EventTypeConversationEnded] {
 
 				out, _ := RunHook(ctx, h, ai.ID, ai.name, res.Text, "", "")
 				if out.ExitCode == 2 {
@@ -180,9 +180,9 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 					blockStop = true
 					ai.AddMessage(types.MessageRoleUser, (string(out.Stderr)))
 
-					// Since a hook has requested more work, we set the session back to running
-					ai.session.Status = agent.SessionStatusRunning
-					err = ai.session.Update(ctx, rt.db)
+					// Since a hook has requested more work, we set the conversation back to running
+					ai.conversation.Status = agent.ConversationStatusRunning
+					err = ai.conversation.Update(ctx, rt.db)
 					if err != nil {
 						return ez.Wrap(op, err)
 					}

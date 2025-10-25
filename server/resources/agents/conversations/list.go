@@ -1,4 +1,4 @@
-package sessions
+package conversations
 
 import (
 	"context"
@@ -13,14 +13,14 @@ type ListRequest struct {
 	pagination.CursorRequest
 
 	// Optional filters
-	Provider    *agent.LLMProvider   `json:"provider,omitempty"`
-	Search      string               `json:"search"`
-	AgentSpecID uuid.UUID            `json:"agent_spec_id,omitempty"`
-	Status      *agent.SessionStatus `json:"status,omitempty"`
+	Provider    *agent.LLMProvider        `json:"provider,omitempty"`
+	Search      string                    `json:"search"`
+	AgentSpecID uuid.UUID                 `json:"agent_spec_id,omitempty"`
+	Status      *agent.ConversationStatus `json:"status,omitempty"`
 }
 
 func (r *ListRequest) Validate() error {
-	const op = "sessions.ListRequest.Validate"
+	const op = "conversations.ListRequest.Validate"
 
 	err := r.CursorRequest.Validate()
 	if err != nil {
@@ -32,32 +32,32 @@ func (r *ListRequest) Validate() error {
 
 type ListResponse struct {
 	pagination.CursorResponse
-	Sessions []agent.Session `json:"agent_sessions"`
+	Conversations []agent.Conversation `json:"conversations"`
 }
 
 func (api *API) List(ctx context.Context, requester interface{}, request *ListRequest) (*ListResponse, error) {
-	const op = "sessions.API.List"
+	const op = "conversations.API.List"
 
-	items := []agent.Session{}
-	model := agent.Session{}
+	items := []agent.Conversation{}
+	model := agent.Conversation{}
 
 	selectQuery := api.db.NewSelect().
 		Model(&items)
 
 	if request.Provider != nil {
-		selectQuery = selectQuery.Where("session.provider = ?", *request.Provider)
+		selectQuery = selectQuery.Where("conversation.provider = ?", *request.Provider)
 	}
 
 	if request.AgentSpecID != uuid.Nil {
-		selectQuery = selectQuery.Where("session.agent_spec_id = ?", request.AgentSpecID)
+		selectQuery = selectQuery.Where("conversation.agent_spec_id = ?", request.AgentSpecID)
 	}
 
 	if request.Status != nil {
-		selectQuery = selectQuery.Where("session.status = ?", *request.Status)
+		selectQuery = selectQuery.Where("conversation.status = ?", *request.Status)
 	}
 
 	if request.Search != "" {
-		selectQuery = selectQuery.Where("session.name ILIKE ?", "%"+request.Search+"%")
+		selectQuery = selectQuery.Where("conversation.name ILIKE ?", "%"+request.Search+"%")
 	}
 
 	selectQuery, err := pagination.ApplyCursorToQuery(selectQuery, &request.CursorRequest, model, pagination.DESC)
@@ -76,7 +76,7 @@ func (api *API) List(ctx context.Context, requester interface{}, request *ListRe
 	}
 
 	return &ListResponse{
-		Sessions:       resp.GetItems().([]agent.Session),
+		Conversations:  resp.GetItems().([]agent.Conversation),
 		CursorResponse: *resp,
 	}, nil
 }

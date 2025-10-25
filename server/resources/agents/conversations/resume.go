@@ -1,4 +1,4 @@
-package sessions
+package conversations
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 )
 
 type ResumeRequest struct {
-	AgentSessionID uuid.UUID `json:"agent_session_id"`
+	ConversationID uuid.UUID `json:"conversation_id"`
 	Prompt         string    `json:"prompt"`
 }
 
@@ -18,7 +18,7 @@ func (r ResumeRequest) Validate() error {
 	const op = "ResumeRequest.Validate"
 
 	err := validation.ValidateStruct(&r,
-		validation.Field(&r.AgentSessionID, validation.Required),
+		validation.Field(&r.ConversationID, validation.Required),
 	)
 	if err != nil {
 		return ez.New(op, ez.EINVALID, err.Error(), nil)
@@ -28,10 +28,10 @@ func (r ResumeRequest) Validate() error {
 }
 
 func (api *API) Resume(ctx context.Context, requester interface{}, request *ResumeRequest) (uuid.UUID, error) {
-	const op = "sessions.API.Resume"
+	const op = "conversations.API.Resume"
 
-	// Step 1: Get the agent session
-	session, err := agent.GetAgentSessionByID(ctx, api.db, request.AgentSessionID)
+	// Step 1: Get the conversation
+	conversation, err := agent.GetConversationByID(ctx, api.db, request.ConversationID)
 	if err != nil {
 		return uuid.Nil, ez.Wrap(op, err)
 	}
@@ -39,12 +39,12 @@ func (api *API) Resume(ctx context.Context, requester interface{}, request *Resu
 	// Step 2: Launch
 
 	// TODO: Permissions check
-	instance, err := api.rt.NewAgentInstanceFromSession(ctx, session.ID)
+	instance, err := api.rt.NewAgentInstanceFromConversation(ctx, conversation.ID)
 	if err != nil {
 		return uuid.Nil, ez.Wrap(op, err)
 	}
 
 	api.rt.RunAgentInstance(instance, request.Prompt)
 
-	return session.ID, nil
+	return conversation.ID, nil
 }

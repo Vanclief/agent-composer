@@ -16,7 +16,7 @@ import (
 
 type AgentInstance struct {
 	ID              uuid.UUID
-	session         *agent.Session
+	conversation    *agent.Conversation
 	provider        types.LLMProvider
 	name            string
 	model           string
@@ -46,28 +46,28 @@ func (rt *Runtime) NewAgentInstanceFromSpec(ctx context.Context, agentSpecID uui
 
 	msgs := []types.Message{*types.NewSystemMessage(spec.Instructions)}
 
-	// Step 2) Create the a new agent session
-	session, err := agent.NewAgentSession(spec, msgs)
+	// Step 2) Create the a new conversation
+	conversation, err := agent.NewConversation(spec, msgs)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
 
-	return rt.newAgentInstance(ctx, session, true)
+	return rt.newAgentInstance(ctx, conversation, true)
 }
 
-func (rt *Runtime) NewAgentInstanceFromSession(ctx context.Context, agentSessionID uuid.UUID) (*AgentInstance, error) {
-	const op = "runtime.NewAgentInstanceFromSession"
+func (rt *Runtime) NewAgentInstanceFromConversation(ctx context.Context, conversationID uuid.UUID) (*AgentInstance, error) {
+	const op = "runtime.NewAgentInstanceFromConversation"
 
-	// Step 1) Load the existing session
-	session, err := agent.GetAgentSessionByID(ctx, rt.db, agentSessionID)
+	// Step 1) Load the existing conversation
+	conversation, err := agent.GetConversationByID(ctx, rt.db, conversationID)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
 
-	return rt.newAgentInstance(ctx, session, false)
+	return rt.newAgentInstance(ctx, conversation, false)
 }
 
-func (rt *Runtime) newAgentInstance(ctx context.Context, session *agent.Session, new bool) (*AgentInstance, error) {
+func (rt *Runtime) newAgentInstance(ctx context.Context, conversation *agent.Conversation, new bool) (*AgentInstance, error) {
 	const op = "runtime.NewAgentInstance"
 
 	// Step 2) Create the ChatGPT instance
@@ -96,37 +96,37 @@ func (rt *Runtime) newAgentInstance(ctx context.Context, session *agent.Session,
 		return nil, ez.Wrap(op, err)
 	}
 
-	session.Tools = tools
+	conversation.Tools = tools
 
 	if new {
-		err = session.Insert(ctx, rt.db)
+		err = conversation.Insert(ctx, rt.db)
 		if err != nil {
 			return nil, ez.Wrap(op, err)
 		}
 	} else {
-		err = session.Update(ctx, rt.db)
+		err = conversation.Update(ctx, rt.db)
 		if err != nil {
 			return nil, ez.Wrap(op, err)
 		}
 	}
 
 	// Step 6) Load the hooks
-	hooks, err := loadInstanceHooks(ctx, rt.db, session.Name)
+	hooks, err := loadInstanceHooks(ctx, rt.db, conversation.Name)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
 
 	return &AgentInstance{
-		ID:              session.ID,
-		session:         session,
+		ID:              conversation.ID,
+		conversation:    conversation,
 		provider:        chatGPT,
-		name:            session.Name,
-		model:           session.Model,
-		instructions:    session.Instructions,
-		reasoningEffort: session.ReasoningEffort,
+		name:            conversation.Name,
+		model:           conversation.Model,
+		instructions:    conversation.Instructions,
+		reasoningEffort: conversation.ReasoningEffort,
 		mcpMux:          mux,
 		tools:           tools,
-		messages:        session.Messages,
+		messages:        conversation.Messages,
 		hooks:           hooks,
 	}, nil
 }

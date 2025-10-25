@@ -1,4 +1,4 @@
-package sessions
+package conversations
 
 import (
 	"context"
@@ -10,14 +10,14 @@ import (
 )
 
 type GetRequest struct {
-	AgentSessionID uuid.UUID `json:"agent_session_id"`
+	ConversationID uuid.UUID `json:"conversation_id"`
 }
 
 func (r GetRequest) Validate() error {
 	const op = "GetRequest.Validate"
 
 	err := validation.ValidateStruct(&r,
-		validation.Field(&r.AgentSessionID, validation.Required),
+		validation.Field(&r.ConversationID, validation.Required),
 	)
 	if err != nil {
 		return ez.New(op, ez.EINVALID, err.Error(), nil)
@@ -26,16 +26,15 @@ func (r GetRequest) Validate() error {
 	return nil
 }
 
-func (api *API) Get(ctx context.Context, requester interface{}, request *GetRequest) (*agent.Session, error) {
-	const op = "sessions.API.Get"
+func (api *API) Get(ctx context.Context, requester interface{}, request *GetRequest) (*agent.Conversation, error) {
+	const op = "conversations.API.Get"
 
-	// Step 1: Get the agent session
-	session, err := agent.GetAgentSessionByID(ctx, api.db, request.AgentSessionID)
+	// Step 1: Get the conversation
+	conversation, err := agent.GetConversationByID(ctx, api.db, request.ConversationID)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
 
 	// TODO: Permissions check
-
-	return session, nil
+	return conversation, nil
 }

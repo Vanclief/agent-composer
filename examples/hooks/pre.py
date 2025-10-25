@@ -11,7 +11,7 @@ def main() -> None:
         sys.exit(2)
 
     # Minimal validation (strict and explicit)
-    required = ["id", "type", "agent_session_id", "agent_name", "timestamp", "data"]
+    required = ["id", "type", "conversation_id", "agent_name", "timestamp", "data"]
     missing = [k for k in required if k not in event]
     if missing:
         print(f"missing fields: {missing}", file=sys.stderr)

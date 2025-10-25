@@ -1,4 +1,4 @@
-package sessions
+package conversations
 
 import (
 	"context"
@@ -10,14 +10,14 @@ import (
 )
 
 type DeleteRequest struct {
-	AgentSessionID uuid.UUID `json:"agent_session_id"`
+	ConversationID uuid.UUID `json:"conversation_id"`
 }
 
 func (r DeleteRequest) Validate() error {
 	const op = "DeleteRequest.Validate"
 
 	err := validation.ValidateStruct(&r,
-		validation.Field(&r.AgentSessionID, validation.Required),
+		validation.Field(&r.ConversationID, validation.Required),
 	)
 	if err != nil {
 		return ez.New(op, ez.EINVALID, err.Error(), nil)
@@ -27,21 +27,21 @@ func (r DeleteRequest) Validate() error {
 }
 
 func (api *API) Delete(ctx context.Context, requester interface{}, request *DeleteRequest) (uuid.UUID, error) {
-	const op = "sessions.API.Delete"
+	const op = "conversations.API.Delete"
 
-	// Step 1: Get the session
-	session, err := agent.GetAgentSessionByID(ctx, api.db, request.AgentSessionID)
+	// Step 1: Get the conversation
+	conversation, err := agent.GetConversationByID(ctx, api.db, request.ConversationID)
 	if err != nil {
 		return uuid.Nil, ez.Wrap(op, err)
 	}
 
 	// TODO: Permissions check
 
-	// Step 3: Delete the agent session
-	err = session.Delete(ctx, api.db)
+	// Step 3: Delete the conversation
+	err = conversation.Delete(ctx, api.db)
 	if err != nil {
 		return uuid.Nil, ez.Wrap(op, err)
 	}
 
-	return session.ID, nil
+	return conversation.ID, nil
 }
