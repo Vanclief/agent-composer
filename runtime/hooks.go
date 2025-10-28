@@ -133,7 +133,7 @@ func loadInstanceHooks(ctx context.Context, db bun.IDB, agentName string) (map[h
 	var hooks []hook.Hook
 	err := db.NewSelect().
 		Model(&hooks).
-		Where("agent_name = ?", agentName).
+		Where("agent_name IN (?, ?)", agentName, "*").
 		Where("enabled = ?", true).
 		Scan(ctx)
 	if err != nil {
