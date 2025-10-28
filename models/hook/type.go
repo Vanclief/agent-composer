@@ -7,6 +7,7 @@ type EventType string
 const (
 	EventTypeConversationStarted EventType = "conversation_started"
 	EventTypeConversationEnded   EventType = "conversation_ended"
+	EventTypeContextExceeded     EventType = "context_exceeded"
 	EventTypePreToolUse          EventType = "pre_tool_use"
 	EventTypePostToolUse         EventType = "post_tool_use"
 )
@@ -14,6 +15,7 @@ const (
 var evenTypeSet = enums.Set([]EventType{
 	EventTypeConversationStarted,
 	EventTypeConversationEnded,
+	EventTypeContextExceeded,
 	EventTypePreToolUse,
 	EventTypePostToolUse,
 })

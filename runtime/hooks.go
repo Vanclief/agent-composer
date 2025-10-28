@@ -8,34 +8,47 @@ import (
 	"os/exec"
 	"syscall"
 
-	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"github.com/uptrace/bun"
 	"github.com/vanclief/agent-composer/models/hook"
+	"github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/ez"
 )
 
-type HookInput struct {
-	ID            string         `json:"id"`
-	RunID         string         `json:"run_id"`
-	EventType     hook.EventType `json:"event_type"`
-	TemplateName  string         `json:"template_name"`
-	LastResponse  string         `json:"last_response,omitempty"`
-	ToolName      string         `json:"tool_name,omitempty"`
-	ToolArguments string         `json:"tool_arguments,omitempty"`
+type HookStdin struct {
+	ID             string         `json:"id"`
+	ConversationID string         `json:"conversation_id"`
+	EventType      hook.EventType `json:"event_type"`
+	AgentName      string         `json:"agent_name"`
+	LastResponse   string         `json:"last_response,omitempty"`
+	ToolName       string         `json:"tool_name,omitempty"`
+	ToolArguments  string         `json:"tool_arguments,omitempty"`
+	ToolResponse   string         `json:"tool_response,omitempty"`
 }
 
-func RunHook(ctx context.Context, hook hook.Hook, runID uuid.UUID, templateName, lastResponse, toolName, toolArguments string) (HookResult, error) {
+func RunHook(ctx context.Context, hook hook.Hook, ai *AgentInstance, toolCall *types.ToolCall, toolCallResponse string) (HookResult, error) {
 	const op = "runtime.RunHook"
 
-	e := HookInput{
-		ID:            hook.ID.String(),
-		RunID:         runID.String(),
-		TemplateName:  templateName,
-		EventType:     hook.EventType,
-		LastResponse:  lastResponse,
-		ToolName:      toolName,
-		ToolArguments: toolArguments,
+	var lastResponse, toolName, toolArguments string
+	lam, found := ai.LatestAssistantMessage()
+	if found {
+		lastResponse = lam.Content
+	}
+
+	if toolCall != nil {
+		toolName = toolCall.Name
+		toolArguments = toolCall.Arguments
+	}
+
+	e := HookStdin{
+		ID:             hook.ID.String(),
+		ConversationID: ai.ID.String(),
+		AgentName:      ai.name,
+		EventType:      hook.EventType,
+		LastResponse:   lastResponse,
+		ToolName:       toolName,
+		ToolArguments:  toolArguments,
+		ToolResponse:   toolCallResponse,
 	}
 
 	payload, _ := json.Marshal(e)
@@ -114,13 +127,13 @@ func executeHook(ctx context.Context, command string, args []string, stdin []byt
 	return result, ez.New(op, ez.EINTERNAL, "hook process failed", err)
 }
 
-func loadInstanceHooks(ctx context.Context, db bun.IDB, templateName string) (map[hook.EventType][]hook.Hook, error) {
+func loadInstanceHooks(ctx context.Context, db bun.IDB, agentName string) (map[hook.EventType][]hook.Hook, error) {
 	const op = "runtime.loadInstanceHooks"
 
 	var hooks []hook.Hook
 	err := db.NewSelect().
 		Model(&hooks).
-		Where("template_name = ?", templateName).
+		Where("agent_name = ?", agentName).
 		Where("enabled = ?", true).
 		Scan(ctx)
 	if err != nil {

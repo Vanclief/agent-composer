@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/google/uuid"
 
+	"github.com/vanclief/agent-composer/mcp/shell"
 	"github.com/vanclief/agent-composer/models/agent"
 	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 )
@@ -177,7 +178,7 @@ func renderConversationMessages(conv *agent.Conversation, width int) string {
 		}
 		role := humanizeRole(string(message.Role))
 		content, alreadyStyled := formatMessageContent(message, width)
-		header := fmt.Sprintf("%s:", role)
+		header := fmt.Sprintf("[%s]", role)
 		b.WriteString(headerStyle.Render(header))
 		b.WriteString("\n")
 		if alreadyStyled {
@@ -211,7 +212,7 @@ func renderConversationSidebar(conv *agent.Conversation, width int) string {
 		sections = append(sections, row)
 	}
 
-	appendField("Name", conv.Name)
+	appendField("Name", conv.AgentName)
 	appendField("Status", string(conv.Status))
 	appendField("Provider", string(conv.Provider))
 	appendField("Model", conv.Model)
@@ -220,16 +221,6 @@ func renderConversationSidebar(conv *agent.Conversation, width int) string {
 	appendField("Conversation ID", conv.ID.String())
 
 	return strings.Join(sections, "\n\n")
-}
-
-type toolMessagePayload struct {
-	ExitCode     int    `json:"exit_code"`
-	DurationMS   int64  `json:"duration_ms"`
-	Stdout       string `json:"stdout"`
-	Stderr       string `json:"stderr"`
-	TimedOut     bool   `json:"timed_out"`
-	EffectiveDir string `json:"effective_dir"`
-	CommandEcho  string `json:"command_echo"`
 }
 
 func formatMessageContent(message runtimetypes.Message, width int) (string, bool) {
@@ -242,7 +233,7 @@ func formatMessageContent(message runtimetypes.Message, width int) (string, bool
 }
 
 func formatToolMessageContent(message runtimetypes.Message, width int) (string, bool) {
-	var payload toolMessagePayload
+	var payload shell.ShellRunResult
 	if err := json.Unmarshal([]byte(message.Content), &payload); err != nil {
 		return "", false
 	}
@@ -254,7 +245,7 @@ func formatToolMessageContent(message runtimetypes.Message, width int) (string, 
 		command = message.Name
 	}
 	if command != "" {
-		b.WriteString(valueStyle.Copy().Bold(true).Render("Ran"))
+		b.WriteString(valueStyle.Bold(true).Render("Ran"))
 		b.WriteString("\n")
 		b.WriteString(bodyStyle.Render(wrapText(command, width)))
 	}

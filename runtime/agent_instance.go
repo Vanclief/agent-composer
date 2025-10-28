@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -111,7 +113,7 @@ func (rt *Runtime) newAgentInstance(ctx context.Context, conversation *agent.Con
 	}
 
 	// Step 6) Load the hooks
-	hooks, err := loadInstanceHooks(ctx, rt.db, conversation.Name)
+	hooks, err := loadInstanceHooks(ctx, rt.db, conversation.AgentName)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
@@ -120,7 +122,7 @@ func (rt *Runtime) newAgentInstance(ctx context.Context, conversation *agent.Con
 		ID:              conversation.ID,
 		conversation:    conversation,
 		provider:        chatGPT,
-		name:            conversation.Name,
+		name:            conversation.AgentName,
 		model:           conversation.Model,
 		instructions:    conversation.Instructions,
 		reasoningEffort: conversation.ReasoningEffort,
@@ -129,6 +131,58 @@ func (rt *Runtime) newAgentInstance(ctx context.Context, conversation *agent.Con
 		messages:        conversation.Messages,
 		hooks:           hooks,
 	}, nil
+}
+
+func (ai *AgentInstance) LatestAssistantMessage() (*types.Message, bool) {
+	for i := len(ai.messages) - 1; i >= 0; i-- {
+		if ai.messages[i].Role == types.MessageRoleAssistant && ai.messages[i].ToolCall == nil {
+			return &ai.messages[i], true
+		}
+	}
+
+	return nil, false
+}
+
+func (ai *AgentInstance) RunHooks(ctx context.Context, event hook.EventType, toolCall *types.ToolCall, toolCallResponse string) error {
+	for _, h := range ai.hooks[event] {
+		_, err := ai.useHook(ctx, h, toolCall, toolCallResponse)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (ai *AgentInstance) useHook(ctx context.Context, h hook.Hook, toolCall *types.ToolCall, toolCallResponse string) (HookResult, error) {
+	out, err := RunHook(ctx, h, ai, toolCall, toolCallResponse)
+	if out.ExitCode == 2 {
+		stderrText := strings.TrimSpace(string(out.Stderr))
+		if stderrText == "" {
+			stderrText = "hook failed"
+		}
+
+		if toolCall != nil {
+			payload := shellmcp.ShellRunResult{
+				ExitCode:    1,
+				Stderr:      stderrText,
+				CommandEcho: commandEcho(toolCall),
+			}
+
+			encoded, marshalErr := json.Marshal(payload)
+			if marshalErr != nil {
+				log.Error().Err(marshalErr).Msg("Failed to marshal hook error payload")
+				ai.AddToolMessage(toolCall.Name, toolCall.CallID, stderrText)
+			} else {
+				ai.AddToolMessage(toolCall.Name, toolCall.CallID, string(encoded))
+			}
+		} else {
+			ai.AddMessage(types.MessageRoleUser, stderrText)
+		}
+		return out, err // Return on first exit code 2
+	}
+
+	return out, nil
 }
 
 func (ai *AgentInstance) AddMessage(role types.MessageRole, content string) {
@@ -152,4 +206,32 @@ func (ai *AgentInstance) AddMessage(role types.MessageRole, content string) {
 func (ai *AgentInstance) AddToolMessage(toolName, toolCallID, content string) {
 	msg := *types.NewToolMessage(toolName, toolCallID, content)
 	ai.messages = append(ai.messages, msg)
+}
+
+func (ai *AgentInstance) AddAssistantToolCall(toolCall types.ToolCall) {
+	msg := *types.NewAssistantToolCallMessage(toolCall)
+	ai.messages = append(ai.messages, msg)
+}
+
+func commandEcho(call *types.ToolCall) string {
+	if call == nil {
+		return ""
+	}
+
+	if len(call.JSONArguments) > 0 {
+		var payload struct {
+			Command string `json:"command"`
+		}
+		if err := json.Unmarshal(call.JSONArguments, &payload); err == nil {
+			if cmd := strings.TrimSpace(payload.Command); cmd != "" {
+				return cmd
+			}
+		}
+	}
+
+	if trimmed := strings.TrimSpace(call.Arguments); trimmed != "" {
+		return trimmed
+	}
+
+	return call.Name
 }

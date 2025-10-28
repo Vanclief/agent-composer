@@ -13,15 +13,15 @@ import (
 type Hook struct {
 	bun.BaseModel `bun:"table:hooks"`
 
-	ID           uuid.UUID `bun:",pk,type:uuid" json:"id"` // DB default should be uuid_generate_v4() via uuid-ossp
-	EventType    EventType `bun:"event_type,notnull" json:"event_type"`
-	TemplateName string    `bun:"template_name" json:"template_name"` // empty = wildcard
-	Command      string    `bun:"command,notnull" json:"command"`
-	Args         []string  `bun:"args,array" json:"args"`
-	Enabled      bool      `bun:"enabled" json:"enabled"`
+	ID        uuid.UUID `bun:",pk,type:uuid" json:"id"`
+	EventType EventType `bun:"event_type,notnull" json:"event_type"`
+	AgentName string    `bun:"agent_name" json:"agent_name"` // empty = wildcard
+	Command   string    `bun:"command,notnull" json:"command"`
+	Args      []string  `bun:"args,array" json:"args"`
+	Enabled   bool      `bun:"enabled" json:"enabled"`
 }
 
-func NewHook(eventType EventType, templateName, command string, args []string, enabled bool) (*Hook, error) {
+func NewHook(eventType EventType, agentName, command string, args []string, enabled bool) (*Hook, error) {
 	const op = "hook.NewHook"
 
 	id, err := uuid.NewV7()
@@ -30,12 +30,12 @@ func NewHook(eventType EventType, templateName, command string, args []string, e
 	}
 
 	h := &Hook{
-		ID:           id,
-		EventType:    eventType,
-		TemplateName: templateName,
-		Command:      command,
-		Args:         args,
-		Enabled:      enabled,
+		ID:        id,
+		EventType: eventType,
+		AgentName: agentName,
+		Command:   command,
+		Args:      args,
+		Enabled:   enabled,
 	}
 
 	err = h.Validate()
@@ -47,7 +47,7 @@ func NewHook(eventType EventType, templateName, command string, args []string, e
 }
 
 func (h Hook) IsWildcard() bool {
-	return h.TemplateName == ""
+	return h.AgentName == ""
 }
 
 // Paginatable-style helpers
@@ -56,11 +56,11 @@ func (h Hook) GetCursor() string {
 }
 
 func (h Hook) GetSortField() string {
-	return `"hook".template_name`
+	return `"hook".agent_name`
 }
 
 func (h Hook) GetSortValue() interface{} {
-	return h.TemplateName
+	return h.AgentName
 }
 
 func (h Hook) GetUniqueField() string {

@@ -11,7 +11,7 @@ import (
 
 type CreateRequest struct {
 	EventType    hook.EventType `json:"event_type"`
-	TemplateName string         `json:"template_name"` // empty = wildcard
+	AgentName string         `json:"agent_name"` // empty = wildcard
 	Command      string         `json:"command"`
 	Args         []string       `json:"args"`
 	Enabled      bool           `json:"enabled"`
@@ -24,7 +24,7 @@ func (r CreateRequest) Validate() error {
 		validation.Field(&r.EventType, validation.Required),
 		validation.Field(&r.Command, validation.Required),
 		validation.Field(&r.Enabled, validation.Required),
-		// TemplateName optional, Args optional
+		// AgentName optional, Args optional
 	)
 	if err != nil {
 		return ez.New(op, ez.EINVALID, err.Error(), nil)
@@ -42,7 +42,7 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 
 	// TODO: Permissions check
 
-	h, err := hook.NewHook(request.EventType, strings.TrimSpace(request.TemplateName), strings.TrimSpace(request.Command), request.Args, request.Enabled)
+	h, err := hook.NewHook(request.EventType, strings.TrimSpace(request.AgentName), strings.TrimSpace(request.Command), request.Args, request.Enabled)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}

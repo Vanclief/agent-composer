@@ -31,8 +31,11 @@ func (r CreateRequest) Validate() error {
 }
 
 type CreateResponse struct {
-	IDs     []uuid.UUID `json:"ids,omitempty"`
-	Success bool        `json:"success"`
+	Conversations []ConversationID `json:"conversations"`
+}
+
+type ConversationID struct {
+	ID uuid.UUID `json:"id"`
 }
 
 func (api *API) Create(ctx context.Context, requester interface{}, request *CreateRequest) (*CreateResponse, error) {
@@ -63,10 +66,13 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 		instances = append(instances, instance)
 	}
 
-	ids := make([]uuid.UUID, len(instances))
-	for i, instance := range instances {
-		ids[i] = instance.ID
+	response := &CreateResponse{
+		Conversations: make([]ConversationID, len(instances)),
 	}
 
-	return &CreateResponse{IDs: ids, Success: true}, nil
+	for i, instance := range instances {
+		response.Conversations[i] = ConversationID{ID: instance.ID}
+	}
+
+	return response, nil
 }

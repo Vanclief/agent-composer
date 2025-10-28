@@ -24,7 +24,7 @@ type Conversation struct {
 
 	ID              uuid.UUID                    `bun:",pk,type:uuid" json:"id"`
 	AgentSpecID     uuid.UUID                    `bun:"type:uuid" json:"agent_spec_id"`
-	Name            string                       `json:"name"`
+	AgentName       string                       `json:"agent_name"`
 	Provider        LLMProvider                  `json:"provider"`
 	Model           string                       `json:"model"`
 	ReasoningEffort runtimetypes.ReasoningEffort `json:"reasoning_effort"`
@@ -47,7 +47,7 @@ func NewConversation(agentSpec *Spec, messages []types.Message) (*Conversation, 
 	conversation := &Conversation{
 		ID:              id,
 		AgentSpecID:     agentSpec.ID,
-		Name:            agentSpec.Name,
+		AgentName:       agentSpec.Name,
 		Provider:        agentSpec.Provider,
 		Model:           agentSpec.Model,
 		ReasoningEffort: agentSpec.ReasoningEffort,
@@ -73,7 +73,7 @@ func (c *Conversation) Validate() error {
 		return ez.New(op, ez.EINVALID, "agent_spec_id is required", nil)
 	}
 
-	if c.Name == "" {
+	if c.AgentName == "" {
 		return ez.New(op, ez.EINVALID, "name is required", nil)
 	}
 

@@ -29,8 +29,8 @@ func (h *Handler) ListHooks(c echo.Context) error {
 		et := events.EventType(v)
 		body.EventType = &et
 	}
-	if v := strings.TrimSpace(c.QueryParam("template_name")); v != "" {
-		body.TemplateName = &v
+	if v := strings.TrimSpace(c.QueryParam("agent_name")); v != "" {
+		body.AgentName = &v
 	}
 
 	return h.JSONResponse(c, op, req, body)

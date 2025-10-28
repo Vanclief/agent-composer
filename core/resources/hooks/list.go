@@ -15,8 +15,8 @@ type ListRequest struct {
 
 	// Optional filters
 	EventType    *events.EventType `json:"event_type,omitempty"`
-	TemplateName *string           `json:"template_name,omitempty"`
-	Search       string            `json:"search"` // ILIKE on template_name/command
+	AgentName *string           `json:"agent_name,omitempty"`
+	Search       string            `json:"search"` // ILIKE on agent_name/command
 }
 
 func (r *ListRequest) Validate() error {
@@ -53,12 +53,12 @@ func (api *API) List(ctx context.Context, requester interface{}, request *ListRe
 	if request.EventType != nil {
 		q = q.Where("event_type = ?", *request.EventType)
 	}
-	if request.TemplateName != nil {
-		q = q.Where("template_name = ?", strings.TrimSpace(*request.TemplateName))
+	if request.AgentName != nil {
+		q = q.Where("agent_name = ?", strings.TrimSpace(*request.AgentName))
 	}
 	if strings.TrimSpace(request.Search) != "" {
 		search := "%" + strings.TrimSpace(request.Search) + "%"
-		q = q.Where("(template_name ILIKE ? OR command ILIKE ?)", search, search)
+		q = q.Where("(agent_name ILIKE ? OR command ILIKE ?)", search, search)
 	}
 
 	// Newest-first by cursor (UUIDv7 or your model's rules)

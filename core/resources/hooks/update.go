@@ -13,7 +13,7 @@ import (
 type UpdateRequest struct {
 	HookID       uuid.UUID       `json:"hook_id"`
 	EventType    *hook.EventType `json:"event_type,omitempty"`
-	TemplateName *string         `json:"template_name,omitempty"`
+	AgentName *string         `json:"agent_name,omitempty"`
 	Command      *string         `json:"command,omitempty"`
 	Args         *[]string       `json:"args,omitempty"`
 	Enabled      *bool           `json:"enabled,omitempty"`
@@ -55,8 +55,8 @@ func (api *API) Update(ctx context.Context, requester interface{}, request *Upda
 		changed = true
 	}
 
-	if request.TemplateName != nil {
-		h.TemplateName = strings.TrimSpace(*request.TemplateName)
+	if request.AgentName != nil {
+		h.AgentName = strings.TrimSpace(*request.AgentName)
 		changed = true
 	}
 

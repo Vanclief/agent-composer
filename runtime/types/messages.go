@@ -20,6 +20,7 @@ type Message struct {
 	Content    string      // The text or payload of the message
 	Name       string      // Optional: tool name or function name
 	ToolCallID string      // Optional: maps back to the provider's call identifier
+	ToolCall   *ToolCall   // Optional: captures assistant-issued tool calls
 }
 
 func NewMessage(role MessageRole, content string) *Message {
@@ -60,5 +61,16 @@ func NewToolMessage(toolName, toolCallID, content string) *Message {
 		Name:       toolName,
 		ToolCallID: toolCallID,
 		Content:    content,
+	}
+}
+
+// NewAssistantToolCallMessage records a tool call emitted by the assistant.
+func NewAssistantToolCallMessage(toolCall ToolCall) *Message {
+	tc := toolCall
+	return &Message{
+		Role:       MessageRoleAssistant,
+		Name:       tc.Name,
+		ToolCallID: tc.CallID,
+		ToolCall:   &tc,
 	}
 }

@@ -18,7 +18,7 @@ type shellRunArgs struct {
 	Workdir string `json:"workdir"        jsonschema_description:"Optional working directory"`
 }
 
-type shellRunResult struct {
+type ShellRunResult struct {
 	ExitCode     int    `json:"exit_code"`
 	DurationMS   int64  `json:"duration_ms"`
 	Stdout       string `json:"stdout"`
@@ -60,18 +60,18 @@ func NewServer(rootDir string, allowedWorkdirs []string, defaultWorkdir string, 
 		"shell",
 		mcpproto.WithDescription("Execute a bash command"),
 		mcpproto.WithInputSchema[shellRunArgs](),
-		mcpproto.WithOutputSchema[shellRunResult](),
+		mcpproto.WithOutputSchema[ShellRunResult](),
 	)
 
 	srv.AddTool(shellTool, mcpproto.NewStructuredToolHandler(func(
 		ctx context.Context,
 		_ mcpproto.CallToolRequest,
 		args shellRunArgs,
-	) (shellRunResult, error) {
+	) (ShellRunResult, error) {
 		// 1) Resolve workdir (this defines `workdir`)
 		workdir, err := resolver.resolve(args.Workdir)
 		if err != nil {
-			return shellRunResult{}, ez.Wrap(op, err)
+			return ShellRunResult{}, ez.Wrap(op, err)
 		}
 
 		// 2) Compute effective timeout (this defines `effectiveTimeout`)
@@ -82,7 +82,7 @@ func NewServer(rootDir string, allowedWorkdirs []string, defaultWorkdir string, 
 		outcome, runErr := runBashIsolated(execCtx, workdir, args.Command)
 		duration := time.Since(start)
 
-		result := shellRunResult{
+		result := ShellRunResult{
 			ExitCode:     outcome.ExitCode,
 			DurationMS:   duration.Milliseconds(),
 			Stdout:       outcome.Stdout,

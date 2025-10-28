@@ -130,7 +130,7 @@ func (v *listView) UpdateRows(items []hook.Hook) {
 	rows := make([]table.Row, len(items))
 	for i, h := range items {
 		rows[i] = table.Row{
-			humanizeTemplate(h.TemplateName),
+			humanizeTemplate(h.AgentName),
 			string(h.EventType),
 			h.Command,
 			boolLabel(h.Enabled),

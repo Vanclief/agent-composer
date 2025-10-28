@@ -213,7 +213,7 @@ func renderHookSidebar(h *hook.Hook, width int) string {
 	}
 
 	appendField("Event Type", string(h.EventType))
-	appendField("Template", humanizeTemplate(h.TemplateName))
+	appendField("Template", humanizeTemplate(h.AgentName))
 	appendField("Status", boolLabel(h.Enabled))
 	appendField("Hook ID", h.ID.String())
 

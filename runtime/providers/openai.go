@@ -177,19 +177,27 @@ func messagesToResponsesInputParam(messages []types.Message) responses.ResponseI
 			items = append(items, responses.ResponseInputItemUnionParam{OfInputMessage: &inMsg})
 
 		case types.MessageRoleAssistant:
-			// Assistant history must be sent as *output_message* content,
-			// whose content types are 'output_text' or 'refusal'.
-			outText := responses.ResponseOutputTextParam{Text: m.Content}
-			outContent := responses.ResponseOutputMessageContentUnionParam{
-				OfOutputText: &outText,
+			if m.ToolCall != nil {
+				// Persisted function call from the assistant.
+				items = append(items, responses.ResponseInputItemParamOfFunctionCall(
+					m.ToolCall.Arguments,
+					m.ToolCall.CallID,
+					m.ToolCall.Name,
+				))
+			} else {
+				// Assistant history must be sent as *output_message* content.
+				outText := responses.ResponseOutputTextParam{Text: m.Content}
+				outContent := responses.ResponseOutputMessageContentUnionParam{
+					OfOutputText: &outText,
+				}
+				outMsg := responses.ResponseOutputMessageParam{
+					Content: []responses.ResponseOutputMessageContentUnionParam{outContent},
+					// Role and Type default to assistant/message; OK to omit.
+				}
+				items = append(items, responses.ResponseInputItemUnionParam{
+					OfOutputMessage: &outMsg,
+				})
 			}
-			outMsg := responses.ResponseOutputMessageParam{
-				Content: []responses.ResponseOutputMessageContentUnionParam{outContent},
-				// Role and Type default to assistant/message; OK to omit.
-			}
-			items = append(items, responses.ResponseInputItemUnionParam{
-				OfOutputMessage: &outMsg,
-			})
 
 		case types.MessageRoleTool:
 
