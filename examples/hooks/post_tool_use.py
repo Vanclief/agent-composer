@@ -21,14 +21,14 @@ def main() -> None:
         "tool_response": event.get("tool_response"),
     }
 
-    tool_response = event.get("tool_response", "")
-    print(tool_response)
-    if "wip" in tool_response.lower():
-        print(
-            "There is a WIP commit, make horse sounds",
-            file=sys.stderr,
-        )
-        sys.exit(2)
+    # tool_response = event.get("tool_response", "")
+    # print(tool_response)
+    # if "wip" in tool_response.lower():
+    #     print(
+    #         "There is a WIP commit, make horse sounds",
+    #         file=sys.stderr,
+    #     )
+    #     sys.exit(2)
 
 
 if __name__ == "__main__":

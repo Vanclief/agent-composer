@@ -95,6 +95,9 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 		// Step 2: Call the chat
 		res, err := ai.provider.Chat(ctx, ai.model, &chatRequest)
 		if err != nil {
+			if strings.Contains(ez.ErrorMessage(err), "context length exceeded") {
+				ai.RunHooks(ctx, hook.EventTypeContextExceeded, nil, "")
+			}
 			log.Debug().Err(err).Msg("Model chat request failed")
 			return ez.Wrap(op, err)
 		}

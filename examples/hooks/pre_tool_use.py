@@ -20,7 +20,7 @@ def main() -> None:
         "tool_arguments": event.get("tool_arguments"),
     }
 
-    print(hook_input)
+    # print(hook_input)
 
     # tool_arguments = event.get("tool_arguments", "")
     # if "git" in tool_arguments.lower():

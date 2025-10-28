@@ -57,7 +57,7 @@ func (api *API) List(ctx context.Context, requester interface{}, request *ListRe
 	}
 
 	if request.Search != "" {
-		selectQuery = selectQuery.Where("conversation.name ILIKE ?", "%"+request.Search+"%")
+		selectQuery = selectQuery.Where("conversation.agent_name ILIKE ?", "%"+request.Search+"%")
 	}
 
 	selectQuery, err := pagination.ApplyCursorToQuery(selectQuery, &request.CursorRequest, model, pagination.DESC)
