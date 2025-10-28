@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
@@ -153,13 +154,14 @@ func GetConversationByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*Conver
 	conversation := new(Conversation)
 	err := db.NewSelect().
 		Model(conversation).
-		Where("conversation.id = ?", id).
+		Where("id = ?", id).
 		Scan(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return conversation, ez.New(op, ez.ENOTFOUND, "conversation not found", err)
+			errMsg := fmt.Sprintf("conversation with ID %s not found", id)
+			return nil, ez.New(op, ez.ENOTFOUND, errMsg, err)
 		}
-		return conversation, ez.Wrap(op, err)
+		return nil, ez.Wrap(op, err)
 	}
 	return conversation, nil
 }

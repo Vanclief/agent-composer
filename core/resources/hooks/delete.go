@@ -25,22 +25,18 @@ func (r DeleteRequest) Validate() error {
 	return nil
 }
 
-func (api *API) Delete(ctx context.Context, requester interface{}, request *DeleteRequest) (*hook.Hook, error) {
+func (api *API) Delete(ctx context.Context, requester interface{}, request *DeleteRequest) (uuid.UUID, error) {
 	const op = "hooks.API.Delete"
 
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return uuid.Nil, ez.Wrap(op, err)
 	}
 
 	// Get
-	var h hook.Hook
-	err = api.db.NewSelect().
-		Model(&h).
-		Where("id = ?", request.HookID).
-		Scan(ctx)
+	h, err := hook.GetHookByID(ctx, api.db, request.HookID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return uuid.Nil, ez.Wrap(op, err)
 	}
 
 	// TODO: permissions
@@ -48,8 +44,8 @@ func (api *API) Delete(ctx context.Context, requester interface{}, request *Dele
 	// Delete
 	err = h.Delete(ctx, api.db)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return uuid.Nil, ez.Wrap(op, err)
 	}
 
-	return &h, nil
+	return h.ID, nil
 }

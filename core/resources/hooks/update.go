@@ -40,11 +40,7 @@ func (api *API) Update(ctx context.Context, requester interface{}, request *Upda
 	}
 
 	// Get
-	var h hook.Hook
-	err = api.db.NewSelect().
-		Model(&h).
-		Where("id = ?", request.HookID).
-		Scan(ctx)
+	h, err := hook.GetHookByID(ctx, api.db, request.HookID)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
@@ -94,5 +90,5 @@ func (api *API) Update(ctx context.Context, requester interface{}, request *Upda
 		return nil, ez.Wrap(op, err)
 	}
 
-	return &h, nil
+	return h, nil
 }

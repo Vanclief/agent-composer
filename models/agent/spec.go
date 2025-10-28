@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -153,13 +154,14 @@ func GetAgentSpecByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*Spec, err
 	pt := new(Spec)
 	err := db.NewSelect().
 		Model(pt).
-		Where("spec.id = ?", id).
+		Where("id = ?", id).
 		Scan(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return pt, ez.New(op, ez.ENOTFOUND, "agent spec not found", err)
+			errMsg := fmt.Sprintf("agent spec with ID %s not found", id)
+			return nil, ez.New(op, ez.ENOTFOUND, errMsg, err)
 		}
-		return pt, ez.Wrap(op, err)
+		return nil, ez.Wrap(op, err)
 	}
 	return pt, nil
 }
