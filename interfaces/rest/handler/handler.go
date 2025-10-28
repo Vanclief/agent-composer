@@ -19,6 +19,6 @@ func NewHandler(server *restserver.Server) *Handler {
 	return &Handler{
 		BaseHandler: *h,
 		server:      server,
-		ctrl:        server.GetController(),
+		ctrl:        server.Ctrl,
 	}
 }

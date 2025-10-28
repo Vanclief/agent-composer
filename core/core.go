@@ -26,7 +26,7 @@ type Stack struct {
 }
 
 // New builds the application stack (controller, scheduler, runtime, APIs).
-func New(rootCtx context.Context) (*Stack, error) {
+func NewStack(rootCtx context.Context) (*Stack, error) {
 	ctrl, err := controller.New()
 	if err != nil {
 		return nil, err

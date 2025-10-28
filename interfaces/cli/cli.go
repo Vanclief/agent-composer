@@ -44,7 +44,7 @@ func Run(ctx context.Context, args []string) error {
 }
 
 func runServer(ctx context.Context) error {
-	stack, err := core.New(ctx)
+	stack, err := core.NewStack(ctx)
 	if err != nil {
 		return err
 	}
@@ -54,27 +54,36 @@ func runServer(ctx context.Context) error {
 	group, gctx := errgroup.WithContext(ctx)
 
 	group.Go(func() error {
-		rest.Start(gctx, app, log.Logger)
-		return nil
-	})
-
-	group.Go(func() error {
 		stack.StartScheduler(gctx)
 		return nil
 	})
 
-	<-ctx.Done()
+	group.Go(func() error {
+		return rest.Start(gctx, app, log.Logger)
+	})
 
-	err = group.Wait()
-	if err != nil && !errors.Is(err, context.Canceled) {
-		return err
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- group.Wait()
+	}()
+
+	var waitErr error
+
+	select {
+	case <-ctx.Done():
+		waitErr = <-errCh
+	case waitErr = <-errCh:
+	}
+
+	if waitErr != nil && !errors.Is(waitErr, context.Canceled) {
+		return waitErr
 	}
 
 	return nil
 }
 
 func runTUI(ctx context.Context) error {
-	stack, err := core.New(ctx)
+	stack, err := core.NewStack(ctx)
 	if err != nil {
 		return err
 	}
@@ -91,7 +100,7 @@ func runTUI(ctx context.Context) error {
 		if err != nil && !errors.Is(err, context.Canceled) {
 			return err
 		}
-		return nil
+		return context.Canceled
 	})
 
 	err = group.Wait()

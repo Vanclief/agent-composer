@@ -18,7 +18,7 @@ func main() {
 
 	err := appcli.Run(rootCtx, os.Args)
 	if err != nil && !errors.Is(err, context.Canceled) {
-		log.Error().Err(err).Msg("AGC exited with error")
+		log.Error().Err(err).Msg("agc exited with error")
 		os.Exit(1)
 	}
 }

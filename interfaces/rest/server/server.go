@@ -34,10 +34,6 @@ func New(ctrl *controller.Controller, agentsAPI *agents.API, hooksAPI *hooks.API
 	}
 }
 
-func (s *Server) GetController() *controller.Controller {
-	return s.Ctrl
-}
-
 func (s *Server) HandleRequest(request requests.Request) (interface{}, error) {
 	const op = "rest.Server.HandleRequest"
 

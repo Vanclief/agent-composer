@@ -2,6 +2,7 @@ package rest
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -10,13 +11,12 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/vanclief/agent-composer/interfaces/rest/handler"
-	restserver "github.com/vanclief/agent-composer/interfaces/rest/server"
+	"github.com/vanclief/agent-composer/interfaces/rest/server"
 )
 
-func Start(ctx context.Context, app *restserver.Server, log zerolog.Logger) {
-	ctrl := app.GetController()
+func Start(ctx context.Context, s *server.Server, log zerolog.Logger) error {
 	e := echo.New()
-	h := handler.NewHandler(app)
+	h := handler.NewHandler(s)
 
 	// Custom Error Handler
 	e.HTTPErrorHandler = func(err error, c echo.Context) {
@@ -51,20 +51,36 @@ func Start(ctx context.Context, app *restserver.Server, log zerolog.Logger) {
 	// Config
 	e.HideBanner = true
 
+	serverErr := make(chan error, 1)
+
 	// Start the server
 	go func() {
-		err := e.Start(":" + ctrl.Config.App.Port)
-		if err != nil && err != http.ErrServerClosed {
-			e.Logger.Error(err)
+		err := e.Start(":" + s.Ctrl.Config.App.Port)
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+			return
 		}
+
+		serverErr <- nil
 	}()
 
-	// Wait for interrupt signal to gracefully shut down the server with a timeout of 10 seconds.
-	<-ctx.Done()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	err := e.Shutdown(ctx)
-	if err != nil {
-		e.Logger.Fatal(err)
+	select {
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		err := e.Shutdown(shutdownCtx)
+		if err != nil {
+			isCanceled := errors.Is(err, context.Canceled)
+			isServerClosed := errors.Is(err, http.ErrServerClosed)
+
+			if !isCanceled && !isServerClosed {
+				return err
+			}
+		}
+
+		return <-serverErr
+	case err := <-serverErr:
+		return err
 	}
 }

@@ -8,6 +8,6 @@ var (
 	statusStyle  = theme.BodyStyle
 	loadingStyle = theme.LoadingStyle
 	errorStyle   = theme.ErrorStyle
-	labelStyle   = theme.BodyStyle.Copy().Bold(true)
+	labelStyle   = theme.BodyStyle.Bold(true)
 	valueStyle   = theme.HighlightStyle
 )
