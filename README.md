@@ -38,6 +38,14 @@ Then export the environment:
 
 **Step 4: Run the binary**
 
+**TUI Mode:**
+
 ```bash
 ./agc
+```
+
+**REST Server Mode:**
+
+```bash
+./agc rest
 ```
