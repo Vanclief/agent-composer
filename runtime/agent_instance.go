@@ -30,11 +30,6 @@ type AgentInstance struct {
 	hooks           map[hook.EventType][]hook.Hook
 }
 
-const defaultAgentPolicy = `
-Policy:
-- Use other tools only when strictly necessary. Do not re-run a tool just to "confirm".
-- NEVER call the same tool with identical arguments twice in a row. If you must retry, briefly explain why and change the arguments.`
-
 func (rt *Runtime) NewAgentInstanceFromSpec(ctx context.Context, agentSpecID uuid.UUID) (*AgentInstance, error) {
 	const op = "runtime.NewAgentInstanceFromSpec"
 
@@ -43,8 +38,6 @@ func (rt *Runtime) NewAgentInstanceFromSpec(ctx context.Context, agentSpecID uui
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
-
-	spec.Instructions += "\n" + defaultAgentPolicy
 
 	msgs := []types.Message{*types.NewSystemMessage(spec.Instructions)}
 
