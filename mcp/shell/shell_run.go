@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -45,7 +46,7 @@ func runBashIsolated(ctx context.Context, workdir string, command string) (ExecO
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 
-	var waitErr error
+	var cmdErr error
 	select {
 	case <-ctx.Done():
 		// Kill the entire group (negative pgid). Try TERM, then KILL.
@@ -65,9 +66,9 @@ func runBashIsolated(ctx context.Context, workdir string, command string) (ExecO
 		}
 		ctxErr := ctx.Err()
 		out.TimedOut = errors.Is(ctxErr, context.DeadlineExceeded)
-		waitErr = ctxErr
+		cmdErr = ctxErr
 
-	case waitErr = <-done:
+	case cmdErr = <-done:
 		// exited normally or with failure
 	}
 
@@ -79,15 +80,22 @@ func runBashIsolated(ctx context.Context, workdir string, command string) (ExecO
 		return out, context.DeadlineExceeded
 	}
 
-	if waitErr != nil {
+	if cmdErr != nil {
 		var ee *exec.ExitError
-		if errors.As(waitErr, &ee) {
+		if errors.As(cmdErr, &ee) {
 			out.ExitCode = ee.ExitCode()
-			return out, fmt.Errorf("command exited with code %d: %w", out.ExitCode, waitErr)
+
+			msg := strings.TrimSpace(out.Stderr)
+			if msg == "" {
+				msg = strings.TrimSpace(out.Stdout)
+			}
+
+			return out, fmt.Errorf("%s (exit code %d)", msg, out.ExitCode)
 		}
-		// Some other error (Start already returned above; this is rare)
+
+		// Some other error (Start already returned above, should be rare)
 		out.ExitCode = -1
-		return out, waitErr
+		return out, cmdErr
 	}
 
 	out.ExitCode = 0

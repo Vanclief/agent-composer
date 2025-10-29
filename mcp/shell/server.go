@@ -79,7 +79,7 @@ func NewServer(rootDir string, allowedWorkdirs []string, defaultWorkdir string, 
 		defer cancel()
 
 		start := time.Now()
-		outcome, runErr := runBashIsolated(execCtx, workdir, args.Command)
+		outcome, err := runBashIsolated(execCtx, workdir, args.Command)
 		duration := time.Since(start)
 
 		result := ShellRunResult{
@@ -94,12 +94,10 @@ func NewServer(rootDir string, allowedWorkdirs []string, defaultWorkdir string, 
 
 		switch {
 		case outcome.TimedOut:
-			// Preserve your ez taxonomy
-			return result, ez.New(op, ez.ERESOURCEEXHAUSTED, "command timed out", runErr)
+			return result, ez.New(op, ez.ERESOURCEEXHAUSTED, "command timed out", err)
 
-		case runErr != nil:
-			// runErr already contains the exit code message; keep your wrapping
-			return result, ez.Wrap(op, runErr)
+		case err != nil:
+			return result, err
 
 		default:
 			return result, nil
