@@ -32,6 +32,10 @@ type Conversation struct {
 	Tools           []types.ToolDefinition       `bun:"type:jsonb,nullzero" json:"-"`
 	Messages        []types.Message              `bun:"type:jsonb,nullzero" json:"messages"`
 	Status          ConversationStatus           `json:"status"`
+	InputTokens     int                          `json:"input_tokens"`
+	OutputTokens    int                          `json:"output_tokens"`
+	CachedTokens    int                          `json:"cached_tokens"`
+	Cost            int                          `json:"cost"`
 }
 
 // ---- Constructor ----

@@ -71,6 +71,7 @@ func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.
 	log.Info().
 		Int64("input_tokens", usage.InputTokens).
 		Float64("cost", totalCost).
+		Int64("cached_tokens", usage.InputTokensDetails.CachedTokens).
 		Int64("reasoning_tokens", usage.OutputTokensDetails.ReasoningTokens).
 		Int64("output_tokens", usage.OutputTokens).
 		Int64("total_tokens", usage.TotalTokens).
@@ -119,8 +120,9 @@ func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.
 		Model:     model,
 		ToolCalls: toolCalls,
 		TokenUsage: types.TokenUsage{
-			InputTokens:  usage.InputTokens,
-			OutputTokens: usage.OutputTokens,
+			InputTokens:          usage.InputTokens,
+			OutputTokens:         usage.OutputTokens,
+			CacheReadInputTokens: usage.InputTokensDetails.CachedTokens,
 		},
 	}, nil
 }
@@ -234,9 +236,12 @@ func isReasoningModel(model string) bool {
 }
 
 type TokenUsage struct {
-	InputTokens         int64 `json:"input_tokens"`
-	OutputTokens        int64 `json:"output_tokens"`
-	TotalTokens         int64 `json:"total_tokens"`
+	InputTokens        int64 `json:"input_tokens"`
+	OutputTokens       int64 `json:"output_tokens"`
+	TotalTokens        int64 `json:"total_tokens"`
+	InputTokensDetails struct {
+		CachedTokens int64 `json:"cached_tokens"`
+	} `json:"input_tokens_details"`
 	OutputTokensDetails struct {
 		ReasoningTokens int64 `json:"reasoning_tokens"`
 	} `json:"output_tokens_details"`
