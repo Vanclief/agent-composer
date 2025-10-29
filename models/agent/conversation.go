@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
 	"github.com/vanclief/agent-composer/runtime/types"
-	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/compose/drivers/databases/relational"
 	"github.com/vanclief/ez"
 )
@@ -22,20 +21,20 @@ var (
 type Conversation struct {
 	bun.BaseModel `bun:"table:conversations"`
 
-	ID              uuid.UUID                    `bun:",pk,type:uuid" json:"id"`
-	AgentSpecID     uuid.UUID                    `bun:"type:uuid" json:"agent_spec_id"`
-	AgentName       string                       `json:"agent_name"`
-	Provider        LLMProvider                  `json:"provider"`
-	Model           string                       `json:"model"`
-	ReasoningEffort runtimetypes.ReasoningEffort `json:"reasoning_effort"`
-	Instructions    string                       `json:"instructions"`
-	Tools           []types.ToolDefinition       `bun:"type:jsonb,nullzero" json:"-"`
-	Messages        []types.Message              `bun:"type:jsonb,nullzero" json:"messages"`
-	Status          ConversationStatus           `json:"status"`
-	InputTokens     int                          `json:"input_tokens"`
-	OutputTokens    int                          `json:"output_tokens"`
-	CachedTokens    int                          `json:"cached_tokens"`
-	Cost            int                          `json:"cost"`
+	ID              uuid.UUID              `bun:",pk,type:uuid" json:"id"`
+	AgentSpecID     uuid.UUID              `bun:"type:uuid" json:"agent_spec_id"`
+	AgentName       string                 `json:"agent_name"`
+	Provider        LLMProvider            `json:"provider"`
+	Model           string                 `json:"model"`
+	ReasoningEffort types.ReasoningEffort  `json:"reasoning_effort"`
+	Instructions    string                 `json:"instructions"`
+	Tools           []types.ToolDefinition `bun:"type:jsonb,nullzero" json:"-"`
+	Messages        []types.Message        `bun:"type:jsonb,nullzero" json:"messages"`
+	Status          ConversationStatus     `json:"status"`
+	InputTokens     int64                  `json:"input_tokens"`
+	OutputTokens    int64                  `json:"output_tokens"`
+	CachedTokens    int64                  `json:"cached_tokens"`
+	Cost            int64                  `json:"cost"`
 }
 
 // ---- Constructor ----

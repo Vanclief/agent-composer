@@ -84,6 +84,11 @@ func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.
 			ID:    response.ID,
 			Text:  response.OutputText(),
 			Model: model,
+			TokenUsage: types.TokenUsage{
+				InputTokens:          usage.InputTokens,
+				OutputTokens:         usage.OutputTokens + usage.OutputTokensDetails.ReasoningTokens,
+				CacheReadInputTokens: usage.InputTokensDetails.CachedTokens,
+			},
 		}, nil
 	}
 
@@ -121,7 +126,7 @@ func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.
 		ToolCalls: toolCalls,
 		TokenUsage: types.TokenUsage{
 			InputTokens:          usage.InputTokens,
-			OutputTokens:         usage.OutputTokens,
+			OutputTokens:         usage.OutputTokens + usage.OutputTokensDetails.ReasoningTokens,
 			CacheReadInputTokens: usage.InputTokensDetails.CachedTokens,
 		},
 	}, nil

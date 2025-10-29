@@ -100,15 +100,19 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 			ThinkingEffort:     string(ai.reasoningEffort),
 		}
 
-		res, err := ai.provider.Chat(ctx, ai.model, &chatRequest)
+		response, err := ai.provider.Chat(ctx, ai.model, &chatRequest)
 		if err != nil {
 			return ez.Wrap(op, err)
 		}
 
-		prevResponseID = res.ID // NOTE: This only applies to OpenAI
+		prevResponseID = response.ID // NOTE: This only applies to OpenAI
+
+		ai.conversation.InputTokens = response.TokenUsage.InputTokens
+		ai.conversation.OutputTokens += response.TokenUsage.OutputTokens
+		ai.conversation.CachedTokens += response.TokenUsage.CacheReadInputTokens
 
 		// Step 3: If we do have tool calls, execute them
-		for _, toolCall := range res.ToolCalls {
+		for _, toolCall := range response.ToolCalls {
 
 			log.Info().
 				Str("Name", ai.conversation.AgentName).
@@ -180,16 +184,16 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 		}
 
 		// Step 4: If we don't have any tool calls
-		if len(res.ToolCalls) == 0 {
+		if len(response.ToolCalls) == 0 {
 
 			log.Info().
 				Str("Name", ai.conversation.AgentName).
 				Str("ID", ai.conversation.ID.String()).
-				Str("Response", res.Text).
+				Str("Response", response.Text).
 				Int("step", step).
 				Msg("Agent response")
 
-			ai.AddMessage(types.MessageRoleAssistant, res.Text)
+			ai.AddMessage(types.MessageRoleAssistant, response.Text)
 
 			// 4.1 Update the conversation status to succeeded so that hook don't see it as running
 			ai.conversation.Status = agent.ConversationStatusSucceeded
@@ -215,6 +219,9 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 			}
 
 			if !blockStop {
+
+				ai.conversation.Cost = ai.provider.CalculateCost(ai.model, ai.conversation.InputTokens, ai.conversation.OutputTokens, ai.conversation.CachedTokens)
+
 				log.Info().
 					Str("Name", ai.conversation.AgentName).
 					Str("ID", ai.conversation.ID.String()).
