@@ -2,11 +2,17 @@ package chatgpt
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/pkoukk/tiktoken-go"
 	"github.com/vanclief/agent-composer/runtime/types"
 )
+
+var ctxWindow = map[string]int64{
+	"gpt-5": 400000,
+	"o3":    200000,
+}
 
 func (provider *ChatGPT) EstimateInputTokens(model string, messages []types.Message) (int, error) {
 	if len(messages) == 0 {
@@ -21,7 +27,14 @@ func (provider *ChatGPT) EstimateInputTokens(model string, messages []types.Mess
 		return 0, err
 	}
 
-	return len(tke.Encode(simulatedPayload, nil, nil)), nil
+	tokenCount := len(tke.Encode(simulatedPayload, nil, nil))
+
+	maxTokens, ok := ctxWindow[strings.ToLower(model)]
+	if ok && int64(tokenCount) > maxTokens {
+		return 0, fmt.Errorf("input token count %d exceeds context window %d for model %s", tokenCount, maxTokens, model)
+	}
+
+	return tokenCount, nil
 }
 
 func simulatePayload(messages []types.Message) string {
