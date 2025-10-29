@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/vanclief/agent-composer/models/hook"
-	"github.com/vanclief/agent-composer/runtime/events"
 	"github.com/vanclief/compose/drivers/databases/relational/postgres/pagination"
 	"github.com/vanclief/ez"
 )
@@ -14,9 +13,9 @@ type ListRequest struct {
 	pagination.CursorRequest
 
 	// Optional filters
-	EventType    *events.EventType `json:"event_type,omitempty"`
-	AgentName *string           `json:"agent_name,omitempty"`
-	Search       string            `json:"search"` // ILIKE on agent_name/command
+	EventType *hook.EventType `json:"event_type,omitempty"`
+	AgentName *string         `json:"agent_name,omitempty"`
+	Search    string          `json:"search"` // ILIKE on agent_name/command
 }
 
 func (r *ListRequest) Validate() error {

@@ -14,7 +14,7 @@ import (
 	"github.com/vanclief/agent-composer/interfaces/tui"
 )
 
-const version = "0.1.0"
+const version = "0.1.1"
 
 // Run starts the CLI entrypoint.
 func Run(ctx context.Context, args []string) error {

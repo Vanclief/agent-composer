@@ -9,6 +9,7 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
+	"github.com/pkoukk/tiktoken-go"
 	"github.com/rs/zerolog/log"
 	"github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/ez"
@@ -45,6 +46,22 @@ func (provider *ChatGPT) ValidateModel(ctx context.Context, model string) error 
 		return ez.New(op, ez.EINVALID, errMsg, err)
 	}
 	return nil
+}
+
+func (provider *ChatGPT) EstimateInputTokens(model string, messages []types.Message) (int, error) {
+	if len(messages) == 0 {
+		return 0, nil
+	}
+
+	transcript := buildChatMLTranscript(messages)
+	encodingName := encodingForModel(model)
+
+	tke, err := tiktoken.GetEncoding(encodingName)
+	if err != nil {
+		return 0, err
+	}
+
+	return len(tke.Encode(transcript, nil, nil)), nil
 }
 
 func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.ChatRequest) (types.ChatResponse, error) {
@@ -108,10 +125,11 @@ func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.
 		Int64("reasoning_tokens", usage.OutputTokensDetails.ReasoningTokens).
 		Int64("output_tokens", usage.OutputTokens).
 		Int64("total_tokens", usage.TotalTokens).
-		Msg("Chat response")
+		Msg("OpenAI response")
 
 	// Exit 1) If the response is not empty, return it
 	if response.OutputText() != "" {
+		provider.responsesToMessages[response.ID] = originalMessageCount
 		return types.ChatResponse{
 			ID:    response.ID,
 			Text:  response.OutputText(),
@@ -260,6 +278,129 @@ func buildFunctionTools(toolDefs []types.ToolDefinition) ([]responses.ToolUnionP
 	}
 
 	return toolParams, nil
+}
+
+func buildChatMLTranscript(messages []types.Message) string {
+	var b strings.Builder
+
+	b.WriteString("<|begin_of_text|>\n")
+
+	for _, msg := range messages {
+		role := string(msg.Role)
+		if msg.Role == types.MessageRoleTool {
+			role = "tool"
+		}
+
+		writeChatMLHeader(&b, role)
+
+		switch msg.Role {
+		case types.MessageRoleSystem, types.MessageRoleUser, types.MessageRoleAssistant:
+			if msg.ToolCall != nil {
+				writeChatMLFunctionCall(&b, msg.ToolCall)
+			} else {
+				writeChatMLText(&b, msg.Content)
+			}
+		case types.MessageRoleTool:
+			writeChatMLToolOutput(&b, msg.ToolCallID, msg.Content)
+		default:
+			// Unsupported roles are ignored.
+		}
+
+		writeChatMLEnd(&b)
+	}
+
+	return b.String()
+}
+
+func BuildChatMLTranscript(messages []types.Message) string {
+	return buildChatMLTranscript(messages)
+}
+
+func writeChatMLHeader(b *strings.Builder, role string) {
+	b.WriteString("<|start_header_id|>")
+	b.WriteString(role)
+	b.WriteString("<|end_header_id|>\n")
+}
+
+func writeChatMLText(b *strings.Builder, content string) {
+	b.WriteString(content)
+	if !strings.HasSuffix(content, "\n") {
+		b.WriteString("\n")
+	}
+}
+
+func writeChatMLEnd(b *strings.Builder) {
+	b.WriteString("<|eot_id|>\n")
+}
+
+func writeChatMLFunctionCall(b *strings.Builder, call *types.ToolCall) {
+	payload := struct {
+		Type      string `json:"type"`
+		CallID    string `json:"call_id"`
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	}{
+		Type:   "function_call",
+		CallID: call.CallID,
+		Name:   call.Name,
+	}
+
+	switch {
+	case call.Arguments != "":
+		payload.Arguments = call.Arguments
+	case len(call.JSONArguments) > 0:
+		payload.Arguments = string(call.JSONArguments)
+	default:
+		payload.Arguments = "{}"
+	}
+
+	writeChatMLJSON(b, payload)
+}
+
+func writeChatMLToolOutput(b *strings.Builder, callID, content string) {
+	payload := struct {
+		Type   string `json:"type"`
+		CallID string `json:"call_id"`
+		Output string `json:"output"`
+	}{
+		Type:   "function_call_output",
+		CallID: callID,
+		Output: content,
+	}
+
+	writeChatMLJSON(b, payload)
+}
+
+func writeChatMLJSON(b *strings.Builder, payload any) {
+	b.WriteString("<|json.start|>")
+
+	jsonPayload, err := json.Marshal(payload)
+	if err == nil {
+		b.Write(jsonPayload)
+	} else {
+		b.WriteString("{}")
+	}
+
+	b.WriteString("<|json.end|>\n")
+}
+
+func encodingForModel(model string) string {
+	modelLower := strings.ToLower(model)
+
+	switch {
+	case strings.HasPrefix(modelLower, "gpt-5"),
+		strings.HasPrefix(modelLower, "gpt-4o"),
+		strings.HasPrefix(modelLower, "gpt-4.1"),
+		strings.HasPrefix(modelLower, "o1"),
+		strings.HasPrefix(modelLower, "o3"),
+		strings.HasPrefix(modelLower, "o4"),
+		strings.Contains(modelLower, "mini"),
+		strings.Contains(modelLower, "small"),
+		strings.Contains(modelLower, "large"):
+		return "o200k_base"
+	default:
+		return "cl100k_base"
+	}
 }
 
 // Add somewhere in your package:

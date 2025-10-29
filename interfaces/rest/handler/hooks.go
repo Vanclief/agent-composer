@@ -6,7 +6,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/vanclief/agent-composer/core/resources/hooks"
-	"github.com/vanclief/agent-composer/runtime/events"
+	"github.com/vanclief/agent-composer/models/hook"
 	"github.com/vanclief/compose/components/rest/requests"
 	"github.com/vanclief/compose/drivers/databases/relational/postgres/pagination"
 )
@@ -26,7 +26,7 @@ func (h *Handler) ListHooks(c echo.Context) error {
 
 	// Optional filters
 	if v := strings.TrimSpace(c.QueryParam("event_type")); v != "" {
-		et := events.EventType(v)
+		et := hook.EventType(v)
 		body.EventType = &et
 	}
 	if v := strings.TrimSpace(c.QueryParam("agent_name")); v != "" {

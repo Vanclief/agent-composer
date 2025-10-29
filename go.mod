@@ -9,8 +9,8 @@ require (
 	github.com/go-ozzo/ozzo-validation v3.6.0+incompatible
 	github.com/google/uuid v1.6.0
 	github.com/labstack/echo/v4 v4.11.3
-	github.com/mattn/go-runewidth v0.0.16
 	github.com/mark3labs/mcp-go v0.38.0
+	github.com/mattn/go-runewidth v0.0.16
 	github.com/nicksnyder/go-i18n/v2 v2.6.0
 	github.com/openai/openai-go v1.12.0
 	github.com/pariz/gountries v0.1.6
@@ -33,6 +33,7 @@ require (
 	github.com/charmbracelet/x/cellbuf v0.0.13-0.20250311204145-2c3ea96c31dd // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
+	github.com/dlclark/regexp2 v1.10.0 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/fatih/color v1.15.0 // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
@@ -56,6 +57,7 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/pelletier/go-toml v1.9.4 // indirect
+	github.com/pkoukk/tiktoken-go v0.1.8 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/spf13/afero v1.9.2 // indirect

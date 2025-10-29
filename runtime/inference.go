@@ -82,9 +82,17 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 
 	for step := 0; step < maxSteps; step++ {
 
-		log.Info().Int("step", step).Str("Name", ai.conversation.AgentName).Msg("Conversation inference")
+		tokens, err := ai.provider.EstimateInputTokens(ai.model, ai.messages)
+		if err != nil {
+			return ez.Wrap(op, err)
+		}
 
-		// Step 1: Create the chat request
+		log.Info().Int("input_tokens", tokens).Msg("Estimated input tokens")
+
+		// TODO: Check context has not bee exceeded
+		// ai.RunHooks(ctx, hook.EventTypeContextExceeded, nil, "")
+
+		// Step 2: Make the LLM call
 		chatRequest := types.ChatRequest{
 			Messages:           ai.messages,
 			Tools:              ai.tools,
@@ -92,13 +100,8 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 			ThinkingEffort:     string(ai.reasoningEffort),
 		}
 
-		// TODO: Check context has not bee exceeded
-		// ai.RunHooks(ctx, hook.EventTypeContextExceeded, nil, "")
-
-		// Step 2: Call the chat
 		res, err := ai.provider.Chat(ctx, ai.model, &chatRequest)
 		if err != nil {
-			log.Debug().Err(err).Msg("Model chat request failed")
 			return ez.Wrap(op, err)
 		}
 
@@ -107,7 +110,13 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 		// Step 3: If we do have tool calls, execute them
 		for _, toolCall := range res.ToolCalls {
 
-			log.Info().Str("tool", toolCall.Name).Str("args", toolCall.Arguments).Msg("Agent calling tool")
+			log.Info().
+				Str("Name", ai.conversation.AgentName).
+				Str("ID", ai.conversation.ID.String()).
+				Str("tool", toolCall.Name).
+				Str("args", toolCall.Arguments).
+				Int("step", step).
+				Msg("Agent made tool call")
 
 			// 3.1 Create a tool call key
 			callKey := toolCallKey{name: toolCall.Name, args: toolCall.Arguments}
@@ -146,7 +155,14 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 				return ez.Wrap("agent.ExecuteTool", err)
 			}
 
-			log.Info().Str("tool", toolCall.Name).Str("args", toolCall.Arguments).Str("tool_response", toolCallResponse).Msg("Tool call response")
+			log.Info().
+				Str("Name", ai.conversation.AgentName).
+				Str("ID", ai.conversation.ID.String()).
+				Str("tool", toolCall.Name).
+				Str("args", toolCall.Arguments).
+				Str("tool_response", toolCallResponse).
+				Int("step", step).
+				Msg("Tool Call Response")
 
 			// 3.5 Run any post-tool-use hooks
 			err = ai.RunHooks(ctx, hook.EventTypePostToolUse, &toolCall, toolCallResponse)
@@ -165,6 +181,13 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 
 		// Step 4: If we don't have any tool calls
 		if len(res.ToolCalls) == 0 {
+
+			log.Info().
+				Str("Name", ai.conversation.AgentName).
+				Str("ID", ai.conversation.ID.String()).
+				Str("Response", res.Text).
+				Int("step", step).
+				Msg("Agent response")
 
 			ai.AddMessage(types.MessageRoleAssistant, res.Text)
 
@@ -192,7 +215,11 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 			}
 
 			if !blockStop {
-				log.Info().Str("text", res.Text).Msg("Final assistant response received")
+				log.Info().
+					Str("Name", ai.conversation.AgentName).
+					Str("ID", ai.conversation.ID.String()).
+					Int("step", step).
+					Msg("Agent finished")
 				return nil
 			}
 		}
