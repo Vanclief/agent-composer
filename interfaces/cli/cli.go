@@ -14,11 +14,14 @@ import (
 	"github.com/vanclief/agent-composer/interfaces/tui"
 )
 
+const version = "0.1.0"
+
 // Run starts the CLI entrypoint.
 func Run(ctx context.Context, args []string) error {
 	app := &cli.App{
-		Name:  "agc",
-		Usage: "Agent Composer interfaces",
+		Name:    "agc",
+		Usage:   "Agent Composer interfaces",
+		Version: version,
 		Action: func(c *cli.Context) error {
 			return runTUI(c.Context)
 		},
