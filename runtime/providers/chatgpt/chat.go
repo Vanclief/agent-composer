@@ -1,68 +1,17 @@
-package providers
+package chatgpt
 
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
-	"github.com/pkoukk/tiktoken-go"
 	"github.com/rs/zerolog/log"
 	"github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/ez"
 )
-
-type ChatGPT struct {
-	client              *openai.Client
-	responsesToMessages map[string]int
-}
-
-func NewChatGPT(client *openai.Client) (types.LLMProvider, error) {
-	const op = "providers.NewOpenAI"
-
-	chatgpt := &ChatGPT{client: client, responsesToMessages: make(map[string]int)}
-
-	return chatgpt, nil
-}
-
-func (provider *ChatGPT) ValidateModel(ctx context.Context, model string) error {
-	const op = "ChatGPT.ValidateModel"
-
-	// NOTE: Probably we can get rid of this method, check once we add another
-	// LLM provider
-
-	if model == "" {
-		return ez.New(op, ez.EINVALID, "model is required", nil)
-	}
-
-	// Uses the official SDK's Models service (Get) to verify the model ID.
-	// Any 4xx/5xx from the API bubbles up here.
-	_, err := provider.client.Models.Get(ctx, model)
-	if err != nil {
-		errMsg := fmt.Sprintf("ChatGPT model %s does not exist", model)
-		return ez.New(op, ez.EINVALID, errMsg, err)
-	}
-	return nil
-}
-
-func (provider *ChatGPT) EstimateInputTokens(model string, messages []types.Message) (int, error) {
-	if len(messages) == 0 {
-		return 0, nil
-	}
-
-	transcript := buildChatMLTranscript(messages)
-	encodingName := encodingForModel(model)
-
-	tke, err := tiktoken.GetEncoding(encodingName)
-	if err != nil {
-		return 0, err
-	}
-
-	return len(tke.Encode(transcript, nil, nil)), nil
-}
 
 func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.ChatRequest) (types.ChatResponse, error) {
 	const op = "ChatGPT.Chat"
@@ -117,7 +66,7 @@ func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.
 	}
 
 	// Log token usage
-	usage, _ := extractUsage(response)
+	usage, _ := extractTokenUsage(response)
 	totalCost := float64(usage.InputTokens)*0.00000125 + float64(usage.OutputTokens)*0.00001
 	log.Info().
 		Int64("input_tokens", usage.InputTokens).
@@ -158,11 +107,6 @@ func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.
 			toolCalls = append(toolCalls, toolCall)
 		case "reasoning":
 			log.Info().Msg("Reasoning...")
-			reasoning := outputItem.AsReasoning()
-			for _, summary := range reasoning.Summary {
-				log.Info().
-					Msg(summary.Text)
-			}
 
 			continue
 		default:
@@ -174,6 +118,10 @@ func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.
 		ID:        response.ID,
 		Model:     model,
 		ToolCalls: toolCalls,
+		TokenUsage: types.TokenUsage{
+			InputTokens:  usage.InputTokens,
+			OutputTokens: usage.OutputTokens,
+		},
 	}, nil
 }
 
@@ -280,130 +228,11 @@ func buildFunctionTools(toolDefs []types.ToolDefinition) ([]responses.ToolUnionP
 	return toolParams, nil
 }
 
-func buildChatMLTranscript(messages []types.Message) string {
-	var b strings.Builder
-
-	b.WriteString("<|begin_of_text|>\n")
-
-	for _, msg := range messages {
-		role := string(msg.Role)
-		if msg.Role == types.MessageRoleTool {
-			role = "tool"
-		}
-
-		writeChatMLHeader(&b, role)
-
-		switch msg.Role {
-		case types.MessageRoleSystem, types.MessageRoleUser, types.MessageRoleAssistant:
-			if msg.ToolCall != nil {
-				writeChatMLFunctionCall(&b, msg.ToolCall)
-			} else {
-				writeChatMLText(&b, msg.Content)
-			}
-		case types.MessageRoleTool:
-			writeChatMLToolOutput(&b, msg.ToolCallID, msg.Content)
-		default:
-			// Unsupported roles are ignored.
-		}
-
-		writeChatMLEnd(&b)
-	}
-
-	return b.String()
-}
-
-func BuildChatMLTranscript(messages []types.Message) string {
-	return buildChatMLTranscript(messages)
-}
-
-func writeChatMLHeader(b *strings.Builder, role string) {
-	b.WriteString("<|start_header_id|>")
-	b.WriteString(role)
-	b.WriteString("<|end_header_id|>\n")
-}
-
-func writeChatMLText(b *strings.Builder, content string) {
-	b.WriteString(content)
-	if !strings.HasSuffix(content, "\n") {
-		b.WriteString("\n")
-	}
-}
-
-func writeChatMLEnd(b *strings.Builder) {
-	b.WriteString("<|eot_id|>\n")
-}
-
-func writeChatMLFunctionCall(b *strings.Builder, call *types.ToolCall) {
-	payload := struct {
-		Type      string `json:"type"`
-		CallID    string `json:"call_id"`
-		Name      string `json:"name"`
-		Arguments string `json:"arguments"`
-	}{
-		Type:   "function_call",
-		CallID: call.CallID,
-		Name:   call.Name,
-	}
-
-	switch {
-	case call.Arguments != "":
-		payload.Arguments = call.Arguments
-	case len(call.JSONArguments) > 0:
-		payload.Arguments = string(call.JSONArguments)
-	default:
-		payload.Arguments = "{}"
-	}
-
-	writeChatMLJSON(b, payload)
-}
-
-func writeChatMLToolOutput(b *strings.Builder, callID, content string) {
-	payload := struct {
-		Type   string `json:"type"`
-		CallID string `json:"call_id"`
-		Output string `json:"output"`
-	}{
-		Type:   "function_call_output",
-		CallID: callID,
-		Output: content,
-	}
-
-	writeChatMLJSON(b, payload)
-}
-
-func writeChatMLJSON(b *strings.Builder, payload any) {
-	b.WriteString("<|json.start|>")
-
-	jsonPayload, err := json.Marshal(payload)
-	if err == nil {
-		b.Write(jsonPayload)
-	} else {
-		b.WriteString("{}")
-	}
-
-	b.WriteString("<|json.end|>\n")
-}
-
-func encodingForModel(model string) string {
+func isReasoningModel(model string) bool {
 	modelLower := strings.ToLower(model)
-
-	switch {
-	case strings.HasPrefix(modelLower, "gpt-5"),
-		strings.HasPrefix(modelLower, "gpt-4o"),
-		strings.HasPrefix(modelLower, "gpt-4.1"),
-		strings.HasPrefix(modelLower, "o1"),
-		strings.HasPrefix(modelLower, "o3"),
-		strings.HasPrefix(modelLower, "o4"),
-		strings.Contains(modelLower, "mini"),
-		strings.Contains(modelLower, "small"),
-		strings.Contains(modelLower, "large"):
-		return "o200k_base"
-	default:
-		return "cl100k_base"
-	}
+	return strings.HasPrefix(modelLower, "gpt-5") || strings.HasPrefix(modelLower, "o")
 }
 
-// Add somewhere in your package:
 type TokenUsage struct {
 	InputTokens         int64 `json:"input_tokens"`
 	OutputTokens        int64 `json:"output_tokens"`
@@ -413,18 +242,15 @@ type TokenUsage struct {
 	} `json:"output_tokens_details"`
 }
 
-func extractUsage(resp *responses.Response) (TokenUsage, error) {
-	// The SDK exposes RawJSON(); usage is in there per API docs.
-	var wire struct {
+func extractTokenUsage(resp *responses.Response) (TokenUsage, error) {
+	var payload struct {
 		Usage TokenUsage `json:"usage"`
 	}
-	if err := json.Unmarshal([]byte(resp.RawJSON()), &wire); err != nil {
+
+	err := json.Unmarshal([]byte(resp.RawJSON()), &payload)
+	if err != nil {
 		return TokenUsage{}, err
 	}
-	return wire.Usage, nil
-}
 
-func isReasoningModel(model string) bool {
-	modelLower := strings.ToLower(model)
-	return strings.HasPrefix(modelLower, "gpt-5") || strings.HasPrefix(modelLower, "o")
+	return payload.Usage, nil
 }

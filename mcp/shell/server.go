@@ -25,7 +25,7 @@ type ShellRunResult struct {
 	Stderr       string `json:"stderr"`
 	TimedOut     bool   `json:"timed_out"`
 	EffectiveDir string `json:"effective_dir"`
-	CommandEcho  string `json:"command_echo"`
+	Command      string `json:"command"`
 }
 
 // NewServer constructs an in process MCP server exposing a single shell_run tool
@@ -89,7 +89,7 @@ func NewServer(rootDir string, allowedWorkdirs []string, defaultWorkdir string, 
 			Stderr:       outcome.Stderr,
 			TimedOut:     outcome.TimedOut,
 			EffectiveDir: workdir,
-			CommandEcho:  args.Command,
+			Command:      args.Command,
 		}
 
 		switch {

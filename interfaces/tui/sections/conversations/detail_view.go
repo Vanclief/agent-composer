@@ -240,7 +240,7 @@ func formatToolMessageContent(message runtimetypes.Message, width int) (string, 
 
 	var b strings.Builder
 
-	command := strings.TrimSpace(payload.CommandEcho)
+	command := strings.TrimSpace(payload.Command)
 	if command == "" && message.Name != "" {
 		command = message.Name
 	}

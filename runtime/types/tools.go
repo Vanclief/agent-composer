@@ -1,6 +1,9 @@
 package types
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 type ToolDefinition struct {
 	Name        string
@@ -15,17 +18,30 @@ type ToolCall struct {
 	JSONArguments json.RawMessage // same as arguments but handy for re-marshaling
 }
 
-type ChatRequest struct {
-	Messages           []Message
-	Tools              []ToolDefinition
-	ThinkingEffort     string
-	PreviousResponseID string
-}
+func (tc *ToolCall) CommandString() string {
+	if tc == nil {
+		return ""
+	}
 
-type ChatResponse struct {
-	ID                 string
-	Text               string
-	Model              string
-	ToolCalls          []ToolCall
-	PreviousResponseID string
+	if len(tc.JSONArguments) > 0 {
+
+		var payload struct {
+			Command string `json:"command"`
+		}
+
+		err := json.Unmarshal(tc.JSONArguments, &payload)
+		if err == nil {
+			cmd := strings.TrimSpace(payload.Command)
+			if cmd != "" {
+				return cmd
+			}
+		}
+	}
+
+	trimmed := strings.TrimSpace(tc.Arguments)
+	if trimmed != "" {
+		return trimmed
+	}
+
+	return tc.Name
 }
