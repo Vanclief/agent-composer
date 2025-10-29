@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -97,10 +96,6 @@ func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.
 	// Step 3) Call the ChatGPT API
 	response, err := provider.client.Responses.New(ctx, params)
 	if err != nil {
-		var apiErr *openai.Error
-		if errors.As(err, &apiErr) && apiErr.Code == "context_length_exceeded" {
-			return types.ChatResponse{}, ez.New(op, ez.EINTERNAL, "context length exceeded", err)
-		}
 		return types.ChatResponse{}, ez.New(op, ez.EINTERNAL, "Responses API call failed", err)
 	}
 
