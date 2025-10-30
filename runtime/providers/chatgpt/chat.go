@@ -79,10 +79,8 @@ func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.
 
 	// Log token usage
 	usage, _ := extractTokenUsage(response)
-	totalCost := float64(usage.InputTokens)*0.00000125 + float64(usage.OutputTokens)*0.00001
 	log.Info().
 		Int64("input_tokens", usage.InputTokens).
-		Float64("cost", totalCost).
 		Int64("cached_tokens", usage.InputTokensDetails.CachedTokens).
 		Int64("reasoning_tokens", usage.OutputTokensDetails.ReasoningTokens).
 		Int64("output_tokens", usage.OutputTokens).
