@@ -11,8 +11,6 @@ type ChatGPT struct {
 }
 
 func New(client *openai.Client) (types.LLMProvider, error) {
-	const op = "providers.NewOpenAI"
-
 	gpt := &ChatGPT{client: client, responsesToMessages: make(map[string]int)}
 
 	return gpt, nil

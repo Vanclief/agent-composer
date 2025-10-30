@@ -129,7 +129,8 @@ func (v *listView) UpdateRows(items []agent.Conversation) {
 	v.items = items
 	rows := make([]table.Row, len(items))
 	for i, conv := range items {
-		rows[i] = table.Row{conv.AgentName, string(conv.Status), string(conv.Provider), conv.Model, conv.ID.String()}
+		cost := fmt.Sprintf("$%.2f", float64(conv.Cost)/100)
+		rows[i] = table.Row{conv.AgentName, string(conv.Status), string(conv.Provider), conv.Model, cost, conv.ID.String()}
 	}
 	v.table.SetRows(rows)
 	if len(rows) > 0 {

@@ -107,7 +107,11 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 
 		prevResponseID = response.ID // NOTE: This only applies to OpenAI
 
-		ai.conversation.InputTokens = response.TokenUsage.InputTokens
+		newInputTokens := response.TokenUsage.InputTokens - response.TokenUsage.CacheReadInputTokens
+		if newInputTokens < 0 {
+			newInputTokens = 0
+		}
+		ai.conversation.InputTokens += newInputTokens
 		ai.conversation.OutputTokens += response.TokenUsage.OutputTokens
 		ai.conversation.CachedTokens += response.TokenUsage.CacheReadInputTokens
 
