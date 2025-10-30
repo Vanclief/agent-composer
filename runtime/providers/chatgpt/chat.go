@@ -27,6 +27,18 @@ func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.
 			} else {
 				request.Messages = request.Messages[:0]
 			}
+
+			if len(request.Messages) > 0 {
+				filtered := make([]types.Message, 0, len(request.Messages))
+				for _, msg := range request.Messages {
+					// Skip assistant replies that don't contain tool calls; they were already sent.
+					if msg.Role == types.MessageRoleAssistant && msg.ToolCall == nil {
+						continue
+					}
+					filtered = append(filtered, msg)
+				}
+				request.Messages = filtered
+			}
 		}
 	}
 

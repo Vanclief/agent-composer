@@ -21,9 +21,9 @@ def main() -> None:
 
     print(hook_input)
 
-    # if hook_input["last_response"] != "goodbye":
+    # if hook_input["last_response"] != "the end":
     #     print(
-    #         "Conversation did not end as expected, you need to say exactly the word 'goodbye'",
+    #         "Conversation did not end as expected, you need to say exactly the words 'the end'",
     #         file=sys.stderr,
     #     )
     #     sys.exit(2)
