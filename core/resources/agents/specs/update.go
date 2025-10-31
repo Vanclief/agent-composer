@@ -2,6 +2,7 @@ package specs
 
 import (
 	"context"
+	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation"
 	"github.com/google/uuid"
@@ -10,12 +11,15 @@ import (
 )
 
 type UpdateRequest struct {
-	AgentSpecID  uuid.UUID          `json:"agent_spec_id"`
-	Provider     *agent.LLMProvider `json:"provider"`
-	Name         *string            `json:"name"`
-	Model        *string            `json:"model"`
-	Instructions *string            `json:"instructions"`
-	AllowedTools *[]string          `json:"allowed_tools"`
+	AgentSpecID      uuid.UUID          `json:"agent_spec_id"`
+	Provider         *agent.LLMProvider `json:"provider"`
+	Name             *string            `json:"name"`
+	Model            *string            `json:"model"`
+	Instructions     *string            `json:"instructions"`
+	AutoCompact      *bool              `json:"auto_compact"`
+	CompactAtPercent *int               `json:"compact_at_percent"`
+	CompactionPrompt *string            `json:"compaction_prompt"`
+	AllowedTools     *[]string          `json:"allowed_tools"`
 }
 
 func (r UpdateRequest) Validate() error {
@@ -26,6 +30,12 @@ func (r UpdateRequest) Validate() error {
 	)
 	if err != nil {
 		return ez.New(op, ez.EINVALID, err.Error(), nil)
+	}
+
+	if r.CompactAtPercent != nil {
+		if *r.CompactAtPercent <= 0 || *r.CompactAtPercent > 100 {
+			return ez.New(op, ez.EINVALID, "compact_at_percent must be between 1 and 100", nil)
+		}
 	}
 
 	return nil
@@ -69,6 +79,21 @@ func (api *API) Update(ctx context.Context, requester interface{}, request *Upda
 
 	if request.Instructions != nil {
 		spec.Instructions = *request.Instructions
+		shouldInsert = true
+	}
+
+	if request.AutoCompact != nil {
+		spec.AutoCompact = *request.AutoCompact
+		shouldInsert = true
+	}
+
+	if request.CompactAtPercent != nil {
+		spec.CompactAtPercent = *request.CompactAtPercent
+		shouldInsert = true
+	}
+
+	if request.CompactionPrompt != nil {
+		spec.CompactionPrompt = strings.TrimSpace(*request.CompactionPrompt)
 		shouldInsert = true
 	}
 

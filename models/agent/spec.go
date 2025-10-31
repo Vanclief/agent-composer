@@ -27,13 +27,16 @@ var (
 type Spec struct {
 	bun.BaseModel `bun:"table:agent_specs"`
 
-	ID              uuid.UUID                    `bun:",pk,type:uuid" json:"id"`
-	Name            string                       `json:"name"`
-	Provider        LLMProvider                  `json:"provider"`
-	Model           string                       `json:"model"`
-	ReasoningEffort runtimetypes.ReasoningEffort `json:"reasoning_effort"`
-	Instructions    string                       `json:"instructions"`
-	Version         int                          `json:"version"`
+	ID               uuid.UUID                    `bun:",pk,type:uuid" json:"id"`
+	Name             string                       `json:"name"`
+	Provider         LLMProvider                  `json:"provider"`
+	Model            string                       `json:"model"`
+	ReasoningEffort  runtimetypes.ReasoningEffort `json:"reasoning_effort"`
+	Instructions     string                       `json:"instructions"`
+	AutoCompact      bool                         `json:"auto_compact"`
+	CompactAtPercent int                          `json:"compact_at_percent"`
+	CompactionPrompt string                       `json:"compaction_prompt"`
+	Version          int                          `json:"version"`
 }
 
 // ---- Constructor ----
@@ -47,13 +50,16 @@ func NewAgentSpec(name string, prov LLMProvider, model, instructions string, rea
 	}
 
 	pt := &Spec{
-		ID:              id,
-		Name:            strings.TrimSpace(name),
-		Provider:        prov,
-		Model:           strings.TrimSpace(model),
-		Instructions:    strings.TrimSpace(instructions),
-		ReasoningEffort: reasoningEffort,
-		Version:         version,
+		ID:               id,
+		Name:             strings.TrimSpace(name),
+		Provider:         prov,
+		Model:            strings.TrimSpace(model),
+		Instructions:     strings.TrimSpace(instructions),
+		AutoCompact:      false,
+		CompactAtPercent: 90,
+		CompactionPrompt: "",
+		ReasoningEffort:  reasoningEffort,
+		Version:          version,
 	}
 
 	err = pt.Validate()
@@ -83,6 +89,10 @@ func (pt *Spec) Validate() error {
 
 	if err := pt.Provider.Validate(); err != nil {
 		return ez.Wrap(op, err)
+	}
+
+	if pt.CompactAtPercent <= 0 || pt.CompactAtPercent > 100 {
+		return ez.New(op, ez.EINVALID, "compact_at_percent must be between 1 and 100", nil)
 	}
 
 	return nil

@@ -2,6 +2,7 @@ package specs
 
 import (
 	"context"
+	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation"
 	"github.com/vanclief/agent-composer/models/agent"
@@ -10,12 +11,15 @@ import (
 )
 
 type CreateRequest struct {
-	Name            string                       `json:"name"`
-	Provider        agent.LLMProvider            `json:"provider"`
-	Model           string                       `json:"model"`
-	Instructions    string                       `json:"instructions"`
-	ReasoningEffort runtimetypes.ReasoningEffort `json:"reasoning_effort"`
-	AllowedTools    []string                     `json:"allowed_tools"`
+	Name             string                       `json:"name"`
+	Provider         agent.LLMProvider            `json:"provider"`
+	Model            string                       `json:"model"`
+	Instructions     string                       `json:"instructions"`
+	ReasoningEffort  runtimetypes.ReasoningEffort `json:"reasoning_effort"`
+	AutoCompact      bool                         `json:"auto_compact"`
+	CompactAtPercent *int                         `json:"compact_at_percent"`
+	CompactionPrompt string                       `json:"compaction_prompt"`
+	AllowedTools     []string                     `json:"allowed_tools"`
 }
 
 func (r CreateRequest) Validate() error {
@@ -30,6 +34,12 @@ func (r CreateRequest) Validate() error {
 	)
 	if err != nil {
 		return ez.New(op, ez.EINVALID, err.Error(), nil)
+	}
+
+	if r.CompactAtPercent != nil {
+		if *r.CompactAtPercent <= 0 || *r.CompactAtPercent > 100 {
+			return ez.New(op, ez.EINVALID, "compact_at_percent must be between 1 and 100", nil)
+		}
 	}
 
 	return nil
@@ -49,6 +59,14 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
+
+	spec.AutoCompact = request.AutoCompact
+
+	if request.CompactAtPercent != nil {
+		spec.CompactAtPercent = *request.CompactAtPercent
+	}
+
+	spec.CompactionPrompt = strings.TrimSpace(request.CompactionPrompt)
 
 	err = spec.Insert(ctx, api.db)
 	if err != nil {

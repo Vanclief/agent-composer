@@ -13,14 +13,14 @@ import (
 	"github.com/vanclief/ez"
 )
 
-func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.ChatRequest) (types.ChatResponse, error) {
+func (gpt *ChatGPT) Chat(ctx context.Context, model string, request *types.ChatRequest) (types.ChatResponse, error) {
 	const op = "ChatGPT.Chat"
 
 	originalMessageCount := len(request.Messages)
 
 	// Step 1) Only pass the messages delta if continuing a previous response
 	if request.PreviousResponseID != "" {
-		lastMsg, ok := provider.responsesToMessages[request.PreviousResponseID]
+		lastMsg, ok := gpt.responsesToMessages[request.PreviousResponseID]
 		if ok {
 			if lastMsg <= len(request.Messages) {
 				request.Messages = request.Messages[lastMsg:]
@@ -72,7 +72,7 @@ func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.
 	}
 
 	// Step 3) Call the ChatGPT API
-	response, err := provider.client.Responses.New(ctx, params)
+	response, err := gpt.client.Responses.New(ctx, params)
 	if err != nil {
 		return types.ChatResponse{}, ez.New(op, ez.EINTERNAL, "Responses API call failed", err)
 	}
@@ -89,7 +89,7 @@ func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.
 
 	// Exit 1) If the response is not empty, return it
 	if response.OutputText() != "" {
-		provider.responsesToMessages[response.ID] = originalMessageCount
+		gpt.responsesToMessages[response.ID] = originalMessageCount
 		return types.ChatResponse{
 			ID:    response.ID,
 			Text:  response.OutputText(),
@@ -103,7 +103,7 @@ func (provider *ChatGPT) Chat(ctx context.Context, model string, request *types.
 	}
 
 	// Step 4) Add the response ID to the map to track messages
-	provider.responsesToMessages[response.ID] = originalMessageCount
+	gpt.responsesToMessages[response.ID] = originalMessageCount
 
 	// Step 5) If the response is not empty, probably we have tool calls
 	var toolCalls []types.ToolCall

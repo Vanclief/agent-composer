@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"github.com/vanclief/agent-composer/models/agent"
-	"github.com/vanclief/agent-composer/models/hook"
 	types "github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/ez"
 )
@@ -42,7 +42,7 @@ func (rt *Runtime) runAgentInstance(ctx context.Context, ai *AgentInstance, prom
 	}
 
 	// Step 2: Run any session started hooks
-	ai.RunHooks(ctx, hook.EventTypeConversationStarted, nil, "")
+	ai.RunConversationStartedHook(ctx)
 
 	// Step 3: Run the inference
 	inferenceErr := rt.runInference(ctx, ai)
@@ -82,15 +82,62 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 
 	for step := 0; step < maxSteps; step++ {
 
-		tokens, err := ai.provider.EstimateInputTokens(ai.model, ai.messages)
+		inputTokens, err := ai.provider.EstimateInputTokens(ai.model, ai.messages)
 		if err != nil {
 			return ez.Wrap(op, err)
 		}
 
-		log.Info().Int("input_tokens", tokens).Msg("Estimated input tokens")
+		compactAtPercent := 100
+		if ai.autoCompact {
+			compactAtPercent = ai.compactAtPercent
+		}
 
-		// TODO: Check context has not bee exceeded
-		// ai.RunHooks(ctx, hook.EventTypeContextExceeded, nil, "")
+		err = ai.provider.CheckContextWindow(ai.model, inputTokens, compactAtPercent)
+		if err != nil {
+			// If we exceed context, run any hooks and compact if autoCompact is set
+			if ai.autoCompact {
+
+				// NOTE: Right now I am not tracking the tokens used in compaction
+				// calls, but we probably should in the future.
+
+				err = ai.RunPreContextCompactionHook(ctx, uuid.Nil)
+				if err != nil {
+					return ez.Wrap(op, err)
+				}
+
+				compactingMessages := ai.messages
+				msg := *types.NewUserMessage(ai.compactionPrompt)
+				compactingMessages = append(compactingMessages, msg)
+
+				chatRequest := types.ChatRequest{
+					Messages:           compactingMessages,
+					PreviousResponseID: prevResponseID,
+					ThinkingEffort:     string(ai.reasoningEffort),
+				}
+
+				response, err := ai.provider.Chat(ctx, ai.model, &chatRequest)
+				if err != nil {
+					return ez.Wrap(op, err)
+				}
+
+				newAI, err := rt.NewAgentInstanceFromSpec(ctx, ai.conversation.AgentSpecID)
+				if err != nil {
+					return ez.Wrap(op, err)
+				}
+
+				rt.RunAgentInstance(newAI, response.Text)
+
+				ai.RunPostContextCompactionHook(ctx, newAI.conversation.ID)
+
+				return ez.New(op, ez.EINVALID, "Context window exceeded, compacted in new conversation", nil)
+			}
+
+			return ez.Wrap(op, err)
+		}
+
+		log.Info().Int("input_tokens", inputTokens).Msg("Estimated input tokens")
+
+		// TODO: Check context has notee exceeded
 
 		// Step 2: Make the LLM call
 		chatRequest := types.ChatRequest{
@@ -149,7 +196,7 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 			ai.AddAssistantToolCall(toolCall)
 
 			// 3.3 Run any pre-tool-use hooks
-			err = ai.RunHooks(ctx, hook.EventTypePreToolUse, &toolCall, "")
+			err = ai.RunPreToolUseHook(ctx, &toolCall, "")
 			if err != nil {
 				// Record the step to help the anti-loop policy.
 				toolCalls[callKey] = step
@@ -173,7 +220,7 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 				Msg("Tool Call Response")
 
 			// 3.5 Run any post-tool-use hooks
-			err = ai.RunHooks(ctx, hook.EventTypePostToolUse, &toolCall, toolCallResponse)
+			err = ai.RunPostToolUseHook(ctx, &toolCall, toolCallResponse)
 			if err != nil {
 				// Record the step to help the anti-loop policy.
 				toolCalls[callKey] = step
@@ -209,7 +256,7 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 			// 4.2 Check if any hooks want to block the stop
 			blockStop := false
 
-			err = ai.RunHooks(ctx, hook.EventTypeConversationEnded, nil, "")
+			err = ai.RunConversationEndedHook(ctx)
 			if err != nil {
 
 				blockStop = true

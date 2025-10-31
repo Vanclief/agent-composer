@@ -5,17 +5,21 @@ import "github.com/vanclief/compose/primitives/enums"
 type EventType string
 
 const (
-	EventTypeConversationStarted EventType = "conversation_started"
-	EventTypeConversationEnded   EventType = "conversation_ended"
-	EventTypeContextExceeded     EventType = "context_exceeded"
-	EventTypePreToolUse          EventType = "pre_tool_use"
-	EventTypePostToolUse         EventType = "post_tool_use"
+	EventTypeConversationStarted   EventType = "conversation_started"
+	EventTypeConversationEnded     EventType = "conversation_ended"
+	EventTypeContextExceeded       EventType = "context_exceeded" // TODO: consider deprecating
+	EventTypePreContextCompaction  EventType = "pre_context_compaction"
+	EventTypePostContextCompaction EventType = "post_context_compaction"
+	EventTypePreToolUse            EventType = "pre_tool_use"
+	EventTypePostToolUse           EventType = "post_tool_use"
 )
 
 var evenTypeSet = enums.Set([]EventType{
 	EventTypeConversationStarted,
 	EventTypeConversationEnded,
 	EventTypeContextExceeded,
+	EventTypePreContextCompaction,
+	EventTypePostContextCompaction,
 	EventTypePreToolUse,
 	EventTypePostToolUse,
 })

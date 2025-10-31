@@ -3,7 +3,6 @@ package runtime
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"os/exec"
 	"syscall"
@@ -11,49 +10,13 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/uptrace/bun"
 	"github.com/vanclief/agent-composer/models/hook"
-	"github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/ez"
 )
 
-type HookStdin struct {
-	ID             string         `json:"id"`
-	ConversationID string         `json:"conversation_id"`
-	EventType      hook.EventType `json:"event_type"`
-	AgentName      string         `json:"agent_name"`
-	LastResponse   string         `json:"last_response,omitempty"`
-	ToolName       string         `json:"tool_name,omitempty"`
-	ToolArguments  string         `json:"tool_arguments,omitempty"`
-	ToolResponse   string         `json:"tool_response,omitempty"`
-}
-
-func RunHook(ctx context.Context, hook hook.Hook, ai *AgentInstance, toolCall *types.ToolCall, toolCallResponse string) (HookResult, error) {
+func RunHook(ctx context.Context, hook hook.Hook, stdin []byte) (HookResult, error) {
 	const op = "runtime.RunHook"
 
-	var lastResponse, toolName, toolArguments string
-	lam, found := ai.LatestAssistantMessage()
-	if found {
-		lastResponse = lam.Content
-	}
-
-	if toolCall != nil {
-		toolName = toolCall.Name
-		toolArguments = toolCall.Arguments
-	}
-
-	e := HookStdin{
-		ID:             hook.ID.String(),
-		ConversationID: ai.ID.String(),
-		AgentName:      ai.name,
-		EventType:      hook.EventType,
-		LastResponse:   lastResponse,
-		ToolName:       toolName,
-		ToolArguments:  toolArguments,
-		ToolResponse:   toolCallResponse,
-	}
-
-	payload, _ := json.Marshal(e)
-
-	result, err := executeHook(ctx, hook.Command, hook.Args, payload)
+	result, err := executeHook(ctx, hook.Command, hook.Args, stdin)
 	if err != nil {
 		log.Error().Err(err).
 			Str("EventType", string(hook.EventType)).

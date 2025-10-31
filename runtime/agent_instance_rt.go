@@ -31,7 +31,7 @@ func (rt *Runtime) NewAgentInstanceFromSpec(ctx context.Context, agentSpecID uui
 		return nil, ez.Wrap(op, err)
 	}
 
-	return rt.newAgentInstance(ctx, conversation, true)
+	return rt.newAgentInstance(ctx, spec, conversation, true)
 }
 
 func (rt *Runtime) NewAgentInstanceFromConversation(ctx context.Context, conversationID uuid.UUID) (*AgentInstance, error) {
@@ -43,10 +43,13 @@ func (rt *Runtime) NewAgentInstanceFromConversation(ctx context.Context, convers
 		return nil, ez.Wrap(op, err)
 	}
 
-	return rt.newAgentInstance(ctx, conversation, false)
+	// Step 2) Check if there is an agent spec
+	spec, _ := agent.GetAgentSpecByID(ctx, rt.db, conversation.AgentSpecID)
+
+	return rt.newAgentInstance(ctx, spec, conversation, false)
 }
 
-func (rt *Runtime) newAgentInstance(ctx context.Context, conversation *agent.Conversation, new bool) (*AgentInstance, error) {
+func (rt *Runtime) newAgentInstance(ctx context.Context, spec *agent.Spec, conversation *agent.Conversation, new bool) (*AgentInstance, error) {
 	const op = "runtime.NewAgentInstance"
 
 	// Step 2) Create the ChatGPT instance
@@ -95,7 +98,9 @@ func (rt *Runtime) newAgentInstance(ctx context.Context, conversation *agent.Con
 		return nil, ez.Wrap(op, err)
 	}
 
-	return &AgentInstance{
+	// Step 7) Create the instance
+
+	ai := &AgentInstance{
 		ID:              conversation.ID,
 		conversation:    conversation,
 		provider:        chatGPT,
@@ -107,5 +112,14 @@ func (rt *Runtime) newAgentInstance(ctx context.Context, conversation *agent.Con
 		tools:           tools,
 		messages:        conversation.Messages,
 		hooks:           hooks,
-	}, nil
+	}
+
+	// Step 8) Create the instance
+	if spec != nil {
+		ai.autoCompact = spec.AutoCompact
+		ai.compactAtPercent = spec.CompactAtPercent
+		ai.compactionPrompt = spec.CompactionPrompt
+	}
+
+	return ai, nil
 }

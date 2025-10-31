@@ -10,17 +10,20 @@ import (
 )
 
 type AgentInstance struct {
-	ID              uuid.UUID
-	conversation    *agent.Conversation
-	provider        types.LLMProvider
-	name            string
-	model           string
-	instructions    string
-	reasoningEffort types.ReasoningEffort
-	mcpMux          *mcp.Mux
-	tools           []types.ToolDefinition
-	messages        []types.Message
-	hooks           map[hook.EventType][]hook.Hook
+	ID               uuid.UUID
+	conversation     *agent.Conversation
+	provider         types.LLMProvider
+	name             string
+	model            string
+	instructions     string
+	reasoningEffort  types.ReasoningEffort
+	mcpMux           *mcp.Mux
+	tools            []types.ToolDefinition
+	messages         []types.Message
+	hooks            map[hook.EventType][]hook.Hook
+	compactAtPercent int
+	autoCompact      bool
+	compactionPrompt string
 }
 
 func (ai *AgentInstance) LatestAssistantMessage() (*types.Message, bool) {

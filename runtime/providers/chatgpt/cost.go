@@ -4,7 +4,7 @@ import "strings"
 
 // CalculateCost returns total USD cents (rounded half-up) at Standard pricing.
 // Reasoning tokens must be included in outputTokens by the caller.
-func (chat *ChatGPT) CalculateCost(model string, inputTokens, outputTokens, cachedTokens int64) int64 {
+func (gpt *ChatGPT) CalculateCost(model string, inputTokens, outputTokens, cachedTokens int64) int64 {
 	key := normalize(model)
 	r, ok := std[key]
 	if !ok {

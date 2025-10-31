@@ -9,9 +9,10 @@ import (
 
 type LLMProvider interface {
 	Chat(ctx context.Context, model string, request *ChatRequest) (ChatResponse, error)
-	EstimateInputTokens(model string, messages []Message) (int, error)
 	ValidateModel(ctx context.Context, model string) error
 	CalculateCost(model string, inputTokens, outputTokens, cachedTokens int64) int64
+	EstimateInputTokens(model string, messages []Message) (int, error)
+	CheckContextWindow(model string, totalInputTokens int, compactionPercentage int) error
 }
 
 type ChatRequest struct {
