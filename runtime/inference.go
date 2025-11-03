@@ -105,27 +105,33 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 					return ez.Wrap(op, err)
 				}
 
-				compactingMessages := ai.messages
-				msg := *types.NewUserMessage(ai.compactionPrompt)
-				compactingMessages = append(compactingMessages, msg)
+				ai.AddMessage(types.MessageRoleUser, ai.compactionPrompt)
 
 				chatRequest := types.ChatRequest{
-					Messages:           compactingMessages,
+					Messages:           ai.messages,
 					PreviousResponseID: prevResponseID,
 					ThinkingEffort:     string(ai.reasoningEffort),
 				}
 
-				response, err := ai.provider.Chat(ctx, ai.model, &chatRequest)
+				compactingResponse, err := ai.provider.Chat(ctx, ai.model, &chatRequest)
 				if err != nil {
 					return ez.Wrap(op, err)
 				}
+
+				newInputTokens := compactingResponse.TokenUsage.InputTokens - compactingResponse.TokenUsage.CacheReadInputTokens
+				if newInputTokens < 0 {
+					newInputTokens = 0
+				}
+				ai.conversation.InputTokens += newInputTokens
+				ai.conversation.OutputTokens += compactingResponse.TokenUsage.OutputTokens
+				ai.conversation.CachedTokens += compactingResponse.TokenUsage.CacheReadInputTokens
 
 				newAI, err := rt.NewAgentInstanceFromSpec(ctx, ai.conversation.AgentSpecID)
 				if err != nil {
 					return ez.Wrap(op, err)
 				}
 
-				rt.RunAgentInstance(newAI, response.Text)
+				rt.RunAgentInstance(newAI, compactingResponse.Text)
 
 				ai.RunPostContextCompactionHook(ctx, newAI.conversation.ID)
 
