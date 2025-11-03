@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -36,6 +37,8 @@ type Conversation struct {
 	OutputTokens    int64                  `json:"output_tokens"`
 	CachedTokens    int64                  `json:"cached_tokens"`
 	Cost            int64                  `json:"cost"`
+	CreatedAt       time.Time              `json:"created_at"`
+	// TODO: Add Spec settings + compacting counter
 }
 
 // ---- Constructor ----
@@ -58,6 +61,7 @@ func NewConversation(agentSpec *Spec, messages []types.Message) (*Conversation, 
 		Instructions:    agentSpec.Instructions,
 		Messages:        messages,
 		Status:          ConversationStatusQueued,
+		CreatedAt:       time.Now().UTC(),
 	}
 
 	err = conversation.Validate()
@@ -101,6 +105,10 @@ func (c *Conversation) Insert(ctx context.Context, db bun.IDB) error {
 			return ez.Wrap(op, err)
 		}
 		c.ID = id
+	}
+
+	if c.CreatedAt.IsZero() {
+		c.CreatedAt = time.Now().UTC()
 	}
 
 	err := c.Validate()
