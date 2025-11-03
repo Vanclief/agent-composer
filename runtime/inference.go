@@ -147,10 +147,13 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 
 		// Step 2: Make the LLM call
 		chatRequest := types.ChatRequest{
-			Messages:           ai.messages,
-			Tools:              ai.tools,
-			PreviousResponseID: prevResponseID,
-			ThinkingEffort:     string(ai.reasoningEffort),
+			Messages:               ai.messages,
+			Tools:                  ai.tools,
+			PreviousResponseID:     prevResponseID,
+			ThinkingEffort:         string(ai.reasoningEffort),
+			WebSearch:              ai.webSearch,
+			StructuredOutputs:      ai.structuredOutput,
+			StructuredOutputSchema: ai.structuredOutputSchema,
 		}
 
 		response, err := ai.provider.Chat(ctx, ai.model, &chatRequest)
@@ -288,6 +291,10 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 			}
 		}
 
+		err = ai.conversation.Update(ctx, rt.db)
+		if err != nil {
+			return ez.Wrap(op, err)
+		}
 	}
 
 	return ez.Root(op, ez.ERESOURCEEXHAUSTED, "exceeded maximum inference steps")

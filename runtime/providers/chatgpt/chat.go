@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/packages/param"
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
 	"github.com/rs/zerolog/log"
@@ -56,13 +57,39 @@ func (gpt *ChatGPT) Chat(ctx context.Context, model string, request *types.ChatR
 	}
 
 	// If there are are any tool calls create them
+	tools := make([]responses.ToolUnionParam, 0, len(request.Tools)+1)
+
 	if len(request.Tools) > 0 {
-		tools, err := buildFunctionTools(request.Tools)
+		functionTools, err := buildFunctionTools(request.Tools)
 		if err != nil {
 			return types.ChatResponse{}, ez.New(op, ez.EINVALID, "invalid tool definition", err)
 		}
 
+		tools = append(tools, functionTools...)
+	}
+
+	if request.WebSearch {
+		webSearchTool := responses.ToolParamOfWebSearchPreview(responses.WebSearchToolTypeWebSearchPreview)
+		tools = append(tools, webSearchTool)
+	}
+
+	if len(tools) > 0 {
 		params.Tools = tools
+	}
+
+	if request.StructuredOutputs {
+		if len(request.StructuredOutputSchema) == 0 {
+			return types.ChatResponse{}, ez.New(op, ez.EINVALID, "structured outputs enabled but schema is empty", nil)
+		}
+
+		format := responses.ResponseFormatTextConfigParamOfJSONSchema("structured_output", request.StructuredOutputSchema)
+		if format.OfJSONSchema != nil {
+			format.OfJSONSchema.Strict = param.NewOpt(true)
+		}
+
+		params.Text = responses.ResponseTextConfigParam{
+			Format: format,
+		}
 	}
 
 	if isReasoningModel(model) {
@@ -72,6 +99,7 @@ func (gpt *ChatGPT) Chat(ctx context.Context, model string, request *types.ChatR
 	}
 
 	// Step 3) Call the ChatGPT API
+	log.Info().Msg("Doing LLM things...")
 	response, err := gpt.client.Responses.New(ctx, params)
 	if err != nil {
 		return types.ChatResponse{}, ez.New(op, ez.EINTERNAL, "Responses API call failed", err)

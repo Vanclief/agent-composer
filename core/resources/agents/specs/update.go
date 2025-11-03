@@ -11,15 +11,19 @@ import (
 )
 
 type UpdateRequest struct {
-	AgentSpecID      uuid.UUID          `json:"agent_spec_id"`
-	Provider         *agent.LLMProvider `json:"provider"`
-	Name             *string            `json:"name"`
-	Model            *string            `json:"model"`
-	Instructions     *string            `json:"instructions"`
-	AutoCompact      *bool              `json:"auto_compact"`
-	CompactAtPercent *int               `json:"compact_at_percent"`
-	CompactionPrompt *string            `json:"compaction_prompt"`
-	AllowedTools     *[]string          `json:"allowed_tools"`
+	AgentSpecID            uuid.UUID          `json:"agent_spec_id"`
+	Provider               *agent.LLMProvider `json:"provider"`
+	Name                   *string            `json:"name"`
+	Model                  *string            `json:"model"`
+	Instructions           *string            `json:"instructions"`
+	AutoCompact            *bool              `json:"auto_compact"`
+	CompactAtPercent       *int               `json:"compact_at_percent"`
+	CompactionPrompt       *string            `json:"compaction_prompt"`
+	AllowedTools           *[]string          `json:"allowed_tools"`
+	ShellAccess            *bool              `json:"shell_access"`
+	WebSearch              *bool              `json:"web_search"`
+	StructuredOutput       *bool              `json:"structured_output"`
+	StructuredOutputSchema *map[string]any    `json:"structured_output_schema"`
 }
 
 func (r UpdateRequest) Validate() error {
@@ -35,6 +39,12 @@ func (r UpdateRequest) Validate() error {
 	if r.CompactAtPercent != nil {
 		if *r.CompactAtPercent <= 0 || *r.CompactAtPercent > 100 {
 			return ez.New(op, ez.EINVALID, "compact_at_percent must be between 1 and 100", nil)
+		}
+	}
+
+	if r.StructuredOutput != nil && *r.StructuredOutput {
+		if r.StructuredOutputSchema == nil || len(*r.StructuredOutputSchema) == 0 {
+			return ez.New(op, ez.EINVALID, "structured_output_schema is required when structured_output is true", nil)
 		}
 	}
 
@@ -94,6 +104,34 @@ func (api *API) Update(ctx context.Context, requester interface{}, request *Upda
 
 	if request.CompactionPrompt != nil {
 		spec.CompactionPrompt = strings.TrimSpace(*request.CompactionPrompt)
+		shouldInsert = true
+	}
+
+	if request.ShellAccess != nil {
+		spec.ShellAccess = *request.ShellAccess
+		shouldInsert = true
+	}
+
+	if request.WebSearch != nil {
+		spec.WebSearch = *request.WebSearch
+		shouldInsert = true
+	}
+
+	if request.StructuredOutput != nil {
+		spec.StructuredOutput = *request.StructuredOutput
+		if spec.StructuredOutput {
+			if request.StructuredOutputSchema != nil {
+				spec.StructuredOutputSchema = *request.StructuredOutputSchema
+			} else if len(spec.StructuredOutputSchema) == 0 {
+				// Should not happen due to validation, but guard against empty schema.
+				return nil, ez.New(op, ez.EINVALID, "structured_output_schema must be set when enabling structured_output", nil)
+			}
+		} else {
+			spec.StructuredOutputSchema = nil
+		}
+		shouldInsert = true
+	} else if request.StructuredOutputSchema != nil {
+		spec.StructuredOutputSchema = *request.StructuredOutputSchema
 		shouldInsert = true
 	}
 

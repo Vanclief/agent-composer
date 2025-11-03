@@ -58,24 +58,31 @@ func (rt *Runtime) newAgentInstance(ctx context.Context, spec *agent.Spec, conve
 		return nil, ez.Wrap(op, err)
 	}
 
+	var tools []types.ToolDefinition
+	var mux *mcp.Mux
+
 	// Step 4) Create the MCP servers and mux them
-	// TODO: This is currently hardcoded
-	shellMCP, err := shellmcp.NewClient(ctx, "", nil, ".", 0)
-	if err != nil {
-		return nil, ez.Wrap(op, err)
-	}
+	// TODO: Need to refactor this horrible flow as spec is checked later
+	// probably the conversation should hold the settings instead of the
+	// spec so if a spec is deleted we just keep the conversation settings
+	if spec != nil && spec.ShellAccess {
+		shellMCP, err := shellmcp.NewClient(ctx, "", nil, ".", 0)
+		if err != nil {
+			return nil, ez.Wrap(op, err)
+		}
 
-	// TODO: Limit what commands the shell can use
+		// TODO: Limit what commands the shell can use
 
-	mux, err := mcp.NewMux(ctx, shellMCP)
-	if err != nil {
-		return nil, ez.Wrap(op, err)
-	}
+		mux, err = mcp.NewMux(ctx, shellMCP)
+		if err != nil {
+			return nil, ez.Wrap(op, err)
+		}
 
-	// Step 5) Add the tools
-	tools, err := mux.ListTools(ctx)
-	if err != nil {
-		return nil, ez.Wrap(op, err)
+		// Step 5) Add the tools
+		tools, err = mux.ListTools(ctx)
+		if err != nil {
+			return nil, ez.Wrap(op, err)
+		}
 	}
 
 	conversation.Tools = tools
@@ -119,6 +126,10 @@ func (rt *Runtime) newAgentInstance(ctx context.Context, spec *agent.Spec, conve
 		ai.autoCompact = spec.AutoCompact
 		ai.compactAtPercent = spec.CompactAtPercent
 		ai.compactionPrompt = spec.CompactionPrompt
+		ai.shellAccess = spec.ShellAccess
+		ai.webSearch = spec.WebSearch
+		ai.structuredOutput = spec.StructuredOutput
+		ai.structuredOutputSchema = spec.StructuredOutputSchema
 	}
 
 	return ai, nil

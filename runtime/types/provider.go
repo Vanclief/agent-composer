@@ -16,10 +16,13 @@ type LLMProvider interface {
 }
 
 type ChatRequest struct {
-	Messages           []Message
-	Tools              []ToolDefinition
-	ThinkingEffort     string
-	PreviousResponseID string
+	Messages               []Message
+	Tools                  []ToolDefinition
+	ThinkingEffort         string
+	PreviousResponseID     string // OpenAI specific
+	WebSearch              bool
+	StructuredOutputs      bool
+	StructuredOutputSchema map[string]any
 }
 
 type ChatResponse struct {

@@ -11,15 +11,19 @@ import (
 )
 
 type CreateRequest struct {
-	Name             string                       `json:"name"`
-	Provider         agent.LLMProvider            `json:"provider"`
-	Model            string                       `json:"model"`
-	Instructions     string                       `json:"instructions"`
-	ReasoningEffort  runtimetypes.ReasoningEffort `json:"reasoning_effort"`
-	AutoCompact      bool                         `json:"auto_compact"`
-	CompactAtPercent *int                         `json:"compact_at_percent"`
-	CompactionPrompt string                       `json:"compaction_prompt"`
-	AllowedTools     []string                     `json:"allowed_tools"`
+	Name                   string                       `json:"name"`
+	Provider               agent.LLMProvider            `json:"provider"`
+	Model                  string                       `json:"model"`
+	Instructions           string                       `json:"instructions"`
+	ReasoningEffort        runtimetypes.ReasoningEffort `json:"reasoning_effort"`
+	AutoCompact            bool                         `json:"auto_compact"`
+	CompactAtPercent       *int                         `json:"compact_at_percent"`
+	CompactionPrompt       string                       `json:"compaction_prompt"`
+	AllowedTools           []string                     `json:"allowed_tools"`
+	ShellAccess            *bool                        `json:"shell_access"`
+	WebSearch              *bool                        `json:"web_search"`
+	StructuredOutput       *bool                        `json:"structured_output"`
+	StructuredOutputSchema map[string]any               `json:"structured_output_schema"`
 }
 
 func (r CreateRequest) Validate() error {
@@ -39,6 +43,12 @@ func (r CreateRequest) Validate() error {
 	if r.CompactAtPercent != nil {
 		if *r.CompactAtPercent <= 0 || *r.CompactAtPercent > 100 {
 			return ez.New(op, ez.EINVALID, "compact_at_percent must be between 1 and 100", nil)
+		}
+	}
+
+	if r.StructuredOutput != nil && *r.StructuredOutput {
+		if len(r.StructuredOutputSchema) == 0 {
+			return ez.New(op, ez.EINVALID, "structured_output_schema is required when structured_output is true", nil)
 		}
 	}
 
@@ -67,6 +77,27 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 	}
 
 	spec.CompactionPrompt = strings.TrimSpace(request.CompactionPrompt)
+
+	if request.ShellAccess != nil {
+		spec.ShellAccess = *request.ShellAccess
+	}
+
+	if request.WebSearch != nil {
+		spec.WebSearch = *request.WebSearch
+	}
+
+	if request.StructuredOutput != nil {
+		spec.StructuredOutput = *request.StructuredOutput
+		if spec.StructuredOutput {
+			spec.StructuredOutputSchema = request.StructuredOutputSchema
+		} else {
+			spec.StructuredOutputSchema = nil
+		}
+	} else if len(request.StructuredOutputSchema) > 0 {
+		// If schema was provided without toggling the flag, assume structured outputs should be enabled.
+		spec.StructuredOutput = true
+		spec.StructuredOutputSchema = request.StructuredOutputSchema
+	}
 
 	err = spec.Insert(ctx, api.db)
 	if err != nil {
