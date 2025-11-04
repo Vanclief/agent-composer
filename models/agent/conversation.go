@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"github.com/uptrace/bun"
 	"github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/compose/drivers/databases/relational"
@@ -109,6 +110,7 @@ func (c *Conversation) Insert(ctx context.Context, db bun.IDB) error {
 
 	_, err = db.NewInsert().Model(c).Exec(ctx)
 	if err != nil {
+		log.Debug().Err(err).Msg("Failed to insert conversation")
 		return ez.Wrap(op, err)
 	}
 
