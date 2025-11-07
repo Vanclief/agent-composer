@@ -108,7 +108,7 @@ func (h *Handler) ForkConversation(c echo.Context) error {
 		ConversationID: resourceID,
 	}
 
-	return h.JSONResponse(c, op, request, requestBody)
+	return h.BindedJSONResponse(c, op, request, requestBody)
 }
 
 func (h *Handler) ResumeConversation(c echo.Context) error {

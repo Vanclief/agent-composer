@@ -11,6 +11,7 @@ import (
 
 type ForkRequest struct {
 	ConversationID uuid.UUID `json:"conversation_id"`
+	Prompt         string    `json:"prompt"`
 }
 
 func (r ForkRequest) Validate() error {
@@ -18,6 +19,7 @@ func (r ForkRequest) Validate() error {
 
 	err := validation.ValidateStruct(&r,
 		validation.Field(&r.ConversationID, validation.Required),
+		validation.Field(&r.Prompt, validation.Required),
 	)
 	if err != nil {
 		return ez.New(op, ez.EINVALID, err.Error(), nil)
@@ -26,13 +28,13 @@ func (r ForkRequest) Validate() error {
 	return nil
 }
 
-func (api *API) Fork(ctx context.Context, requester interface{}, request *ForkRequest) (*agent.Conversation, error) {
+func (api *API) Fork(ctx context.Context, requester interface{}, request *ForkRequest) (uuid.UUID, error) {
 	const op = "conversations.API.Fork"
 
 	// Step 1: Get the conversation
 	conversation, err := agent.GetConversationByID(ctx, api.db, request.ConversationID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return uuid.Nil, ez.Wrap(op, err)
 	}
 
 	// Step 2: Create a new conversation from that OG conversation
@@ -41,8 +43,16 @@ func (api *API) Fork(ctx context.Context, requester interface{}, request *ForkRe
 
 	err = fork.Insert(ctx, api.db)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return uuid.Nil, ez.Wrap(op, err)
 	}
 
-	return conversation, nil
+	// Step 3: Launch the fork
+	instance, err := api.rt.NewAgentInstanceFromConversation(ctx, conversation.ID)
+	if err != nil {
+		return uuid.Nil, ez.Wrap(op, err)
+	}
+
+	api.rt.RunAgentInstance(instance, request.Prompt)
+
+	return fork.ID, nil
 }

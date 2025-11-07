@@ -31,7 +31,7 @@ func (rt *Runtime) NewAgentInstanceFromSpec(ctx context.Context, agentSpecID uui
 		return nil, ez.Wrap(op, err)
 	}
 
-	return rt.newAgentInstance(ctx, spec, conversation, true)
+	return rt.newAgentInstance(ctx, conversation, true)
 }
 
 func (rt *Runtime) NewAgentInstanceFromConversation(ctx context.Context, conversationID uuid.UUID) (*AgentInstance, error) {
@@ -43,16 +43,13 @@ func (rt *Runtime) NewAgentInstanceFromConversation(ctx context.Context, convers
 		return nil, ez.Wrap(op, err)
 	}
 
-	// Step 2) Check if there is an agent spec
-	spec, _ := agent.GetAgentSpecByID(ctx, rt.db, conversation.AgentSpecID)
-
-	return rt.newAgentInstance(ctx, spec, conversation, false)
+	return rt.newAgentInstance(ctx, conversation, false)
 }
 
-func (rt *Runtime) newAgentInstance(ctx context.Context, spec *agent.Spec, conversation *agent.Conversation, new bool) (*AgentInstance, error) {
+func (rt *Runtime) newAgentInstance(ctx context.Context, conversation *agent.Conversation, new bool) (*AgentInstance, error) {
 	const op = "runtime.NewAgentInstance"
 
-	// Step 2) Create the ChatGPT instance
+	// Step 1) Create the ChatGPT instance
 	chatGPT, err := chatgpt.New(rt.openai)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
@@ -62,10 +59,7 @@ func (rt *Runtime) newAgentInstance(ctx context.Context, spec *agent.Spec, conve
 	var mux *mcp.Mux
 
 	// Step 4) Create the MCP servers and mux them
-	// TODO: Need to refactor this horrible flow as spec is checked later
-	// probably the conversation should hold the settings instead of the
-	// spec so if a spec is deleted we just keep the conversation settings
-	if spec != nil && spec.ShellAccess {
+	if conversation.ShellAccess {
 		shellMCP, err := shellmcp.NewClient(ctx, "", nil, ".", 0)
 		if err != nil {
 			return nil, ez.Wrap(op, err)
@@ -108,28 +102,24 @@ func (rt *Runtime) newAgentInstance(ctx context.Context, spec *agent.Spec, conve
 	// Step 7) Create the instance
 
 	ai := &AgentInstance{
-		ID:              conversation.ID,
-		conversation:    conversation,
-		provider:        chatGPT,
-		name:            conversation.AgentName,
-		model:           conversation.Model,
-		instructions:    conversation.Instructions,
-		reasoningEffort: conversation.ReasoningEffort,
-		mcpMux:          mux,
-		tools:           tools,
-		messages:        conversation.Messages,
-		hooks:           hooks,
-	}
-
-	// Step 8) Create the instance
-	if spec != nil {
-		ai.autoCompact = spec.AutoCompact
-		ai.compactAtPercent = spec.CompactAtPercent
-		ai.compactionPrompt = spec.CompactionPrompt
-		ai.shellAccess = spec.ShellAccess
-		ai.webSearch = spec.WebSearch
-		ai.structuredOutput = spec.StructuredOutput
-		ai.structuredOutputSchema = spec.StructuredOutputSchema
+		ID:                     conversation.ID,
+		conversation:           conversation,
+		provider:               chatGPT,
+		name:                   conversation.AgentName,
+		model:                  conversation.Model,
+		instructions:           conversation.Instructions,
+		reasoningEffort:        conversation.ReasoningEffort,
+		mcpMux:                 mux,
+		tools:                  tools,
+		messages:               conversation.Messages,
+		hooks:                  hooks,
+		autoCompact:            conversation.AutoCompact,
+		compactAtPercent:       conversation.CompactAtPercent,
+		compactionPrompt:       conversation.CompactionPrompt,
+		shellAccess:            conversation.ShellAccess,
+		webSearch:              conversation.WebSearch,
+		structuredOutput:       conversation.StructuredOutput,
+		structuredOutputSchema: conversation.StructuredOutputSchema,
 	}
 
 	return ai, nil

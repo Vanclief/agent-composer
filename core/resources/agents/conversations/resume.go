@@ -19,6 +19,7 @@ func (r ResumeRequest) Validate() error {
 
 	err := validation.ValidateStruct(&r,
 		validation.Field(&r.ConversationID, validation.Required),
+		validation.Field(&r.Prompt, validation.Required),
 	)
 	if err != nil {
 		return ez.New(op, ez.EINVALID, err.Error(), nil)

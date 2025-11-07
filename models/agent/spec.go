@@ -19,11 +19,6 @@ var (
 	_ relational.DBModel        = (*Spec)(nil)
 )
 
-// NOTE: I could keep the provider as separate so you can
-// run the same spec with different providers. Depends
-// on if it makes sense to have the same instructions with different
-// providers
-
 type Spec struct {
 	bun.BaseModel `bun:"table:agent_specs"`
 

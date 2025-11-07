@@ -23,22 +23,29 @@ var (
 type Conversation struct {
 	bun.BaseModel `bun:"table:conversations"`
 
-	ID              uuid.UUID              `bun:",pk,type:uuid" json:"id"`
-	AgentSpecID     uuid.UUID              `bun:"type:uuid" json:"agent_spec_id"`
-	AgentName       string                 `json:"agent_name"`
-	Provider        LLMProvider            `json:"provider"`
-	Model           string                 `json:"model"`
-	ReasoningEffort types.ReasoningEffort  `json:"reasoning_effort"`
-	Instructions    string                 `json:"instructions"`
-	Tools           []types.ToolDefinition `bun:"type:jsonb,nullzero" json:"-"`
-	Messages        []types.Message        `bun:"type:jsonb,nullzero" json:"messages"`
-	Status          ConversationStatus     `json:"status"`
-	InputTokens     int64                  `json:"input_tokens"`
-	OutputTokens    int64                  `json:"output_tokens"`
-	CachedTokens    int64                  `json:"cached_tokens"`
-	Cost            int64                  `json:"cost"`
-	CreatedAt       time.Time              `json:"created_at"`
-	// TODO: Add Spec settings + compacting counter
+	ID                     uuid.UUID              `bun:",pk,type:uuid" json:"id"`
+	AgentSpecID            uuid.UUID              `bun:"type:uuid" json:"agent_spec_id"`
+	AgentName              string                 `json:"agent_name"`
+	Provider               LLMProvider            `json:"provider"`
+	Model                  string                 `json:"model"`
+	ReasoningEffort        types.ReasoningEffort  `json:"reasoning_effort"`
+	Instructions           string                 `json:"instructions"`
+	Tools                  []types.ToolDefinition `bun:"type:jsonb,nullzero" json:"-"`
+	Messages               []types.Message        `bun:"type:jsonb,nullzero" json:"messages"`
+	Status                 ConversationStatus     `json:"status"`
+	InputTokens            int64                  `json:"input_tokens"`
+	OutputTokens           int64                  `json:"output_tokens"`
+	CachedTokens           int64                  `json:"cached_tokens"`
+	Cost                   int64                  `json:"cost"`
+	CreatedAt              time.Time              `json:"created_at"`
+	AutoCompact            bool                   `json:"auto_compact"`
+	CompactAtPercent       int                    `json:"compact_at_percent"`
+	CompactionPrompt       string                 `json:"compaction_prompt"`
+	CompactCount           int                    `json:"compact_count"`
+	ShellAccess            bool                   `json:"shell_access"`
+	WebSearch              bool                   `json:"web_search"`
+	StructuredOutput       bool                   `json:"structured_output"`
+	StructuredOutputSchema map[string]any         `bun:"type:jsonb,nullzero" json:"structured_output_schema"`
 }
 
 // ---- Constructor ----
@@ -52,16 +59,24 @@ func NewConversation(agentSpec *Spec, messages []types.Message) (*Conversation, 
 	}
 
 	conversation := &Conversation{
-		ID:              id,
-		AgentSpecID:     agentSpec.ID,
-		AgentName:       agentSpec.Name,
-		Provider:        agentSpec.Provider,
-		Model:           agentSpec.Model,
-		ReasoningEffort: agentSpec.ReasoningEffort,
-		Instructions:    agentSpec.Instructions,
-		Messages:        messages,
-		Status:          ConversationStatusQueued,
-		CreatedAt:       time.Now().UTC(),
+		ID:                     id,
+		AgentSpecID:            agentSpec.ID,
+		AgentName:              agentSpec.Name,
+		Provider:               agentSpec.Provider,
+		Model:                  agentSpec.Model,
+		ReasoningEffort:        agentSpec.ReasoningEffort,
+		Instructions:           agentSpec.Instructions,
+		Messages:               messages,
+		Status:                 ConversationStatusQueued,
+		CreatedAt:              time.Now().UTC(),
+		AutoCompact:            agentSpec.AutoCompact,
+		CompactAtPercent:       agentSpec.CompactAtPercent,
+		CompactionPrompt:       agentSpec.CompactionPrompt,
+		CompactCount:           0,
+		ShellAccess:            agentSpec.ShellAccess,
+		WebSearch:              agentSpec.WebSearch,
+		StructuredOutput:       agentSpec.StructuredOutput,
+		StructuredOutputSchema: agentSpec.StructuredOutputSchema,
 	}
 
 	err = conversation.Validate()
@@ -91,6 +106,10 @@ func (c *Conversation) Validate() error {
 
 	if err := c.Provider.Validate(); err != nil {
 		return ez.Wrap(op, err)
+	}
+
+	if c.CompactAtPercent <= 0 || c.CompactAtPercent > 100 {
+		return ez.New(op, ez.EINVALID, "compact_at_percent must be between 1 and 100", nil)
 	}
 
 	return nil

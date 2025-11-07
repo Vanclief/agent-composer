@@ -97,9 +97,6 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 			// If we exceed context, run any hooks and compact if autoCompact is set
 			if ai.autoCompact {
 
-				// NOTE: Right now I am not tracking the tokens used in compaction
-				// calls, but we probably should in the future.
-
 				err = ai.RunPreContextCompactionHook(ctx, uuid.Nil)
 				if err != nil {
 					return ez.Wrap(op, err)
@@ -130,6 +127,8 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 				if err != nil {
 					return ez.Wrap(op, err)
 				}
+
+				newAI.conversation.CompactCount = ai.conversation.CompactCount + 1
 
 				rt.RunAgentInstance(newAI, compactingResponse.Text)
 
