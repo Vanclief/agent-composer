@@ -34,9 +34,9 @@ func (rt *Runtime) runAgentInstance(ctx context.Context, ai *AgentInstance, prom
 
 	// Step 1: Append the user prompt to the messages and update the status
 	ai.AddMessage(types.MessageRoleUser, prompt)
-	ai.conversation.Status = agent.ConversationStatusRunning
+	ai.Status = agent.ConversationStatusRunning
 
-	err := ai.conversation.Update(ctx, rt.db)
+	err := ai.Update(ctx, rt.db)
 	if err != nil {
 		return ez.Wrap(op, err)
 	}
@@ -48,16 +48,14 @@ func (rt *Runtime) runAgentInstance(ctx context.Context, ai *AgentInstance, prom
 	inferenceErr := rt.runInference(ctx, ai)
 	if inferenceErr != nil {
 		if strings.Contains(inferenceErr.Error(), "context canceled") {
-			ai.conversation.Status = agent.ConversationStatusCanceled
+			ai.Status = agent.ConversationStatusCanceled
 		} else {
-			ai.conversation.Status = agent.ConversationStatusFailed
+			ai.Status = agent.ConversationStatusFailed
 		}
 	}
 
-	ai.conversation.Messages = ai.messages
-
 	pCtx := context.WithoutCancel(ctx)
-	err = ai.conversation.Update(pCtx, rt.db)
+	err = ai.Update(pCtx, rt.db)
 	if err != nil {
 		return ez.Wrap(op, err)
 	}
@@ -82,35 +80,35 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 
 	for step := 0; step < maxSteps; step++ {
 
-		inputTokens, err := ai.provider.EstimateInputTokens(ai.model, ai.messages)
+		inputTokens, err := ai.provider.EstimateInputTokens(ai.Model, ai.Messages)
 		if err != nil {
 			return ez.Wrap(op, err)
 		}
 
 		compactAtPercent := 100
-		if ai.autoCompact {
-			compactAtPercent = ai.compactAtPercent
+		if ai.AutoCompact {
+			compactAtPercent = ai.CompactAtPercent
 		}
 
-		err = ai.provider.CheckContextWindow(ai.model, inputTokens, compactAtPercent)
+		err = ai.provider.CheckContextWindow(ai.Model, inputTokens, compactAtPercent)
 		if err != nil {
 			// If we exceed context, run any hooks and compact if autoCompact is set
-			if ai.autoCompact {
+			if ai.AutoCompact {
 
 				err = ai.RunPreContextCompactionHook(ctx, uuid.Nil)
 				if err != nil {
 					return ez.Wrap(op, err)
 				}
 
-				ai.AddMessage(types.MessageRoleUser, ai.compactionPrompt)
+				ai.AddMessage(types.MessageRoleUser, ai.CompactionPrompt)
 
 				chatRequest := types.ChatRequest{
-					Messages:           ai.messages,
+					Messages:           ai.Messages,
 					PreviousResponseID: prevResponseID,
-					ThinkingEffort:     string(ai.reasoningEffort),
+					ThinkingEffort:     string(ai.ReasoningEffort),
 				}
 
-				compactingResponse, err := ai.provider.Chat(ctx, ai.model, &chatRequest)
+				compactingResponse, err := ai.provider.Chat(ctx, ai.Model, &chatRequest)
 				if err != nil {
 					return ez.Wrap(op, err)
 				}
@@ -119,20 +117,20 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 				if newInputTokens < 0 {
 					newInputTokens = 0
 				}
-				ai.conversation.InputTokens += newInputTokens
-				ai.conversation.OutputTokens += compactingResponse.TokenUsage.OutputTokens
-				ai.conversation.CachedTokens += compactingResponse.TokenUsage.CacheReadInputTokens
+				ai.InputTokens += newInputTokens
+				ai.OutputTokens += compactingResponse.TokenUsage.OutputTokens
+				ai.CachedTokens += compactingResponse.TokenUsage.CacheReadInputTokens
 
-				newAI, err := rt.NewAgentInstanceFromSpec(ctx, ai.conversation.AgentSpecID)
+				newAI, err := rt.NewAgentInstanceFromSpec(ctx, ai.AgentSpecID)
 				if err != nil {
 					return ez.Wrap(op, err)
 				}
 
-				newAI.conversation.CompactCount = ai.conversation.CompactCount + 1
+				newAI.CompactCount = ai.CompactCount + 1
 
 				rt.RunAgentInstance(newAI, compactingResponse.Text)
 
-				ai.RunPostContextCompactionHook(ctx, newAI.conversation.ID)
+				ai.RunPostContextCompactionHook(ctx, newAI.ID)
 
 				return ez.New(op, ez.EINVALID, "Context window exceeded, compacted in new conversation", nil)
 			}
@@ -142,20 +140,18 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 
 		log.Info().Int("input_tokens", inputTokens).Msg("Estimated input tokens")
 
-		// TODO: Check context has notee exceeded
-
 		// Step 2: Make the LLM call
 		chatRequest := types.ChatRequest{
-			Messages:               ai.messages,
-			Tools:                  ai.tools,
+			Messages:               ai.Messages,
+			Tools:                  ai.Tools,
 			PreviousResponseID:     prevResponseID,
-			ThinkingEffort:         string(ai.reasoningEffort),
-			WebSearch:              ai.webSearch,
-			StructuredOutputs:      ai.structuredOutput,
-			StructuredOutputSchema: ai.structuredOutputSchema,
+			ThinkingEffort:         string(ai.ReasoningEffort),
+			WebSearch:              ai.WebSearch,
+			StructuredOutputs:      ai.StructuredOutput,
+			StructuredOutputSchema: ai.StructuredOutputSchema,
 		}
 
-		response, err := ai.provider.Chat(ctx, ai.model, &chatRequest)
+		response, err := ai.provider.Chat(ctx, ai.Model, &chatRequest)
 		if err != nil {
 			return ez.Wrap(op, err)
 		}
@@ -166,16 +162,16 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 		if newInputTokens < 0 {
 			newInputTokens = 0
 		}
-		ai.conversation.InputTokens += newInputTokens
-		ai.conversation.OutputTokens += response.TokenUsage.OutputTokens
-		ai.conversation.CachedTokens += response.TokenUsage.CacheReadInputTokens
+		ai.InputTokens += newInputTokens
+		ai.OutputTokens += response.TokenUsage.OutputTokens
+		ai.CachedTokens += response.TokenUsage.CacheReadInputTokens
 
 		// Step 3: If we do have tool calls, execute them
 		for _, toolCall := range response.ToolCalls {
 
 			log.Info().
-				Str("Name", ai.conversation.AgentName).
-				Str("ID", ai.conversation.ID.String()).
+				Str("Name", ai.AgentName).
+				Str("ID", ai.ID.String()).
 				Str("tool", toolCall.Name).
 				Str("args", toolCall.Arguments).
 				Int("step", step).
@@ -219,8 +215,8 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 			}
 
 			log.Info().
-				Str("Name", ai.conversation.AgentName).
-				Str("ID", ai.conversation.ID.String()).
+				Str("Name", ai.AgentName).
+				Str("ID", ai.ID.String()).
 				Str("tool", toolCall.Name).
 				Str("args", toolCall.Arguments).
 				Str("tool_response", toolCallResponse).
@@ -246,8 +242,8 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 		if len(response.ToolCalls) == 0 {
 
 			log.Info().
-				Str("Name", ai.conversation.AgentName).
-				Str("ID", ai.conversation.ID.String()).
+				Str("Name", ai.AgentName).
+				Str("ID", ai.ID.String()).
 				Str("Response", response.Text).
 				Int("step", step).
 				Msg("Agent response")
@@ -255,8 +251,8 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 			ai.AddMessage(types.MessageRoleAssistant, response.Text)
 
 			// 4.1 Update the conversation status to succeeded so that hook don't see it as running
-			ai.conversation.Status = agent.ConversationStatusSucceeded
-			err = ai.conversation.Update(ctx, rt.db)
+			ai.Status = agent.ConversationStatusSucceeded
+			err = ai.Update(ctx, rt.db)
 			if err != nil {
 				return ez.Wrap(op, err)
 			}
@@ -270,8 +266,8 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 				blockStop = true
 
 				// Since a hook has requested more work, we set the conversation back to running
-				ai.conversation.Status = agent.ConversationStatusRunning
-				err = ai.conversation.Update(ctx, rt.db)
+				ai.Status = agent.ConversationStatusRunning
+				err = ai.Update(ctx, rt.db)
 				if err != nil {
 					return ez.Wrap(op, err)
 				}
@@ -279,18 +275,18 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 
 			if !blockStop {
 
-				ai.conversation.Cost = ai.provider.CalculateCost(ai.model, ai.conversation.InputTokens, ai.conversation.OutputTokens, ai.conversation.CachedTokens)
+				ai.Cost = ai.provider.CalculateCost(ai.Model, ai.InputTokens, ai.OutputTokens, ai.CachedTokens)
 
 				log.Info().
-					Str("Name", ai.conversation.AgentName).
-					Str("ID", ai.conversation.ID.String()).
+					Str("Name", ai.AgentName).
+					Str("ID", ai.ID.String()).
 					Int("step", step).
 					Msg("Agent finished")
 				return nil
 			}
 		}
 
-		err = ai.conversation.Update(ctx, rt.db)
+		err = ai.Update(ctx, rt.db)
 		if err != nil {
 			return ez.Wrap(op, err)
 		}

@@ -108,7 +108,7 @@ func (ai *AgentInstance) runConversationHooks(ctx context.Context, h hook.Hook) 
 	e := ConversationStateHook{
 		ID:             h.ID.String(),
 		ConversationID: ai.ID.String(),
-		AgentName:      ai.name,
+		AgentName:      ai.AgentName,
 		EventType:      h.EventType,
 		LastResponse:   lastResponse,
 	}
@@ -154,7 +154,7 @@ func (ai *AgentInstance) runToolHooks(ctx context.Context, h hook.Hook, toolCall
 	e := ToolUseHook{
 		ID:             h.ID.String(),
 		ConversationID: ai.ID.String(),
-		AgentName:      ai.name,
+		AgentName:      ai.AgentName,
 		EventType:      h.EventType,
 		LastResponse:   lastResponse,
 		ToolName:       toolCall.Name,
@@ -211,7 +211,7 @@ func (ai *AgentInstance) runCompactionHooks(ctx context.Context, h hook.Hook, co
 		ID:                      h.ID.String(),
 		ConversationID:          ai.ID.String(),
 		CompactedConversationID: compactedConversationID.String(),
-		AgentName:               ai.name,
+		AgentName:               ai.AgentName,
 		EventType:               h.EventType,
 		LastResponse:            lastResponse,
 	}

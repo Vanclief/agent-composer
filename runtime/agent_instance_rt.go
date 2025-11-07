@@ -102,24 +102,10 @@ func (rt *Runtime) newAgentInstance(ctx context.Context, conversation *agent.Con
 	// Step 7) Create the instance
 
 	ai := &AgentInstance{
-		ID:                     conversation.ID,
-		conversation:           conversation,
-		provider:               chatGPT,
-		name:                   conversation.AgentName,
-		model:                  conversation.Model,
-		instructions:           conversation.Instructions,
-		reasoningEffort:        conversation.ReasoningEffort,
-		mcpMux:                 mux,
-		tools:                  tools,
-		messages:               conversation.Messages,
-		hooks:                  hooks,
-		autoCompact:            conversation.AutoCompact,
-		compactAtPercent:       conversation.CompactAtPercent,
-		compactionPrompt:       conversation.CompactionPrompt,
-		shellAccess:            conversation.ShellAccess,
-		webSearch:              conversation.WebSearch,
-		structuredOutput:       conversation.StructuredOutput,
-		structuredOutputSchema: conversation.StructuredOutputSchema,
+		Conversation: conversation,
+		provider:     chatGPT,
+		mcpMux:       mux,
+		hooks:        hooks,
 	}
 
 	return ai, nil
