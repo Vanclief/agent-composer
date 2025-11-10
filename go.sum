@@ -1005,6 +1005,8 @@ github.com/valyala/fasttemplate v1.2.2 h1:lxLXG0uE3Qnshl9QyaK6XJxMXlQZELvChBOCmQ
 github.com/valyala/fasttemplate v1.2.2/go.mod h1:KHLXt3tVN2HBp8eijSv/kGJopbvo7S+qRAEEKiv+SiQ=
 github.com/vanclief/compose v1.6.1 h1:35rinWoMfVz6bpb7U5CCVNG117mZi8TpEVzY/J0iQzc=
 github.com/vanclief/compose v1.6.1/go.mod h1:u02DXun1n8TGkEnlPrWdg8FKZiq5I/QGTJLsKv1yimQ=
+github.com/vanclief/compose v1.6.5 h1:OYyPxuWAgHcx6FWQNMEBYKHyDkZ/cI6QCpJxGiIsB7U=
+github.com/vanclief/compose v1.6.5/go.mod h1:u02DXun1n8TGkEnlPrWdg8FKZiq5I/QGTJLsKv1yimQ=
 github.com/vanclief/ez v1.4.0 h1:uvogx4nM12qzPruWHGkxcAQMUdGbczs74BAGkZfS8Rg=
 github.com/vanclief/ez v1.4.0/go.mod h1:LvrMsdtIljKsiQzpS8WZaXK8wPZSaekzl+sn5dCEo0E=
 github.com/vmihailenco/msgpack/v5 v5.4.1 h1:cQriyiUvjTwOHg8QZaPihLWeRAAVoCpE00IUPn0Bjt8=

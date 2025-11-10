@@ -63,7 +63,7 @@ func New() (*Controller, error) {
 
 	err = cfg.LoadConfiguration(&c)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, os.ErrNotExist) || ez.ErrorCode(err) == ez.ENOTFOUND {
 			c.App.Name = "Agent Composer"
 			c.App.Port = "8080"
 			c.App.RateLimit = 60

@@ -17,7 +17,7 @@ require (
 	github.com/rs/zerolog v1.34.0
 	github.com/uptrace/bun v1.1.16
 	github.com/urfave/cli/v2 v2.27.1
-	github.com/vanclief/compose v1.6.1
+	github.com/vanclief/compose v1.6.5
 	github.com/vanclief/ez v1.4.0
 	golang.org/x/sync v0.13.0
 )
