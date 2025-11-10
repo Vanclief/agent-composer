@@ -8,24 +8,24 @@ import (
 	types "github.com/vanclief/agent-composer/runtime/types"
 )
 
-type AgentInstance struct {
+type ConversationInstance struct {
 	*agent.Conversation
 	provider types.LLMProvider
 	mcpMux   *mcp.Mux
 	hooks    map[hook.EventType][]hook.Hook
 }
 
-func (ai *AgentInstance) LatestAssistantMessage() (*types.Message, bool) {
-	for i := len(ai.Messages) - 1; i >= 0; i-- {
-		if ai.Messages[i].Role == types.MessageRoleAssistant && ai.Messages[i].ToolCall == nil {
-			return &ai.Messages[i], true
+func (ci *ConversationInstance) LatestAssistantMessage() (*types.Message, bool) {
+	for i := len(ci.Messages) - 1; i >= 0; i-- {
+		if ci.Messages[i].Role == types.MessageRoleAssistant && ci.Messages[i].ToolCall == nil {
+			return &ci.Messages[i], true
 		}
 	}
 
 	return nil, false
 }
 
-func (ai *AgentInstance) AddMessage(role types.MessageRole, content string) {
+func (ci *ConversationInstance) AddMessage(role types.MessageRole, content string) {
 	var msg types.Message
 
 	switch role {
@@ -40,15 +40,15 @@ func (ai *AgentInstance) AddMessage(role types.MessageRole, content string) {
 		return // Invalid role; do nothing
 	}
 
-	ai.Messages = append(ai.Messages, msg)
+	ci.Messages = append(ci.Messages, msg)
 }
 
-func (ai *AgentInstance) AddToolMessage(toolName, toolCallID, content string) {
+func (ci *ConversationInstance) AddToolMessage(toolName, toolCallID, content string) {
 	msg := *types.NewToolMessage(toolName, toolCallID, content)
-	ai.Messages = append(ai.Messages, msg)
+	ci.Messages = append(ci.Messages, msg)
 }
 
-func (ai *AgentInstance) AddAssistantToolCall(toolCall types.ToolCall) {
+func (ci *ConversationInstance) AddAssistantToolCall(toolCall types.ToolCall) {
 	msg := *types.NewAssistantToolCallMessage(toolCall)
-	ai.Messages = append(ai.Messages, msg)
+	ci.Messages = append(ci.Messages, msg)
 }

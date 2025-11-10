@@ -53,15 +53,15 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 		request.ParallelConversations = 1
 	}
 
-	instances := make([]*runtime.AgentInstance, 0, request.ParallelConversations)
+	instances := make([]*runtime.ConversationInstance, 0, request.ParallelConversations)
 
 	for i := 0; i < request.ParallelConversations; i++ {
-		instance, err := api.rt.NewAgentInstanceFromSpec(ctx, spec.ID)
+		instance, err := api.rt.NewConversationInstanceFromSpec(ctx, spec.ID)
 		if err != nil {
 			return nil, ez.Wrap(op, err)
 		}
 
-		api.rt.RunAgentInstance(instance, request.Prompt)
+		api.rt.RunConversationInstance(instance, request.Prompt)
 
 		instances = append(instances, instance)
 	}

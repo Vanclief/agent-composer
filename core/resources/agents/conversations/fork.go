@@ -38,21 +38,18 @@ func (api *API) Fork(ctx context.Context, requester interface{}, request *ForkRe
 	}
 
 	// Step 2: Create a new conversation from that OG conversation
-	fork := conversation
-	fork.ID = uuid.Nil // Reset ID for new insert
-
-	err = fork.Insert(ctx, api.db)
+	fork, err := conversation.Clone(ctx, api.db, false)
 	if err != nil {
 		return uuid.Nil, ez.Wrap(op, err)
 	}
 
 	// Step 3: Launch the fork
-	instance, err := api.rt.NewAgentInstanceFromConversation(ctx, conversation.ID)
+	instance, err := api.rt.NewConversationInstance(ctx, fork.ID)
 	if err != nil {
 		return uuid.Nil, ez.Wrap(op, err)
 	}
 
-	api.rt.RunAgentInstance(instance, request.Prompt)
+	api.rt.RunConversationInstance(instance, request.Prompt)
 
 	return fork.ID, nil
 }

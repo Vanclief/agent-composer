@@ -40,12 +40,12 @@ func (api *API) Resume(ctx context.Context, requester interface{}, request *Resu
 	// Step 2: Launch
 
 	// TODO: Permissions check
-	instance, err := api.rt.NewAgentInstanceFromConversation(ctx, conversation.ID)
+	instance, err := api.rt.NewConversationInstance(ctx, conversation.ID)
 	if err != nil {
 		return uuid.Nil, ez.Wrap(op, err)
 	}
 
-	api.rt.RunAgentInstance(instance, request.Prompt)
+	api.rt.RunConversationInstance(instance, request.Prompt)
 
 	return conversation.ID, nil
 }

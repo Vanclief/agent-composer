@@ -178,6 +178,41 @@ func (c *Conversation) Delete(ctx context.Context, db bun.IDB) error {
 	return nil
 }
 
+func (c *Conversation) Clone(ctx context.Context, db bun.IDB, discardMessages bool) (*Conversation, error) {
+	const op = "Conversation.Clone"
+
+	if c == nil {
+		return nil, ez.New(op, ez.EINVALID, "conversation is nil", nil)
+	}
+
+	// Create a value copy so mutations don't affect the original object.
+	clone := *c
+
+	id, err := uuid.NewV7()
+	if err != nil {
+		return nil, ez.Wrap(op, err)
+	}
+
+	clone.ID = id
+	clone.CreatedAt = time.Now().UTC()
+	clone.InputTokens = 0
+	clone.OutputTokens = 0
+	clone.CachedTokens = 0
+
+	if discardMessages {
+		clone.Messages = []types.Message{*types.NewSystemMessage(clone.Instructions)}
+	} else if len(c.Messages) > 0 {
+		clone.Messages = append([]types.Message(nil), c.Messages...)
+	}
+
+	_, err = db.NewInsert().Model(&clone).Exec(ctx)
+	if err != nil {
+		return nil, ez.Wrap(op, err)
+	}
+
+	return &clone, nil
+}
+
 // ---- Queries ----
 
 func GetConversationByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*Conversation, error) {

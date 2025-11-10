@@ -13,9 +13,9 @@ import (
 	"github.com/vanclief/ez"
 )
 
-// func (ai *AgentInstance) RunHooks(ctx context.Context, event hook.EventType, toolCall *types.ToolCall, toolCallResponse string) error {
-// 	for _, h := range ai.hooks[event] {
-// 		_, err := ai.runToolHooks(ctx, h, toolCall, toolCallResponse)
+// func (ci *ConversationInstance) RunHooks(ctx context.Context, event hook.EventType, toolCall *types.ToolCall, toolCallResponse string) error {
+// 	for _, h := range ci.hooks[event] {
+// 		_, err := ci.runToolHooks(ctx, h, toolCall, toolCallResponse)
 // 		if err != nil {
 // 			return err
 // 		}
@@ -24,9 +24,9 @@ import (
 // 	return nil
 // }
 
-func (ai *AgentInstance) RunConversationStartedHook(ctx context.Context) error {
-	for _, h := range ai.hooks[hook.EventTypeConversationStarted] {
-		_, err := ai.runConversationHooks(ctx, h)
+func (ci *ConversationInstance) RunConversationStartedHook(ctx context.Context) error {
+	for _, h := range ci.hooks[hook.EventTypeConversationStarted] {
+		_, err := ci.runConversationHooks(ctx, h)
 		if err != nil {
 			return err
 		}
@@ -35,9 +35,9 @@ func (ai *AgentInstance) RunConversationStartedHook(ctx context.Context) error {
 	return nil
 }
 
-func (ai *AgentInstance) RunConversationEndedHook(ctx context.Context) error {
-	for _, h := range ai.hooks[hook.EventTypeConversationEnded] {
-		_, err := ai.runConversationHooks(ctx, h)
+func (ci *ConversationInstance) RunConversationEndedHook(ctx context.Context) error {
+	for _, h := range ci.hooks[hook.EventTypeConversationEnded] {
+		_, err := ci.runConversationHooks(ctx, h)
 		if err != nil {
 			return err
 		}
@@ -46,9 +46,9 @@ func (ai *AgentInstance) RunConversationEndedHook(ctx context.Context) error {
 	return nil
 }
 
-func (ai *AgentInstance) RunPreToolUseHook(ctx context.Context, toolCall *types.ToolCall, toolCallResponse string) error {
-	for _, h := range ai.hooks[hook.EventTypePreToolUse] {
-		_, err := ai.runToolHooks(ctx, h, toolCall, toolCallResponse)
+func (ci *ConversationInstance) RunPreToolUseHook(ctx context.Context, toolCall *types.ToolCall, toolCallResponse string) error {
+	for _, h := range ci.hooks[hook.EventTypePreToolUse] {
+		_, err := ci.runToolHooks(ctx, h, toolCall, toolCallResponse)
 		if err != nil {
 			return err
 		}
@@ -57,9 +57,9 @@ func (ai *AgentInstance) RunPreToolUseHook(ctx context.Context, toolCall *types.
 	return nil
 }
 
-func (ai *AgentInstance) RunPostToolUseHook(ctx context.Context, toolCall *types.ToolCall, toolCallResponse string) error {
-	for _, h := range ai.hooks[hook.EventTypePostToolUse] {
-		_, err := ai.runToolHooks(ctx, h, toolCall, toolCallResponse)
+func (ci *ConversationInstance) RunPostToolUseHook(ctx context.Context, toolCall *types.ToolCall, toolCallResponse string) error {
+	for _, h := range ci.hooks[hook.EventTypePostToolUse] {
+		_, err := ci.runToolHooks(ctx, h, toolCall, toolCallResponse)
 		if err != nil {
 			return err
 		}
@@ -68,9 +68,9 @@ func (ai *AgentInstance) RunPostToolUseHook(ctx context.Context, toolCall *types
 	return nil
 }
 
-func (ai *AgentInstance) RunPreContextCompactionHook(ctx context.Context, compactedConversationID uuid.UUID) error {
-	for _, h := range ai.hooks[hook.EventTypePreContextCompaction] {
-		_, err := ai.runCompactionHooks(ctx, h, compactedConversationID)
+func (ci *ConversationInstance) RunPreContextCompactionHook(ctx context.Context, compactedConversationID uuid.UUID) error {
+	for _, h := range ci.hooks[hook.EventTypePreContextCompaction] {
+		_, err := ci.runCompactionHooks(ctx, h, compactedConversationID)
 		if err != nil {
 			return err
 		}
@@ -79,9 +79,9 @@ func (ai *AgentInstance) RunPreContextCompactionHook(ctx context.Context, compac
 	return nil
 }
 
-func (ai *AgentInstance) RunPostContextCompactionHook(ctx context.Context, compactedConversationID uuid.UUID) error {
-	for _, h := range ai.hooks[hook.EventTypePostContextCompaction] {
-		_, err := ai.runCompactionHooks(ctx, h, compactedConversationID)
+func (ci *ConversationInstance) RunPostContextCompactionHook(ctx context.Context, compactedConversationID uuid.UUID) error {
+	for _, h := range ci.hooks[hook.EventTypePostContextCompaction] {
+		_, err := ci.runCompactionHooks(ctx, h, compactedConversationID)
 		if err != nil {
 			return err
 		}
@@ -98,17 +98,17 @@ type ConversationStateHook struct {
 	LastResponse   string         `json:"last_response,omitempty"`
 }
 
-func (ai *AgentInstance) runConversationHooks(ctx context.Context, h hook.Hook) (HookResult, error) {
+func (ci *ConversationInstance) runConversationHooks(ctx context.Context, h hook.Hook) (HookResult, error) {
 	var lastResponse string
-	lam, found := ai.LatestAssistantMessage()
+	lam, found := ci.LatestAssistantMessage()
 	if found {
 		lastResponse = lam.Content
 	}
 
 	e := ConversationStateHook{
 		ID:             h.ID.String(),
-		ConversationID: ai.ID.String(),
-		AgentName:      ai.AgentName,
+		ConversationID: ci.ID.String(),
+		AgentName:      ci.AgentName,
 		EventType:      h.EventType,
 		LastResponse:   lastResponse,
 	}
@@ -122,7 +122,7 @@ func (ai *AgentInstance) runConversationHooks(ctx context.Context, h hook.Hook) 
 			stderrText = "hook failed"
 		}
 
-		ai.AddMessage(types.MessageRoleUser, stderrText)
+		ci.AddMessage(types.MessageRoleUser, stderrText)
 		return out, err // Return on first exit code 2
 	}
 
@@ -140,9 +140,9 @@ type ToolUseHook struct {
 	ToolResponse   string         `json:"tool_response,omitempty"`
 }
 
-func (ai *AgentInstance) runToolHooks(ctx context.Context, h hook.Hook, toolCall *types.ToolCall, toolCallResponse string) (HookResult, error) {
+func (ci *ConversationInstance) runToolHooks(ctx context.Context, h hook.Hook, toolCall *types.ToolCall, toolCallResponse string) (HookResult, error) {
 	var lastResponse string
-	lam, found := ai.LatestAssistantMessage()
+	lam, found := ci.LatestAssistantMessage()
 	if found {
 		lastResponse = lam.Content
 	}
@@ -153,8 +153,8 @@ func (ai *AgentInstance) runToolHooks(ctx context.Context, h hook.Hook, toolCall
 
 	e := ToolUseHook{
 		ID:             h.ID.String(),
-		ConversationID: ai.ID.String(),
-		AgentName:      ai.AgentName,
+		ConversationID: ci.ID.String(),
+		AgentName:      ci.AgentName,
 		EventType:      h.EventType,
 		LastResponse:   lastResponse,
 		ToolName:       toolCall.Name,
@@ -180,9 +180,9 @@ func (ai *AgentInstance) runToolHooks(ctx context.Context, h hook.Hook, toolCall
 		encoded, marshalErr := json.Marshal(payload)
 		if marshalErr != nil {
 			log.Error().Err(marshalErr).Msg("Failed to marshal hook error payload")
-			ai.AddToolMessage(toolCall.Name, toolCall.CallID, stderrText)
+			ci.AddToolMessage(toolCall.Name, toolCall.CallID, stderrText)
 		} else {
-			ai.AddToolMessage(toolCall.Name, toolCall.CallID, string(encoded))
+			ci.AddToolMessage(toolCall.Name, toolCall.CallID, string(encoded))
 		}
 
 		return out, err // Return on first exit code 2
@@ -200,18 +200,18 @@ type CompactionHook struct {
 	LastResponse            string         `json:"last_response,omitempty"`
 }
 
-func (ai *AgentInstance) runCompactionHooks(ctx context.Context, h hook.Hook, compactedConversationID uuid.UUID) (HookResult, error) {
+func (ci *ConversationInstance) runCompactionHooks(ctx context.Context, h hook.Hook, compactedConversationID uuid.UUID) (HookResult, error) {
 	var lastResponse string
-	lam, found := ai.LatestAssistantMessage()
+	lam, found := ci.LatestAssistantMessage()
 	if found {
 		lastResponse = lam.Content
 	}
 
 	e := CompactionHook{
 		ID:                      h.ID.String(),
-		ConversationID:          ai.ID.String(),
+		ConversationID:          ci.ID.String(),
 		CompactedConversationID: compactedConversationID.String(),
-		AgentName:               ai.AgentName,
+		AgentName:               ci.AgentName,
 		EventType:               h.EventType,
 		LastResponse:            lastResponse,
 	}
@@ -225,7 +225,7 @@ func (ai *AgentInstance) runCompactionHooks(ctx context.Context, h hook.Hook, co
 			stderrText = "hook failed"
 		}
 
-		ai.AddMessage(types.MessageRoleUser, stderrText)
+		ci.AddMessage(types.MessageRoleUser, stderrText)
 		return out, err // Return on first exit code 2
 	}
 

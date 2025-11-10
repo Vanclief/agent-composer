@@ -14,48 +14,48 @@ import (
 
 type toolCallKey struct{ name, args string }
 
-func (rt *Runtime) RunAgentInstance(ai *AgentInstance, prompt string) error {
-	const op = "runtime.RunConversations"
+func (rt *Runtime) RunConversationInstance(ci *ConversationInstance, prompt string) error {
+	const op = "runtime.RunConversationInstance"
 
-	sessionID := fmt.Sprintf("agent:%s", ai.ID)
+	sessionID := fmt.Sprintf("agent:%s", ci.ID)
 
 	rt.scheduler.RunOnce(rt.rootCtx, sessionID, func(jobCtx context.Context) {
-		err := rt.runAgentInstance(jobCtx, ai, prompt)
+		err := rt.runConversationInstance(jobCtx, ci, prompt)
 		if err != nil {
-			log.Error().Err(err).Str("conversation_id", ai.ID.String()).Msg("conversation failed")
+			log.Error().Err(err).Str("conversation_id", ci.ID.String()).Msg("conversation failed")
 		}
 	})
 
 	return nil
 }
 
-func (rt *Runtime) runAgentInstance(ctx context.Context, ai *AgentInstance, prompt string) error {
-	const op = "runtime.AgentInstance.Run"
+func (rt *Runtime) runConversationInstance(ctx context.Context, ci *ConversationInstance, prompt string) error {
+	const op = "runtime.runConversationInstance"
 
 	// Step 1: Append the user prompt to the messages and update the status
-	ai.AddMessage(types.MessageRoleUser, prompt)
-	ai.Status = agent.ConversationStatusRunning
+	ci.AddMessage(types.MessageRoleUser, prompt)
+	ci.Status = agent.ConversationStatusRunning
 
-	err := ai.Update(ctx, rt.db)
+	err := ci.Update(ctx, rt.db)
 	if err != nil {
 		return ez.Wrap(op, err)
 	}
 
 	// Step 2: Run any session started hooks
-	ai.RunConversationStartedHook(ctx)
+	ci.RunConversationStartedHook(ctx)
 
 	// Step 3: Run the inference
-	inferenceErr := rt.runInference(ctx, ai)
+	inferenceErr := rt.runInference(ctx, ci)
 	if inferenceErr != nil {
 		if strings.Contains(inferenceErr.Error(), "context canceled") {
-			ai.Status = agent.ConversationStatusCanceled
+			ci.Status = agent.ConversationStatusCanceled
 		} else {
-			ai.Status = agent.ConversationStatusFailed
+			ci.Status = agent.ConversationStatusFailed
 		}
 	}
 
 	pCtx := context.WithoutCancel(ctx)
-	err = ai.Update(pCtx, rt.db)
+	err = ci.Update(pCtx, rt.db)
 	if err != nil {
 		return ez.Wrap(op, err)
 	}
@@ -65,13 +65,13 @@ func (rt *Runtime) runAgentInstance(ctx context.Context, ai *AgentInstance, prom
 	}
 
 	// Step 4: If there was no error, return the last message content
-	log.Info().Str("conversation_id", ai.ID.String()).Msg("Finished running inference")
+	log.Info().Str("conversation_id", ci.ID.String()).Msg("Finished running inference")
 
 	return nil
 }
 
-func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
-	const op = "runtime.AgentInstance.runInference"
+func (rt *Runtime) runInference(ctx context.Context, ci *ConversationInstance) error {
+	const op = "runtime.ConversationInstance.runInference"
 
 	const maxSteps = 300
 
@@ -80,35 +80,35 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 
 	for step := 0; step < maxSteps; step++ {
 
-		inputTokens, err := ai.provider.EstimateInputTokens(ai.Model, ai.Messages)
+		inputTokens, err := ci.provider.EstimateInputTokens(ci.Model, ci.Messages)
 		if err != nil {
 			return ez.Wrap(op, err)
 		}
 
 		compactAtPercent := 100
-		if ai.AutoCompact {
-			compactAtPercent = ai.CompactAtPercent
+		if ci.AutoCompact {
+			compactAtPercent = ci.CompactAtPercent
 		}
 
-		err = ai.provider.CheckContextWindow(ai.Model, inputTokens, compactAtPercent)
+		err = ci.provider.CheckContextWindow(ci.Model, inputTokens, compactAtPercent)
 		if err != nil {
 			// If we exceed context, run any hooks and compact if autoCompact is set
-			if ai.AutoCompact {
+			if ci.AutoCompact {
 
-				err = ai.RunPreContextCompactionHook(ctx, uuid.Nil)
+				err = ci.RunPreContextCompactionHook(ctx, uuid.Nil)
 				if err != nil {
 					return ez.Wrap(op, err)
 				}
 
-				ai.AddMessage(types.MessageRoleUser, ai.CompactionPrompt)
+				ci.AddMessage(types.MessageRoleUser, ci.CompactionPrompt)
 
 				chatRequest := types.ChatRequest{
-					Messages:           ai.Messages,
+					Messages:           ci.Messages,
 					PreviousResponseID: prevResponseID,
-					ThinkingEffort:     string(ai.ReasoningEffort),
+					ThinkingEffort:     string(ci.ReasoningEffort),
 				}
 
-				compactingResponse, err := ai.provider.Chat(ctx, ai.Model, &chatRequest)
+				compactingResponse, err := ci.provider.Chat(ctx, ci.Model, &chatRequest)
 				if err != nil {
 					return ez.Wrap(op, err)
 				}
@@ -117,20 +117,25 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 				if newInputTokens < 0 {
 					newInputTokens = 0
 				}
-				ai.InputTokens += newInputTokens
-				ai.OutputTokens += compactingResponse.TokenUsage.OutputTokens
-				ai.CachedTokens += compactingResponse.TokenUsage.CacheReadInputTokens
+				ci.InputTokens += newInputTokens
+				ci.OutputTokens += compactingResponse.TokenUsage.OutputTokens
+				ci.CachedTokens += compactingResponse.TokenUsage.CacheReadInputTokens
 
-				newAI, err := rt.NewAgentInstanceFromSpec(ctx, ai.AgentSpecID)
+				newConversation, err := ci.Clone(ctx, rt.db, true)
 				if err != nil {
 					return ez.Wrap(op, err)
 				}
 
-				newAI.CompactCount = ai.CompactCount + 1
+				newConversation.CompactCount = ci.CompactCount + 1
 
-				rt.RunAgentInstance(newAI, compactingResponse.Text)
+				newInstance, err := rt.NewConversationInstance(ctx, newConversation.ID)
+				if err != nil {
+					return ez.Wrap(op, err)
+				}
 
-				ai.RunPostContextCompactionHook(ctx, newAI.ID)
+				rt.RunConversationInstance(newInstance, compactingResponse.Text)
+
+				ci.RunPostContextCompactionHook(ctx, newConversation.ID)
 
 				return ez.New(op, ez.EINVALID, "Context window exceeded, compacted in new conversation", nil)
 			}
@@ -142,16 +147,16 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 
 		// Step 2: Make the LLM call
 		chatRequest := types.ChatRequest{
-			Messages:               ai.Messages,
-			Tools:                  ai.Tools,
+			Messages:               ci.Messages,
+			Tools:                  ci.Tools,
 			PreviousResponseID:     prevResponseID,
-			ThinkingEffort:         string(ai.ReasoningEffort),
-			WebSearch:              ai.WebSearch,
-			StructuredOutputs:      ai.StructuredOutput,
-			StructuredOutputSchema: ai.StructuredOutputSchema,
+			ThinkingEffort:         string(ci.ReasoningEffort),
+			WebSearch:              ci.WebSearch,
+			StructuredOutputs:      ci.StructuredOutput,
+			StructuredOutputSchema: ci.StructuredOutputSchema,
 		}
 
-		response, err := ai.provider.Chat(ctx, ai.Model, &chatRequest)
+		response, err := ci.provider.Chat(ctx, ci.Model, &chatRequest)
 		if err != nil {
 			return ez.Wrap(op, err)
 		}
@@ -162,16 +167,16 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 		if newInputTokens < 0 {
 			newInputTokens = 0
 		}
-		ai.InputTokens += newInputTokens
-		ai.OutputTokens += response.TokenUsage.OutputTokens
-		ai.CachedTokens += response.TokenUsage.CacheReadInputTokens
+		ci.InputTokens += newInputTokens
+		ci.OutputTokens += response.TokenUsage.OutputTokens
+		ci.CachedTokens += response.TokenUsage.CacheReadInputTokens
 
 		// Step 3: If we do have tool calls, execute them
 		for _, toolCall := range response.ToolCalls {
 
 			log.Info().
-				Str("Name", ai.AgentName).
-				Str("ID", ai.ID.String()).
+				Str("Name", ci.AgentName).
+				Str("ID", ci.ID.String()).
 				Str("tool", toolCall.Name).
 				Str("args", toolCall.Arguments).
 				Int("step", step).
@@ -191,16 +196,16 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 				// IMPORTANT: Always satisfy the protocol with a ToolMessage for this call_id.
 				// We send a synthetic error payload instead of executing the tool again.
 				syntheticError := `{"error":"duplicate_tool_call","policy":"anti-loop","message":"Duplicate tool call with identical arguments within one step; tool execution skipped."}`
-				ai.AddToolMessage(toolCall.Name, toolCall.CallID, syntheticError)
+				ci.AddToolMessage(toolCall.Name, toolCall.CallID, syntheticError)
 
 				continue
 			}
 
 			// Persist the assistant-issued tool call so resumes have the full transcript.
-			ai.AddAssistantToolCall(toolCall)
+			ci.AddAssistantToolCall(toolCall)
 
 			// 3.3 Run any pre-tool-use hooks
-			err = ai.RunPreToolUseHook(ctx, &toolCall, "")
+			err = ci.RunPreToolUseHook(ctx, &toolCall, "")
 			if err != nil {
 				// Record the step to help the anti-loop policy.
 				toolCalls[callKey] = step
@@ -209,14 +214,14 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 			}
 
 			// 3.4 Call the tool
-			toolCallResponse, err := ai.mcpMux.CallTool(ctx, &toolCall)
+			toolCallResponse, err := ci.mcpMux.CallTool(ctx, &toolCall)
 			if err != nil {
 				return ez.Wrap("agent.ExecuteTool", err)
 			}
 
 			log.Info().
-				Str("Name", ai.AgentName).
-				Str("ID", ai.ID.String()).
+				Str("Name", ci.AgentName).
+				Str("ID", ci.ID.String()).
 				Str("tool", toolCall.Name).
 				Str("args", toolCall.Arguments).
 				Str("tool_response", toolCallResponse).
@@ -224,7 +229,7 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 				Msg("Tool Call Response")
 
 			// 3.5 Run any post-tool-use hooks
-			err = ai.RunPostToolUseHook(ctx, &toolCall, toolCallResponse)
+			err = ci.RunPostToolUseHook(ctx, &toolCall, toolCallResponse)
 			if err != nil {
 				// Record the step to help the anti-loop policy.
 				toolCalls[callKey] = step
@@ -235,24 +240,24 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 			// 3.6 Record the tool call step
 			toolCalls[callKey] = step
 
-			ai.AddToolMessage(toolCall.Name, toolCall.CallID, toolCallResponse)
+			ci.AddToolMessage(toolCall.Name, toolCall.CallID, toolCallResponse)
 		}
 
 		// Step 4: If we don't have any tool calls
 		if len(response.ToolCalls) == 0 {
 
 			log.Info().
-				Str("Name", ai.AgentName).
-				Str("ID", ai.ID.String()).
+				Str("Name", ci.AgentName).
+				Str("ID", ci.ID.String()).
 				Str("Response", response.Text).
 				Int("step", step).
 				Msg("Agent response")
 
-			ai.AddMessage(types.MessageRoleAssistant, response.Text)
+			ci.AddMessage(types.MessageRoleAssistant, response.Text)
 
 			// 4.1 Update the conversation status to succeeded so that hook don't see it as running
-			ai.Status = agent.ConversationStatusSucceeded
-			err = ai.Update(ctx, rt.db)
+			ci.Status = agent.ConversationStatusSucceeded
+			err = ci.Update(ctx, rt.db)
 			if err != nil {
 				return ez.Wrap(op, err)
 			}
@@ -260,14 +265,14 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 			// 4.2 Check if any hooks want to block the stop
 			blockStop := false
 
-			err = ai.RunConversationEndedHook(ctx)
+			err = ci.RunConversationEndedHook(ctx)
 			if err != nil {
 
 				blockStop = true
 
 				// Since a hook has requested more work, we set the conversation back to running
-				ai.Status = agent.ConversationStatusRunning
-				err = ai.Update(ctx, rt.db)
+				ci.Status = agent.ConversationStatusRunning
+				err = ci.Update(ctx, rt.db)
 				if err != nil {
 					return ez.Wrap(op, err)
 				}
@@ -275,18 +280,18 @@ func (rt *Runtime) runInference(ctx context.Context, ai *AgentInstance) error {
 
 			if !blockStop {
 
-				ai.Cost = ai.provider.CalculateCost(ai.Model, ai.InputTokens, ai.OutputTokens, ai.CachedTokens)
+				ci.Cost = ci.provider.CalculateCost(ci.Model, ci.InputTokens, ci.OutputTokens, ci.CachedTokens)
 
 				log.Info().
-					Str("Name", ai.AgentName).
-					Str("ID", ai.ID.String()).
+					Str("Name", ci.AgentName).
+					Str("ID", ci.ID.String()).
 					Int("step", step).
 					Msg("Agent finished")
 				return nil
 			}
 		}
 
-		err = ai.Update(ctx, rt.db)
+		err = ci.Update(ctx, rt.db)
 		if err != nil {
 			return ez.Wrap(op, err)
 		}

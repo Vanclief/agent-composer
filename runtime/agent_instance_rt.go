@@ -14,8 +14,8 @@ import (
 
 // TODO: Try to take out the Runtime
 
-func (rt *Runtime) NewAgentInstanceFromSpec(ctx context.Context, agentSpecID uuid.UUID) (*AgentInstance, error) {
-	const op = "runtime.NewAgentInstanceFromSpec"
+func (rt *Runtime) NewConversationInstanceFromSpec(ctx context.Context, agentSpecID uuid.UUID) (*ConversationInstance, error) {
+	const op = "runtime.NewConversationInstanceFromSpec"
 
 	// Step 1) Fetch the agent spec
 	spec, err := agent.GetAgentSpecByID(ctx, rt.db, agentSpecID)
@@ -34,8 +34,8 @@ func (rt *Runtime) NewAgentInstanceFromSpec(ctx context.Context, agentSpecID uui
 	return rt.newAgentInstance(ctx, conversation, true)
 }
 
-func (rt *Runtime) NewAgentInstanceFromConversation(ctx context.Context, conversationID uuid.UUID) (*AgentInstance, error) {
-	const op = "runtime.NewAgentInstanceFromConversation"
+func (rt *Runtime) NewConversationInstance(ctx context.Context, conversationID uuid.UUID) (*ConversationInstance, error) {
+	const op = "runtime.NewConversationInstance"
 
 	// Step 1) Load the existing conversation
 	conversation, err := agent.GetConversationByID(ctx, rt.db, conversationID)
@@ -46,7 +46,7 @@ func (rt *Runtime) NewAgentInstanceFromConversation(ctx context.Context, convers
 	return rt.newAgentInstance(ctx, conversation, false)
 }
 
-func (rt *Runtime) newAgentInstance(ctx context.Context, conversation *agent.Conversation, new bool) (*AgentInstance, error) {
+func (rt *Runtime) newAgentInstance(ctx context.Context, conversation *agent.Conversation, new bool) (*ConversationInstance, error) {
 	const op = "runtime.NewAgentInstance"
 
 	// Step 1) Create the ChatGPT instance
@@ -101,12 +101,12 @@ func (rt *Runtime) newAgentInstance(ctx context.Context, conversation *agent.Con
 
 	// Step 7) Create the instance
 
-	ai := &AgentInstance{
+	ci := &ConversationInstance{
 		Conversation: conversation,
 		provider:     chatGPT,
 		mcpMux:       mux,
 		hooks:        hooks,
 	}
 
-	return ai, nil
+	return ci, nil
 }
