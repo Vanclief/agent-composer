@@ -25,6 +25,7 @@ type Conversation struct {
 
 	ID                     uuid.UUID              `bun:",pk,type:uuid" json:"id"`
 	AgentSpecID            uuid.UUID              `bun:"type:uuid" json:"agent_spec_id"`
+	SessionID              string                 `json:"session_id,omitempty"`
 	AgentName              string                 `json:"agent_name"`
 	Provider               LLMProvider            `json:"provider"`
 	Model                  string                 `json:"model"`

@@ -19,7 +19,7 @@ import (
 	appmigrations "github.com/vanclief/agent-composer/models/migrations"
 )
 
-const version = "0.2.5"
+const version = "0.2.6"
 
 // Run starts the CLI entrypoint.
 func Run(ctx context.Context, args []string) error {

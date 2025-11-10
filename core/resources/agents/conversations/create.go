@@ -14,6 +14,7 @@ type CreateRequest struct {
 	AgentSpecID           uuid.UUID `json:"agent_spec_id"`
 	Prompt                string    `json:"prompt"`
 	ParallelConversations int       `json:"parallel_conversations"`
+	SessionID             string    `json:"session_id,omitempty"`
 }
 
 func (r CreateRequest) Validate() error {
@@ -56,7 +57,7 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 	instances := make([]*runtime.ConversationInstance, 0, request.ParallelConversations)
 
 	for i := 0; i < request.ParallelConversations; i++ {
-		instance, err := api.rt.NewConversationInstanceFromSpec(ctx, spec.ID)
+		instance, err := api.rt.NewConversationInstanceFromSpec(ctx, spec.ID, request.SessionID)
 		if err != nil {
 			return nil, ez.Wrap(op, err)
 		}

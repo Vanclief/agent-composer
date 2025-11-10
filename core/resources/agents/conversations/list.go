@@ -17,6 +17,7 @@ type ListRequest struct {
 	Search      string                    `json:"search"`
 	AgentSpecID uuid.UUID                 `json:"agent_spec_id,omitempty"`
 	Status      *agent.ConversationStatus `json:"status,omitempty"`
+	SessionID   string                    `json:"session_id,omitempty"`
 }
 
 func (r *ListRequest) Validate() error {
@@ -58,6 +59,10 @@ func (api *API) List(ctx context.Context, requester interface{}, request *ListRe
 
 	if request.Search != "" {
 		selectQuery = selectQuery.Where("conversation.agent_name ILIKE ?", "%"+request.Search+"%")
+	}
+
+	if request.SessionID != "" {
+		selectQuery = selectQuery.Where("conversation.session_id = ?", request.SessionID)
 	}
 
 	selectQuery, err := pagination.ApplyCursorToQuery(selectQuery, &request.CursorRequest, model, pagination.DESC)

@@ -23,7 +23,13 @@ func (h *Handler) ListConversations(c echo.Context) error {
 		Search: c.QueryParam("search"),
 	}
 
-	if agentSpecIDStr := c.QueryParam("agent_spec_id"); agentSpecIDStr != "" {
+	sessionID := c.QueryParam("session_id")
+	if sessionID != "" {
+		requestBody.SessionID = sessionID
+	}
+
+	agentSpecIDStr := c.QueryParam("agent_spec_id")
+	if agentSpecIDStr != "" {
 		agentSpecID, err := uuid.Parse(agentSpecIDStr)
 		if err != nil || agentSpecID == uuid.Nil {
 			return h.ManageError(c, op, request, ez.New(op, ez.EINVALID, "invalid agent_spec_id", err))
@@ -31,7 +37,8 @@ func (h *Handler) ListConversations(c echo.Context) error {
 		requestBody.AgentSpecID = agentSpecID
 	}
 
-	if providerParam := c.QueryParam("provider"); providerParam != "" {
+	providerParam := c.QueryParam("provider")
+	if providerParam != "" {
 		prov := agent.LLMProvider(providerParam)
 		if err := prov.Validate(); err != nil {
 			return h.ManageError(c, op, request, ez.New(op, ez.EINVALID, "invalid provider", err))
@@ -39,7 +46,8 @@ func (h *Handler) ListConversations(c echo.Context) error {
 		requestBody.Provider = &prov
 	}
 
-	if statusStr := c.QueryParam("status"); statusStr != "" {
+	statusStr := c.QueryParam("status")
+	if statusStr != "" {
 		status := agent.ConversationStatus(statusStr)
 		if err := status.Validate(); err != nil {
 			return h.ManageError(c, op, request, ez.New(op, ez.EINVALID, "invalid status", err))

@@ -14,7 +14,7 @@ import (
 
 // TODO: Try to take out the Runtime
 
-func (rt *Runtime) NewConversationInstanceFromSpec(ctx context.Context, agentSpecID uuid.UUID) (*ConversationInstance, error) {
+func (rt *Runtime) NewConversationInstanceFromSpec(ctx context.Context, agentSpecID uuid.UUID, sessionID string) (*ConversationInstance, error) {
 	const op = "runtime.NewConversationInstanceFromSpec"
 
 	// Step 1) Fetch the agent spec
@@ -30,6 +30,8 @@ func (rt *Runtime) NewConversationInstanceFromSpec(ctx context.Context, agentSpe
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
+
+	conversation.SessionID = sessionID
 
 	return rt.newAgentInstance(ctx, conversation, true)
 }
