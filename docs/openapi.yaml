@@ -1,0 +1,957 @@
+openapi: 3.0.3
+info:
+  title: Agent Composer REST API
+  version: 0.1.0
+  description: >
+    REST interface exposed by the Agent Composer service. The routes documented here were
+    generated directly from the Echo handlers in `interfaces/rest/handler` and cover agent
+    specs, agent conversations, and runtime hooks. All responses are JSON encoded and share a
+    common error envelope.
+servers:
+  - url: http://localhost:8080/api
+    description: Local development server
+  - url: /api
+    description: Relative base path when the service is deployed behind another host
+tags:
+  - name: Agent Specs
+    description: CRUD operations for reusable agent definitions.
+  - name: Conversations
+    description: Manage agent conversation runs and forks.
+  - name: Hooks
+    description: Manage runtime hooks that trigger external commands.
+paths:
+  /agents/specs:
+    get:
+      tags: [Agent Specs]
+      operationId: listAgentSpecs
+      summary: List agent specs
+      description: >
+        Returns the newest agent specs first. Results are cursor paginated and filtered only by
+        an optional case-insensitive search over the spec name.
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/SearchParam'
+      responses:
+        '200':
+          description: Cursor-paginated agent specs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentSpecListResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [Agent Specs]
+      operationId: createAgentSpec
+      summary: Create an agent spec
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAgentSpecRequest'
+      responses:
+        '200':
+          description: The newly created agent spec.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentSpec'
+        '400':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /agents/specs/{id}:
+    get:
+      tags: [Agent Specs]
+      operationId: getAgentSpec
+      summary: Retrieve an agent spec
+      parameters:
+        - $ref: '#/components/parameters/AgentSpecIdParam'
+      responses:
+        '200':
+          description: The requested agent spec.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentSpec'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    put:
+      tags: [Agent Specs]
+      operationId: updateAgentSpec
+      summary: Update an agent spec
+      parameters:
+        - $ref: '#/components/parameters/AgentSpecIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAgentSpecRequest'
+      responses:
+        '200':
+          description: The updated agent spec.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentSpec'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Agent Specs]
+      operationId: deleteAgentSpec
+      summary: Delete an agent spec
+      parameters:
+        - $ref: '#/components/parameters/AgentSpecIdParam'
+      responses:
+        '200':
+          description: UUID of the deleted spec.
+          content:
+            application/json:
+              schema:
+                type: string
+                format: uuid
+                description: Identifier that was deleted.
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /agents/conversations:
+    get:
+      tags: [Conversations]
+      operationId: listConversations
+      summary: List conversations
+      description: >
+        Returns the newest conversations first. `search` matches agent names, `agent_spec_id`
+        filters to a single spec, `provider` filters by LLM provider, `status` filters the
+        conversation lifecycle state, and `session_id` restricts results to a client session.
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Case-insensitive substring applied to `agent_name`.
+        - name: provider
+          in: query
+          schema:
+            $ref: '#/components/schemas/LLMProvider'
+          description: Only return conversations using the specified provider.
+        - name: agent_spec_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Limit results to a single agent spec.
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ConversationStatus'
+          description: Filter by the most recent conversation status.
+        - name: session_id
+          in: query
+          schema:
+            type: string
+          description: Filter by a client-provided session identifier.
+      responses:
+        '200':
+          description: Cursor-paginated conversations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationListResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [Conversations]
+      operationId: createConversation
+      summary: Start one or more conversations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConversationRequest'
+      responses:
+        '200':
+          description: Identifiers of the enqueued conversations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationCreateResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /agents/conversations/{id}:
+    get:
+      tags: [Conversations]
+      operationId: getConversation
+      summary: Retrieve a conversation
+      parameters:
+        - $ref: '#/components/parameters/ConversationIdParam'
+      responses:
+        '200':
+          description: The requested conversation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Conversations]
+      operationId: deleteConversation
+      summary: Delete a conversation
+      parameters:
+        - $ref: '#/components/parameters/ConversationIdParam'
+      responses:
+        '200':
+          description: UUID of the deleted conversation.
+          content:
+            application/json:
+              schema:
+                type: string
+                format: uuid
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /agents/conversations/{id}/fork:
+    post:
+      tags: [Conversations]
+      operationId: forkConversation
+      summary: Fork a conversation
+      description: >
+        Clones the specified conversation, then immediately continues it with a new prompt,
+        returning the identifier of the fork.
+      parameters:
+        - $ref: '#/components/parameters/ConversationIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForkConversationRequest'
+      responses:
+        '200':
+          description: UUID of the newly created fork.
+          content:
+            application/json:
+              schema:
+                type: string
+                format: uuid
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /agents/conversations/{id}/resume:
+    post:
+      tags: [Conversations]
+      operationId: resumeConversation
+      summary: Resume a conversation
+      description: >
+        Enqueues more model work on the same conversation with a new prompt and returns its
+        identifier (which matches the path parameter).
+      parameters:
+        - $ref: '#/components/parameters/ConversationIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResumeConversationRequest'
+      responses:
+        '200':
+          description: UUID of the resumed conversation.
+          content:
+            application/json:
+              schema:
+                type: string
+                format: uuid
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /hooks:
+    get:
+      tags: [Hooks]
+      operationId: listHooks
+      summary: List hooks
+      description: >
+        Returns hooks ordered by cursor. `search` matches the agent name or command, `event_type`
+        narrows down to a hook category, and `agent_name` filters to hooks bound to one agent.
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Case-insensitive substring applied to agent names and commands.
+        - name: event_type
+          in: query
+          schema:
+            $ref: '#/components/schemas/HookEventType'
+          description: Only return hooks that fire on this event type.
+        - name: agent_name
+          in: query
+          schema:
+            type: string
+          description: Filter hooks that target a specific agent name (empty value is treated as wildcard).
+      responses:
+        '200':
+          description: Cursor-paginated hooks.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HookListResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [Hooks]
+      operationId: createHook
+      summary: Create a hook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateHookRequest'
+      responses:
+        '200':
+          description: The newly created hook.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hook'
+        '400':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /hooks/{id}:
+    get:
+      tags: [Hooks]
+      operationId: getHook
+      summary: Retrieve a hook
+      parameters:
+        - $ref: '#/components/parameters/HookIdParam'
+      responses:
+        '200':
+          description: The requested hook.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hook'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    put:
+      tags: [Hooks]
+      operationId: updateHook
+      summary: Update a hook
+      parameters:
+        - $ref: '#/components/parameters/HookIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateHookRequest'
+      responses:
+        '200':
+          description: The updated hook.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hook'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Hooks]
+      operationId: deleteHook
+      summary: Delete a hook
+      parameters:
+        - $ref: '#/components/parameters/HookIdParam'
+      responses:
+        '200':
+          description: UUID of the deleted hook.
+          content:
+            application/json:
+              schema:
+                type: string
+                format: uuid
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+components:
+  parameters:
+    LimitParam:
+      name: limit
+      in: query
+      description: >
+        Maximum number of records to return. Defaults to 50 and is capped at 1000 by the service.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 1000
+        default: 50
+    CursorParam:
+      name: cursor
+      in: query
+      description: >
+        Base64 encoded cursor returned by a previous page. Supply it to fetch the next page.
+      schema:
+        type: string
+    SearchParam:
+      name: search
+      in: query
+      description: Case-insensitive substring search applied to resource-specific fields.
+      schema:
+        type: string
+    AgentSpecIdParam:
+      name: id
+      in: path
+      required: true
+      description: Agent spec identifier.
+      schema:
+        type: string
+        format: uuid
+    ConversationIdParam:
+      name: id
+      in: path
+      required: true
+      description: Conversation identifier.
+      schema:
+        type: string
+        format: uuid
+    HookIdParam:
+      name: id
+      in: path
+      required: true
+      description: Hook identifier.
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Error:
+      description: Error response with machine-readable code and request identifier.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          $ref: '#/components/schemas/StandardError'
+      required:
+        - error
+    StandardError:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Application error code (e.g., EINVALID, ENOTFOUND).
+        message:
+          type: string
+          description: Human-readable error message.
+        request_id:
+          type: string
+          description: Correlation identifier logged by the server.
+      required:
+        - code
+        - message
+        - request_id
+    CursorPage:
+      type: object
+      properties:
+        next_cursor:
+          type: string
+          description: Cursor to fetch the next page, omitted if there is no next page.
+        has_next_page:
+          type: boolean
+          description: Indicates whether another page exists.
+        hash:
+          type: string
+          description: SHA-256 hash of the returned items for cache validation.
+      required:
+        - has_next_page
+    AgentSpec:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        provider:
+          $ref: '#/components/schemas/LLMProvider'
+        model:
+          type: string
+        reasoning_effort:
+          $ref: '#/components/schemas/ReasoningEffort'
+        instructions:
+          type: string
+        auto_compact:
+          type: boolean
+        compact_at_percent:
+          type: integer
+          minimum: 1
+          maximum: 100
+        compaction_prompt:
+          type: string
+        shell_access:
+          type: boolean
+        web_search:
+          type: boolean
+        structured_output:
+          type: boolean
+        structured_output_schema:
+          type: object
+          additionalProperties: true
+          nullable: true
+        version:
+          type: integer
+      required:
+        - id
+        - name
+        - provider
+        - model
+        - reasoning_effort
+        - instructions
+        - auto_compact
+        - compact_at_percent
+        - shell_access
+        - web_search
+        - structured_output
+        - version
+    AgentSpecListResponse:
+      allOf:
+        - $ref: '#/components/schemas/CursorPage'
+        - type: object
+          properties:
+            agent_specs:
+              type: array
+              items:
+                $ref: '#/components/schemas/AgentSpec'
+          required:
+            - agent_specs
+    CreateAgentSpecRequest:
+      type: object
+      required:
+        - name
+        - provider
+        - model
+        - instructions
+        - reasoning_effort
+      properties:
+        name:
+          type: string
+        provider:
+          $ref: '#/components/schemas/LLMProvider'
+        model:
+          type: string
+        instructions:
+          type: string
+        reasoning_effort:
+          $ref: '#/components/schemas/ReasoningEffort'
+        auto_compact:
+          type: boolean
+          default: false
+        compact_at_percent:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: Optional override for when automatic compaction triggers (percentage of context window).
+        compaction_prompt:
+          type: string
+          description: Custom system prompt injected before compaction runs.
+        allowed_tools:
+          type: array
+          items:
+            type: string
+        shell_access:
+          type: boolean
+        web_search:
+          type: boolean
+        structured_output:
+          type: boolean
+        structured_output_schema:
+          type: object
+          additionalProperties: true
+          description: Required when `structured_output` is true.
+    UpdateAgentSpecRequest:
+      type: object
+      properties:
+        agent_spec_id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Filled from the path parameter; omit in the payload.
+        provider:
+          $ref: '#/components/schemas/LLMProvider'
+        name:
+          type: string
+        model:
+          type: string
+        instructions:
+          type: string
+        auto_compact:
+          type: boolean
+        compact_at_percent:
+          type: integer
+          minimum: 1
+          maximum: 100
+        compaction_prompt:
+          type: string
+        allowed_tools:
+          type: array
+          items:
+            type: string
+        shell_access:
+          type: boolean
+        web_search:
+          type: boolean
+        structured_output:
+          type: boolean
+        structured_output_schema:
+          type: object
+          additionalProperties: true
+          nullable: true
+          description: Send null to clear the structured output schema.
+      description: Supply at least one mutable field; otherwise the service returns EINVALID.
+    Conversation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        agent_spec_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          nullable: true
+        agent_name:
+          type: string
+        provider:
+          $ref: '#/components/schemas/LLMProvider'
+        model:
+          type: string
+        reasoning_effort:
+          $ref: '#/components/schemas/ReasoningEffort'
+        instructions:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        status:
+          $ref: '#/components/schemas/ConversationStatus'
+        input_tokens:
+          type: integer
+        output_tokens:
+          type: integer
+        cached_tokens:
+          type: integer
+        cost:
+          type: integer
+          description: Tracked cost in the smallest billing unit for the provider.
+        created_at:
+          type: string
+          format: date-time
+        auto_compact:
+          type: boolean
+        compact_at_percent:
+          type: integer
+        compaction_prompt:
+          type: string
+        compact_count:
+          type: integer
+        shell_access:
+          type: boolean
+        web_search:
+          type: boolean
+        structured_output:
+          type: boolean
+        structured_output_schema:
+          type: object
+          additionalProperties: true
+          nullable: true
+      required:
+        - id
+        - agent_spec_id
+        - agent_name
+        - provider
+        - model
+        - reasoning_effort
+        - instructions
+        - messages
+        - status
+        - input_tokens
+        - output_tokens
+        - cached_tokens
+        - cost
+        - created_at
+        - auto_compact
+        - compact_at_percent
+        - compact_count
+        - shell_access
+        - web_search
+        - structured_output
+    Message:
+      type: object
+      properties:
+        Role:
+          $ref: '#/components/schemas/MessageRole'
+        Content:
+          type: string
+        Name:
+          type: string
+        ToolCallID:
+          type: string
+        ToolCall:
+          $ref: '#/components/schemas/ToolCall'
+          nullable: true
+    ToolCall:
+      type: object
+      properties:
+        Name:
+          type: string
+        CallID:
+          type: string
+        Arguments:
+          type: string
+          description: Raw JSON arguments returned by the model.
+        JSONArguments:
+          $ref: '#/components/schemas/JSONValue'
+          description: Raw JSON value mirrored from `Arguments` (object, array, or scalar).
+      additionalProperties: false
+    ConversationListResponse:
+      allOf:
+        - $ref: '#/components/schemas/CursorPage'
+        - type: object
+          properties:
+            conversations:
+              type: array
+              items:
+                $ref: '#/components/schemas/Conversation'
+          required:
+            - conversations
+    CreateConversationRequest:
+      type: object
+      required:
+        - agent_spec_id
+        - prompt
+      properties:
+        agent_spec_id:
+          type: string
+          format: uuid
+        prompt:
+          type: string
+        parallel_conversations:
+          type: integer
+          minimum: 1
+          default: 1
+          description: Number of conversation instances to launch in parallel. Values <1 default to 1.
+        session_id:
+          type: string
+          description: Optional client-provided identifier for logical sessions.
+    ConversationCreateResponse:
+      type: object
+      properties:
+        conversations:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+            required:
+              - id
+      required:
+        - conversations
+    ForkConversationRequest:
+      type: object
+      required:
+        - prompt
+      properties:
+        prompt:
+          type: string
+          description: Prompt to send to the forked conversation.
+    ResumeConversationRequest:
+      type: object
+      required:
+        - prompt
+      properties:
+        prompt:
+          type: string
+          description: Prompt to resume the conversation with.
+    Hook:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        event_type:
+          $ref: '#/components/schemas/HookEventType'
+        agent_name:
+          type: string
+          description: Empty string represents a wildcard hook.
+        command:
+          type: string
+        args:
+          type: array
+          items:
+            type: string
+        enabled:
+          type: boolean
+      required:
+        - id
+        - event_type
+        - agent_name
+        - command
+        - args
+        - enabled
+    HookListResponse:
+      allOf:
+        - $ref: '#/components/schemas/CursorPage'
+        - type: object
+          properties:
+            hooks:
+              type: array
+              items:
+                $ref: '#/components/schemas/Hook'
+          required:
+            - hooks
+    CreateHookRequest:
+      type: object
+      required:
+        - event_type
+        - command
+        - enabled
+      properties:
+        event_type:
+          $ref: '#/components/schemas/HookEventType'
+        agent_name:
+          type: string
+          description: Empty string (or omission) registers a wildcard hook.
+        command:
+          type: string
+        args:
+          type: array
+          items:
+            type: string
+        enabled:
+          type: boolean
+    UpdateHookRequest:
+      type: object
+      properties:
+        hook_id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Filled from the path parameter; omit in the payload.
+        event_type:
+          $ref: '#/components/schemas/HookEventType'
+        agent_name:
+          type: string
+        command:
+          type: string
+        args:
+          type: array
+          nullable: true
+          items:
+            type: string
+        enabled:
+          type: boolean
+      description: Supply at least one mutable field; otherwise the service returns EINVALID.
+    LLMProvider:
+      type: string
+      enum:
+        - open_ai
+    ReasoningEffort:
+      type: string
+      enum:
+        - high
+        - medium
+        - low
+    ConversationStatus:
+      type: string
+      enum:
+        - queued
+        - running
+        - succeeded
+        - failed
+        - canceled
+    HookEventType:
+      type: string
+      enum:
+        - conversation_started
+        - conversation_ended
+        - context_exceeded
+        - pre_context_compaction
+        - post_context_compaction
+        - pre_tool_use
+        - post_tool_use
+    MessageRole:
+      type: string
+      enum:
+        - system
+        - user
+        - assistant
+        - tool
+    JSONValue:
+      description: Represents an arbitrary JSON value.
+      nullable: true
+      oneOf:
+        - type: object
+          additionalProperties: true
+        - type: array
+          items: {}
+        - type: string
+        - type: number
+        - type: integer
+        - type: boolean
