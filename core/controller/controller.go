@@ -1,12 +1,26 @@
 package controller
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
+
 	"github.com/vanclief/agent-composer/models"
 	"github.com/vanclief/compose/components/configurator"
 	"github.com/vanclief/compose/components/ctrl"
 	"github.com/vanclief/compose/drivers/databases/relational"
 	"github.com/vanclief/ez"
 )
+
+const CONFIG_DIR = ".agent_composer/config"
+
+func resolveConfigDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, CONFIG_DIR) + string(os.PathSeparator), nil
+}
 
 type Controller struct {
 	ctrl.BaseController
@@ -25,14 +39,41 @@ func New() (*Controller, error) {
 	e := EnvVars{}
 	c := Config{}
 
+	configDir, err := resolveConfigDir()
+	if err != nil {
+		return nil, ez.Wrap(op, err)
+	}
+
 	opts := []configurator.Option{}
 	opts = append(opts, configurator.WithRequiredEnv("ENVIRONMENT"))
 	opts = append(opts, configurator.WithRequiredEnv("POSTGRES_PASSWORD"))
-	opts = append(opts, configurator.WithConfigPath("core/config/"))
+	opts = append(opts, configurator.WithConfigPath(configDir))
 
-	err := controller.LoadEnvVarsAndConfig(&e, &c, opts...)
+	cfg, err := configurator.New(opts...)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
+	}
+
+	controller.Environment = cfg.Environment
+
+	err = cfg.LoadEnvVars(&e)
+	if err != nil {
+		return nil, ez.Wrap(op, err)
+	}
+
+	err = cfg.LoadConfiguration(&c)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			c.App.Name = "Agent Composer"
+			c.App.Port = "8080"
+			c.App.RateLimit = 60
+			c.App.RateLimitWindow = 10
+			c.Postgres.Host = "localhost:5432"
+			c.Postgres.Username = "agent_composer"
+			c.Postgres.Database = "agent_composer"
+		} else {
+			return nil, ez.Wrap(op, err)
+		}
 	}
 
 	controller.EnvVars = e
