@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/rs/zerolog/log"
 	"github.com/vanclief/agent-composer/models"
 	"github.com/vanclief/compose/components/configurator"
 	"github.com/vanclief/compose/components/ctrl"
@@ -12,15 +13,7 @@ import (
 	"github.com/vanclief/ez"
 )
 
-const CONFIG_DIR = ".agent_composer/config"
-
-func resolveConfigDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, CONFIG_DIR) + string(os.PathSeparator), nil
-}
+const DEFAULT_CONFIG_DIR = ".agent_composer/config"
 
 type Controller struct {
 	ctrl.BaseController
@@ -34,6 +27,9 @@ func New() (*Controller, error) {
 
 	// Create a new instance
 	controller := &Controller{}
+
+	// Create the logger
+	controller.WithZerolog()
 
 	// Load the configuration
 	e := EnvVars{}
@@ -54,16 +50,17 @@ func New() (*Controller, error) {
 		return nil, ez.Wrap(op, err)
 	}
 
-	controller.Environment = cfg.Environment
-
 	err = cfg.LoadEnvVars(&e)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
 
+	controller.Environment = cfg.Environment
+
 	err = cfg.LoadConfiguration(&c)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) || ez.ErrorCode(err) == ez.ENOTFOUND {
+			log.Info().Msg("Configuration file not found, using default configuration")
 			c.App.Name = "Agent Composer"
 			c.App.Port = "8080"
 			c.App.RateLimit = 60
@@ -79,7 +76,7 @@ func New() (*Controller, error) {
 	controller.EnvVars = e
 	controller.Config = c
 
-	controller.WithZerolog()
+	log.Info().Str("Env", controller.Environment).Msg("Starting Agent Composer")
 
 	err = controller.Setup()
 	if err != nil {
@@ -106,16 +103,16 @@ func (controller *Controller) Setup() error {
 		return ez.Wrap(op, err)
 	}
 
-	// NOTE: Disabled this for clean installs
-	// Apply pending migrations
-	// if controller.Environment != "TEST" {
-	// 	err = db.RunMigrations(migrations.Migrations)
-	// 	if err != nil {
-	// 		return ez.Wrap(op, err)
-	// 	}
-	// }
-
 	controller.DB = db
 
 	return nil
+}
+
+func resolveConfigDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(home, DEFAULT_CONFIG_DIR) + string(os.PathSeparator), nil
 }
