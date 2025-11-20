@@ -25,25 +25,29 @@ type Stack struct {
 	HooksAPI   *hooks.API
 }
 
+type StackOptions struct {
+	ShellRoot string
+}
+
 // New builds the application stack (controller, scheduler, runtime, APIs).
-func NewStack(rootCtx context.Context) (*Stack, error) {
+func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	ctrl, err := controller.New()
 	if err != nil {
 		return nil, err
 	}
 
-	var opts []scheduler.Option
+	var schedOpts []scheduler.Option
 	if ctrl.Config.App.Debug {
 		l := logger.NewZero(log.Logger)
-		opts = append(opts, scheduler.WithLogger(l))
+		schedOpts = append(schedOpts, scheduler.WithLogger(l))
 	}
 
-	sch, err := scheduler.New(tickTime, opts...)
+	sch, err := scheduler.New(tickTime, schedOpts...)
 	if err != nil {
 		return nil, err
 	}
 
-	rt, err := runtime.New(rootCtx, ctrl, sch)
+	rt, err := runtime.New(rootCtx, ctrl, sch, runtime.Options{ShellRoot: opts.ShellRoot})
 	if err != nil {
 		return nil, err
 	}

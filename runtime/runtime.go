@@ -20,6 +20,7 @@ type Runtime struct {
 	db        *relational.DB
 	scheduler *scheduler.Scheduler
 	openai    *openai.Client
+	shellRoot string
 }
 
 type hookSub struct {
@@ -27,7 +28,11 @@ type hookSub struct {
 	unsubscribe func() error
 }
 
-func New(rootCtx context.Context, ctrl *controller.Controller, sch *scheduler.Scheduler) (*Runtime, error) {
+type Options struct {
+	ShellRoot string
+}
+
+func New(rootCtx context.Context, ctrl *controller.Controller, sch *scheduler.Scheduler, opts Options) (*Runtime, error) {
 	const op = "runtime.New"
 
 	if ctrl == nil {
@@ -41,6 +46,7 @@ func New(rootCtx context.Context, ctrl *controller.Controller, sch *scheduler.Sc
 		rootCtx:   rootCtx,
 		db:        ctrl.DB,
 		scheduler: sch,
+		shellRoot: strings.TrimSpace(opts.ShellRoot),
 	}
 
 	err := rt.SetOpenAIClient()

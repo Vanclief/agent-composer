@@ -19,7 +19,7 @@ import (
 	appmigrations "github.com/vanclief/agent-composer/models/migrations"
 )
 
-const version = "0.2.7"
+const version = "0.2.8"
 
 // Run starts the CLI entrypoint.
 func Run(ctx context.Context, args []string) error {
@@ -27,22 +27,30 @@ func Run(ctx context.Context, args []string) error {
 		Name:    "agc",
 		Usage:   "Agent Composer interfaces",
 		Version: version,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "shell-root",
+				Usage:   "Root directory for shell tool access (defaults to current directory)",
+				Value:   "",
+				EnvVars: []string{"AGC_SHELL_ROOT"},
+			},
+		},
 		Action: func(c *cli.Context) error {
-			return runTUI(c.Context)
+			return runTUI(c.Context, c.String("shell-root"))
 		},
 		Commands: []*cli.Command{
 			{
 				Name:  "rest",
 				Usage: "Start the REST server",
 				Action: func(c *cli.Context) error {
-					return runServer(c.Context)
+					return runServer(c.Context, c.String("shell-root"))
 				},
 			},
 			{
 				Name:  "tui",
 				Usage: "Start the terminal UI",
 				Action: func(c *cli.Context) error {
-					return runTUI(c.Context)
+					return runTUI(c.Context, c.String("shell-root"))
 				},
 			},
 			{
@@ -72,8 +80,8 @@ func Run(ctx context.Context, args []string) error {
 	return app.RunContext(ctx, args)
 }
 
-func runServer(ctx context.Context) error {
-	stack, err := core.NewStack(ctx)
+func runServer(ctx context.Context, shellRoot string) error {
+	stack, err := core.NewStack(ctx, core.StackOptions{ShellRoot: shellRoot})
 	if err != nil {
 		return err
 	}
@@ -178,8 +186,8 @@ func migrationMatches(target string, migration migrate.Migration) bool {
 	return false
 }
 
-func runTUI(ctx context.Context) error {
-	stack, err := core.NewStack(ctx)
+func runTUI(ctx context.Context, shellRoot string) error {
+	stack, err := core.NewStack(ctx, core.StackOptions{ShellRoot: shellRoot})
 	if err != nil {
 		return err
 	}

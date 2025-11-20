@@ -62,7 +62,8 @@ func (rt *Runtime) newAgentInstance(ctx context.Context, conversation *agent.Con
 
 	// Step 4) Create the MCP servers and mux them
 	if conversation.ShellAccess {
-		shellMCP, err := shellmcp.NewClient(ctx, "", nil, ".", 0)
+		shellRoot := rt.shellRoot
+		shellMCP, err := shellmcp.NewClient(ctx, shellRoot, nil, ".", 0)
 		if err != nil {
 			return nil, ez.Wrap(op, err)
 		}
