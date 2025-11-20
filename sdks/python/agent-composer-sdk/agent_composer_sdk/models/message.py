@@ -24,14 +24,14 @@ class Message:
         content (str | Unset):
         name (str | Unset):
         tool_call_id (str | Unset):
-        tool_call (ToolCall | Unset):
+        tool_call (ToolCall | None | Unset):
     """
 
     role: MessageRole | Unset = UNSET
     content: str | Unset = UNSET
     name: str | Unset = UNSET
     tool_call_id: str | Unset = UNSET
-    tool_call: ToolCall | Unset = UNSET
+    tool_call: ToolCall | None | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -45,8 +45,10 @@ class Message:
 
         tool_call_id = self.tool_call_id
 
-        tool_call: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.tool_call, Unset):
+        tool_call: dict[str, Any] | None | Unset = UNSET
+        if self.tool_call is None:
+            tool_call = None
+        elif not isinstance(self.tool_call, Unset):
             tool_call = self.tool_call.to_dict()
 
         field_dict: dict[str, Any] = {}
@@ -84,9 +86,11 @@ class Message:
         tool_call_id = d.pop("ToolCallID", UNSET)
 
         _tool_call = d.pop("ToolCall", UNSET)
-        tool_call: ToolCall | Unset
+        tool_call: ToolCall | None | Unset
         if isinstance(_tool_call, Unset):
             tool_call = UNSET
+        elif _tool_call is None:
+            tool_call = None
         else:
             tool_call = ToolCall.from_dict(_tool_call)
 
