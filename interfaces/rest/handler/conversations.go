@@ -75,6 +75,23 @@ func (h *Handler) GetConversation(c echo.Context) error {
 	return h.JSONResponse(c, op, request, requestBody)
 }
 
+func (h *Handler) UpdateConversation(c echo.Context) error {
+	const op = "Handler.UpdateConversation"
+
+	request := requests.New(c.Request().Header, c.RealIP())
+
+	resourceID, err := h.GetParameterUUID(c, "id")
+	if err != nil {
+		return h.ManageError(c, op, request, err)
+	}
+
+	requestBody := &conversations.UpdateRequest{
+		ConversationID: resourceID,
+	}
+
+	return h.BindedJSONResponse(c, op, request, requestBody)
+}
+
 func (h *Handler) CreateConversation(c echo.Context) error {
 	const op = "Handler.CreateConversation"
 

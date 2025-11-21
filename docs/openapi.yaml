@@ -220,6 +220,31 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
+    put:
+      tags: [Conversations]
+      operationId: updateConversation
+      summary: Update a conversation
+      parameters:
+        - $ref: '#/components/parameters/ConversationIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateConversationRequest'
+      responses:
+        '200':
+          description: The updated conversation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
     delete:
       tags: [Conversations]
       operationId: deleteConversation
@@ -687,6 +712,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Message'
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
         status:
           $ref: '#/components/schemas/ConversationStatus'
         input_tokens:
@@ -798,6 +827,20 @@ components:
         session_id:
           type: string
           description: Optional client-provided identifier for logical sessions.
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+    UpdateConversationRequest:
+      type: object
+      required:
+        - metadata
+      properties:
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: false
+          description: JSON object to replace metadata; send {} to clear.
     ConversationCreateResponse:
       type: object
       properties:

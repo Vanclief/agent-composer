@@ -24,6 +24,7 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	conversations.GET("", h.ListConversations)
 	conversations.POST("", h.CreateConversation)
 	conversations.GET("/:id", h.GetConversation)
+	conversations.PUT("/:id", h.UpdateConversation)
 	conversations.POST("/:id/fork", h.ForkConversation)
 	conversations.POST("/:id/resume", h.ResumeConversation)
 	conversations.DELETE("/:id", h.DeleteConversation)

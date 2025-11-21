@@ -75,6 +75,8 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.AgentsAPI.Conversations.Get(request.GetContext(), nil, body)
 	case *conversations.CreateRequest:
 		return s.AgentsAPI.Conversations.Create(request.GetContext(), nil, body)
+	case *conversations.UpdateRequest:
+		return s.AgentsAPI.Conversations.Update(request.GetContext(), nil, body)
 	case *conversations.ForkRequest:
 		return s.AgentsAPI.Conversations.Fork(request.GetContext(), nil, body)
 	case *conversations.ResumeRequest:

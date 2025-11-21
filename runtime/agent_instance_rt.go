@@ -14,7 +14,7 @@ import (
 
 // TODO: Try to take out the Runtime
 
-func (rt *Runtime) NewConversationInstanceFromSpec(ctx context.Context, agentSpecID uuid.UUID, sessionID string) (*ConversationInstance, error) {
+func (rt *Runtime) NewConversationInstanceFromSpec(ctx context.Context, agentSpecID uuid.UUID, sessionID string, metadata map[string]any) (*ConversationInstance, error) {
 	const op = "runtime.NewConversationInstanceFromSpec"
 
 	// Step 1) Fetch the agent spec
@@ -26,7 +26,7 @@ func (rt *Runtime) NewConversationInstanceFromSpec(ctx context.Context, agentSpe
 	msgs := []types.Message{*types.NewSystemMessage(spec.Instructions)}
 
 	// Step 2) Create the a new conversation
-	conversation, err := agent.NewConversation(spec, msgs)
+	conversation, err := agent.NewConversation(spec, msgs, metadata)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}

@@ -11,10 +11,11 @@ import (
 )
 
 type CreateRequest struct {
-	AgentSpecID           uuid.UUID `json:"agent_spec_id"`
-	Prompt                string    `json:"prompt"`
-	ParallelConversations int       `json:"parallel_conversations"`
-	SessionID             string    `json:"session_id,omitempty"`
+	AgentSpecID           uuid.UUID      `json:"agent_spec_id"`
+	Prompt                string         `json:"prompt"`
+	ParallelConversations int            `json:"parallel_conversations"`
+	SessionID             string         `json:"session_id,omitempty"`
+	Metadata              map[string]any `json:"metadata,omitempty"`
 }
 
 func (r CreateRequest) Validate() error {
@@ -57,7 +58,7 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 	instances := make([]*runtime.ConversationInstance, 0, request.ParallelConversations)
 
 	for i := 0; i < request.ParallelConversations; i++ {
-		instance, err := api.rt.NewConversationInstanceFromSpec(ctx, spec.ID, request.SessionID)
+		instance, err := api.rt.NewConversationInstanceFromSpec(ctx, spec.ID, request.SessionID, request.Metadata)
 		if err != nil {
 			return nil, ez.Wrap(op, err)
 		}
