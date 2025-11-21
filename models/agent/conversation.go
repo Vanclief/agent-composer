@@ -33,6 +33,7 @@ type Conversation struct {
 	Instructions           string                 `json:"instructions"`
 	Tools                  []types.ToolDefinition `bun:"type:jsonb,nullzero" json:"-"`
 	Messages               []types.Message        `bun:"type:jsonb,nullzero" json:"messages"`
+	Metadata               map[string]any         `bun:"type:jsonb,nullzero" json:"metadata"`
 	Status                 ConversationStatus     `json:"status"`
 	InputTokens            int64                  `json:"input_tokens"`
 	OutputTokens           int64                  `json:"output_tokens"`
@@ -51,7 +52,7 @@ type Conversation struct {
 
 // ---- Constructor ----
 
-func NewConversation(agentSpec *Spec, messages []types.Message) (*Conversation, error) {
+func NewConversation(agentSpec *Spec, messages []types.Message, metadata map[string]any) (*Conversation, error) {
 	const op = "agent.NewConversation"
 
 	id, err := uuid.NewV7()
@@ -68,6 +69,7 @@ func NewConversation(agentSpec *Spec, messages []types.Message) (*Conversation, 
 		ReasoningEffort:        agentSpec.ReasoningEffort,
 		Instructions:           agentSpec.Instructions,
 		Messages:               messages,
+		Metadata:               copyMetadata(metadata),
 		Status:                 ConversationStatusQueued,
 		CreatedAt:              time.Now().UTC(),
 		AutoCompact:            agentSpec.AutoCompact,
@@ -188,6 +190,7 @@ func (c *Conversation) Clone(ctx context.Context, db bun.IDB, discardMessages bo
 
 	// Create a value copy so mutations don't affect the original object.
 	clone := *c
+	clone.Metadata = copyMetadata(c.Metadata)
 
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -212,6 +215,19 @@ func (c *Conversation) Clone(ctx context.Context, db bun.IDB, discardMessages bo
 	}
 
 	return &clone, nil
+}
+
+func copyMetadata(src map[string]any) map[string]any {
+	if src == nil {
+		return nil
+	}
+
+	dst := make(map[string]any, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+
+	return dst
 }
 
 // ---- Queries ----
