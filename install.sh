@@ -115,46 +115,6 @@ else
     fi
 fi
 
-# Step 8: Create aliases for apply-patch functions
-if [ "${shell_name}" = "fish" ]; then
-    mkdir -p "${HOME}/.config/fish/functions"
-    FUNC_FILE="${HOME}/.config/fish/functions/apply_patch.fish"
-    if ! grep -q "agent-composer apply_patch functions" "${FUNC_FILE}" 2>/dev/null; then
-        cat >"${FUNC_FILE}" <<'EOF'
-# --- agent-composer apply_patch functions ---
-function apply_patch
-    if test (count $argv) -eq 1
-        codex --codex-run-as-apply-patch "$argv[1]"
-    else
-        set patch (cat)
-        codex --codex-run-as-apply-patch "$patch"
-    end
-end
-functions -e apply-patch 2>/dev/null; function apply-patch; apply_patch $argv; end
-functions -e applypatch  2>/dev/null; function applypatch;  apply_patch $argv; end
-# --- end agent-composer apply_patch functions ---
-EOF
-    fi
-else
-    if [ -n "${PROFILE}" ] && ! grep -q "agent-composer apply_patch functions" "${PROFILE}" 2>/dev/null; then
-        cat >>"${PROFILE}" <<'EOF'
-
-# --- agent-composer apply_patch functions ---
-apply_patch() {
-  if [ "$#" -eq 1 ]; then
-    codex --codex-run-as-apply-patch "$1"
-  else
-    p="$(cat)"
-    codex --codex-run-as-apply-patch "$p"
-  fi
-}
-apply-patch() { apply_patch "$@"; }
-applypatch()  { apply_patch "$@"; }
-# --- end agent-composer apply_patch functions ---
-EOF
-    fi
-fi
-
 echo
 echo "Successfully installed Agent Composer!"
 echo "Open a new terminal (or 'source' your profile) to run agc"

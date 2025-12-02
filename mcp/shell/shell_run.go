@@ -27,9 +27,23 @@ func runBashIsolated(ctx context.Context, workdir string, command string) (ExecO
 	var out ExecOutcome
 	var stdoutBuf, stderrBuf bytes.Buffer
 
+	// Add apply_patch function to the shell environment for codex
+	const applyPatchSnippet = `
+    apply_patch() {
+        if [ "$#" -eq 1 ]; then
+            codex --codex-run-as-apply-patch "$1"
+        else
+            p="$(cat)"
+            codex --codex-run-as-apply-patch "$p"
+        fi
+    }
+    apply-patch() { apply_patch "$@"; }
+    applypatch()  { apply_patch "$@"; }
+    `
+
 	// Build bash with minimal profile loading and sane pipe behavior.
-	// If you don't want `set -e`, drop it. `-o pipefail` is important.
-	wrapped := "set -e; " + command
+	wrapped := "set -e;" + applyPatchSnippet + "\n" + command
+
 	cmd := exec.CommandContext(ctx, bashPath, "--noprofile", "--norc", "-o", "pipefail", "-c", wrapped)
 	cmd.Dir = workdir
 	cmd.Stdout = &stdoutBuf
