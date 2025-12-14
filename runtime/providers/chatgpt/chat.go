@@ -10,6 +10,7 @@ import (
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
 	"github.com/rs/zerolog/log"
+	"github.com/vanclief/agent-composer/core/helpers/jsonutil"
 	"github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/ez"
 )
@@ -78,13 +79,13 @@ func (gpt *ChatGPT) Chat(ctx context.Context, model string, request *types.ChatR
 	}
 
 	if request.StructuredOutputs {
-		if len(request.StructuredOutputSchema) == 0 {
+		if len(request.StructuredOutputSchema) == 0 || jsonutil.IsNullRawMessage(request.StructuredOutputSchema) {
 			return types.ChatResponse{}, ez.New(op, ez.EINVALID, "structured outputs enabled but schema is empty", nil)
 		}
 
-		format := responses.ResponseFormatTextConfigParamOfJSONSchema("structured_output", request.StructuredOutputSchema)
-		if format.OfJSONSchema != nil {
-			format.OfJSONSchema.Strict = param.NewOpt(true)
+		format, err := buildStructuredOutputFormatParam(request.StructuredOutputSchema)
+		if err != nil {
+			return types.ChatResponse{}, ez.New(op, ez.EINVALID, "structured outputs enabled but schema is invalid JSON", err)
 		}
 
 		params.Text = responses.ResponseTextConfigParam{
@@ -248,10 +249,12 @@ func buildFunctionTools(toolDefs []types.ToolDefinition) ([]responses.ToolUnionP
 		}
 
 		// Minimal, valid JSON Schema scaffold
-		if _, hasType := parameters["type"]; !hasType {
+		_, hasType := parameters["type"]
+		if !hasType {
 			parameters["type"] = "object"
 		}
-		if _, hasProps := parameters["properties"]; !hasProps {
+		_, hasProps := parameters["properties"]
+		if !hasProps {
 			parameters["properties"] = map[string]any{}
 		}
 
@@ -259,7 +262,8 @@ func buildFunctionTools(toolDefs []types.ToolDefinition) ([]responses.ToolUnionP
 		// The model reads it even if the top-level Description field isn't sent.
 		if definition.Description != "" {
 			// Do not overwrite an existing root description if the user provided one.
-			if _, hasRootDesc := parameters["description"]; !hasRootDesc {
+			_, hasRootDesc := parameters["description"]
+			if !hasRootDesc {
 				parameters["description"] = definition.Description
 			}
 		}
@@ -271,6 +275,32 @@ func buildFunctionTools(toolDefs []types.ToolDefinition) ([]responses.ToolUnionP
 	}
 
 	return toolParams, nil
+}
+
+func buildStructuredOutputFormatParam(rawSchema json.RawMessage) (responses.ResponseFormatTextConfigUnionParam, error) {
+	var scratch map[string]any
+	if err := json.Unmarshal(rawSchema, &scratch); err != nil {
+		return responses.ResponseFormatTextConfigUnionParam{}, err
+	}
+
+	payload := struct {
+		Type   string          `json:"type"`
+		Name   string          `json:"name"`
+		Schema json.RawMessage `json:"schema"`
+		Strict bool            `json:"strict"`
+	}{
+		Type:   "json_schema",
+		Name:   "structured_output",
+		Schema: rawSchema,
+		Strict: true,
+	}
+
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return responses.ResponseFormatTextConfigUnionParam{}, err
+	}
+
+	return param.Override[responses.ResponseFormatTextConfigUnionParam](json.RawMessage(encoded)), nil
 }
 
 func isReasoningModel(model string) bool {

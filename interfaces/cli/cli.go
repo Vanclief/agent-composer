@@ -19,7 +19,7 @@ import (
 	appmigrations "github.com/vanclief/agent-composer/models/migrations"
 )
 
-const version = "0.2.10"
+const version = "0.2.11"
 
 // Run starts the CLI entrypoint.
 func Run(ctx context.Context, args []string) error {
@@ -127,7 +127,8 @@ func runMigrationByName(ctx context.Context, name string) error {
 	defer ctrl.DB.Close() // nolint:errcheck // Close errors are not actionable here.
 
 	fullMigrator := migrate.NewMigrator(ctrl.DB.DB, appmigrations.Migrations)
-	if err := fullMigrator.Init(ctx); err != nil {
+	err = fullMigrator.Init(ctx)
+	if err != nil {
 		return err
 	}
 
@@ -162,7 +163,8 @@ func runMigrationByName(ctx context.Context, name string) error {
 	single := migrate.NewMigrations()
 	single.Add(target)
 
-	if err := ctrl.DB.RunMigrations(single); err != nil {
+	err = ctrl.DB.RunMigrations(single)
+	if err != nil {
 		return err
 	}
 

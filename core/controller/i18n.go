@@ -134,7 +134,8 @@ func (l *Locale) UnmarshalJSON(data []byte) error {
 	const op = "Locale.UnmarshalJSON"
 
 	var str string
-	if err := json.Unmarshal(data, &str); err != nil {
+	err := json.Unmarshal(data, &str)
+	if err != nil {
 		return ez.Wrap(op, err)
 	}
 

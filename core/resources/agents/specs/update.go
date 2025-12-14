@@ -2,10 +2,12 @@ package specs
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation"
 	"github.com/google/uuid"
+	"github.com/vanclief/agent-composer/core/helpers/jsonutil"
 	"github.com/vanclief/agent-composer/models/agent"
 	"github.com/vanclief/ez"
 )
@@ -23,7 +25,7 @@ type UpdateRequest struct {
 	ShellAccess            *bool              `json:"shell_access"`
 	WebSearch              *bool              `json:"web_search"`
 	StructuredOutput       *bool              `json:"structured_output"`
-	StructuredOutputSchema *map[string]any    `json:"structured_output_schema"`
+	StructuredOutputSchema *json.RawMessage   `json:"structured_output_schema"`
 }
 
 func (r UpdateRequest) Validate() error {
@@ -42,10 +44,15 @@ func (r UpdateRequest) Validate() error {
 		}
 	}
 
-	if r.StructuredOutput != nil && *r.StructuredOutput {
-		if r.StructuredOutputSchema == nil || len(*r.StructuredOutputSchema) == 0 {
-			return ez.New(op, ez.EINVALID, "structured_output_schema is required when structured_output is true", nil)
+	if r.StructuredOutputSchema != nil {
+		err := validateStructuredOutputSchema(*r.StructuredOutputSchema)
+		if err != nil {
+			return ez.Wrap(op, err)
 		}
+	}
+
+	if r.StructuredOutput != nil && *r.StructuredOutput && (r.StructuredOutputSchema == nil || len(*r.StructuredOutputSchema) == 0 || jsonutil.IsNullRawMessage(*r.StructuredOutputSchema)) {
+		return ez.New(op, ez.EINVALID, "structured_output_schema is required when structured_output is true", nil)
 	}
 
 	return nil
@@ -121,8 +128,8 @@ func (api *API) Update(ctx context.Context, requester interface{}, request *Upda
 		spec.StructuredOutput = *request.StructuredOutput
 		if spec.StructuredOutput {
 			if request.StructuredOutputSchema != nil {
-				spec.StructuredOutputSchema = *request.StructuredOutputSchema
-			} else if len(spec.StructuredOutputSchema) == 0 {
+				spec.StructuredOutputSchema = normalizeStructuredOutputSchema(*request.StructuredOutputSchema)
+			} else if len(spec.StructuredOutputSchema) == 0 || jsonutil.IsNullRawMessage(spec.StructuredOutputSchema) {
 				// Should not happen due to validation, but guard against empty schema.
 				return nil, ez.New(op, ez.EINVALID, "structured_output_schema must be set when enabling structured_output", nil)
 			}
@@ -131,7 +138,11 @@ func (api *API) Update(ctx context.Context, requester interface{}, request *Upda
 		}
 		shouldInsert = true
 	} else if request.StructuredOutputSchema != nil {
-		spec.StructuredOutputSchema = *request.StructuredOutputSchema
+		normalized := normalizeStructuredOutputSchema(*request.StructuredOutputSchema)
+		spec.StructuredOutputSchema = normalized
+		if normalized == nil {
+			spec.StructuredOutput = false
+		}
 		shouldInsert = true
 	}
 

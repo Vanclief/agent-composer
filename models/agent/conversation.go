@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"github.com/uptrace/bun"
+	"github.com/vanclief/agent-composer/core/helpers/jsonutil"
 	"github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/compose/drivers/databases/relational"
 	"github.com/vanclief/ez"
@@ -47,10 +49,18 @@ type Conversation struct {
 	ShellAccess            bool                   `json:"shell_access"`
 	WebSearch              bool                   `json:"web_search"`
 	StructuredOutput       bool                   `json:"structured_output"`
-	StructuredOutputSchema map[string]any         `bun:"type:jsonb,nullzero" json:"structured_output_schema"`
+	StructuredOutputSchema json.RawMessage        `bun:"type:json,nullzero" json:"structured_output_schema"`
 }
 
 // ---- Constructor ----
+
+func (c *Conversation) AfterScanRow(ctx context.Context) error {
+	normalized, err := jsonutil.NormalizeJSONSchemaPropertiesOrder(c.StructuredOutputSchema)
+	if err == nil {
+		c.StructuredOutputSchema = normalized
+	}
+	return nil
+}
 
 func NewConversation(agentSpec *Spec, messages []types.Message, metadata map[string]any) (*Conversation, error) {
 	const op = "agent.NewConversation"
@@ -107,7 +117,8 @@ func (c *Conversation) Validate() error {
 		return ez.New(op, ez.EINVALID, "instructions are required", nil)
 	}
 
-	if err := c.Provider.Validate(); err != nil {
+	err := c.Provider.Validate()
+	if err != nil {
 		return ez.Wrap(op, err)
 	}
 

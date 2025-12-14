@@ -21,7 +21,8 @@ func Start(ctx context.Context, s *server.Server, log zerolog.Logger) error {
 	// Custom Error Handler
 	e.HTTPErrorHandler = func(err error, c echo.Context) {
 		code := http.StatusInternalServerError
-		if he, ok := err.(*echo.HTTPError); ok {
+		he, ok := err.(*echo.HTTPError)
+		if ok {
 			code = he.Code
 		}
 
@@ -36,7 +37,8 @@ func Start(ctx context.Context, s *server.Server, log zerolog.Logger) error {
 			Msg("HTTP Request Error")
 
 		// Send response
-		if err := c.JSON(code, map[string]string{"message": statusText}); err != nil {
+		err = c.JSON(code, map[string]string{"message": statusText})
+		if err != nil {
 			c.Logger().Error(err)
 		}
 	}

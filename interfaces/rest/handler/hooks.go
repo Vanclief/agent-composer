@@ -25,11 +25,13 @@ func (h *Handler) ListHooks(c echo.Context) error {
 	}
 
 	// Optional filters
-	if v := strings.TrimSpace(c.QueryParam("event_type")); v != "" {
+	v := strings.TrimSpace(c.QueryParam("event_type"))
+	if v != "" {
 		et := hook.EventType(v)
 		body.EventType = &et
 	}
-	if v := strings.TrimSpace(c.QueryParam("agent_name")); v != "" {
+	v = strings.TrimSpace(c.QueryParam("agent_name"))
+	if v != "" {
 		body.AgentName = &v
 	}
 

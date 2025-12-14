@@ -82,7 +82,8 @@ func (m *Model) setupTabs() {
 func (m *Model) collectInitCmds() tea.Cmd {
 	var cmds []tea.Cmd
 	for _, section := range m.sections {
-		if cmd := section.Init(); cmd != nil {
+		cmd := section.Init()
+		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	}
@@ -105,7 +106,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.handleWindowSize(message)
 	case tea.KeyMsg:
-		if handled, cmd := m.handleKeyMsg(message); handled {
+		handled, cmd := m.handleKeyMsg(message)
+		if handled {
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
@@ -113,15 +115,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if _, isKey := msg.(tea.KeyMsg); isKey {
-		if section := m.activeSection(); section != nil {
-			if cmd := section.Update(msg); cmd != nil {
+	_, isKey := msg.(tea.KeyMsg)
+	if isKey {
+		section := m.activeSection()
+		if section != nil {
+			cmd := section.Update(msg)
+			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 		}
 	} else {
 		for _, section := range m.sections {
-			if cmd := section.Update(msg); cmd != nil {
+			cmd := section.Update(msg)
+			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 		}
@@ -165,7 +171,8 @@ func (m *Model) moveTab(delta int) {
 }
 
 func (m *Model) setActiveTab(key tabKey) {
-	if _, ok := m.sections[key]; !ok {
+	_, ok := m.sections[key]
+	if !ok {
 		return
 	}
 	m.activeTab = key
@@ -216,8 +223,10 @@ func (m *Model) View() string {
 
 func (m *Model) renderHelp() string {
 	help := []string{"←/→ switch tabs", "ctrl+c quit"}
-	if section := m.activeSection(); section != nil {
-		if extra := strings.TrimSpace(section.ShortHelp()); extra != "" {
+	section := m.activeSection()
+	if section != nil {
+		extra := strings.TrimSpace(section.ShortHelp())
+		if extra != "" {
 			help = append(help, extra)
 		}
 	}
@@ -226,7 +235,8 @@ func (m *Model) renderHelp() string {
 
 func (m *Model) renderBody() string {
 	content := "No section available."
-	if section := m.activeSection(); section != nil {
+	section := m.activeSection()
+	if section != nil {
 		content = section.View()
 	}
 	return workspacePaneStyle.Height(m.bodyHeight).Width(m.workspaceWidth).Render(content)

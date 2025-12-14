@@ -30,19 +30,24 @@ func runBashIsolated(ctx context.Context, workdir string, command string) (ExecO
 	// Add apply_patch function to the shell environment for codex
 	const applyPatchSnippet = `
     apply_patch() {
-        if [ "$#" -eq 1 ]; then
+        if [ "$#" -eq 1 ]
+        then
             codex --codex-run-as-apply-patch "$1"
         else
             p="$(cat)"
             codex --codex-run-as-apply-patch "$p"
         fi
     }
-    apply-patch() { apply_patch "$@"; }
-    applypatch()  { apply_patch "$@"; }
+    apply-patch() {
+        apply_patch "$@"
+    }
+    applypatch()  {
+        apply_patch "$@"
+    }
     `
 
 	// Build bash with minimal profile loading and sane pipe behavior.
-	wrapped := "set -e;" + applyPatchSnippet + "\n" + command
+	wrapped := "set -e\n" + applyPatchSnippet + "\n" + command
 
 	cmd := exec.CommandContext(ctx, bashPath, "--noprofile", "--norc", "-o", "pipefail", "-c", wrapped)
 	cmd.Dir = workdir
@@ -65,7 +70,8 @@ func runBashIsolated(ctx context.Context, workdir string, command string) (ExecO
 	case <-ctx.Done():
 		// Kill the entire group (negative pgid). Try TERM, then KILL.
 		if cmd.Process != nil {
-			if pgid, err := syscall.Getpgid(cmd.Process.Pid); err == nil {
+			pgid, err := syscall.Getpgid(cmd.Process.Pid)
+			if err == nil {
 				_ = syscall.Kill(-pgid, syscall.SIGTERM)
 
 				select {

@@ -87,7 +87,8 @@ func (v *listView) View() string {
 	b.WriteString(v.table.View())
 	b.WriteString("\n\n")
 
-	if status := strings.TrimSpace(v.status); status != "" {
+	status := strings.TrimSpace(v.status)
+	if status != "" {
 		b.WriteString(statusStyle.Render(status))
 		b.WriteString("\n")
 	}
@@ -101,7 +102,8 @@ func (v *listView) statusLine() string {
 	if len(v.prevCursors) > 0 {
 		parts = append(parts, "p previous page")
 	}
-	if resp := v.response; resp != nil && resp.HasNextPage {
+	resp := v.response
+	if resp != nil && resp.HasNextPage {
 		parts = append(parts, "n next page")
 	}
 	parts = append(parts, "r refresh", "enter view conversation")

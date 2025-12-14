@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"encoding/json"
 )
 
 // TODO: I don't like this name as it conflicts with the agent.LLMProvider which
@@ -22,7 +23,7 @@ type ChatRequest struct {
 	PreviousResponseID     string // OpenAI specific
 	WebSearch              bool
 	StructuredOutputs      bool
-	StructuredOutputSchema map[string]any
+	StructuredOutputSchema json.RawMessage
 }
 
 type ChatResponse struct {

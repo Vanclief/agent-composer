@@ -40,7 +40,8 @@ func (h *Handler) ListConversations(c echo.Context) error {
 	providerParam := c.QueryParam("provider")
 	if providerParam != "" {
 		prov := agent.LLMProvider(providerParam)
-		if err := prov.Validate(); err != nil {
+		err := prov.Validate()
+		if err != nil {
 			return h.ManageError(c, op, request, ez.New(op, ez.EINVALID, "invalid provider", err))
 		}
 		requestBody.Provider = &prov
@@ -49,7 +50,8 @@ func (h *Handler) ListConversations(c echo.Context) error {
 	statusStr := c.QueryParam("status")
 	if statusStr != "" {
 		status := agent.ConversationStatus(statusStr)
-		if err := status.Validate(); err != nil {
+		err := status.Validate()
+		if err != nil {
 			return h.ManageError(c, op, request, ez.New(op, ez.EINVALID, "invalid status", err))
 		}
 		requestBody.Status = &status

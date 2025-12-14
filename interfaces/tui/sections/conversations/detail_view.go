@@ -225,7 +225,8 @@ func renderConversationSidebar(conv *agent.Conversation, width int) string {
 
 func formatMessageContent(message runtimetypes.Message, width int) (string, bool) {
 	if message.Role == runtimetypes.MessageRoleTool {
-		if formatted, ok := formatToolMessageContent(message, width); ok {
+		formatted, ok := formatToolMessageContent(message, width)
+		if ok {
 			return formatted, true
 		}
 	}
@@ -234,7 +235,8 @@ func formatMessageContent(message runtimetypes.Message, width int) (string, bool
 
 func formatToolMessageContent(message runtimetypes.Message, width int) (string, bool) {
 	var payload shell.ShellRunResult
-	if err := json.Unmarshal([]byte(message.Content), &payload); err != nil {
+	err := json.Unmarshal([]byte(message.Content), &payload)
+	if err != nil {
 		return "", false
 	}
 

@@ -3,12 +3,14 @@ package agent
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/uptrace/bun"
+	"github.com/vanclief/agent-composer/core/helpers/jsonutil"
 	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/compose/drivers/databases/relational"
 	"github.com/vanclief/ez"
@@ -34,11 +36,19 @@ type Spec struct {
 	ShellAccess            bool                         `json:"shell_access"`
 	WebSearch              bool                         `json:"web_search"`
 	StructuredOutput       bool                         `json:"structured_output"`
-	StructuredOutputSchema map[string]any               `bun:"type:jsonb,nullzero" json:"structured_output_schema"`
+	StructuredOutputSchema json.RawMessage              `bun:"type:json,nullzero" json:"structured_output_schema"`
 	Version                int                          `json:"version"`
 }
 
 // ---- Constructor ----
+
+func (pt *Spec) AfterScanRow(ctx context.Context) error {
+	normalized, err := jsonutil.NormalizeJSONSchemaPropertiesOrder(pt.StructuredOutputSchema)
+	if err == nil {
+		pt.StructuredOutputSchema = normalized
+	}
+	return nil
+}
 
 func NewAgentSpec(name string, prov LLMProvider, model, instructions string, reasoningEffort runtimetypes.ReasoningEffort, version int) (*Spec, error) {
 	const op = "agent.NewAgentSpec"
@@ -90,7 +100,8 @@ func (pt *Spec) Validate() error {
 		return ez.New(op, ez.EINVALID, "version must be > 0", nil)
 	}
 
-	if err := pt.Provider.Validate(); err != nil {
+	err := pt.Provider.Validate()
+	if err != nil {
 		return ez.Wrap(op, err)
 	}
 
