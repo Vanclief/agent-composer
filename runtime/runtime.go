@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/models/agent"
@@ -65,7 +66,8 @@ func (rt *Runtime) SetOpenAIClient() error {
 		return ez.New(op, ez.EINVALID, "missing env var OPENAI_API_KEY", nil)
 	}
 
-	client := openai.NewClient()
+	// The OpenAI Go SDK already retries on 5xx responses; increase retries to smooth over transient 500s.
+	client := openai.NewClient(option.WithMaxRetries(5))
 
 	rt.openai = &client
 

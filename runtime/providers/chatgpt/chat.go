@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/param"
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
@@ -101,7 +103,7 @@ func (gpt *ChatGPT) Chat(ctx context.Context, model string, request *types.ChatR
 
 	// Step 3) Call the ChatGPT API
 	log.Info().Msg("Doing LLM things...")
-	response, err := gpt.client.Responses.New(ctx, params)
+	response, err := gpt.client.Responses.New(ctx, params, option.WithHeader("Idempotency-Key", uuid.NewString()))
 	if err != nil {
 		return types.ChatResponse{}, ez.New(op, ez.EINTERNAL, "Responses API call failed", err)
 	}
@@ -279,7 +281,8 @@ func buildFunctionTools(toolDefs []types.ToolDefinition) ([]responses.ToolUnionP
 
 func buildStructuredOutputFormatParam(rawSchema json.RawMessage) (responses.ResponseFormatTextConfigUnionParam, error) {
 	var scratch map[string]any
-	if err := json.Unmarshal(rawSchema, &scratch); err != nil {
+	err := json.Unmarshal(rawSchema, &scratch)
+	if err != nil {
 		return responses.ResponseFormatTextConfigUnionParam{}, err
 	}
 
