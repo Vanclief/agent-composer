@@ -34,9 +34,11 @@ type perMillion struct {
 }
 
 var std = map[string]perMillion{
+	"gpt-5.2":                      {175, 17, 1400},
+	"gpt-5.1":                      {125, 12, 1000},
 	"gpt-5":                        {125, 12, 1000},
 	"gpt-5-mini":                   {25, 2, 200},
-	"gpt-5-nano":                   {5, 0, 40}, // cached 0? Standard table says 0.005 => 0 (round to nearest cent per 1M) – handle via input fallback if you prefer
+	"gpt-5-nano":                   {5, 1, 40}, // cached 1 is overestimated.  Standard table says 0.005 => 1 (round to nearest cent per 1M) – handle via input fallback if you prefer
 	"gpt-5-chat-latest":            {125, 12, 1000},
 	"gpt-5-codex":                  {125, 12, 1000},
 	"gpt-5-pro":                    {1500, 0, 12000},
