@@ -698,6 +698,10 @@ components:
         session_id:
           type: string
           nullable: true
+        shell_root:
+          type: string
+          nullable: true
+          description: Optional root path for shell tool execution; when set (and shell access is enabled), overrides the runtime default for this conversation.
         agent_name:
           type: string
         provider:
@@ -827,6 +831,10 @@ components:
         session_id:
           type: string
           description: Optional client-provided identifier for logical sessions.
+        shell_root:
+          type: string
+          nullable: true
+          description: Optional root path for shell tool execution; when set (and shell access is enabled), overrides the runtime default for this conversation.
         metadata:
           type: object
           additionalProperties: true

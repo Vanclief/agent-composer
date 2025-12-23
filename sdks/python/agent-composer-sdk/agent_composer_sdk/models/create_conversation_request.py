@@ -21,12 +21,15 @@ class CreateConversationRequest:
         parallel_conversations (int | Unset): Number of conversation instances to launch in parallel. Values <1 default
             to 1. Default: 1.
         session_id (str | Unset): Optional client-provided identifier for logical sessions.
+        shell_root (str | Unset): Optional root path for shell tool execution; overrides the runtime default for this
+            conversation.
     """
 
     agent_spec_id: UUID
     prompt: str
     parallel_conversations: int | Unset = 1
     session_id: str | Unset = UNSET
+    shell_root: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -37,6 +40,7 @@ class CreateConversationRequest:
         parallel_conversations = self.parallel_conversations
 
         session_id = self.session_id
+        shell_root = self.shell_root
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -50,6 +54,8 @@ class CreateConversationRequest:
             field_dict["parallel_conversations"] = parallel_conversations
         if session_id is not UNSET:
             field_dict["session_id"] = session_id
+        if shell_root is not UNSET:
+            field_dict["shell_root"] = shell_root
 
         return field_dict
 
@@ -63,12 +69,14 @@ class CreateConversationRequest:
         parallel_conversations = d.pop("parallel_conversations", UNSET)
 
         session_id = d.pop("session_id", UNSET)
+        shell_root = d.pop("shell_root", UNSET)
 
         create_conversation_request = cls(
             agent_spec_id=agent_spec_id,
             prompt=prompt,
             parallel_conversations=parallel_conversations,
             session_id=session_id,
+            shell_root=shell_root,
         )
 
         create_conversation_request.additional_properties = d

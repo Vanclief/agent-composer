@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/vanclief/agent-composer/mcp"
@@ -14,7 +15,7 @@ import (
 
 // TODO: Try to take out the Runtime
 
-func (rt *Runtime) NewConversationInstanceFromSpec(ctx context.Context, agentSpecID uuid.UUID, sessionID string, metadata map[string]any) (*ConversationInstance, error) {
+func (rt *Runtime) NewConversationInstanceFromSpec(ctx context.Context, agentSpecID uuid.UUID, sessionID string, metadata map[string]any, shellRoot string) (*ConversationInstance, error) {
 	const op = "runtime.NewConversationInstanceFromSpec"
 
 	// Step 1) Fetch the agent spec
@@ -31,6 +32,7 @@ func (rt *Runtime) NewConversationInstanceFromSpec(ctx context.Context, agentSpe
 		return nil, ez.Wrap(op, err)
 	}
 
+	conversation.ShellRoot = strings.TrimSpace(shellRoot)
 	conversation.SessionID = sessionID
 
 	return rt.newAgentInstance(ctx, conversation, true)
@@ -62,7 +64,10 @@ func (rt *Runtime) newAgentInstance(ctx context.Context, conversation *agent.Con
 
 	// Step 4) Create the MCP servers and mux them
 	if conversation.ShellAccess {
-		shellRoot := rt.shellRoot
+		shellRoot := strings.TrimSpace(conversation.ShellRoot)
+		if shellRoot == "" {
+			shellRoot = rt.shellRoot
+		}
 		shellMCP, err := shellmcp.NewClient(ctx, shellRoot, nil, ".", 0)
 		if err != nil {
 			return nil, ez.Wrap(op, err)

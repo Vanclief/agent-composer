@@ -44,6 +44,7 @@ class Conversation:
         compact_at_percent (int):
         compact_count (int):
         shell_access (bool):
+        shell_root (str | Unset):
         web_search (bool):
         structured_output (bool):
         session_id (None | str | Unset):
@@ -69,6 +70,7 @@ class Conversation:
     compact_at_percent: int
     compact_count: int
     shell_access: bool
+    shell_root: str | Unset = UNSET
     web_search: bool
     structured_output: bool
     session_id: None | str | Unset = UNSET
@@ -117,6 +119,7 @@ class Conversation:
         compact_count = self.compact_count
 
         shell_access = self.shell_access
+        shell_root = self.shell_root
 
         web_search = self.web_search
 
@@ -164,6 +167,8 @@ class Conversation:
                 "structured_output": structured_output,
             }
         )
+        if shell_root is not UNSET:
+            field_dict["shell_root"] = shell_root
         if session_id is not UNSET:
             field_dict["session_id"] = session_id
         if compaction_prompt is not UNSET:
@@ -220,6 +225,8 @@ class Conversation:
 
         shell_access = d.pop("shell_access")
 
+        shell_root = d.pop("shell_root", UNSET)
+
         web_search = d.pop("web_search")
 
         structured_output = d.pop("structured_output")
@@ -271,6 +278,7 @@ class Conversation:
             compact_at_percent=compact_at_percent,
             compact_count=compact_count,
             shell_access=shell_access,
+            shell_root=shell_root,
             web_search=web_search,
             structured_output=structured_output,
             session_id=session_id,

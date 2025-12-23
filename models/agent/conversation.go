@@ -46,6 +46,7 @@ type Conversation struct {
 	CompactAtPercent       int                    `json:"compact_at_percent"`
 	CompactionPrompt       string                 `json:"compaction_prompt"`
 	CompactCount           int                    `json:"compact_count"`
+	ShellRoot              string                 `json:"shell_root,omitempty"`
 	ShellAccess            bool                   `json:"shell_access"`
 	WebSearch              bool                   `json:"web_search"`
 	StructuredOutput       bool                   `json:"structured_output"`
