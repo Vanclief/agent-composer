@@ -19,7 +19,7 @@ type columnSpec struct {
 
 var agentSpecColumnSpecs = []columnSpec{
 	{title: "Name", min: 24, flex: 3},
-	{title: "Provider", min: 12, flex: 1},
+	{title: "Harness", min: 12, flex: 1},
 	{title: "Model", min: 18, flex: 2},
 	{title: "Reasoning", min: 12, flex: 1},
 	{title: "Version", min: 8, flex: 1},

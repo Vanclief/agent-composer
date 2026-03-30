@@ -5,10 +5,9 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/vanclief/agent-composer/mcp"
-	shellmcp "github.com/vanclief/agent-composer/mcp/shell"
 	"github.com/vanclief/agent-composer/models/agent"
-	"github.com/vanclief/agent-composer/runtime/providers/chatgpt"
+	"github.com/vanclief/agent-composer/models/hook"
+	"github.com/vanclief/agent-composer/runtime/harnesses"
 	types "github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/ez"
 )
@@ -33,6 +32,9 @@ func (rt *Runtime) NewConversationInstanceFromSpec(ctx context.Context, agentSpe
 	}
 
 	conversation.ShellRoot = strings.TrimSpace(shellRoot)
+	if conversation.ShellRoot == "" {
+		conversation.ShellRoot = rt.shellRoot
+	}
 	conversation.SessionID = sessionID
 
 	return rt.newAgentInstance(ctx, conversation, true)
@@ -53,41 +55,20 @@ func (rt *Runtime) NewConversationInstance(ctx context.Context, conversationID u
 func (rt *Runtime) newAgentInstance(ctx context.Context, conversation *agent.Conversation, new bool) (*ConversationInstance, error) {
 	const op = "runtime.NewAgentInstance"
 
-	// Step 1) Create the ChatGPT instance
-	chatGPT, err := chatgpt.New(rt.openai)
+	err := validateLegacyConversationOptions(conversation)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
 
-	var tools []types.ToolDefinition
-	var mux *mcp.Mux
-
-	// Step 4) Create the MCP servers and mux them
-	if conversation.ShellAccess {
-		shellRoot := strings.TrimSpace(conversation.ShellRoot)
-		if shellRoot == "" {
-			shellRoot = rt.shellRoot
-		}
-		shellMCP, err := shellmcp.NewClient(ctx, shellRoot, nil, ".", 0)
-		if err != nil {
-			return nil, ez.Wrap(op, err)
-		}
-
-		// TODO: Limit what commands the shell can use
-
-		mux, err = mcp.NewMux(ctx, shellMCP)
-		if err != nil {
-			return nil, ez.Wrap(op, err)
-		}
-
-		// Step 5) Add the tools
-		tools, err = mux.ListTools(ctx)
-		if err != nil {
-			return nil, ez.Wrap(op, err)
-		}
+	harness, err := harnesses.New(conversation.Harness)
+	if err != nil {
+		return nil, ez.Wrap(op, err)
 	}
 
-	conversation.Tools = tools
+	err = harness.Validate(ctx, conversation.Model, conversation.HarnessConfig)
+	if err != nil {
+		return nil, ez.Wrap(op, err)
+	}
 
 	if new {
 		err = conversation.Insert(ctx, rt.db)
@@ -101,20 +82,52 @@ func (rt *Runtime) newAgentInstance(ctx context.Context, conversation *agent.Con
 		}
 	}
 
-	// Step 6) Load the hooks
 	hooks, err := loadInstanceHooks(ctx, rt.db, conversation.AgentName)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
 
-	// Step 7) Create the instance
+	if hasEnabledHooks(hooks) {
+		return nil, ez.New(op, ez.EINVALID, "hooks are not supported for harness-based conversations", nil)
+	}
 
 	ci := &ConversationInstance{
 		Conversation: conversation,
-		provider:     chatGPT,
-		mcpMux:       mux,
+		harness:      harness,
 		hooks:        hooks,
 	}
 
 	return ci, nil
+}
+
+func validateLegacyConversationOptions(conversation *agent.Conversation) error {
+	const op = "runtime.validateLegacyConversationOptions"
+
+	if conversation == nil {
+		return ez.New(op, ez.EINVALID, "conversation is nil", nil)
+	}
+
+	if conversation.AutoCompact {
+		return ez.New(op, ez.EINVALID, "auto_compact is not supported for harness-based conversations", nil)
+	}
+
+	if conversation.WebSearch {
+		return ez.New(op, ez.EINVALID, "web_search must be configured through harness_config", nil)
+	}
+
+	if conversation.StructuredOutput {
+		return ez.New(op, ez.EINVALID, "structured_output must be configured through harness_config", nil)
+	}
+
+	return nil
+}
+
+func hasEnabledHooks(items map[hook.EventType][]hook.Hook) bool {
+	for _, hooks := range items {
+		if len(hooks) > 0 {
+			return true
+		}
+	}
+
+	return false
 }

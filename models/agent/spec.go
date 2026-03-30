@@ -26,8 +26,9 @@ type Spec struct {
 
 	ID                     uuid.UUID                    `bun:",pk,type:uuid" json:"id"`
 	Name                   string                       `json:"name"`
-	Provider               LLMProvider                  `json:"provider"`
-	Model                  string                       `json:"model"`
+	Harness                Harness                      `json:"harness"`
+	Model                  string                       `bun:"model" json:"model"`
+	HarnessConfig          json.RawMessage              `bun:"type:jsonb,nullzero" json:"harness_config,omitempty"`
 	ReasoningEffort        runtimetypes.ReasoningEffort `json:"reasoning_effort"`
 	Instructions           string                       `json:"instructions"`
 	AutoCompact            bool                         `json:"auto_compact"`
@@ -47,10 +48,13 @@ func (pt *Spec) AfterScanRow(ctx context.Context) error {
 	if err == nil {
 		pt.StructuredOutputSchema = normalized
 	}
+	if pt.ReasoningEffort == "" {
+		pt.ReasoningEffort = runtimetypes.ReasoningEffortMedium
+	}
 	return nil
 }
 
-func NewAgentSpec(name string, prov LLMProvider, model, instructions string, reasoningEffort runtimetypes.ReasoningEffort, version int) (*Spec, error) {
+func NewAgentSpec(name string, harness Harness, model string, harnessConfig json.RawMessage, instructions string, reasoningEffort runtimetypes.ReasoningEffort, version int) (*Spec, error) {
 	const op = "agent.NewAgentSpec"
 
 	id, err := uuid.NewV7()
@@ -61,8 +65,9 @@ func NewAgentSpec(name string, prov LLMProvider, model, instructions string, rea
 	pt := &Spec{
 		ID:                     id,
 		Name:                   strings.TrimSpace(name),
-		Provider:               prov,
+		Harness:                harness,
 		Model:                  strings.TrimSpace(model),
+		HarnessConfig:          CopyRawJSON(harnessConfig),
 		Instructions:           strings.TrimSpace(instructions),
 		AutoCompact:            false,
 		CompactAtPercent:       90,
@@ -71,7 +76,7 @@ func NewAgentSpec(name string, prov LLMProvider, model, instructions string, rea
 		WebSearch:              false,
 		StructuredOutput:       false,
 		StructuredOutputSchema: nil,
-		ReasoningEffort:        reasoningEffort,
+		ReasoningEffort:        normalizeReasoningEffort(reasoningEffort),
 		Version:                version,
 	}
 
@@ -100,7 +105,16 @@ func (pt *Spec) Validate() error {
 		return ez.New(op, ez.EINVALID, "version must be > 0", nil)
 	}
 
-	err := pt.Provider.Validate()
+	err := pt.Harness.Validate()
+	if err != nil {
+		return ez.Wrap(op, err)
+	}
+
+	if strings.TrimSpace(pt.Model) == "" {
+		return ez.New(op, ez.EINVALID, "model is required", nil)
+	}
+
+	err = validateHarnessConfig(pt.HarnessConfig)
 	if err != nil {
 		return ez.Wrap(op, err)
 	}
@@ -210,4 +224,39 @@ func (pt Spec) GetUniqueField() string {
 
 func (pt Spec) GetUniqueValue() interface{} {
 	return pt.ID
+}
+
+func validateHarnessConfig(raw json.RawMessage) error {
+	const op = "agent.validateHarnessConfig"
+
+	if len(raw) == 0 {
+		return nil
+	}
+
+	var payload map[string]any
+	err := json.Unmarshal(raw, &payload)
+	if err != nil {
+		return ez.New(op, ez.EINVALID, "harness_config must be a valid JSON object", err)
+	}
+
+	return nil
+}
+
+func CopyRawJSON(src json.RawMessage) json.RawMessage {
+	if len(src) == 0 {
+		return nil
+	}
+
+	dst := make(json.RawMessage, len(src))
+	copy(dst, src)
+
+	return dst
+}
+
+func normalizeReasoningEffort(value runtimetypes.ReasoningEffort) runtimetypes.ReasoningEffort {
+	if value == "" {
+		return runtimetypes.ReasoningEffortMedium
+	}
+
+	return value
 }

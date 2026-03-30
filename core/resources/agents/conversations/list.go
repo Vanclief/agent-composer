@@ -13,7 +13,7 @@ type ListRequest struct {
 	pagination.CursorRequest
 
 	// Optional filters
-	Provider    *agent.LLMProvider        `json:"provider,omitempty"`
+	Harness     *agent.Harness            `json:"harness,omitempty"`
 	Search      string                    `json:"search"`
 	AgentSpecID uuid.UUID                 `json:"agent_spec_id,omitempty"`
 	Status      *agent.ConversationStatus `json:"status,omitempty"`
@@ -45,8 +45,8 @@ func (api *API) List(ctx context.Context, requester interface{}, request *ListRe
 	selectQuery := api.db.NewSelect().
 		Model(&items)
 
-	if request.Provider != nil {
-		selectQuery = selectQuery.Where("conversation.provider = ?", *request.Provider)
+	if request.Harness != nil {
+		selectQuery = selectQuery.Where("conversation.harness = ?", *request.Harness)
 	}
 
 	if request.AgentSpecID != uuid.Nil {

@@ -2,17 +2,16 @@ package runtime
 
 import (
 	"github.com/rs/zerolog/log"
-	"github.com/vanclief/agent-composer/mcp"
 	"github.com/vanclief/agent-composer/models/agent"
 	"github.com/vanclief/agent-composer/models/hook"
+	"github.com/vanclief/agent-composer/runtime/harnesses"
 	types "github.com/vanclief/agent-composer/runtime/types"
 )
 
 type ConversationInstance struct {
 	*agent.Conversation
-	provider types.LLMProvider
-	mcpMux   *mcp.Mux
-	hooks    map[hook.EventType][]hook.Hook
+	harness harnesses.Harness
+	hooks   map[hook.EventType][]hook.Hook
 }
 
 func (ci *ConversationInstance) LatestAssistantMessage() (*types.Message, bool) {

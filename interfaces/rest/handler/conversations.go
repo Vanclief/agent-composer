@@ -37,14 +37,14 @@ func (h *Handler) ListConversations(c echo.Context) error {
 		requestBody.AgentSpecID = agentSpecID
 	}
 
-	providerParam := c.QueryParam("provider")
-	if providerParam != "" {
-		prov := agent.LLMProvider(providerParam)
-		err := prov.Validate()
+	harnessParam := c.QueryParam("harness")
+	if harnessParam != "" {
+		harness := agent.Harness(harnessParam)
+		err := harness.Validate()
 		if err != nil {
-			return h.ManageError(c, op, request, ez.New(op, ez.EINVALID, "invalid provider", err))
+			return h.ManageError(c, op, request, ez.New(op, ez.EINVALID, "invalid harness", err))
 		}
-		requestBody.Provider = &prov
+		requestBody.Harness = &harness
 	}
 
 	statusStr := c.QueryParam("status")

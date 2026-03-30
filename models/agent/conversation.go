@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,8 +30,14 @@ type Conversation struct {
 	AgentSpecID            uuid.UUID              `bun:"type:uuid" json:"agent_spec_id"`
 	SessionID              string                 `json:"session_id,omitempty"`
 	AgentName              string                 `json:"agent_name"`
-	Provider               LLMProvider            `json:"provider"`
-	Model                  string                 `json:"model"`
+	Harness                Harness                `json:"harness"`
+	Model                  string                 `bun:"model" json:"model"`
+	HarnessConfig          json.RawMessage        `bun:"type:jsonb,nullzero" json:"harness_config,omitempty"`
+	HarnessSessionRef      string                 `json:"harness_session_ref,omitempty"`
+	HarnessState           json.RawMessage        `bun:"type:jsonb,nullzero" json:"harness_state,omitempty"`
+	RawHarnessOutput       string                 `json:"raw_harness_output,omitempty"`
+	HarnessExitCode        int                    `json:"harness_exit_code"`
+	HarnessError           string                 `json:"harness_error,omitempty"`
 	ReasoningEffort        types.ReasoningEffort  `json:"reasoning_effort"`
 	Instructions           string                 `json:"instructions"`
 	Tools                  []types.ToolDefinition `bun:"type:jsonb,nullzero" json:"-"`
@@ -60,6 +67,9 @@ func (c *Conversation) AfterScanRow(ctx context.Context) error {
 	if err == nil {
 		c.StructuredOutputSchema = normalized
 	}
+	if c.ReasoningEffort == "" {
+		c.ReasoningEffort = types.ReasoningEffortMedium
+	}
 	return nil
 }
 
@@ -75,9 +85,10 @@ func NewConversation(agentSpec *Spec, messages []types.Message, metadata map[str
 		ID:                     id,
 		AgentSpecID:            agentSpec.ID,
 		AgentName:              agentSpec.Name,
-		Provider:               agentSpec.Provider,
+		Harness:                agentSpec.Harness,
 		Model:                  agentSpec.Model,
-		ReasoningEffort:        agentSpec.ReasoningEffort,
+		HarnessConfig:          CopyRawJSON(agentSpec.HarnessConfig),
+		ReasoningEffort:        normalizeReasoningEffort(agentSpec.ReasoningEffort),
 		Instructions:           agentSpec.Instructions,
 		Messages:               messages,
 		Metadata:               copyMetadata(metadata),
@@ -118,7 +129,16 @@ func (c *Conversation) Validate() error {
 		return ez.New(op, ez.EINVALID, "instructions are required", nil)
 	}
 
-	err := c.Provider.Validate()
+	err := c.Harness.Validate()
+	if err != nil {
+		return ez.Wrap(op, err)
+	}
+
+	if strings.TrimSpace(c.Model) == "" {
+		return ez.New(op, ez.EINVALID, "model is required", nil)
+	}
+
+	err = validateHarnessConfig(c.HarnessConfig)
 	if err != nil {
 		return ez.Wrap(op, err)
 	}
@@ -214,6 +234,13 @@ func (c *Conversation) Clone(ctx context.Context, db bun.IDB, discardMessages bo
 	clone.InputTokens = 0
 	clone.OutputTokens = 0
 	clone.CachedTokens = 0
+	clone.Cost = 0
+	clone.Status = ConversationStatusQueued
+	clone.HarnessSessionRef = ""
+	clone.HarnessState = nil
+	clone.RawHarnessOutput = ""
+	clone.HarnessExitCode = 0
+	clone.HarnessError = ""
 
 	if discardMessages {
 		clone.Messages = []types.Message{*types.NewSystemMessage(clone.Instructions)}

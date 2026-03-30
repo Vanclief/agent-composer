@@ -26,12 +26,17 @@ paths:
       operationId: listAgentSpecs
       summary: List agent specs
       description: >
-        Returns the newest agent specs first. Results are cursor paginated and filtered only by
-        an optional case-insensitive search over the spec name.
+        Returns the newest agent specs first. Results are cursor paginated and can be filtered by
+        an optional case-insensitive search over the spec name and by `harness`.
       parameters:
         - $ref: '#/components/parameters/LimitParam'
         - $ref: '#/components/parameters/CursorParam'
         - $ref: '#/components/parameters/SearchParam'
+        - name: harness
+          in: query
+          schema:
+            $ref: '#/components/schemas/Harness'
+          description: Only return specs using the specified harness.
       responses:
         '200':
           description: Cursor-paginated agent specs.
@@ -137,7 +142,7 @@ paths:
       summary: List conversations
       description: >
         Returns the newest conversations first. `search` matches agent names, `agent_spec_id`
-        filters to a single spec, `provider` filters by LLM provider, `status` filters the
+        filters to a single spec, `harness` filters by harness type, `status` filters the
         conversation lifecycle state, and `session_id` restricts results to a client session.
       parameters:
         - $ref: '#/components/parameters/LimitParam'
@@ -147,11 +152,11 @@ paths:
           schema:
             type: string
           description: Case-insensitive substring applied to `agent_name`.
-        - name: provider
+        - name: harness
           in: query
           schema:
-            $ref: '#/components/schemas/LLMProvider'
-          description: Only return conversations using the specified provider.
+            $ref: '#/components/schemas/Harness'
+          description: Only return conversations using the specified harness.
         - name: agent_spec_id
           in: query
           schema:
@@ -183,6 +188,10 @@ paths:
       tags: [Conversations]
       operationId: createConversation
       summary: Start one or more conversations
+      description: >
+        Starts one or more harness-backed conversations from an agent spec. If the targeted spec
+        still relies on unsupported legacy runtime options such as hooks, automatic compaction,
+        structured outputs, or top-level web search flags, the service returns EINVALID.
       requestBody:
         required: true
         content:
@@ -272,7 +281,8 @@ paths:
       summary: Fork a conversation
       description: >
         Clones the specified conversation, then immediately continues it with a new prompt,
-        returning the identifier of the fork.
+        returning the identifier of the fork. Forked conversations start a fresh harness session
+        and do not inherit the prior run's `harness_session_ref`.
       parameters:
         - $ref: '#/components/parameters/ConversationIdParam'
       requestBody:
@@ -302,7 +312,9 @@ paths:
       summary: Resume a conversation
       description: >
         Enqueues more model work on the same conversation with a new prompt and returns its
-        identifier (which matches the path parameter).
+        identifier (which matches the path parameter). For harnesses that support resume, such as
+        `codex_cli` and `claude_code`, the service resumes the stored `harness_session_ref` when
+        one is available.
       parameters:
         - $ref: '#/components/parameters/ConversationIdParam'
       requestBody:
@@ -550,10 +562,12 @@ components:
           format: uuid
         name:
           type: string
-        provider:
-          $ref: '#/components/schemas/LLMProvider'
+        harness:
+          $ref: '#/components/schemas/Harness'
         model:
           type: string
+        harness_config:
+          $ref: '#/components/schemas/JSONValue'
         reasoning_effort:
           $ref: '#/components/schemas/ReasoningEffort'
         instructions:
@@ -581,7 +595,7 @@ components:
       required:
         - id
         - name
-        - provider
+        - harness
         - model
         - reasoning_effort
         - instructions
@@ -606,46 +620,31 @@ components:
       type: object
       required:
         - name
-        - provider
+        - harness
         - model
         - instructions
-        - reasoning_effort
       properties:
         name:
           type: string
-        provider:
-          $ref: '#/components/schemas/LLMProvider'
+        harness:
+          $ref: '#/components/schemas/Harness'
         model:
           type: string
+        harness_config:
+          $ref: '#/components/schemas/JSONValue'
+          description: >
+            Harness-specific configuration. For `codex_cli` this may include fields such as
+            `sandbox`, `profile`, `full_auto`, `skip_git_repo_check`, `ephemeral`, `add_dirs`,
+            and `config_overrides`. For `claude_code` this may include fields such as
+            `permission_mode`, `allowed_tools`, `disallowed_tools`, `add_dirs`, `mcp_config`,
+            `tools`, `settings`, `system_prompt`, `append_system_prompt`, `bare`, `verbose`,
+            `strict_mcp_config`, `dangerously_skip_permissions`, and
+            `allow_dangerously_skip_permissions`.
         instructions:
           type: string
-        reasoning_effort:
-          $ref: '#/components/schemas/ReasoningEffort'
-        auto_compact:
-          type: boolean
-          default: false
-        compact_at_percent:
-          type: integer
-          minimum: 1
-          maximum: 100
-          description: Optional override for when automatic compaction triggers (percentage of context window).
-        compaction_prompt:
-          type: string
-          description: Custom system prompt injected before compaction runs.
-        allowed_tools:
-          type: array
-          items:
-            type: string
-        shell_access:
-          type: boolean
-        web_search:
-          type: boolean
-        structured_output:
-          type: boolean
-        structured_output_schema:
-          type: object
-          additionalProperties: true
-          description: Required when `structured_output` is true.
+      description: >
+        Creates a harness-backed agent spec. Legacy provider/self-harness request fields are no
+        longer part of this contract.
     UpdateAgentSpecRequest:
       type: object
       properties:
@@ -654,38 +653,19 @@ components:
           format: uuid
           readOnly: true
           description: Filled from the path parameter; omit in the payload.
-        provider:
-          $ref: '#/components/schemas/LLMProvider'
+        harness:
+          $ref: '#/components/schemas/Harness'
         name:
           type: string
         model:
           type: string
+        harness_config:
+          $ref: '#/components/schemas/JSONValue'
         instructions:
           type: string
-        auto_compact:
-          type: boolean
-        compact_at_percent:
-          type: integer
-          minimum: 1
-          maximum: 100
-        compaction_prompt:
-          type: string
-        allowed_tools:
-          type: array
-          items:
-            type: string
-        shell_access:
-          type: boolean
-        web_search:
-          type: boolean
-        structured_output:
-          type: boolean
-        structured_output_schema:
-          type: object
-          additionalProperties: true
-          nullable: true
-          description: Send null to clear the structured output schema.
-      description: Supply at least one mutable field; otherwise the service returns EINVALID.
+      description: >
+        Supply at least one mutable field; otherwise the service returns EINVALID. Legacy
+        provider/self-harness fields are no longer part of this contract.
     Conversation:
       type: object
       properties:
@@ -701,13 +681,30 @@ components:
         shell_root:
           type: string
           nullable: true
-          description: Optional root path for shell tool execution; when set (and shell access is enabled), overrides the runtime default for this conversation.
+          description: Optional working root for the harness process.
         agent_name:
           type: string
-        provider:
-          $ref: '#/components/schemas/LLMProvider'
+        harness:
+          $ref: '#/components/schemas/Harness'
         model:
           type: string
+        harness_config:
+          $ref: '#/components/schemas/JSONValue'
+        harness_session_ref:
+          type: string
+          nullable: true
+          description: Harness-native session or thread identifier used for resume.
+        harness_state:
+          $ref: '#/components/schemas/JSONValue'
+        raw_harness_output:
+          type: string
+          description: Raw machine-readable output captured from the harness, if available.
+        harness_exit_code:
+          type: integer
+          description: Most recent harness process exit code.
+        harness_error:
+          type: string
+          nullable: true
         reasoning_effort:
           $ref: '#/components/schemas/ReasoningEffort'
         instructions:
@@ -730,7 +727,7 @@ components:
           type: integer
         cost:
           type: integer
-          description: Tracked cost in the smallest billing unit for the provider.
+          description: Tracked cost in the smallest billing unit known to the service.
         created_at:
           type: string
           format: date-time
@@ -756,8 +753,9 @@ components:
         - id
         - agent_spec_id
         - agent_name
-        - provider
+        - harness
         - model
+        - harness_exit_code
         - reasoning_effort
         - instructions
         - messages
@@ -834,7 +832,7 @@ components:
         shell_root:
           type: string
           nullable: true
-          description: Optional root path for shell tool execution; when set (and shell access is enabled), overrides the runtime default for this conversation.
+          description: Optional working root for the harness process.
         metadata:
           type: object
           additionalProperties: true
@@ -959,10 +957,11 @@ components:
         enabled:
           type: boolean
       description: Supply at least one mutable field; otherwise the service returns EINVALID.
-    LLMProvider:
+    Harness:
       type: string
       enum:
-        - open_ai
+        - codex_cli
+        - claude_code
     ReasoningEffort:
       type: string
       enum:

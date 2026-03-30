@@ -133,7 +133,7 @@ func (v *listView) UpdateRows(items []agent.Spec) {
 	for i, spec := range items {
 		rows[i] = table.Row{
 			spec.Name,
-			string(spec.Provider),
+			string(spec.Harness),
 			spec.Model,
 			string(spec.ReasoningEffort),
 			fmt.Sprintf("%d", spec.Version),

@@ -214,7 +214,7 @@ func renderConversationSidebar(conv *agent.Conversation, width int) string {
 
 	appendField("Name", conv.AgentName)
 	appendField("Status", string(conv.Status))
-	appendField("Provider", string(conv.Provider))
+	appendField("Harness", string(conv.Harness))
 	appendField("Model", conv.Model)
 	appendField("Reasoning", string(conv.ReasoningEffort))
 	appendField("Spec ID", conv.AgentSpecID.String())

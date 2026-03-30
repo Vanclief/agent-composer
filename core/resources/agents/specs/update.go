@@ -3,29 +3,20 @@ package specs
 import (
 	"context"
 	"encoding/json"
-	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation"
 	"github.com/google/uuid"
-	"github.com/vanclief/agent-composer/core/helpers/jsonutil"
 	"github.com/vanclief/agent-composer/models/agent"
 	"github.com/vanclief/ez"
 )
 
 type UpdateRequest struct {
-	AgentSpecID            uuid.UUID          `json:"agent_spec_id"`
-	Provider               *agent.LLMProvider `json:"provider"`
-	Name                   *string            `json:"name"`
-	Model                  *string            `json:"model"`
-	Instructions           *string            `json:"instructions"`
-	AutoCompact            *bool              `json:"auto_compact"`
-	CompactAtPercent       *int               `json:"compact_at_percent"`
-	CompactionPrompt       *string            `json:"compaction_prompt"`
-	AllowedTools           *[]string          `json:"allowed_tools"`
-	ShellAccess            *bool              `json:"shell_access"`
-	WebSearch              *bool              `json:"web_search"`
-	StructuredOutput       *bool              `json:"structured_output"`
-	StructuredOutputSchema *json.RawMessage   `json:"structured_output_schema"`
+	AgentSpecID   uuid.UUID        `json:"agent_spec_id"`
+	Harness       *agent.Harness   `json:"harness"`
+	Name          *string          `json:"name"`
+	Model         *string          `json:"model"`
+	HarnessConfig *json.RawMessage `json:"harness_config"`
+	Instructions  *string          `json:"instructions"`
 }
 
 func (r UpdateRequest) Validate() error {
@@ -38,21 +29,11 @@ func (r UpdateRequest) Validate() error {
 		return ez.New(op, ez.EINVALID, err.Error(), nil)
 	}
 
-	if r.CompactAtPercent != nil {
-		if *r.CompactAtPercent <= 0 || *r.CompactAtPercent > 100 {
-			return ez.New(op, ez.EINVALID, "compact_at_percent must be between 1 and 100", nil)
-		}
-	}
-
-	if r.StructuredOutputSchema != nil {
-		err := validateStructuredOutputSchema(*r.StructuredOutputSchema)
+	if r.HarnessConfig != nil {
+		err := validateHarnessConfig(*r.HarnessConfig)
 		if err != nil {
 			return ez.Wrap(op, err)
 		}
-	}
-
-	if r.StructuredOutput != nil && *r.StructuredOutput && (r.StructuredOutputSchema == nil || len(*r.StructuredOutputSchema) == 0 || jsonutil.IsNullRawMessage(*r.StructuredOutputSchema)) {
-		return ez.New(op, ez.EINVALID, "structured_output_schema is required when structured_output is true", nil)
 	}
 
 	return nil
@@ -78,19 +59,18 @@ func (api *API) Update(ctx context.Context, requester interface{}, request *Upda
 		shouldInsert = true
 	}
 
-	if request.Provider != nil {
-		spec.Provider = *request.Provider
+	if request.Harness != nil {
+		spec.Harness = *request.Harness
 		shouldInsert = true
 	}
 
 	if request.Model != nil {
 		spec.Model = *request.Model
+		shouldInsert = true
+	}
 
-		err = api.rt.ValidateModel(ctx, spec.Provider, spec.Model)
-		if err != nil {
-			return nil, ez.Wrap(op, err)
-		}
-
+	if request.HarnessConfig != nil {
+		spec.HarnessConfig = agent.CopyRawJSON(*request.HarnessConfig)
 		shouldInsert = true
 	}
 
@@ -99,55 +79,13 @@ func (api *API) Update(ctx context.Context, requester interface{}, request *Upda
 		shouldInsert = true
 	}
 
-	if request.AutoCompact != nil {
-		spec.AutoCompact = *request.AutoCompact
-		shouldInsert = true
-	}
-
-	if request.CompactAtPercent != nil {
-		spec.CompactAtPercent = *request.CompactAtPercent
-		shouldInsert = true
-	}
-
-	if request.CompactionPrompt != nil {
-		spec.CompactionPrompt = strings.TrimSpace(*request.CompactionPrompt)
-		shouldInsert = true
-	}
-
-	if request.ShellAccess != nil {
-		spec.ShellAccess = *request.ShellAccess
-		shouldInsert = true
-	}
-
-	if request.WebSearch != nil {
-		spec.WebSearch = *request.WebSearch
-		shouldInsert = true
-	}
-
-	if request.StructuredOutput != nil {
-		spec.StructuredOutput = *request.StructuredOutput
-		if spec.StructuredOutput {
-			if request.StructuredOutputSchema != nil {
-				spec.StructuredOutputSchema = normalizeStructuredOutputSchema(*request.StructuredOutputSchema)
-			} else if len(spec.StructuredOutputSchema) == 0 || jsonutil.IsNullRawMessage(spec.StructuredOutputSchema) {
-				// Should not happen due to validation, but guard against empty schema.
-				return nil, ez.New(op, ez.EINVALID, "structured_output_schema must be set when enabling structured_output", nil)
-			}
-		} else {
-			spec.StructuredOutputSchema = nil
-		}
-		shouldInsert = true
-	} else if request.StructuredOutputSchema != nil {
-		normalized := normalizeStructuredOutputSchema(*request.StructuredOutputSchema)
-		spec.StructuredOutputSchema = normalized
-		if normalized == nil {
-			spec.StructuredOutput = false
-		}
-		shouldInsert = true
-	}
-
 	if !shouldInsert {
 		return nil, ez.New(op, ez.EINVALID, "No fields to update", nil)
+	}
+
+	err = api.rt.ValidateHarness(ctx, spec.Harness, spec.Model, spec.HarnessConfig)
+	if err != nil {
+		return nil, ez.Wrap(op, err)
 	}
 
 	spec.Version += 1

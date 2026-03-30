@@ -200,7 +200,7 @@ func renderSpecSidebar(spec *agent.Spec, width int) string {
 	}
 
 	appendField("Name", spec.Name)
-	appendField("Provider", string(spec.Provider))
+	appendField("Harness", string(spec.Harness))
 	appendField("Model", spec.Model)
 	appendField("Reasoning Effort", string(spec.ReasoningEffort))
 	appendField("Version", fmt.Sprintf("%d", spec.Version))

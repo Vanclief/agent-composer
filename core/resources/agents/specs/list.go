@@ -13,8 +13,8 @@ type ListRequest struct {
 	pagination.CursorRequest
 
 	// Optional filters
-	Provider *agent.LLMProvider `json:"provider,omitempty"`
-	Search   string             `json:"search"`
+	Harness *agent.Harness `json:"harness,omitempty"`
+	Search  string         `json:"search"`
 }
 
 func (r *ListRequest) Validate() error {
@@ -45,6 +45,10 @@ func (api *API) List(ctx context.Context, requester interface{}, request *ListRe
 
 	selectQuery := api.db.NewSelect().
 		Model(&items)
+
+	if request.Harness != nil {
+		selectQuery = selectQuery.Where("spec.harness = ?", *request.Harness)
+	}
 
 	// Default newest-first by cursor (UUIDv7)
 	selectQuery, err := pagination.ApplyCursorToQuery(selectQuery, &request.CursorRequest, model, pagination.DESC)

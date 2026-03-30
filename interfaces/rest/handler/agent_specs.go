@@ -2,6 +2,7 @@ package handler
 
 import (
 	"github.com/labstack/echo/v4"
+	"github.com/vanclief/agent-composer/models/agent"
 
 	"github.com/vanclief/agent-composer/core/resources/agents/specs"
 	"github.com/vanclief/compose/components/rest/requests"
@@ -19,6 +20,16 @@ func (h *Handler) ListAgentSpecs(c echo.Context) error {
 			Cursor: c.QueryParam("cursor"),
 		},
 		Search: c.QueryParam("search"),
+	}
+
+	harnessParam := c.QueryParam("harness")
+	if harnessParam != "" {
+		harness := agent.Harness(harnessParam)
+		err := harness.Validate()
+		if err != nil {
+			return h.ManageError(c, op, request, err)
+		}
+		requestBody.Harness = &harness
 	}
 
 	return h.JSONResponse(c, op, request, requestBody)
