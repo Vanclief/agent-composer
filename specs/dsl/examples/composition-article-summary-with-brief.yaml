@@ -1,0 +1,54 @@
+workflow:
+  id: composed_article_summary
+  version: "1"
+  description: >
+    Compose the installed article_summary workflow and then generate a short
+    executive brief from its final summary.
+  inputs:
+    article_text: string
+  outputs:
+    final_summary:
+      schema: FinalSummary
+      from: instance.summarize.final_summary
+    executive_brief:
+      schema: string
+      from: instance.make_brief.out
+
+schemas:
+  FinalSummary:
+    type: object
+    properties:
+      text:
+        type: string
+
+nodes:
+  article_summary_pipeline:
+    kind: workflow
+    workflow_id: article_summary
+
+  brief_writer:
+    kind: inference
+    inputs:
+      summary: FinalSummary
+    outputs:
+      out: string
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Write a short executive brief from the final summary. Focus on the main
+        outcome and keep it concise.
+
+flow:
+  instances:
+    summarize:
+      node: article_summary_pipeline
+      inputs:
+        article_text: workflow_input.article_text
+
+    make_brief:
+      node: brief_writer
+      inputs:
+        summary: instance.summarize.final_summary

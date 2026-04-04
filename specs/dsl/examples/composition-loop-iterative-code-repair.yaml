@@ -1,0 +1,129 @@
+workflow:
+  id: iterative_code_review_repair
+  version: "1"
+  description: >
+    Implement a coding task, then repeatedly review, validate, and fix issues
+    until no valid actionable issues remain. Return the final implementation
+    summary and any pending questions for the developer.
+  inputs:
+    coding_task: string
+  outputs:
+    implementation_summary:
+      schema: string
+      from: instance.final_state_unpacker.implementation_summary
+    pending_questions:
+      schema: PendingQuestionList
+      from: instance.final_state_unpacker.pending_questions
+
+schemas:
+  ReviewIssue:
+    type: object
+    properties:
+      title:
+        type: string
+      description:
+        type: string
+      severity:
+        type: string
+        enum: [low, medium, high]
+      requires_human_input:
+        type: boolean
+      question_for_human:
+        type: string
+        optional: true
+
+  ReviewIssueList:
+    type: array
+    items:
+      schema_ref: ReviewIssue
+
+  PendingQuestion:
+    type: object
+    properties:
+      question:
+        type: string
+      issue_title:
+        type: string
+      rationale:
+        type: string
+
+  PendingQuestionList:
+    type: array
+    items:
+      schema_ref: PendingQuestion
+
+  ReviewState:
+    type: object
+    properties:
+      implementation_summary:
+        type: string
+      actionable_issues:
+        schema_ref: ReviewIssueList
+      pending_questions:
+        schema_ref: PendingQuestionList
+      iteration:
+        type: integer
+
+nodes:
+  initial_coder:
+    kind: inference
+    inputs:
+      coding_task: string
+    outputs:
+      review_state: ReviewState
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4
+        reasoning_effort: high
+      instruction: >
+        Implement the coding task on the current codebase. Return an initial
+        review_state where implementation_summary describes what was implemented,
+        actionable_issues is empty, pending_questions is empty, and iteration is
+        0.
+
+  review_fix_cycle_worker:
+    kind: workflow
+    workflow_id: review_fix_cycle
+
+  review_fix_loop:
+    kind: loop
+    operation: while
+    executes: review_fix_cycle_worker
+    updates: review_state
+    breaks_on: should_stop
+    inputs:
+      coding_task: string
+      review_state: ReviewState
+    outputs:
+      review_state: ReviewState
+    max_iterations: 8
+
+  final_state_unpacker:
+    kind: connector
+    operation: unpack
+    inputs:
+      in: ReviewState
+    outputs:
+      implementation_summary: string
+      actionable_issues: ReviewIssueList
+      pending_questions: PendingQuestionList
+      iteration: integer
+
+flow:
+  instances:
+    initial_implementation:
+      node: initial_coder
+      inputs:
+        coding_task: workflow_input.coding_task
+
+    review_fix_loop:
+      node: review_fix_loop
+      inputs:
+        coding_task: workflow_input.coding_task
+        review_state: instance.initial_implementation.review_state
+
+    final_state_unpacker:
+      node: final_state_unpacker
+      inputs:
+        in: instance.review_fix_loop.review_state

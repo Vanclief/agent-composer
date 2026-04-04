@@ -1,0 +1,104 @@
+workflow:
+  id: binary_vote_round
+  version: "1"
+  description: >
+    Ask one binary question to seven voter workers and collect the raw votes.
+  inputs:
+    question: string
+  outputs:
+    votes:
+      schema: VoteList
+      from: instance.collect_votes.out
+
+schemas:
+  Vote:
+    type: object
+    properties:
+      answer:
+        type: string
+        enum: [yes, no]
+      rationale:
+        type: string
+
+  VoteList:
+    type: array
+    items:
+      schema_ref: Vote
+
+nodes:
+  binary_voter:
+    kind: inference
+    inputs:
+      question: string
+    outputs:
+      out: Vote
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Answer the question with exactly one binary choice, yes or no, and
+        provide a short rationale for the choice.
+
+  vote_collector:
+    kind: connector
+    operation: collect
+    inputs:
+      vote_a: Vote
+      vote_b: Vote
+      vote_c: Vote
+      vote_d: Vote
+      vote_e: Vote
+      vote_f: Vote
+      vote_g: Vote
+    outputs:
+      out: VoteList
+
+flow:
+  instances:
+    voter_a:
+      node: binary_voter
+      inputs:
+        question: workflow_input.question
+
+    voter_b:
+      node: binary_voter
+      inputs:
+        question: workflow_input.question
+
+    voter_c:
+      node: binary_voter
+      inputs:
+        question: workflow_input.question
+
+    voter_d:
+      node: binary_voter
+      inputs:
+        question: workflow_input.question
+
+    voter_e:
+      node: binary_voter
+      inputs:
+        question: workflow_input.question
+
+    voter_f:
+      node: binary_voter
+      inputs:
+        question: workflow_input.question
+
+    voter_g:
+      node: binary_voter
+      inputs:
+        question: workflow_input.question
+
+    collect_votes:
+      node: vote_collector
+      inputs:
+        vote_a: instance.voter_a.out
+        vote_b: instance.voter_b.out
+        vote_c: instance.voter_c.out
+        vote_d: instance.voter_d.out
+        vote_e: instance.voter_e.out
+        vote_f: instance.voter_f.out
+        vote_g: instance.voter_g.out

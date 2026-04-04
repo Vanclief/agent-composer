@@ -1,0 +1,68 @@
+workflow:
+  id: section_summary_batch
+  version: "1"
+  description: >
+    Summarize each input section in parallel while passing the same tone setting
+    to every iteration.
+  inputs:
+    section_text: SectionTextList
+    tone: string
+  outputs:
+    out:
+      schema: SectionSummaryList
+      from: instance.run_section_summary.out
+
+schemas:
+  SectionTextList:
+    type: array
+    items:
+      type: string
+
+  SectionSummary:
+    type: object
+    properties:
+      text:
+        type: string
+
+  SectionSummaryList:
+    type: array
+    items:
+      schema_ref: SectionSummary
+
+nodes:
+  section_summarizer:
+    kind: inference
+    inputs:
+      section_text: string
+      tone: string
+    outputs:
+      out: SectionSummary
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Summarize the section in the requested tone while preserving the main
+        point and essential supporting details.
+
+  run_section_summary:
+    kind: loop
+    operation: foreach
+    executes: section_summarizer
+    over: section_text
+    inputs:
+      section_text: SectionTextList
+      tone: string
+    outputs:
+      out: SectionSummaryList
+    parallelism: max
+    preserve_order: true
+
+flow:
+  instances:
+    run_section_summary:
+      node: run_section_summary
+      inputs:
+        section_text: workflow_input.section_text
+        tone: workflow_input.tone

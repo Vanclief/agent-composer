@@ -1,0 +1,141 @@
+workflow:
+  id: parallel_code_review
+  version: "12"
+  description: >
+    Compare against a target branch, run three review agents in parallel,
+    validate each returned issue, and aggregate the validated issues.
+  inputs:
+    compare_branch: string
+  outputs:
+    issues:
+      schema: ValidatedIssueList
+      from: instance.aggregate_validated_issues.out
+
+schemas:
+  Issue:
+    type: object
+    description: A single review issue.
+    properties:
+      path:
+        type: string
+      line:
+        type: integer
+      title:
+        type: string
+      description:
+        type: string
+
+  IssueList:
+    type: array
+    items:
+      schema_ref: Issue
+
+  ValidatedIssue:
+    type: object
+    properties:
+      issue:
+        schema_ref: Issue
+      is_valid:
+        type: boolean
+      reason:
+        type: string
+        nullable: true
+
+  ValidatedIssueList:
+    type: array
+    items:
+      schema_ref: ValidatedIssue
+
+nodes:
+  code_reviewer:
+    kind: inference
+    inputs:
+      branch: string
+    outputs:
+      out: IssueList
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Review the git diff against the input branch and return a list of
+        concrete issues with file path, line number, title, and description.
+      output_format: issue_list
+
+  issue_validator:
+    kind: inference
+    inputs:
+      issue: Issue
+    outputs:
+      out: ValidatedIssue
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Validate whether the issue is a real problem in the reviewed diff and
+        explain the reasoning for the validation result.
+      output_format: validated_issue
+
+  issue_validation_worker:
+    kind: loop
+    operation: foreach
+    executes: issue_validator
+    over: issue
+    inputs:
+      issue: IssueList
+    outputs:
+      out: ValidatedIssueList
+    parallelism: max
+    preserve_order: true
+
+  validated_issue_aggregator:
+    kind: connector
+    operation: concat
+    inputs:
+      issues_a: ValidatedIssueList
+      issues_b: ValidatedIssueList
+      issues_c: ValidatedIssueList
+    outputs:
+      out: ValidatedIssueList
+
+flow:
+  instances:
+    reviewer_a:
+      node: code_reviewer
+      inputs:
+        branch: workflow_input.compare_branch
+
+    reviewer_b:
+      node: code_reviewer
+      inputs:
+        branch: workflow_input.compare_branch
+
+    reviewer_c:
+      node: code_reviewer
+      inputs:
+        branch: workflow_input.compare_branch
+
+    validate_reviewer_a_issues:
+      node: issue_validation_worker
+      inputs:
+        issue: instance.reviewer_a.out
+
+    validate_reviewer_b_issues:
+      node: issue_validation_worker
+      inputs:
+        issue: instance.reviewer_b.out
+
+    validate_reviewer_c_issues:
+      node: issue_validation_worker
+      inputs:
+        issue: instance.reviewer_c.out
+
+    aggregate_validated_issues:
+      node: validated_issue_aggregator
+      inputs:
+        issues_a: instance.validate_reviewer_a_issues.out
+        issues_b: instance.validate_reviewer_b_issues.out
+        issues_c: instance.validate_reviewer_c_issues.out

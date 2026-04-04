@@ -1,0 +1,84 @@
+workflow:
+  id: loop_while_binary_consensus
+  version: "1"
+  description: >
+    Keep collecting binary votes until the executed step says the loop should
+    stop.
+  inputs:
+    question: string
+    vote_state: VoteState
+  outputs:
+    vote_state:
+      schema: VoteState
+      from: instance.collect_consensus.vote_state
+
+schemas:
+  Vote:
+    type: object
+    properties:
+      answer:
+        type: string
+        enum: [yes, no]
+      rationale:
+        type: string
+
+  VoteList:
+    type: array
+    items:
+      schema_ref: Vote
+
+  VoteState:
+    type: object
+    properties:
+      votes:
+        schema_ref: VoteList
+      yes_count:
+        type: integer
+      no_count:
+        type: integer
+      agreement_ratio:
+        type: number
+      minimum_votes_reached:
+        type: boolean
+      consensus_reached:
+        type: boolean
+
+nodes:
+  vote_consensus_step:
+    kind: inference
+    inputs:
+      question: string
+      vote_state: VoteState
+    outputs:
+      vote_state: VoteState
+      should_stop: boolean
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Add one more binary vote to vote_state, update the vote list, counts,
+        and agreement ratio, and set should_stop to true only when there are at
+        least 5 votes and agreement_ratio is at least 0.66.
+
+  collect_consensus:
+    kind: loop
+    operation: while
+    executes: vote_consensus_step
+    updates: vote_state
+    breaks_on: should_stop
+    inputs:
+      question: string
+      vote_state: VoteState
+    outputs:
+      vote_state: VoteState
+    max_iterations: 10
+
+flow:
+  instances:
+    collect_consensus:
+      node: collect_consensus
+      inputs:
+        question: workflow_input.question
+        vote_state: workflow_input.vote_state

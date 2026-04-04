@@ -1,0 +1,90 @@
+workflow:
+  id: conditional_boolean_routing_review
+  version: "1"
+  description: >
+    Decide whether the reviewer agrees with the text. If yes, summarize it. If
+    no, explain the disagreement.
+  inputs:
+    text: string
+  outputs:
+    out:
+      schema: ReviewOutcome
+      from: instance.route_review.out
+
+schemas:
+  ReviewOutcome:
+    type: object
+    properties:
+      outcome:
+        type: string
+        enum: [summary, disagreement]
+      text:
+        type: string
+
+nodes:
+  agreement_reviewer:
+    kind: inference
+    inputs:
+      text: string
+    outputs:
+      agrees: boolean
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Decide whether you agree with the text. Return only a boolean answer.
+
+  text_summarizer:
+    kind: inference
+    inputs:
+      text: string
+    outputs:
+      out: ReviewOutcome
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Summarize the text and set outcome to summary.
+
+  disagreement_explainer:
+    kind: inference
+    inputs:
+      text: string
+    outputs:
+      out: ReviewOutcome
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Explain why you disagree with the text and set outcome to disagreement.
+
+  review_router:
+    kind: conditional
+    operation: if
+    routes_on: agrees
+    when_true: text_summarizer
+    when_false: disagreement_explainer
+    inputs:
+      text: string
+      agrees: boolean
+    outputs:
+      out: ReviewOutcome
+
+flow:
+  instances:
+    review_agreement:
+      node: agreement_reviewer
+      inputs:
+        text: workflow_input.text
+
+    route_review:
+      node: review_router
+      inputs:
+        text: workflow_input.text
+        agrees: instance.review_agreement.agrees

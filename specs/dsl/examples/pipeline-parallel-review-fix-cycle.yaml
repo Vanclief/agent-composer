@@ -1,0 +1,266 @@
+workflow:
+  id: review_fix_cycle
+  version: "1"
+  description: >
+    Apply actionable review issues, run parallel reviewers, validate the raised
+    issues, collect pending developer questions, and decide whether another
+    repair iteration is needed.
+  inputs:
+    coding_task: string
+    review_state: ReviewState
+  outputs:
+    review_state:
+      schema: ReviewState
+      from: instance.triage_review_results.review_state
+    should_stop:
+      schema: boolean
+      from: instance.triage_review_results.should_stop
+
+schemas:
+  ReviewIssue:
+    type: object
+    properties:
+      title:
+        type: string
+      description:
+        type: string
+      severity:
+        type: string
+        enum: [low, medium, high]
+      requires_human_input:
+        type: boolean
+      question_for_human:
+        type: string
+        optional: true
+
+  ReviewIssueList:
+    type: array
+    items:
+      schema_ref: ReviewIssue
+
+  ValidatedReviewIssue:
+    type: object
+    properties:
+      issue:
+        schema_ref: ReviewIssue
+      is_valid:
+        type: boolean
+      validation_reason:
+        type: string
+
+  ValidatedReviewIssueList:
+    type: array
+    items:
+      schema_ref: ValidatedReviewIssue
+
+  PendingQuestion:
+    type: object
+    properties:
+      question:
+        type: string
+      issue_title:
+        type: string
+      rationale:
+        type: string
+
+  PendingQuestionList:
+    type: array
+    items:
+      schema_ref: PendingQuestion
+
+  ReviewState:
+    type: object
+    properties:
+      implementation_summary:
+        type: string
+      actionable_issues:
+        schema_ref: ReviewIssueList
+      pending_questions:
+        schema_ref: PendingQuestionList
+      iteration:
+        type: integer
+
+nodes:
+  issue_reviser:
+    kind: inference
+    inputs:
+      coding_task: string
+      review_state: ReviewState
+    outputs:
+      implementation_summary: string
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4
+        reasoning_effort: high
+      instruction: >
+        Work on the current codebase. If review_state.actionable_issues contains
+        valid actionable issues, implement them. If it is empty, make no code
+        changes. Return a concise implementation summary describing the current
+        state of the task after your work is complete.
+
+  reviewer_a:
+    kind: inference
+    inputs:
+      coding_task: string
+      implementation_summary: string
+    outputs:
+      out: ReviewIssueList
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Review the current codebase against the coding task and implementation
+        summary. Return only concrete issues. If an issue depends on ambiguous
+        requirements or missing product intent, set requires_human_input to true
+        and include a concise question_for_human.
+
+  reviewer_b:
+    kind: inference
+    inputs:
+      coding_task: string
+      implementation_summary: string
+    outputs:
+      out: ReviewIssueList
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Review the current codebase against the coding task and implementation
+        summary. Return only concrete issues. If an issue depends on ambiguous
+        requirements or missing product intent, set requires_human_input to true
+        and include a concise question_for_human.
+
+  reviewer_c:
+    kind: inference
+    inputs:
+      coding_task: string
+      implementation_summary: string
+    outputs:
+      out: ReviewIssueList
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Review the current codebase against the coding task and implementation
+        summary. Return only concrete issues. If an issue depends on ambiguous
+        requirements or missing product intent, set requires_human_input to true
+        and include a concise question_for_human.
+
+  merged_review_issues:
+    kind: connector
+    operation: concat
+    inputs:
+      issues_a: ReviewIssueList
+      issues_b: ReviewIssueList
+      issues_c: ReviewIssueList
+    outputs:
+      out: ReviewIssueList
+
+  issue_validator:
+    kind: inference
+    inputs:
+      coding_task: string
+      implementation_summary: string
+      issue: ReviewIssue
+    outputs:
+      out: ValidatedReviewIssue
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Validate whether the issue is real, concrete, and relevant to the
+        coding task and current implementation. Mark invalid issues as is_valid
+        false and explain the decision in validation_reason.
+
+  issue_validation_worker:
+    kind: loop
+    operation: foreach
+    executes: issue_validator
+    over: issue
+    inputs:
+      coding_task: string
+      implementation_summary: string
+      issue: ReviewIssueList
+    outputs:
+      out: ValidatedReviewIssueList
+    parallelism: max
+    preserve_order: true
+
+  triage_review_results:
+    kind: inference
+    inputs:
+      review_state: ReviewState
+      implementation_summary: string
+      validated_issues: ValidatedReviewIssueList
+    outputs:
+      review_state: ReviewState
+      should_stop: boolean
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4
+        reasoning_effort: high
+      instruction: >
+        Build the next review_state. Keep only issues where is_valid is true and
+        issue.requires_human_input is false in actionable_issues. Convert issues
+        where is_valid is true and issue.requires_human_input is true into
+        pending_questions and append them to the existing pending_questions. Set
+        implementation_summary to the latest implementation_summary. Increment
+        iteration by one. Set should_stop to true only when actionable_issues is
+        empty.
+
+flow:
+  instances:
+    revise_code:
+      node: issue_reviser
+      inputs:
+        coding_task: workflow_input.coding_task
+        review_state: workflow_input.review_state
+
+    review_a:
+      node: reviewer_a
+      inputs:
+        coding_task: workflow_input.coding_task
+        implementation_summary: instance.revise_code.implementation_summary
+
+    review_b:
+      node: reviewer_b
+      inputs:
+        coding_task: workflow_input.coding_task
+        implementation_summary: instance.revise_code.implementation_summary
+
+    review_c:
+      node: reviewer_c
+      inputs:
+        coding_task: workflow_input.coding_task
+        implementation_summary: instance.revise_code.implementation_summary
+
+    merge_review_issues:
+      node: merged_review_issues
+      inputs:
+        issues_a: instance.review_a.out
+        issues_b: instance.review_b.out
+        issues_c: instance.review_c.out
+
+    validate_issues:
+      node: issue_validation_worker
+      inputs:
+        coding_task: workflow_input.coding_task
+        implementation_summary: instance.revise_code.implementation_summary
+        issue: instance.merge_review_issues.out
+
+    triage_review_results:
+      node: triage_review_results
+      inputs:
+        review_state: workflow_input.review_state
+        implementation_summary: instance.revise_code.implementation_summary
+        validated_issues: instance.validate_issues.out

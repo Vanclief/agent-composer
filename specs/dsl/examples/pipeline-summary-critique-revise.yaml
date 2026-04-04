@@ -1,0 +1,120 @@
+workflow:
+  id: article_summary
+  version: "7"
+  description: >
+    Summarize one input article, critique the draft for accuracy and omissions,
+    and produce a revised final summary.
+  inputs:
+    article_text: string
+  outputs:
+    final_summary:
+      schema: FinalSummary
+      from: instance.revise_summary.out
+    critique:
+      schema: SummaryCritique
+      from: instance.critique_summary.out
+
+schemas:
+  SummaryDraft:
+    type: object
+    properties:
+      text:
+        type: string
+
+  SummaryCritique:
+    type: object
+    properties:
+      is_accurate:
+        type: boolean
+      unsupported_claims:
+        type: array
+        items:
+          type: string
+      missing_key_points:
+        type: array
+        items:
+          type: string
+      clarity_issues:
+        type: array
+        items:
+          type: string
+      revision_instructions:
+        type: array
+        items:
+          type: string
+
+  FinalSummary:
+    type: object
+    properties:
+      text:
+        type: string
+
+nodes:
+  text_summarizer:
+    kind: inference
+    inputs:
+      article: string
+    outputs:
+      out: SummaryDraft
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Summarize the article into a concise draft that captures the main ideas
+        and key supporting details.
+
+  summary_critic:
+    kind: inference
+    inputs:
+      article: string
+      draft: SummaryDraft
+    outputs:
+      out: SummaryCritique
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Review the draft summary against the source article. Identify unsupported
+        claims, missing key points, clarity issues, and produce actionable
+        revision instructions.
+
+  summary_reviser:
+    kind: inference
+    inputs:
+      article: string
+      draft: SummaryDraft
+      critique: SummaryCritique
+    outputs:
+      out: FinalSummary
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Rewrite the summary using the critique. Preserve accuracy, include
+        missing important points, remove unsupported claims, and improve clarity.
+
+flow:
+  instances:
+    summarize_article:
+      node: text_summarizer
+      inputs:
+        article: workflow_input.article_text
+
+    critique_summary:
+      node: summary_critic
+      inputs:
+        article: workflow_input.article_text
+        draft: instance.summarize_article.out
+
+    revise_summary:
+      node: summary_reviser
+      inputs:
+        article: workflow_input.article_text
+        draft: instance.summarize_article.out
+        critique: instance.critique_summary.out
