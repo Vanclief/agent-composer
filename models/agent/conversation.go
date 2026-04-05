@@ -27,7 +27,7 @@ type Conversation struct {
 	bun.BaseModel `bun:"table:conversations"`
 
 	ID                     uuid.UUID              `bun:",pk,type:uuid" json:"id"`
-	AgentSpecID            uuid.UUID              `bun:"type:uuid" json:"agent_spec_id"`
+	NodeExecutionID        uuid.UUID              `bun:"type:uuid,nullzero" json:"node_execution_id,omitempty"`
 	SessionID              string                 `json:"session_id,omitempty"`
 	AgentName              string                 `json:"agent_name"`
 	Harness                Harness                `json:"harness"`
@@ -42,6 +42,8 @@ type Conversation struct {
 	Instructions           string                 `json:"instructions"`
 	Tools                  []types.ToolDefinition `bun:"type:jsonb,nullzero" json:"-"`
 	Messages               []types.Message        `bun:"type:jsonb,nullzero" json:"messages"`
+	InputSnapshot          map[string]any         `bun:"type:jsonb,nullzero" json:"input_snapshot,omitempty"`
+	OutputSnapshot         map[string]any         `bun:"type:jsonb,nullzero" json:"output_snapshot,omitempty"`
 	Metadata               map[string]any         `bun:"type:jsonb,nullzero" json:"metadata"`
 	Status                 ConversationStatus     `json:"status"`
 	InputTokens            int64                  `json:"input_tokens"`
@@ -60,8 +62,6 @@ type Conversation struct {
 	StructuredOutputSchema json.RawMessage        `bun:"type:json,nullzero" json:"structured_output_schema"`
 }
 
-// ---- Constructor ----
-
 func (c *Conversation) AfterScanRow(ctx context.Context) error {
 	normalized, err := jsonutil.NormalizeJSONSchemaPropertiesOrder(c.StructuredOutputSchema)
 	if err == nil {
@@ -73,52 +73,13 @@ func (c *Conversation) AfterScanRow(ctx context.Context) error {
 	return nil
 }
 
-func NewConversation(agentSpec *Spec, messages []types.Message, metadata map[string]any) (*Conversation, error) {
-	const op = "agent.NewConversation"
-
-	id, err := uuid.NewV7()
-	if err != nil {
-		return nil, ez.Wrap(op, err)
-	}
-
-	conversation := &Conversation{
-		ID:                     id,
-		AgentSpecID:            agentSpec.ID,
-		AgentName:              agentSpec.Name,
-		Harness:                agentSpec.Harness,
-		Model:                  agentSpec.Model,
-		HarnessConfig:          CopyRawJSON(agentSpec.HarnessConfig),
-		ReasoningEffort:        normalizeReasoningEffort(agentSpec.ReasoningEffort),
-		Instructions:           agentSpec.Instructions,
-		Messages:               messages,
-		Metadata:               copyMetadata(metadata),
-		Status:                 ConversationStatusQueued,
-		CreatedAt:              time.Now().UTC(),
-		AutoCompact:            agentSpec.AutoCompact,
-		CompactAtPercent:       agentSpec.CompactAtPercent,
-		CompactionPrompt:       agentSpec.CompactionPrompt,
-		CompactCount:           0,
-		ShellAccess:            agentSpec.ShellAccess,
-		WebSearch:              agentSpec.WebSearch,
-		StructuredOutput:       agentSpec.StructuredOutput,
-		StructuredOutputSchema: agentSpec.StructuredOutputSchema,
-	}
-
-	err = conversation.Validate()
-	if err != nil {
-		return nil, ez.Wrap(op, err)
-	}
-
-	return conversation, nil
-}
-
 // ---- Validation ----
 
 func (c *Conversation) Validate() error {
 	const op = "Conversation.Validate"
 
-	if c.AgentSpecID == uuid.Nil {
-		return ez.New(op, ez.EINVALID, "agent_spec_id is required", nil)
+	if c.NodeExecutionID == uuid.Nil {
+		return ez.New(op, ez.EINVALID, "node_execution_id is required", nil)
 	}
 
 	if c.AgentName == "" {
@@ -213,62 +174,6 @@ func (c *Conversation) Delete(ctx context.Context, db bun.IDB) error {
 	return nil
 }
 
-func (c *Conversation) Clone(ctx context.Context, db bun.IDB, discardMessages bool) (*Conversation, error) {
-	const op = "Conversation.Clone"
-
-	if c == nil {
-		return nil, ez.New(op, ez.EINVALID, "conversation is nil", nil)
-	}
-
-	// Create a value copy so mutations don't affect the original object.
-	clone := *c
-	clone.Metadata = copyMetadata(c.Metadata)
-
-	id, err := uuid.NewV7()
-	if err != nil {
-		return nil, ez.Wrap(op, err)
-	}
-
-	clone.ID = id
-	clone.CreatedAt = time.Now().UTC()
-	clone.InputTokens = 0
-	clone.OutputTokens = 0
-	clone.CachedTokens = 0
-	clone.Cost = 0
-	clone.Status = ConversationStatusQueued
-	clone.HarnessSessionRef = ""
-	clone.HarnessState = nil
-	clone.RawHarnessOutput = ""
-	clone.HarnessExitCode = 0
-	clone.HarnessError = ""
-
-	if discardMessages {
-		clone.Messages = []types.Message{*types.NewSystemMessage(clone.Instructions)}
-	} else if len(c.Messages) > 0 {
-		clone.Messages = append([]types.Message(nil), c.Messages...)
-	}
-
-	_, err = db.NewInsert().Model(&clone).Exec(ctx)
-	if err != nil {
-		return nil, ez.Wrap(op, err)
-	}
-
-	return &clone, nil
-}
-
-func copyMetadata(src map[string]any) map[string]any {
-	if src == nil {
-		return nil
-	}
-
-	dst := make(map[string]any, len(src))
-	for k, v := range src {
-		dst[k] = v
-	}
-
-	return dst
-}
-
 // ---- Queries ----
 
 func GetConversationByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*Conversation, error) {
@@ -289,17 +194,18 @@ func GetConversationByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*Conver
 	return conversation, nil
 }
 
-func GetConversationsBySpecID(ctx context.Context, db bun.IDB, agentSpecID uuid.UUID) ([]*Conversation, error) {
-	const op = "agent.GetConversationsBySpecID"
+func GetConversationsByNodeExecutionID(ctx context.Context, db bun.IDB, nodeExecutionID uuid.UUID) ([]*Conversation, error) {
+	const op = "agent.GetConversationsByNodeExecutionID"
 
 	var conversations []*Conversation
 	err := db.NewSelect().
 		Model(&conversations).
-		Where("conversation.agent_spec_id = ?", agentSpecID).
+		Where("conversation.node_execution_id = ?", nodeExecutionID).
 		Scan(ctx)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
+
 	return conversations, nil
 }
 

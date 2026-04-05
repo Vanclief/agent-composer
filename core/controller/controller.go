@@ -15,6 +15,11 @@ import (
 
 const DEFAULT_CONFIG_DIR = ".agent_composer/config"
 
+const (
+	hardcodedEnvironment      = "LOCAL"
+	hardcodedPostgresPassword = "postgres"
+)
+
 type Controller struct {
 	ctrl.BaseController
 	Config  Config
@@ -24,6 +29,19 @@ type Controller struct {
 
 func New() (*Controller, error) {
 	const op = "Controller.New"
+
+	// TODO: Remove these hardcoded local defaults when Agent Composer switches
+	// from Postgres to SQLite. Startup should not depend on Postgres-specific
+	// environment values once SQLite is the default runtime store.
+	err := os.Setenv("ENVIRONMENT", hardcodedEnvironment)
+	if err != nil {
+		return nil, ez.Wrap(op, err)
+	}
+
+	err = os.Setenv("POSTGRES_PASSWORD", hardcodedPostgresPassword)
+	if err != nil {
+		return nil, ez.Wrap(op, err)
+	}
 
 	// Create a new instance
 	controller := &Controller{}

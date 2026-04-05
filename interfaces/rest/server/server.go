@@ -6,10 +6,10 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/vanclief/agent-composer/core/controller"
-	"github.com/vanclief/agent-composer/core/resources/agents"
-	"github.com/vanclief/agent-composer/core/resources/agents/conversations"
-	"github.com/vanclief/agent-composer/core/resources/agents/specs"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
+	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
+	workflowexecutions "github.com/vanclief/agent-composer/core/resources/workflow/executions"
+	workflownodeexecutions "github.com/vanclief/agent-composer/core/resources/workflow/nodeexecutions"
 	"github.com/vanclief/agent-composer/models/user"
 	"github.com/vanclief/compose/components/ratelimit"
 	"github.com/vanclief/compose/components/rest/requests"
@@ -19,18 +19,18 @@ import (
 type Server struct {
 	Ctrl        *controller.Controller
 	RateLimiter *ratelimit.WindowCounter
-	AgentsAPI   *agents.API
 	HooksAPI    *hooks.API
+	WorkflowAPI *workflowapi.API
 }
 
-func New(ctrl *controller.Controller, agentsAPI *agents.API, hooksAPI *hooks.API) *Server {
+func New(ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API) *Server {
 	limiter := ratelimit.NewWindowCounter(ctrl.Config.App.RateLimitWindow, ctrl.Config.App.RateLimit)
 
 	return &Server{
 		Ctrl:        ctrl,
 		RateLimiter: limiter,
-		AgentsAPI:   agentsAPI,
 		HooksAPI:    hooksAPI,
+		WorkflowAPI: workflowAPI,
 	}
 }
 
@@ -58,32 +58,6 @@ func (s *Server) HandleRequest(request requests.Request) (interface{}, error) {
 
 func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 	switch body := request.GetBody().(type) {
-	case *specs.ListRequest:
-		return s.AgentsAPI.AgentSpecs.List(request.GetContext(), nil, body)
-	case *specs.GetRequest:
-		return s.AgentsAPI.AgentSpecs.Get(request.GetContext(), nil, body)
-	case *specs.CreateRequest:
-		return s.AgentsAPI.AgentSpecs.Create(request.GetContext(), nil, body)
-	case *specs.UpdateRequest:
-		return s.AgentsAPI.AgentSpecs.Update(request.GetContext(), nil, body)
-	case *specs.DeleteRequest:
-		return s.AgentsAPI.AgentSpecs.Delete(request.GetContext(), nil, body)
-
-	case *conversations.ListRequest:
-		return s.AgentsAPI.Conversations.List(request.GetContext(), nil, body)
-	case *conversations.GetRequest:
-		return s.AgentsAPI.Conversations.Get(request.GetContext(), nil, body)
-	case *conversations.CreateRequest:
-		return s.AgentsAPI.Conversations.Create(request.GetContext(), nil, body)
-	case *conversations.UpdateRequest:
-		return s.AgentsAPI.Conversations.Update(request.GetContext(), nil, body)
-	case *conversations.ForkRequest:
-		return s.AgentsAPI.Conversations.Fork(request.GetContext(), nil, body)
-	case *conversations.ResumeRequest:
-		return s.AgentsAPI.Conversations.Resume(request.GetContext(), nil, body)
-	case *conversations.DeleteRequest:
-		return s.AgentsAPI.Conversations.Delete(request.GetContext(), nil, body)
-
 	case *hooks.ListRequest:
 		return s.HooksAPI.List(request.GetContext(), nil, body)
 	case *hooks.GetRequest:
@@ -94,6 +68,17 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.HooksAPI.Update(request.GetContext(), nil, body)
 	case *hooks.DeleteRequest:
 		return s.HooksAPI.Delete(request.GetContext(), nil, body)
+
+	case *workflowexecutions.CreateRequest:
+		return s.WorkflowAPI.Executions.Create(request.GetContext(), nil, body)
+	case *workflowexecutions.ListRequest:
+		return s.WorkflowAPI.Executions.List(request.GetContext(), nil, body)
+	case *workflowexecutions.GetRequest:
+		return s.WorkflowAPI.Executions.Get(request.GetContext(), nil, body)
+	case *workflownodeexecutions.ListRequest:
+		return s.WorkflowAPI.NodeExecutions.List(request.GetContext(), nil, body)
+	case *workflownodeexecutions.GetRequest:
+		return s.WorkflowAPI.NodeExecutions.Get(request.GetContext(), nil, body)
 
 	default:
 		return nil, ez.New("rest.Server.handleRequest", ez.EINVALID, "Unsupported request type", nil)

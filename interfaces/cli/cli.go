@@ -2,8 +2,10 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/rs/zerolog/log"
@@ -13,10 +15,11 @@ import (
 
 	"github.com/vanclief/agent-composer/core"
 	"github.com/vanclief/agent-composer/core/controller"
+	workflowexecutions "github.com/vanclief/agent-composer/core/resources/workflow/executions"
 	"github.com/vanclief/agent-composer/interfaces/rest"
 	restserver "github.com/vanclief/agent-composer/interfaces/rest/server"
-	"github.com/vanclief/agent-composer/interfaces/tui"
 	appmigrations "github.com/vanclief/agent-composer/models/migrations"
+	"github.com/vanclief/ez"
 )
 
 const version = "0.2.15"
@@ -36,21 +39,15 @@ func Run(ctx context.Context, args []string) error {
 			},
 		},
 		Action: func(c *cli.Context) error {
-			return runTUI(c.Context, c.String("shell-root"))
+			return cli.ShowAppHelp(c)
 		},
 		Commands: []*cli.Command{
+			workflowRunCommand(),
 			{
 				Name:  "rest",
 				Usage: "Start the REST server",
 				Action: func(c *cli.Context) error {
 					return runServer(c.Context, c.String("shell-root"))
-				},
-			},
-			{
-				Name:  "tui",
-				Usage: "Start the terminal UI",
-				Action: func(c *cli.Context) error {
-					return runTUI(c.Context, c.String("shell-root"))
 				},
 			},
 			{
@@ -80,14 +77,42 @@ func Run(ctx context.Context, args []string) error {
 	return app.RunContext(ctx, args)
 }
 
+func workflowRunCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "run",
+		Usage: "Compile and run a workflow blueprint from the registry or disk",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "id",
+				Usage: "Workflow blueprint id from the workflow registry",
+			},
+			&cli.StringFlag{
+				Name:  "file",
+				Usage: "Path to the workflow blueprint YAML file",
+				Value: "specs/dsl/examples/pipeline-summary-critique-revise.yaml",
+			},
+			&cli.StringFlag{
+				Name:  "input-file",
+				Usage: "Path to a JSON file containing workflow inputs",
+			},
+			&cli.StringFlag{
+				Name:  "input-json",
+				Usage: "Inline JSON object containing workflow inputs",
+			},
+		},
+		Action: func(c *cli.Context) error {
+			return runWorkflow(c.Context, c.String("id"), c.String("file"), c.String("input-file"), c.String("input-json"), c.String("shell-root"))
+		},
+	}
+}
+
 func runServer(ctx context.Context, shellRoot string) error {
 	stack, err := core.NewStack(ctx, core.StackOptions{ShellRoot: shellRoot})
 	if err != nil {
 		return err
 	}
 
-	app := restserver.New(stack.Controller, stack.AgentsAPI, stack.HooksAPI)
-
+	app := restserver.New(stack.Controller, stack.HooksAPI, stack.WorkflowAPI)
 	group, gctx := errgroup.WithContext(ctx)
 
 	group.Go(func() error {
@@ -188,31 +213,62 @@ func migrationMatches(target string, migration migrate.Migration) bool {
 	return false
 }
 
-func runTUI(ctx context.Context, shellRoot string) error {
+func runWorkflow(ctx context.Context, workflowID string, filePath string, inputFile string, inputJSON string, shellRoot string) error {
 	stack, err := core.NewStack(ctx, core.StackOptions{ShellRoot: shellRoot})
 	if err != nil {
 		return err
 	}
 
-	group, gctx := errgroup.WithContext(ctx)
+	defer stack.Controller.DB.Close() // nolint:errcheck // Close errors are not actionable here.
 
-	group.Go(func() error {
-		stack.StartScheduler(gctx)
-		return nil
-	})
-
-	group.Go(func() error {
-		err := tui.Start(gctx, stack)
-		if err != nil && !errors.Is(err, context.Canceled) {
-			return err
-		}
-		return context.Canceled
-	})
-
-	err = group.Wait()
-	if err != nil && !errors.Is(err, context.Canceled) {
+	input, err := loadWorkflowInput(strings.TrimSpace(inputFile), strings.TrimSpace(inputJSON))
+	if err != nil {
 		return err
 	}
 
+	response, err := stack.WorkflowAPI.Executions.Create(ctx, nil, &workflowexecutions.CreateRequest{
+		WorkflowID: strings.TrimSpace(workflowID),
+		File:       strings.TrimSpace(filePath),
+		Input:      input,
+		ShellRoot:  strings.TrimSpace(shellRoot),
+	})
+	if err != nil {
+		return err
+	}
+
+	encoded, err := json.MarshalIndent(response.Output, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(string(encoded))
+
 	return nil
+}
+
+func loadWorkflowInput(inputFile string, inputJSON string) (map[string]any, error) {
+	const op = "cli.loadWorkflowInput"
+
+	if inputFile == "" && inputJSON == "" {
+		return nil, ez.New(op, ez.EINVALID, "one of --input-file or --input-json is required", nil)
+	}
+
+	var raw []byte
+	if inputFile != "" {
+		content, err := os.ReadFile(inputFile)
+		if err != nil {
+			return nil, ez.Wrap(op, err)
+		}
+		raw = content
+	} else {
+		raw = []byte(inputJSON)
+	}
+
+	var input map[string]any
+	err := json.Unmarshal(raw, &input)
+	if err != nil {
+		return nil, ez.Wrap(op, err)
+	}
+
+	return input, nil
 }

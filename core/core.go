@@ -7,8 +7,8 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/vanclief/agent-composer/core/controller"
-	"github.com/vanclief/agent-composer/core/resources/agents"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
+	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
 	"github.com/vanclief/agent-composer/runtime"
 	"github.com/vanclief/compose/components/logger"
 	"github.com/vanclief/compose/components/scheduler"
@@ -18,11 +18,11 @@ const tickTime = 1 * time.Minute
 
 // Stack represents the core services required by any interface.
 type Stack struct {
-	Controller *controller.Controller
-	Scheduler  *scheduler.Scheduler
-	Runtime    *runtime.Runtime
-	AgentsAPI  *agents.API
-	HooksAPI   *hooks.API
+	Controller  *controller.Controller
+	Scheduler   *scheduler.Scheduler
+	Runtime     *runtime.Runtime
+	HooksAPI    *hooks.API
+	WorkflowAPI *workflowapi.API
 }
 
 type StackOptions struct {
@@ -52,15 +52,15 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		return nil, err
 	}
 
-	agentsAPI := agents.NewAPI(ctrl, rt)
 	hooksAPI := hooks.NewAPI(ctrl, rt)
+	workflowAPI := workflowapi.NewAPI(ctrl, rt)
 
 	return &Stack{
-		Controller: ctrl,
-		Scheduler:  sch,
-		Runtime:    rt,
-		AgentsAPI:  agentsAPI,
-		HooksAPI:   hooksAPI,
+		Controller:  ctrl,
+		Scheduler:   sch,
+		Runtime:     rt,
+		HooksAPI:    hooksAPI,
+		WorkflowAPI: workflowAPI,
 	}, nil
 }
 

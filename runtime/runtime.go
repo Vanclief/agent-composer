@@ -60,3 +60,11 @@ func (rt *Runtime) ValidateHarness(ctx context.Context, kind agent.Harness, mode
 
 	return nil
 }
+
+func (rt *Runtime) ShellRoot() string {
+	if rt == nil {
+		return ""
+	}
+
+	return rt.shellRoot
+}

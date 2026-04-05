@@ -10,25 +10,6 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	// API
 	api := e.Group("/api")
 
-	// Agents
-	agents := api.Group("/agents")
-
-	specs := agents.Group("/specs")
-	specs.GET("", h.ListAgentSpecs)
-	specs.GET("/:id", h.GetAgentSpec)
-	specs.POST("", h.CreateAgentSpec)
-	specs.PUT("/:id", h.UpdateAgentSpec)
-	specs.DELETE("/:id", h.DeleteAgentSpec)
-
-	conversations := agents.Group("/conversations")
-	conversations.GET("", h.ListConversations)
-	conversations.POST("", h.CreateConversation)
-	conversations.GET("/:id", h.GetConversation)
-	conversations.PUT("/:id", h.UpdateConversation)
-	conversations.POST("/:id/fork", h.ForkConversation)
-	conversations.POST("/:id/resume", h.ResumeConversation)
-	conversations.DELETE("/:id", h.DeleteConversation)
-
 	// Hooks
 	hooks := api.Group("/hooks")
 	hooks.GET("", h.ListHooks)
@@ -36,4 +17,14 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	hooks.POST("", h.CreateHook)
 	hooks.PUT("/:id", h.UpdateHook)
 	hooks.DELETE("/:id", h.DeleteHook)
+
+	workflow := api.Group("/workflow")
+	workflowExecutions := workflow.Group("/executions")
+	workflowExecutions.GET("", h.ListWorkflowExecutions)
+	workflowExecutions.POST("", h.CreateWorkflowExecution)
+	workflowExecutions.GET("/:id", h.GetWorkflowExecution)
+
+	workflowNodeExecutions := workflow.Group("/node-executions")
+	workflowNodeExecutions.GET("", h.ListNodeExecutions)
+	workflowNodeExecutions.GET("/:id", h.GetNodeExecution)
 }

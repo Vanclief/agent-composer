@@ -11,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/vanclief/agent-composer/core/helpers/jsonutil"
 	"github.com/vanclief/agent-composer/models/agent"
 	"github.com/vanclief/ez"
 )
@@ -77,12 +78,34 @@ func (c *CodexCLI) Run(ctx context.Context, conversation *agent.Conversation, pr
 
 	defer os.Remove(lastMessagePath)
 
+	schemaPath := ""
+	if hasStructuredOutputSchema(conversation.StructuredOutputSchema) {
+		schemaFile, err := os.CreateTemp("", "agent-composer-codex-output-schema-*.json")
+		if err != nil {
+			return nil, ez.Wrap(op, err)
+		}
+		schemaPath = schemaFile.Name()
+
+		_, err = schemaFile.Write(conversation.StructuredOutputSchema)
+		if err != nil {
+			schemaFile.Close()
+			return nil, ez.Wrap(op, err)
+		}
+
+		err = schemaFile.Close()
+		if err != nil {
+			return nil, ez.Wrap(op, err)
+		}
+
+		defer os.Remove(schemaPath)
+	}
+
 	workdir := strings.TrimSpace(conversation.ShellRoot)
 	if workdir == "" {
 		workdir = "."
 	}
 
-	args := c.buildArgs(conversation, cfg, prompt, lastMessagePath)
+	args := c.buildArgs(conversation, cfg, prompt, lastMessagePath, schemaPath)
 
 	cmd := exec.CommandContext(ctx, "codex", args...)
 	cmd.Dir = workdir
@@ -137,13 +160,18 @@ func (c *CodexCLI) Run(ctx context.Context, conversation *agent.Conversation, pr
 			return result, ez.New(op, ez.EUNAVAILABLE, "codex run canceled", ctx.Err())
 		}
 
-		return result, ez.New(op, ez.EINTERNAL, "codex run failed", runErr)
+		message := "codex run failed"
+		if strings.TrimSpace(harnessError) != "" {
+			message = message + ": " + strings.TrimSpace(harnessError)
+		}
+
+		return result, ez.New(op, ez.EINTERNAL, message, runErr)
 	}
 
 	return result, nil
 }
 
-func (c *CodexCLI) buildArgs(conversation *agent.Conversation, cfg codexCLIConfig, prompt string, lastMessagePath string) []string {
+func (c *CodexCLI) buildArgs(conversation *agent.Conversation, cfg codexCLIConfig, prompt string, lastMessagePath string, schemaPath string) []string {
 	args := []string{"exec"}
 
 	if strings.TrimSpace(conversation.HarnessSessionRef) != "" {
@@ -171,6 +199,9 @@ func (c *CodexCLI) buildArgs(conversation *agent.Conversation, cfg codexCLIConfi
 	args = append(args, "--json")
 	args = append(args, "-m", conversation.Model)
 	args = append(args, "-o", lastMessagePath)
+	if strings.TrimSpace(schemaPath) != "" {
+		args = append(args, "--output-schema", schemaPath)
+	}
 
 	if cfg.FullAuto {
 		args = append(args, "--full-auto")
@@ -203,6 +234,15 @@ func (c *CodexCLI) buildArgs(conversation *agent.Conversation, cfg codexCLIConfi
 	}
 
 	return args
+}
+
+func hasStructuredOutputSchema(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || jsonutil.IsNullRawMessage(trimmed) {
+		return false
+	}
+
+	return json.Valid(trimmed)
 }
 
 func parseCodexCLIConfig(raw json.RawMessage) (codexCLIConfig, error) {

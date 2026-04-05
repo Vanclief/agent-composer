@@ -58,10 +58,10 @@ CREATE DATABASE agent_composer OWNER agent_composer;
 Create a `.env` file in the directory where you’ll run the server:
 
 ```dotenv
-ENVIRONMENT="LOCAL"      # "LOCAL", "STAGING", "PRODUCTION", etc
-POSTGRES_PASSWORD=""     # Your Postgres password
-OPENAI_API_KEY="sk-xxxx" # Your OpenAI key
+OPENAI_API_KEY="sk-xxxx" # Optional. Only needed for OpenAI-backed features.
 ```
+
+`ENVIRONMENT` and `POSTGRES_PASSWORD` are currently hardcoded in the app for local development.
 
 Load it:
 
@@ -91,6 +91,14 @@ agc
 
 ```bash
 agc rest
+```
+
+**Run a workflow**
+
+```bash
+agc run \
+  --id binary_vote_round \
+  --input-json '{"question":"Are cats blue?"}'
 ```
 
 ## Updating
