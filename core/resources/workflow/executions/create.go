@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation"
+	executionmodels "github.com/vanclief/agent-composer/models/execution"
 
 	workflowruntime "github.com/vanclief/agent-composer/workflow"
 	"github.com/vanclief/ez"
@@ -43,8 +44,60 @@ type CreateResponse struct {
 	Output          map[string]any `json:"output"`
 }
 
+type StartResponse struct {
+	ExecutionID     string                                 `json:"execution_id,omitempty"`
+	WorkflowID      string                                 `json:"workflow_id"`
+	WorkflowVersion string                                 `json:"workflow_version"`
+	Status          executionmodels.WorkflowExecutionStatus `json:"status"`
+}
+
 func (api *API) Create(ctx context.Context, requester interface{}, request *CreateRequest) (*CreateResponse, error) {
 	const op = "workflow.executions.API.Create"
+
+	prepared, err := api.prepareExecution(request)
+	if err != nil {
+		return nil, ez.Wrap(op, err)
+	}
+
+	output, handle, err := prepared.Executor.RunWithHandle(ctx, prepared.Snapshot, request.Input)
+	executionID := ""
+	if handle != nil {
+		executionID = handle.ID.String()
+	}
+
+	if err != nil {
+		details := ExecutionFailureDetails{
+			ExecutionID:     executionID,
+			WorkflowID:      prepared.Snapshot.WorkflowID,
+			WorkflowVersion: prepared.Snapshot.WorkflowVersion,
+		}
+
+		enrichedDetails, enrichErr := loadExecutionFailureDetails(ctx, api.db, details)
+		if enrichErr == nil {
+			details = enrichedDetails
+		}
+
+		return nil, &ExecutionFailedError{
+			Details: details,
+			Err:     ez.Wrap(op, err),
+		}
+	}
+
+	return &CreateResponse{
+		ExecutionID:     executionID,
+		WorkflowID:      prepared.Snapshot.WorkflowID,
+		WorkflowVersion: prepared.Snapshot.WorkflowVersion,
+		Output:          output,
+	}, nil
+}
+
+type preparedExecution struct {
+	Snapshot *workflowruntime.Snapshot
+	Executor *workflowruntime.Executor
+}
+
+func (api *API) prepareExecution(request *CreateRequest) (*preparedExecution, error) {
+	const op = "workflow.executions.API.prepareExecution"
 
 	err := request.Validate()
 	if err != nil {
@@ -71,21 +124,9 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 		executor.Recorder = api.newRecorder()
 	}
 
-	output, handle, err := executor.RunWithHandle(ctx, snapshot, request.Input)
-	if err != nil {
-		return nil, ez.Wrap(op, err)
-	}
-
-	executionID := ""
-	if handle != nil {
-		executionID = handle.ID.String()
-	}
-
-	return &CreateResponse{
-		ExecutionID:     executionID,
-		WorkflowID:      snapshot.WorkflowID,
-		WorkflowVersion: snapshot.WorkflowVersion,
-		Output:          output,
+	return &preparedExecution{
+		Snapshot: snapshot,
+		Executor: executor,
 	}, nil
 }
 

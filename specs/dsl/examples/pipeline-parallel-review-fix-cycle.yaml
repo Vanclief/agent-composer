@@ -31,7 +31,6 @@ schemas:
         type: boolean
       question_for_human:
         type: string
-        optional: true
 
   ReviewIssueList:
     type: array
@@ -115,7 +114,9 @@ nodes:
         Review the current codebase against the coding task and implementation
         summary. Return only concrete issues. If an issue depends on ambiguous
         requirements or missing product intent, set requires_human_input to true
-        and include a concise question_for_human.
+        and include a concise question_for_human. Always include
+        question_for_human, using an empty string when no human input is
+        needed.
 
   reviewer_b:
     kind: inference
@@ -133,7 +134,9 @@ nodes:
         Review the current codebase against the coding task and implementation
         summary. Return only concrete issues. If an issue depends on ambiguous
         requirements or missing product intent, set requires_human_input to true
-        and include a concise question_for_human.
+        and include a concise question_for_human. Always include
+        question_for_human, using an empty string when no human input is
+        needed.
 
   reviewer_c:
     kind: inference
@@ -151,7 +154,9 @@ nodes:
         Review the current codebase against the coding task and implementation
         summary. Return only concrete issues. If an issue depends on ambiguous
         requirements or missing product intent, set requires_human_input to true
-        and include a concise question_for_human.
+        and include a concise question_for_human. Always include
+        question_for_human, using an empty string when no human input is
+        needed.
 
   merged_review_issues:
     kind: connector

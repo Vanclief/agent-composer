@@ -52,6 +52,112 @@ func isObjectSchema(schema map[string]any) bool {
 	return false
 }
 
+func schemaTypeIncludes(schema map[string]any, expected string) bool {
+	if schema == nil {
+		return false
+	}
+
+	rawType, found := schema["type"]
+	if !found {
+		return false
+	}
+
+	switch typed := rawType.(type) {
+	case string:
+		return typed == expected
+	case []any:
+		for _, value := range typed {
+			text, ok := value.(string)
+			if ok && text == expected {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func validateStrictStructuredOutputSchema(schema map[string]any, path string) error {
+	if schema == nil {
+		return nil
+	}
+
+	if schemaTypeIncludes(schema, "array") {
+		rawItems, found := schema["items"]
+		if !found {
+			return fmt.Errorf("array schema at %s is missing items", path)
+		}
+
+		items, ok := rawItems.(map[string]any)
+		if !ok {
+			return fmt.Errorf("array schema at %s has invalid items", path)
+		}
+
+		return validateStrictStructuredOutputSchema(items, path+".items")
+	}
+
+	if !isObjectSchema(schema) {
+		return nil
+	}
+
+	rawProperties, found := schema["properties"]
+	if !found {
+		return fmt.Errorf("object schema at %s is missing properties", path)
+	}
+
+	properties, ok := rawProperties.(map[string]any)
+	if !ok {
+		return fmt.Errorf("object schema at %s has invalid properties", path)
+	}
+
+	rawRequired, found := schema["required"]
+	if !found {
+		return fmt.Errorf("object schema at %s must declare required for every property; optional object fields are not supported in structured outputs", path)
+	}
+
+	required := map[string]struct{}{}
+	switch typed := rawRequired.(type) {
+	case []string:
+		for _, name := range typed {
+			required[name] = struct{}{}
+		}
+	case []any:
+		for _, value := range typed {
+			name, ok := value.(string)
+			if !ok {
+				return fmt.Errorf("object schema at %s has a non-string required entry", path)
+			}
+			required[name] = struct{}{}
+		}
+	default:
+		return fmt.Errorf("object schema at %s has invalid required", path)
+	}
+
+	propertyNames := make([]string, 0, len(properties))
+	for propertyName := range properties {
+		propertyNames = append(propertyNames, propertyName)
+	}
+	sort.Strings(propertyNames)
+
+	for _, propertyName := range propertyNames {
+		if _, found := required[propertyName]; !found {
+			return fmt.Errorf("object schema at %s marks property %q as optional; optional object fields are not supported in structured outputs", path, propertyName)
+		}
+
+		childSchema, ok := properties[propertyName].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		err := validateStrictStructuredOutputSchema(childSchema, path+"."+propertyName)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func buildNodeShape(blueprint *Blueprint, nodeName string, nodeSpec NodeSpec) (compiledNodeShape, error) {
 	inputOrder := orderedPortNames(blueprint.NodeInputOrder[nodeName], nodeSpec.Inputs)
 	inputPorts, err := buildInputPorts(blueprint, nodeName, nodeSpec.Inputs, inputOrder)
@@ -90,6 +196,11 @@ func buildNodeShape(blueprint *Blueprint, nodeName string, nodeSpec NodeSpec) (c
 	shape.Model = model
 	shape.ReasoningEffort = effort
 	shape.HarnessConfig = harnessConfig
+
+	err = validateStrictStructuredOutputSchema(structuredOutputSchema, "response")
+	if err != nil {
+		return compiledNodeShape{}, fmt.Errorf("node %q structured output schema: %w", nodeName, err)
+	}
 
 	return shape, nil
 }
@@ -429,6 +540,11 @@ func buildWhileLoopTarget(blueprint *Blueprint, loopSpec NodeSpec, loopNodeName 
 	err = validateWhileLoopShape(loopNodeName, updates, loopShape, targetName, targetInputs, updateSchema, breakSchema)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	err = validateStrictStructuredOutputSchema(structuredOutputSchema, "response")
+	if err != nil {
+		return nil, nil, fmt.Errorf("while target %q structured output schema: %w", targetName, err)
 	}
 
 	harnessID, model, effort, harnessConfig, err := parseHarnessConfig(targetSpec.Config.Harness)

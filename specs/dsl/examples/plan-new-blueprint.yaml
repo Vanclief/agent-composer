@@ -1,0 +1,116 @@
+workflow:
+  id: plan-new-blueprint
+  version: "1"
+  description: >
+    Plan a new AGC workflow blueprint by drafting an initial blueprint plan and
+    then iterating through review and DSL validation until it is either ready
+    to implement or blocked by open human questions.
+  inputs:
+    blueprint_request: string
+  outputs:
+    plan_state:
+      schema: BlueprintPlanState
+      from: instance.plan_loop.plan_state
+
+schemas:
+  PlanIssue:
+    type: object
+    properties:
+      title:
+        type: string
+      description:
+        type: string
+      severity:
+        type: string
+        enum: [low, medium, high]
+      requires_human_input:
+        type: boolean
+      question_for_human:
+        type: string
+
+  PlanIssueList:
+    type: array
+    items:
+      schema_ref: PlanIssue
+
+  PendingQuestion:
+    type: object
+    properties:
+      question:
+        type: string
+      issue_title:
+        type: string
+      rationale:
+        type: string
+
+  PendingQuestionList:
+    type: array
+    items:
+      schema_ref: PendingQuestion
+
+  BlueprintPlanState:
+    type: object
+    properties:
+      proposed_workflow_id:
+        type: string
+      blueprint_plan:
+        type: string
+      actionable_issues:
+        schema_ref: PlanIssueList
+      pending_questions:
+        schema_ref: PendingQuestionList
+      validation_summary:
+        type: string
+      ready_to_implement:
+        type: boolean
+      iteration:
+        type: integer
+
+nodes:
+  initial_plan_state_builder:
+    kind: inference
+    inputs:
+      blueprint_request: string
+    outputs:
+      plan_state: BlueprintPlanState
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Build an initial BlueprintPlanState for blueprint_request. Set
+        proposed_workflow_id and blueprint_plan to empty strings,
+        actionable_issues to an empty list, pending_questions to an empty list,
+        validation_summary to a short sentence saying no review has run yet,
+        ready_to_implement to false, and iteration to 0.
+
+  blueprint_plan_cycle_worker:
+    kind: workflow
+    workflow_id: blueprint-plan-cycle
+
+  plan_loop:
+    kind: loop
+    operation: while
+    executes: blueprint_plan_cycle_worker
+    updates: plan_state
+    breaks_on: should_stop
+    inputs:
+      blueprint_request: string
+      plan_state: BlueprintPlanState
+    outputs:
+      plan_state: BlueprintPlanState
+    max_iterations: 6
+
+flow:
+  instances:
+    initial_plan_state:
+      node: initial_plan_state_builder
+      inputs:
+        blueprint_request: workflow_input.blueprint_request
+
+    plan_loop:
+      node: plan_loop
+      inputs:
+        blueprint_request: workflow_input.blueprint_request
+        plan_state: instance.initial_plan_state.plan_state

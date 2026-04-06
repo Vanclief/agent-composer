@@ -19,15 +19,37 @@ func (e *Executor) Run(ctx context.Context, snapshot *Snapshot, input map[string
 	return output, err
 }
 
+func (e *Executor) Start(ctx context.Context, snapshot *Snapshot, input map[string]any) (*WorkflowExecutionHandle, error) {
+	const op = "workflow.Executor.Start"
+
+	err := e.validateRunnableSnapshot(snapshot)
+	if err != nil {
+		return nil, ez.Wrap(op, err)
+	}
+
+	if e.Recorder == nil {
+		return nil, ez.New(op, ez.EINTERNAL, "execution recorder is nil", nil)
+	}
+
+	handle, err := e.Recorder.StartWorkflow(ctx, snapshot, input, e.ShellRoot)
+	if err != nil {
+		return nil, ez.Wrap(op, err)
+	}
+
+	workflowHandle := handle
+	runInput := cloneMap(input)
+
+	go e.runDetached(ctx, snapshot, runInput, workflowHandle)
+
+	return &workflowHandle, nil
+}
+
 func (e *Executor) RunWithHandle(ctx context.Context, snapshot *Snapshot, input map[string]any) (map[string]any, *WorkflowExecutionHandle, error) {
 	const op = "workflow.Executor.Run"
 
-	if snapshot == nil {
-		return nil, nil, ez.New(op, ez.EINVALID, "workflow snapshot is nil", nil)
-	}
-
-	if e.NewHarness == nil {
-		return nil, nil, ez.New(op, ez.EINTERNAL, "harness factory is nil", nil)
+	err := e.validateRunnableSnapshot(snapshot)
+	if err != nil {
+		return nil, nil, ez.Wrap(op, err)
 	}
 
 	var workflowHandle *WorkflowExecutionHandle
@@ -42,20 +64,13 @@ func (e *Executor) RunWithHandle(ctx context.Context, snapshot *Snapshot, input 
 
 	output, err := e.runSnapshot(ctx, snapshot, input, workflowHandle, NodeExecutionScope{})
 
-	if workflowHandle != nil && e.Recorder != nil {
-		status := executionmodels.WorkflowExecutionStatusSucceeded
+	finishErr := e.finishWorkflow(ctx, workflowHandle, output, err)
+	if finishErr != nil {
 		if err != nil {
-			status = executionmodels.WorkflowExecutionStatusFailed
+			return nil, workflowHandle, ez.New(op, ez.EINTERNAL, "workflow execution failed and finish workflow also failed", finishErr)
 		}
 
-		finishErr := e.Recorder.FinishWorkflow(ctx, *workflowHandle, output, status)
-		if finishErr != nil {
-			if err != nil {
-				return nil, workflowHandle, ez.New(op, ez.EINTERNAL, "workflow execution failed and finish workflow also failed", finishErr)
-			}
-
-			return nil, workflowHandle, ez.Wrap(op, finishErr)
-		}
+		return nil, workflowHandle, ez.Wrap(op, finishErr)
 	}
 
 	if err != nil {
@@ -63,6 +78,45 @@ func (e *Executor) RunWithHandle(ctx context.Context, snapshot *Snapshot, input 
 	}
 
 	return output, workflowHandle, nil
+}
+
+func (e *Executor) validateRunnableSnapshot(snapshot *Snapshot) error {
+	const op = "workflow.Executor.validateRunnableSnapshot"
+
+	if snapshot == nil {
+		return ez.New(op, ez.EINVALID, "workflow snapshot is nil", nil)
+	}
+
+	if e.NewHarness == nil {
+		return ez.New(op, ez.EINTERNAL, "harness factory is nil", nil)
+	}
+
+	return nil
+}
+
+func (e *Executor) runDetached(ctx context.Context, snapshot *Snapshot, input map[string]any, workflowHandle WorkflowExecutionHandle) {
+	output, err := e.runSnapshot(ctx, snapshot, input, &workflowHandle, NodeExecutionScope{})
+	_ = e.finishWorkflow(ctx, &workflowHandle, output, err)
+}
+
+func (e *Executor) finishWorkflow(ctx context.Context, workflowHandle *WorkflowExecutionHandle, output map[string]any, runErr error) error {
+	const op = "workflow.Executor.finishWorkflow"
+
+	if workflowHandle == nil || e.Recorder == nil {
+		return nil
+	}
+
+	status := executionmodels.WorkflowExecutionStatusSucceeded
+	if runErr != nil {
+		status = executionmodels.WorkflowExecutionStatusFailed
+	}
+
+	err := e.Recorder.FinishWorkflow(ctx, *workflowHandle, output, status)
+	if err != nil {
+		return ez.Wrap(op, err)
+	}
+
+	return nil
 }
 
 func (e *Executor) runSnapshot(ctx context.Context, snapshot *Snapshot, input map[string]any, workflowHandle *WorkflowExecutionHandle, scope NodeExecutionScope) (map[string]any, error) {

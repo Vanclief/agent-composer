@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -27,11 +28,12 @@ type Stack struct {
 
 type StackOptions struct {
 	ShellRoot string
+	LogWriter io.Writer
 }
 
 // New builds the application stack (controller, scheduler, runtime, APIs).
 func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
-	ctrl, err := controller.New()
+	ctrl, err := controller.NewWithLogWriter(opts.LogWriter)
 	if err != nil {
 		return nil, err
 	}

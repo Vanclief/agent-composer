@@ -32,6 +32,13 @@ type WorkflowOutputSpec struct {
 	From   string `yaml:"from"`
 }
 
+type WorkflowSummary struct {
+	ID          string            `json:"id"`
+	Description string            `json:"description,omitempty"`
+	Inputs      map[string]string `json:"inputs"`
+	Outputs     map[string]string `json:"outputs"`
+}
+
 type SchemaSpec struct {
 	Type        string                `yaml:"type"`
 	SchemaRef   string                `yaml:"schema_ref"`

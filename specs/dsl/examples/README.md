@@ -1,5 +1,6 @@
 # DSL Examples
 
+- [blueprint-plan-cycle.yaml](blueprint-plan-cycle.yaml): one blueprint-planning review cycle with revise, review, DSL validation, and triage
 - [composition-article-summary-with-brief.yaml](composition-article-summary-with-brief.yaml): workflow composition plus one downstream inference step
 - [composition-loop-iterative-code-repair.yaml](composition-loop-iterative-code-repair.yaml): initial code implementation followed by a composed `while` review and repair loop
 - [conditional-boolean-routing-review.yaml](conditional-boolean-routing-review.yaml): conditional `if` node driven by a boolean output from an upstream inference node
@@ -9,3 +10,4 @@
 - [loop-while-binary-consensus.yaml](loop-while-binary-consensus.yaml): `while` loop with one evolving state value and one boolean break output
 - [pipeline-parallel-review-fix-cycle.yaml](pipeline-parallel-review-fix-cycle.yaml): one repair cycle with parallel reviewers, issue validation, and triage into next-step issues and pending questions
 - [pipeline-summary-critique-revise.yaml](pipeline-summary-critique-revise.yaml): multi-step inference pipeline with summarize, critique, and revise
+- [plan-new-blueprint.yaml](plan-new-blueprint.yaml): top-level blueprint planner that loops over review and DSL validation until ready or blocked

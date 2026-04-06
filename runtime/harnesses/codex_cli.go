@@ -139,10 +139,7 @@ func (c *CodexCLI) Run(ctx context.Context, conversation *agent.Conversation, pr
 	rawOutput := stdout.String()
 	summary := parseCodexRunSummary(rawOutput)
 
-	harnessError := strings.TrimSpace(stderr.String())
-	if harnessError == "" && len(summary.Errors) > 0 {
-		harnessError = strings.Join(summary.Errors, "\n")
-	}
+	harnessError := selectCodexHarnessError(strings.TrimSpace(stderr.String()), summary)
 
 	result := &RunResult{
 		LastAssistantMessage: lastAssistantMessage,
@@ -169,6 +166,41 @@ func (c *CodexCLI) Run(ctx context.Context, conversation *agent.Conversation, pr
 	}
 
 	return result, nil
+}
+
+func selectCodexHarnessError(stderrText string, summary codexRunSummary) string {
+	if len(summary.Errors) > 0 {
+		normalized := make([]string, 0, len(summary.Errors))
+		for _, rawError := range summary.Errors {
+			trimmed := strings.TrimSpace(rawError)
+			if trimmed == "" {
+				continue
+			}
+
+			normalized = append(normalized, normalizeCodexHarnessError(trimmed))
+		}
+
+		if len(normalized) > 0 {
+			return strings.Join(normalized, "\n")
+		}
+	}
+
+	return strings.TrimSpace(stderrText)
+}
+
+func normalizeCodexHarnessError(raw string) string {
+	var payload map[string]any
+	err := json.Unmarshal([]byte(raw), &payload)
+	if err != nil {
+		return raw
+	}
+
+	message := findFirstString(payload, "message")
+	if strings.TrimSpace(message) == "" {
+		return raw
+	}
+
+	return strings.TrimSpace(message)
 }
 
 func (c *CodexCLI) buildArgs(conversation *agent.Conversation, cfg codexCLIConfig, prompt string, lastMessagePath string, schemaPath string) []string {

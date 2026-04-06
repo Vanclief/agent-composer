@@ -2,9 +2,12 @@ package controller
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/vanclief/agent-composer/models"
 	"github.com/vanclief/compose/components/configurator"
@@ -28,6 +31,10 @@ type Controller struct {
 }
 
 func New() (*Controller, error) {
+	return NewWithLogWriter(nil)
+}
+
+func NewWithLogWriter(writer io.Writer) (*Controller, error) {
 	const op = "Controller.New"
 
 	// TODO: Remove these hardcoded local defaults when Agent Composer switches
@@ -48,6 +55,18 @@ func New() (*Controller, error) {
 
 	// Create the logger
 	controller.WithZerolog()
+	if writer != nil {
+		output := zerolog.ConsoleWriter{Out: writer}
+		output.FormatMessage = func(value interface{}) string {
+			message, ok := value.(string)
+			if ok {
+				return fmt.Sprintf("%-50s", message)
+			}
+			return ""
+		}
+
+		log.Logger = log.Output(output)
+	}
 
 	// Load the configuration
 	e := EnvVars{}

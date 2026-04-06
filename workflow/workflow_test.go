@@ -295,6 +295,84 @@ func TestCompileConnectorPack(t *testing.T) {
 	}
 }
 
+func TestCompileRejectsOptionalObjectFieldsInInferenceStructuredOutputs(t *testing.T) {
+	blueprint := &Blueprint{
+		Workflow: WorkflowSpec{
+			ID:      "optional_structured_output",
+			Version: "1",
+			Inputs: map[string]string{
+				"request": "string",
+			},
+			Outputs: map[string]WorkflowOutputSpec{
+				"out": {
+					Schema: "ReviewIssueList",
+					From:   "instance.review.out",
+				},
+			},
+		},
+		Schemas: map[string]SchemaSpec{
+			"ReviewIssue": {
+				Type: "object",
+				Properties: map[string]SchemaSpec{
+					"title":               {Type: "string"},
+					"requires_human_input": {Type: "boolean"},
+					"question_for_human": {
+						Type:     "string",
+						Optional: true,
+					},
+				},
+			},
+			"ReviewIssueList": {
+				Type: "array",
+				Items: &SchemaSpec{
+					SchemaRef: "ReviewIssue",
+				},
+			},
+		},
+		Nodes: map[string]NodeSpec{
+			"reviewer": {
+				Kind: "inference",
+				Inputs: map[string]string{
+					"request": "string",
+				},
+				Outputs: map[string]string{
+					"out": "ReviewIssueList",
+				},
+				Config: InferenceNodeConfig{
+					Harness: map[string]any{
+						"id":    "codex_cli",
+						"model": "gpt-5.4-mini",
+					},
+					Instruction: "Review the request and return issues.",
+				},
+			},
+		},
+		Flow: FlowSpec{
+			Instances: map[string]InstanceSpec{
+				"review": {
+					Node: "reviewer",
+					Inputs: map[string]string{
+						"request": "workflow_input.request",
+					},
+				},
+			},
+		},
+	}
+
+	_, err := Compile(blueprint)
+	if err == nil {
+		t.Fatal("expected compile to reject optional structured output fields")
+	}
+
+	if !strings.Contains(err.Error(), "optional object fields are not supported in structured outputs") {
+		t.Fatalf("unexpected compile error: %v", err)
+	}
+
+	if !strings.Contains(err.Error(), "question_for_human") {
+		t.Fatalf("expected property name in compile error: %v", err)
+	}
+}
+
 func TestExecuteConnectorPack(t *testing.T) {
 	blueprint := &Blueprint{
 		Workflow: WorkflowSpec{
@@ -1659,11 +1737,13 @@ func TestExampleWorkflowCoverage(t *testing.T) {
 	supportedCompiles := map[string]bool{
 		"pipeline-summary-critique-revise.yaml":        true,
 		"connector-collect-binary-votes.yaml":          true,
+		"blueprint-plan-cycle.yaml":                    true,
 		"composition-article-summary-with-brief.yaml":  true,
 		"loop-foreach-section-summary.yaml":            true,
 		"conditional-boolean-routing-review.yaml":      true,
 		"loop-and-connector-parallel-code-review.yaml": true,
 		"loop-while-binary-consensus.yaml":             true,
+		"plan-new-blueprint.yaml":                      true,
 		"pipeline-parallel-review-fix-cycle.yaml":      true,
 		"composition-loop-iterative-code-repair.yaml":  true,
 	}

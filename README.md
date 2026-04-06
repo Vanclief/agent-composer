@@ -96,10 +96,72 @@ agc rest
 **Run a workflow**
 
 ```bash
-agc run \
+agc workflow run \
   --id binary_vote_round \
   --input-json '{"question":"Are cats blue?"}'
 ```
+
+Workflow commands live under `agc workflow`, with `agc wf` and `agc w` as aliases.
+
+For workflows with exactly one top-level `string` input, you can use:
+
+```bash
+agc workflow run \
+  --id binary_vote_round \
+  --input-string "Are cats blue?"
+```
+
+**Compile a workflow without running it**
+
+```bash
+agc workflow compile --file ./specs/dsl/examples/connector-collect-binary-votes.yaml
+```
+
+**List installed workflows**
+
+```bash
+agc workflow list
+```
+
+**Show a workflow's raw YAML**
+
+```bash
+agc workflow show --id binary_vote_round
+```
+
+**Import a workflow into the registry**
+
+```bash
+agc workflow import --file ./specs/dsl/examples/connector-collect-binary-votes.yaml
+```
+
+**Export a workflow from the registry**
+
+```bash
+agc workflow export --id binary_vote_round --file ./binary_vote_round.yaml
+```
+
+**Delete a workflow from the registry**
+
+```bash
+agc workflow delete --id binary_vote_round
+```
+
+**Start the MCP server**
+
+```bash
+agc mcp
+```
+
+The AGC MCP server exposes:
+
+- `agc_workflow_list`
+- `agc_workflow_start`
+- `agc_workflow_get`
+
+`agc_workflow_start` returns immediately with an execution id. Use `agc_workflow_get` to poll for `running`, `succeeded`, or `failed`.
+
+Imported workflows are copied into the registry one file at a time. If a workflow composes other workflows by `workflow_id`, those dependencies are not imported automatically.
 
 ## Updating
 

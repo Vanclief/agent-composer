@@ -53,3 +53,17 @@ func TestBuildArgsIncludesOutputSchemaWhenStructuredOutputSchemaIsPresent(t *tes
 		t.Fatalf("expected --output-schema in args: %#v", args)
 	}
 }
+
+func TestSelectCodexHarnessErrorPrefersStructuredSummaryErrors(t *testing.T) {
+	summary := codexRunSummary{
+		Errors: []string{
+			`{"type":"error","error":{"message":"Invalid schema for response_format 'codex_output_schema'"}}`,
+		},
+	}
+
+	harnessError := selectCodexHarnessError("Reading additional input from stdin...", summary)
+
+	if harnessError != "Invalid schema for response_format 'codex_output_schema'" {
+		t.Fatalf("unexpected harness error: %q", harnessError)
+	}
+}

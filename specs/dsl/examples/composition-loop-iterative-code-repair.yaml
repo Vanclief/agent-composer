@@ -30,7 +30,6 @@ schemas:
         type: boolean
       question_for_human:
         type: string
-        optional: true
 
   ReviewIssueList:
     type: array

@@ -1,0 +1,209 @@
+workflow:
+  id: blueprint-plan-cycle
+  version: "1"
+  description: >
+    Revise a proposed AGC workflow blueprint plan, review it for product and
+    architecture quality, validate that it fits the current DSL/runtime, and
+    decide whether another planning iteration is needed.
+  inputs:
+    blueprint_request: string
+    plan_state: BlueprintPlanState
+  outputs:
+    plan_state:
+      schema: BlueprintPlanState
+      from: instance.triage_plan.plan_state
+    should_stop:
+      schema: boolean
+      from: instance.triage_plan.should_stop
+
+schemas:
+  PlanIssue:
+    type: object
+    properties:
+      title:
+        type: string
+      description:
+        type: string
+      severity:
+        type: string
+        enum: [low, medium, high]
+      requires_human_input:
+        type: boolean
+      question_for_human:
+        type: string
+
+  PlanIssueList:
+    type: array
+    items:
+      schema_ref: PlanIssue
+
+  PendingQuestion:
+    type: object
+    properties:
+      question:
+        type: string
+      issue_title:
+        type: string
+      rationale:
+        type: string
+
+  PendingQuestionList:
+    type: array
+    items:
+      schema_ref: PendingQuestion
+
+  BlueprintPlanState:
+    type: object
+    properties:
+      proposed_workflow_id:
+        type: string
+      blueprint_plan:
+        type: string
+      actionable_issues:
+        schema_ref: PlanIssueList
+      pending_questions:
+        schema_ref: PendingQuestionList
+      validation_summary:
+        type: string
+      ready_to_implement:
+        type: boolean
+      iteration:
+        type: integer
+
+nodes:
+  plan_reviser:
+    kind: inference
+    inputs:
+      blueprint_request: string
+      plan_state: BlueprintPlanState
+    outputs:
+      proposed_workflow_id: string
+      blueprint_plan: string
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4
+        reasoning_effort: high
+      instruction: >
+        Create or revise an AGC workflow blueprint plan for blueprint_request.
+        Use the existing plan_state to preserve good decisions and address
+        plan_state.actionable_issues. Return proposed_workflow_id in kebab-case
+        and blueprint_plan as markdown with these sections: Goal, Inputs,
+        Outputs, Schemas, Nodes, Flow, Assumptions, Risks, and Open Questions.
+        Keep the design minimal and use only the current AGC DSL/runtime
+        features.
+
+  plan_reviewer:
+    kind: inference
+    inputs:
+      blueprint_request: string
+      blueprint_plan: string
+    outputs:
+      out: PlanIssueList
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Review blueprint_plan against blueprint_request. Return only concrete
+        planning issues. Focus on missing steps, unnecessary complexity, weak
+        schema design, unclear node responsibilities, and ambiguous user-facing
+        behavior. If a requirement is unclear, set requires_human_input to true
+        and include a concise question_for_human. Always include
+        question_for_human, using an empty string when no human input is
+        needed.
+
+  dsl_validator:
+    kind: inference
+    inputs:
+      blueprint_request: string
+      proposed_workflow_id: string
+      blueprint_plan: string
+    outputs:
+      out: PlanIssueList
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4-mini
+        reasoning_effort: medium
+      instruction: >
+        Validate that blueprint_plan can be implemented with the current AGC
+        DSL/runtime. Check supported node kinds, connector operations, loop and
+        conditional shapes, workflow composition assumptions, schema needs, and
+        data-flow consistency. Return only concrete DSL or runtime feasibility
+        issues. If a missing product detail prevents validation, set
+        requires_human_input to true and include question_for_human. Always
+        include question_for_human, using an empty string when no human input
+        is needed.
+
+  merged_plan_issues:
+    kind: connector
+    operation: concat
+    inputs:
+      reviewer_issues: PlanIssueList
+      validator_issues: PlanIssueList
+    outputs:
+      out: PlanIssueList
+
+  triage_plan:
+    kind: inference
+    inputs:
+      plan_state: BlueprintPlanState
+      proposed_workflow_id: string
+      blueprint_plan: string
+      issues: PlanIssueList
+    outputs:
+      plan_state: BlueprintPlanState
+      should_stop: boolean
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.4
+        reasoning_effort: high
+      instruction: >
+        Build the next plan_state from the latest proposal and issues. Keep
+        only concrete issues where requires_human_input is false in
+        actionable_issues. Convert issues where requires_human_input is true
+        into pending_questions. Update proposed_workflow_id and blueprint_plan
+        to the latest values. Write validation_summary as a concise status
+        summary of confidence, remaining issues, and blocking questions.
+        Increment iteration by one. Set ready_to_implement to true only when
+        actionable_issues and pending_questions are both empty. Set should_stop
+        to true when ready_to_implement is true or pending_questions is not
+        empty.
+
+flow:
+  instances:
+    revise_plan:
+      node: plan_reviser
+      inputs:
+        blueprint_request: workflow_input.blueprint_request
+        plan_state: workflow_input.plan_state
+
+    review_plan:
+      node: plan_reviewer
+      inputs:
+        blueprint_request: workflow_input.blueprint_request
+        blueprint_plan: instance.revise_plan.blueprint_plan
+
+    validate_plan:
+      node: dsl_validator
+      inputs:
+        blueprint_request: workflow_input.blueprint_request
+        proposed_workflow_id: instance.revise_plan.proposed_workflow_id
+        blueprint_plan: instance.revise_plan.blueprint_plan
+
+    merge_plan_issues:
+      node: merged_plan_issues
+      inputs:
+        reviewer_issues: instance.review_plan.out
+        validator_issues: instance.validate_plan.out
+
+    triage_plan:
+      node: triage_plan
+      inputs:
+        plan_state: workflow_input.plan_state
+        proposed_workflow_id: instance.revise_plan.proposed_workflow_id
+        blueprint_plan: instance.revise_plan.blueprint_plan
+        issues: instance.merge_plan_issues.out
