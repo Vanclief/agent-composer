@@ -135,7 +135,7 @@ func (r *recordingRecorder) FinishConversation(ctx context.Context, conversation
 }
 
 func TestRunPersistsWorkflowNodeAndConversationRecords(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/pipeline-summary-critique-revise.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/article_summary.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestRunPersistsWorkflowNodeAndConversationRecords(t *testing.T) {
 }
 
 func TestMarshalWorkflowSnapshotWithConnectorNode(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/connector-collect-binary-votes.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/binary_vote_round.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -240,7 +240,7 @@ func TestMarshalWorkflowSnapshotWithConnectorNode(t *testing.T) {
 }
 
 func TestRunPersistsForeachChildNodeScope(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/loop-foreach-section-summary.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/section_summary_batch.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestRunPersistsForeachChildNodeScope(t *testing.T) {
 }
 
 func TestRunPersistsConditionalChildNodeScope(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/conditional-boolean-routing-review.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/conditional_boolean_routing_review.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -334,7 +334,7 @@ func TestRunPersistsConditionalChildNodeScope(t *testing.T) {
 }
 
 func TestRunPersistsWhileChildNodeScope(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/loop-while-binary-consensus.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/loop_while_binary_consensus.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}

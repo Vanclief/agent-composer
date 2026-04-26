@@ -114,7 +114,7 @@ agc workflow run \
 **Compile a workflow without running it**
 
 ```bash
-agc workflow compile --file ./specs/dsl/examples/connector-collect-binary-votes.yaml
+agc workflow compile --file ./examples/binary_vote_round.yaml
 ```
 
 **List installed workflows**
@@ -132,7 +132,7 @@ agc workflow show --id binary_vote_round
 **Import a workflow into the registry**
 
 ```bash
-agc workflow import --file ./specs/dsl/examples/connector-collect-binary-votes.yaml
+agc workflow import --file ./examples/binary_vote_round.yaml
 ```
 
 **Export a workflow from the registry**

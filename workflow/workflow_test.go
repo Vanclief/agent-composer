@@ -14,7 +14,7 @@ import (
 )
 
 func TestCompilePipelineSummaryCritiqueRevise(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/pipeline-summary-critique-revise.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/article_summary.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestCompilePipelineSummaryCritiqueRevise(t *testing.T) {
 }
 
 func TestExecutePipelineSummaryCritiqueRevise(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/pipeline-summary-critique-revise.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/article_summary.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestExecutePipelineSummaryCritiqueRevise(t *testing.T) {
 }
 
 func TestCompileConnectorCollectBinaryVotes(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/connector-collect-binary-votes.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/binary_vote_round.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestCompileConnectorCollectBinaryVotes(t *testing.T) {
 }
 
 func TestExecuteConnectorCollectBinaryVotes(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/connector-collect-binary-votes.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/binary_vote_round.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -314,7 +314,7 @@ func TestCompileRejectsOptionalObjectFieldsInInferenceStructuredOutputs(t *testi
 			"ReviewIssue": {
 				Type: "object",
 				Properties: map[string]SchemaSpec{
-					"title":               {Type: "string"},
+					"title":                {Type: "string"},
 					"requires_human_input": {Type: "boolean"},
 					"question_for_human": {
 						Type:     "string",
@@ -905,7 +905,7 @@ flow:
 }
 
 func TestCompileCompositionArticleSummaryWithBrief(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/composition-article-summary-with-brief.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/composed_article_summary.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -948,7 +948,7 @@ func TestCompileCompositionArticleSummaryWithBrief(t *testing.T) {
 }
 
 func TestExecuteCompositionArticleSummaryWithBrief(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/composition-article-summary-with-brief.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/composed_article_summary.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -990,7 +990,7 @@ func TestExecuteCompositionArticleSummaryWithBrief(t *testing.T) {
 }
 
 func TestCompileLoopForeachSectionSummary(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/loop-foreach-section-summary.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/section_summary_batch.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -1027,7 +1027,7 @@ func TestCompileLoopForeachSectionSummary(t *testing.T) {
 }
 
 func TestExecuteLoopForeachSectionSummary(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/loop-foreach-section-summary.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/section_summary_batch.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -1079,7 +1079,7 @@ func TestExecuteLoopForeachSectionSummary(t *testing.T) {
 }
 
 func TestCompileConditionalBooleanRoutingReview(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/conditional-boolean-routing-review.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/conditional_boolean_routing_review.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -1116,7 +1116,7 @@ func TestCompileConditionalBooleanRoutingReview(t *testing.T) {
 }
 
 func TestExecuteConditionalBooleanRoutingReview(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/conditional-boolean-routing-review.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/conditional_boolean_routing_review.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -1165,7 +1165,7 @@ func TestExecuteConditionalBooleanRoutingReview(t *testing.T) {
 }
 
 func TestCompileLoopAndConnectorParallelCodeReview(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/loop-and-connector-parallel-code-review.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/parallel_code_review.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -1194,7 +1194,7 @@ func TestCompileLoopAndConnectorParallelCodeReview(t *testing.T) {
 }
 
 func TestExecuteLoopAndConnectorParallelCodeReview(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/loop-and-connector-parallel-code-review.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/parallel_code_review.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -1236,7 +1236,7 @@ func TestExecuteLoopAndConnectorParallelCodeReview(t *testing.T) {
 }
 
 func TestCompileLoopWhileBinaryConsensus(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/loop-while-binary-consensus.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/loop_while_binary_consensus.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -1281,7 +1281,7 @@ func TestCompileLoopWhileBinaryConsensus(t *testing.T) {
 }
 
 func TestExecuteLoopWhileBinaryConsensus(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/loop-while-binary-consensus.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/loop_while_binary_consensus.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -1331,7 +1331,7 @@ func TestExecuteLoopWhileBinaryConsensus(t *testing.T) {
 }
 
 func TestCompilePipelineParallelReviewFixCycle(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/pipeline-parallel-review-fix-cycle.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/review_fix_cycle.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -1364,7 +1364,7 @@ func TestCompilePipelineParallelReviewFixCycle(t *testing.T) {
 }
 
 func TestExecutePipelineParallelReviewFixCycle(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/pipeline-parallel-review-fix-cycle.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/review_fix_cycle.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -1421,7 +1421,7 @@ func TestExecutePipelineParallelReviewFixCycle(t *testing.T) {
 }
 
 func TestCompileCompositionLoopIterativeCodeRepair(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/composition-loop-iterative-code-repair.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/iterative_code_review_repair.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -1459,7 +1459,7 @@ func TestCompileCompositionLoopIterativeCodeRepair(t *testing.T) {
 }
 
 func TestExecuteCompositionLoopIterativeCodeRepair(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../specs/dsl/examples/composition-loop-iterative-code-repair.yaml")
+	blueprint, err := LoadBlueprintFile("../examples/iterative_code_review_repair.yaml")
 	if err != nil {
 		t.Fatalf("load blueprint: %v", err)
 	}
@@ -1510,7 +1510,7 @@ func TestSupportedExampleWorkflowsExecute(t *testing.T) {
 	}{
 		{
 			name:  "pipeline summary critique revise",
-			path:  "../specs/dsl/examples/pipeline-summary-critique-revise.yaml",
+			path:  "../examples/article_summary.yaml",
 			input: map[string]any{"article_text": "A short article about a new bridge opening downtown."},
 			newHarness: func(kind agent.Harness) (harnesses.Harness, error) {
 				return fakeHarness{}, nil
@@ -1530,7 +1530,7 @@ func TestSupportedExampleWorkflowsExecute(t *testing.T) {
 		},
 		{
 			name:  "connector collect binary votes",
-			path:  "../specs/dsl/examples/connector-collect-binary-votes.yaml",
+			path:  "../examples/binary_vote_round.yaml",
 			input: map[string]any{"question": "Should we deploy today?"},
 			newHarness: func(kind agent.Harness) (harnesses.Harness, error) {
 				return voteHarness{}, nil
@@ -1550,7 +1550,7 @@ func TestSupportedExampleWorkflowsExecute(t *testing.T) {
 		},
 		{
 			name:  "composition article summary with brief",
-			path:  "../specs/dsl/examples/composition-article-summary-with-brief.yaml",
+			path:  "../examples/composed_article_summary.yaml",
 			input: map[string]any{"article_text": "A short article about a new bridge opening downtown."},
 			newHarness: func(kind agent.Harness) (harnesses.Harness, error) {
 				return fakeHarness{}, nil
@@ -1570,7 +1570,7 @@ func TestSupportedExampleWorkflowsExecute(t *testing.T) {
 		},
 		{
 			name:  "loop foreach section summary",
-			path:  "../specs/dsl/examples/loop-foreach-section-summary.yaml",
+			path:  "../examples/section_summary_batch.yaml",
 			input: map[string]any{"section_text": []string{"Alpha section", "Beta section"}, "tone": "formal"},
 			newHarness: func(kind agent.Harness) (harnesses.Harness, error) {
 				return sectionHarness{}, nil
@@ -1590,7 +1590,7 @@ func TestSupportedExampleWorkflowsExecute(t *testing.T) {
 		},
 		{
 			name:  "conditional boolean routing review",
-			path:  "../specs/dsl/examples/conditional-boolean-routing-review.yaml",
+			path:  "../examples/conditional_boolean_routing_review.yaml",
 			input: map[string]any{"text": "This bridge project reduced traffic and improved pedestrian access."},
 			newHarness: func(kind agent.Harness) (harnesses.Harness, error) {
 				return conditionalHarness{}, nil
@@ -1610,7 +1610,7 @@ func TestSupportedExampleWorkflowsExecute(t *testing.T) {
 		},
 		{
 			name:  "loop and connector parallel code review",
-			path:  "../specs/dsl/examples/loop-and-connector-parallel-code-review.yaml",
+			path:  "../examples/parallel_code_review.yaml",
 			input: map[string]any{"compare_branch": "master"},
 			newHarness: func(kind agent.Harness) (harnesses.Harness, error) {
 				return reviewHarness{}, nil
@@ -1630,7 +1630,7 @@ func TestSupportedExampleWorkflowsExecute(t *testing.T) {
 		},
 		{
 			name: "loop while binary consensus",
-			path: "../specs/dsl/examples/loop-while-binary-consensus.yaml",
+			path: "../examples/loop_while_binary_consensus.yaml",
 			input: map[string]any{
 				"question": "Should we deploy the bridge update today?",
 				"vote_state": map[string]any{
@@ -1660,7 +1660,7 @@ func TestSupportedExampleWorkflowsExecute(t *testing.T) {
 		},
 		{
 			name: "pipeline parallel review fix cycle",
-			path: "../specs/dsl/examples/pipeline-parallel-review-fix-cycle.yaml",
+			path: "../examples/review_fix_cycle.yaml",
 			input: map[string]any{
 				"coding_task": "Implement the bridge task",
 				"review_state": map[string]any{
@@ -1683,7 +1683,7 @@ func TestSupportedExampleWorkflowsExecute(t *testing.T) {
 		},
 		{
 			name:  "composition loop iterative code repair",
-			path:  "../specs/dsl/examples/composition-loop-iterative-code-repair.yaml",
+			path:  "../examples/iterative_code_review_repair.yaml",
 			input: map[string]any{"coding_task": "Implement the bridge task"},
 			newHarness: func(kind agent.Harness) (harnesses.Harness, error) {
 				return repairHarness{}, nil
@@ -1729,23 +1729,23 @@ func TestSupportedExampleWorkflowsExecute(t *testing.T) {
 }
 
 func TestExampleWorkflowCoverage(t *testing.T) {
-	entries, err := os.ReadDir("../specs/dsl/examples")
+	entries, err := os.ReadDir("../examples")
 	if err != nil {
 		t.Fatalf("read examples dir: %v", err)
 	}
 
 	supportedCompiles := map[string]bool{
-		"pipeline-summary-critique-revise.yaml":        true,
-		"connector-collect-binary-votes.yaml":          true,
-		"blueprint-plan-cycle.yaml":                    true,
-		"composition-article-summary-with-brief.yaml":  true,
-		"loop-foreach-section-summary.yaml":            true,
-		"conditional-boolean-routing-review.yaml":      true,
-		"loop-and-connector-parallel-code-review.yaml": true,
-		"loop-while-binary-consensus.yaml":             true,
-		"plan-new-blueprint.yaml":                      true,
-		"pipeline-parallel-review-fix-cycle.yaml":      true,
-		"composition-loop-iterative-code-repair.yaml":  true,
+		"article_summary.yaml":                    true,
+		"binary_vote_round.yaml":                  true,
+		"blueprint-plan-cycle.yaml":               true,
+		"composed_article_summary.yaml":           true,
+		"section_summary_batch.yaml":              true,
+		"conditional_boolean_routing_review.yaml": true,
+		"parallel_code_review.yaml":               true,
+		"loop_while_binary_consensus.yaml":        true,
+		"plan-new-blueprint.yaml":                 true,
+		"review_fix_cycle.yaml":                   true,
+		"iterative_code_review_repair.yaml":       true,
 	}
 
 	seen := map[string]bool{}
@@ -1761,7 +1761,7 @@ func TestExampleWorkflowCoverage(t *testing.T) {
 
 		seen[entry.Name()] = true
 
-		path := filepath.Join("../specs/dsl/examples", entry.Name())
+		path := filepath.Join("../examples", entry.Name())
 		blueprint, err := LoadBlueprintFile(path)
 		if err != nil {
 			t.Fatalf("load %s: %v", entry.Name(), err)
@@ -1780,7 +1780,7 @@ func TestExampleWorkflowCoverage(t *testing.T) {
 		}
 	}
 
-	if !seen["pipeline-summary-critique-revise.yaml"] || !seen["connector-collect-binary-votes.yaml"] {
+	if !seen["article_summary.yaml"] || !seen["binary_vote_round.yaml"] {
 		t.Fatalf("expected core example workflows to be present, got %#v", seen)
 	}
 }

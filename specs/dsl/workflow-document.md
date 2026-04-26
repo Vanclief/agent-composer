@@ -81,14 +81,4 @@ The compiler resolves `workflow_id` from the workflow directory and uses the chi
 
 ## Example
 
-Workflow blueprint examples live under [examples/](examples/README.md).
-
-- [examples/composition-article-summary-with-brief.yaml](examples/composition-article-summary-with-brief.yaml): compose one workflow and continue from its named outputs
-- [examples/composition-loop-iterative-code-repair.yaml](examples/composition-loop-iterative-code-repair.yaml): seed an implementation and then run a composed `while` review and repair loop
-- [examples/conditional-boolean-routing-review.yaml](examples/conditional-boolean-routing-review.yaml): route to one of two branch nodes based on a boolean output from an upstream inference node
-- [examples/connector-collect-binary-votes.yaml](examples/connector-collect-binary-votes.yaml): connector `collect` example with raw vote collection
-- [examples/loop-and-connector-parallel-code-review.yaml](examples/loop-and-connector-parallel-code-review.yaml): larger workflow with `foreach` loops and `concat` aggregation
-- [examples/loop-foreach-section-summary.yaml](examples/loop-foreach-section-summary.yaml): simple `foreach` loop with one iterated input and one pass-through input
-- [examples/loop-while-binary-consensus.yaml](examples/loop-while-binary-consensus.yaml): `while` loop with one evolving state value and one boolean break output
-- [examples/pipeline-parallel-review-fix-cycle.yaml](examples/pipeline-parallel-review-fix-cycle.yaml): one repair cycle with parallel reviewers, issue validation, and question triage
-- [examples/pipeline-summary-critique-revise.yaml](examples/pipeline-summary-critique-revise.yaml): summarize, critique, and revise workflow
+Workflow blueprint examples live under [examples/](../../examples/README.md).

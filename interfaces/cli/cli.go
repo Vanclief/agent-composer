@@ -26,7 +26,7 @@ import (
 	"github.com/vanclief/ez"
 )
 
-const version = "0.2.15"
+const version = "0.2.16"
 
 type compileResult struct {
 	ID          string            `json:"id"`
@@ -144,7 +144,7 @@ func workflowRunCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:  "file",
 				Usage: "Path to the workflow blueprint YAML file",
-				Value: "specs/dsl/examples/pipeline-summary-critique-revise.yaml",
+				Value: "examples/article_summary.yaml",
 			},
 			&cli.StringFlag{
 				Name:  "input-file",
