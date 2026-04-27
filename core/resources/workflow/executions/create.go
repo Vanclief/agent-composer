@@ -38,16 +38,9 @@ func (r CreateRequest) Validate() error {
 }
 
 type CreateResponse struct {
-	ExecutionID     string         `json:"execution_id,omitempty"`
-	WorkflowID      string         `json:"workflow_id"`
-	WorkflowVersion string         `json:"workflow_version"`
-	Output          map[string]any `json:"output"`
-}
-
-type StartResponse struct {
-	ExecutionID     string                                 `json:"execution_id,omitempty"`
-	WorkflowID      string                                 `json:"workflow_id"`
-	WorkflowVersion string                                 `json:"workflow_version"`
+	ExecutionID     string                                  `json:"execution_id,omitempty"`
+	WorkflowID      string                                  `json:"workflow_id"`
+	WorkflowVersion string                                  `json:"workflow_version"`
 	Status          executionmodels.WorkflowExecutionStatus `json:"status"`
 }
 
@@ -59,35 +52,21 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 		return nil, ez.Wrap(op, err)
 	}
 
-	output, handle, err := prepared.Executor.RunWithHandle(ctx, prepared.Snapshot, request.Input)
+	handle, err := prepared.Executor.Start(ctx, prepared.Snapshot, request.Input)
+	if err != nil {
+		return nil, ez.Wrap(op, err)
+	}
+
 	executionID := ""
 	if handle != nil {
 		executionID = handle.ID.String()
-	}
-
-	if err != nil {
-		details := ExecutionFailureDetails{
-			ExecutionID:     executionID,
-			WorkflowID:      prepared.Snapshot.WorkflowID,
-			WorkflowVersion: prepared.Snapshot.WorkflowVersion,
-		}
-
-		enrichedDetails, enrichErr := loadExecutionFailureDetails(ctx, api.db, details)
-		if enrichErr == nil {
-			details = enrichedDetails
-		}
-
-		return nil, &ExecutionFailedError{
-			Details: details,
-			Err:     ez.Wrap(op, err),
-		}
 	}
 
 	return &CreateResponse{
 		ExecutionID:     executionID,
 		WorkflowID:      prepared.Snapshot.WorkflowID,
 		WorkflowVersion: prepared.Snapshot.WorkflowVersion,
-		Output:          output,
+		Status:          executionmodels.WorkflowExecutionStatusRunning,
 	}, nil
 }
 

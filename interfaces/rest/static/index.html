@@ -1,0 +1,927 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Workflow Runs</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f6f2;
+        --surface: #ffffff;
+        --surface-muted: #f0f4f3;
+        --text: #1c2321;
+        --muted: #65716f;
+        --line: #d8dfdc;
+        --accent: #0f766e;
+        --accent-strong: #115e59;
+        --blue: #2563eb;
+        --amber: #a16207;
+        --red: #b91c1c;
+        --green: #15803d;
+        --code-bg: #111827;
+        --code-text: #e5e7eb;
+        --shadow: 0 1px 2px rgba(18, 24, 22, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        line-height: 1.45;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      button {
+        min-height: 36px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--text);
+        padding: 0 12px;
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: var(--accent);
+      }
+
+      button.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: #ffffff;
+      }
+
+      button.primary:hover {
+        background: var(--accent-strong);
+      }
+
+      button.icon {
+        width: 36px;
+        padding: 0;
+      }
+
+      input,
+      select {
+        min-height: 36px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #ffffff;
+        color: var(--text);
+        padding: 0 10px;
+      }
+
+      input:focus,
+      select:focus,
+      button:focus-visible {
+        outline: 2px solid rgba(15, 118, 110, 0.25);
+        outline-offset: 2px;
+      }
+
+      .shell {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+      }
+
+      .sidebar {
+        border-right: 1px solid var(--line);
+        background: #fbfbf8;
+        padding: 18px;
+        overflow: auto;
+      }
+
+      .main {
+        padding: 18px 22px 28px;
+        overflow: auto;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        letter-spacing: 0;
+      }
+
+      h1 {
+        font-size: 20px;
+        font-weight: 700;
+      }
+
+      h2 {
+        font-size: 15px;
+        font-weight: 700;
+      }
+
+      h3 {
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .load-form {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        margin: 14px 0 16px;
+      }
+
+      .filter {
+        width: 100%;
+        margin: 8px 0 12px;
+      }
+
+      .recent-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .recent-item {
+        width: 100%;
+        min-height: 68px;
+        text-align: left;
+        display: grid;
+        gap: 4px;
+        align-content: center;
+        border-radius: 7px;
+        padding: 10px;
+        box-shadow: var(--shadow);
+      }
+
+      .recent-item.active {
+        border-color: var(--accent);
+        box-shadow: inset 3px 0 0 var(--accent);
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .mono {
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", monospace;
+      }
+
+      .small {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .truncate {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        border-radius: 999px;
+        padding: 0 9px;
+        font-size: 12px;
+        font-weight: 700;
+        background: var(--surface-muted);
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .pill.succeeded {
+        background: #dcfce7;
+        color: var(--green);
+      }
+
+      .pill.running,
+      .pill.queued {
+        background: #dbeafe;
+        color: var(--blue);
+      }
+
+      .pill.failed,
+      .pill.canceled,
+      .pill.blocked {
+        background: #fee2e2;
+        color: var(--red);
+      }
+
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(120px, 1fr));
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .metric {
+        min-height: 76px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        padding: 10px;
+        box-shadow: var(--shadow);
+      }
+
+      .metric .label {
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 5px;
+      }
+
+      .metric .value {
+        font-size: 14px;
+        font-weight: 700;
+        overflow-wrap: anywhere;
+      }
+
+      .section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin: 18px 0 10px;
+      }
+
+      .json-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .json-box {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        overflow: hidden;
+        box-shadow: var(--shadow);
+      }
+
+      .json-box header {
+        min-height: 38px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        border-bottom: 1px solid var(--line);
+        padding: 0 10px;
+        background: var(--surface-muted);
+      }
+
+      pre {
+        margin: 0;
+        min-height: 148px;
+        max-height: 420px;
+        overflow: auto;
+        background: var(--code-bg);
+        color: var(--code-text);
+        padding: 12px;
+        font-size: 12px;
+        line-height: 1.55;
+        tab-size: 2;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .node-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      details.node {
+        margin-left: calc(var(--depth, 0) * 20px);
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--accent);
+        border-radius: 8px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      details.node[open] {
+        border-left-color: var(--blue);
+      }
+
+      details.node > summary {
+        min-height: 58px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        cursor: pointer;
+        list-style: none;
+      }
+
+      details.node > summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .node-body {
+        border-top: 1px solid var(--line);
+        padding: 12px;
+      }
+
+      .node-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .node-meta {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 4px;
+      }
+
+      .empty {
+        border: 1px dashed var(--line);
+        border-radius: 8px;
+        min-height: 160px;
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.55);
+        text-align: center;
+        padding: 20px;
+      }
+
+      .error {
+        border: 1px solid #fecaca;
+        background: #fff1f2;
+        color: var(--red);
+        border-radius: 8px;
+        padding: 10px 12px;
+        margin-bottom: 12px;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      label.check {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 13px;
+        user-select: none;
+      }
+
+      label.check input {
+        min-height: auto;
+      }
+
+      @media (max-width: 980px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+          max-height: 420px;
+        }
+
+        .summary-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 680px) {
+        .main,
+        .sidebar {
+          padding: 14px;
+        }
+
+        .topbar,
+        .section-head,
+        .row {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .toolbar {
+          width: 100%;
+        }
+
+        .toolbar button,
+        .toolbar label {
+          flex: 1 1 auto;
+        }
+
+        .summary-grid,
+        .json-grid {
+          grid-template-columns: 1fr;
+        }
+
+        details.node {
+          margin-left: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="topbar">
+          <h1>Workflow Runs</h1>
+          <button id="reloadRecent" class="icon" type="button" title="Reload recent executions">R</button>
+        </div>
+
+        <form id="loadForm" class="load-form">
+          <input
+            id="executionInput"
+            class="mono"
+            name="execution_id"
+            autocomplete="off"
+            placeholder="execution id"
+            aria-label="Execution ID"
+          />
+          <button class="primary" type="submit">Load</button>
+        </form>
+
+        <input id="workflowFilter" class="filter" autocomplete="off" placeholder="workflow id filter" aria-label="Workflow ID filter" />
+
+        <div class="row">
+          <h2>Recent Runs</h2>
+          <span id="recentCount" class="small"></span>
+        </div>
+        <div id="recentList" class="recent-list"></div>
+      </aside>
+
+      <main class="main">
+        <div id="errorBox" class="error hidden"></div>
+
+        <div class="topbar">
+          <div>
+            <h2 id="pageTitle">Execution</h2>
+            <div id="pageSubtitle" class="small mono"></div>
+          </div>
+          <div class="toolbar">
+            <label class="check">
+              <input id="autoRefresh" type="checkbox" />
+              Auto refresh
+            </label>
+            <button id="refreshExecution" type="button">Refresh</button>
+          </div>
+        </div>
+
+        <div id="emptyState" class="empty">Select a workflow execution.</div>
+
+        <section id="executionPanel" class="hidden">
+          <div id="summaryGrid" class="summary-grid"></div>
+
+          <div class="section-head">
+            <h2>Workflow Snapshots</h2>
+          </div>
+          <div class="json-grid">
+            <div class="json-box">
+              <header>
+                <h3>Input</h3>
+                <button type="button" data-copy="workflow-input">Copy</button>
+              </header>
+              <pre id="workflowInput" class="mono"></pre>
+            </div>
+            <div class="json-box">
+              <header>
+                <h3>Output</h3>
+                <button type="button" data-copy="workflow-output">Copy</button>
+              </header>
+              <pre id="workflowOutput" class="mono"></pre>
+            </div>
+          </div>
+
+          <div class="section-head">
+            <h2>Node Executions</h2>
+            <span id="nodeCount" class="small"></span>
+          </div>
+          <div id="nodeList" class="node-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const state = {
+        recent: [],
+        execution: null,
+        nodes: [],
+        activeExecutionID: "",
+        refreshTimer: 0,
+      };
+
+      const el = {
+        reloadRecent: document.getElementById("reloadRecent"),
+        loadForm: document.getElementById("loadForm"),
+        executionInput: document.getElementById("executionInput"),
+        workflowFilter: document.getElementById("workflowFilter"),
+        recentList: document.getElementById("recentList"),
+        recentCount: document.getElementById("recentCount"),
+        errorBox: document.getElementById("errorBox"),
+        pageTitle: document.getElementById("pageTitle"),
+        pageSubtitle: document.getElementById("pageSubtitle"),
+        autoRefresh: document.getElementById("autoRefresh"),
+        refreshExecution: document.getElementById("refreshExecution"),
+        emptyState: document.getElementById("emptyState"),
+        executionPanel: document.getElementById("executionPanel"),
+        summaryGrid: document.getElementById("summaryGrid"),
+        workflowInput: document.getElementById("workflowInput"),
+        workflowOutput: document.getElementById("workflowOutput"),
+        nodeCount: document.getElementById("nodeCount"),
+        nodeList: document.getElementById("nodeList"),
+      };
+
+      function apiPath(path, params = {}) {
+        const url = new URL(path, window.location.origin);
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && String(value).trim() !== "") {
+            url.searchParams.set(key, value);
+          }
+        });
+        return url.toString();
+      }
+
+      async function fetchJSON(path, params) {
+        const response = await fetch(apiPath(path, params), {
+          headers: { Accept: "application/json" },
+        });
+        const text = await response.text();
+        let body = null;
+        if (text) {
+          body = JSON.parse(text);
+        }
+        if (!response.ok) {
+          const message = body?.message || body?.error || response.statusText;
+          throw new Error(message);
+        }
+        return unwrap(body);
+      }
+
+      function unwrap(body) {
+        if (body && typeof body === "object") {
+          if (body.data && typeof body.data === "object") return body.data;
+          if (body.response && typeof body.response === "object") return body.response;
+        }
+        return body;
+      }
+
+      function normalizeExecutions(body) {
+        if (Array.isArray(body)) return body;
+        return body?.workflow_executions || body?.items || [];
+      }
+
+      function normalizeNodes(body) {
+        if (Array.isArray(body)) return body;
+        return body?.node_executions || body?.items || [];
+      }
+
+      function showError(error) {
+        if (!error) {
+          el.errorBox.classList.add("hidden");
+          el.errorBox.textContent = "";
+          return;
+        }
+        el.errorBox.textContent = error.message || String(error);
+        el.errorBox.classList.remove("hidden");
+      }
+
+      function statusClass(status) {
+        return String(status || "").toLowerCase();
+      }
+
+      function statusPill(status) {
+        const value = status || "unknown";
+        return `<span class="pill ${statusClass(value)}">${escapeHTML(value)}</span>`;
+      }
+
+      function formatTime(value) {
+        if (!value) return "";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleString();
+      }
+
+      function formatDuration(start, finish) {
+        if (!start) return "";
+        const startDate = new Date(start);
+        const endDate = finish ? new Date(finish) : new Date();
+        if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return "";
+        const ms = Math.max(0, endDate.getTime() - startDate.getTime());
+        if (ms < 1000) return `${ms} ms`;
+        if (ms < 60000) return `${(ms / 1000).toFixed(1)} s`;
+        return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
+      }
+
+      function pretty(value) {
+        if (value === null || value === undefined) return "";
+        return JSON.stringify(value, null, 2);
+      }
+
+      function escapeHTML(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      function compactID(value) {
+        const raw = String(value || "");
+        if (raw.length <= 18) return raw;
+        return `${raw.slice(0, 8)}...${raw.slice(-6)}`;
+      }
+
+      function sortByTime(items) {
+        return [...items].sort((left, right) => {
+          const leftTime = Date.parse(left.started_at || left.created_at || "") || 0;
+          const rightTime = Date.parse(right.started_at || right.created_at || "") || 0;
+          if (leftTime !== rightTime) return leftTime - rightTime;
+          return String(left.id || "").localeCompare(String(right.id || ""));
+        });
+      }
+
+      async function loadRecent() {
+        showError(null);
+        el.recentList.innerHTML = `<div class="empty">Loading executions.</div>`;
+        try {
+          const body = await fetchJSON("/api/workflow/executions", {
+            limit: 25,
+            workflow_id: el.workflowFilter.value,
+          });
+          state.recent = normalizeExecutions(body);
+          renderRecent();
+        } catch (error) {
+          state.recent = [];
+          renderRecent();
+          showError(error);
+        }
+      }
+
+      function renderRecent() {
+        el.recentCount.textContent = `${state.recent.length}`;
+        if (state.recent.length === 0) {
+          el.recentList.innerHTML = `<div class="empty">No executions found.</div>`;
+          return;
+        }
+
+        el.recentList.innerHTML = state.recent
+          .map((execution) => {
+            const active = execution.id === state.activeExecutionID ? " active" : "";
+            return `
+              <button class="recent-item${active}" type="button" data-execution-id="${escapeHTML(execution.id)}">
+                <span class="row">
+                  <span class="truncate">${escapeHTML(execution.workflow_id)}</span>
+                  ${statusPill(execution.status)}
+                </span>
+                <span class="small mono truncate">${escapeHTML(compactID(execution.id))}</span>
+                <span class="small">${escapeHTML(formatTime(execution.started_at || execution.created_at))}</span>
+              </button>
+            `;
+          })
+          .join("");
+      }
+
+      async function loadExecution(executionID, options = {}) {
+        const trimmed = String(executionID || "").trim();
+        if (!trimmed) return;
+
+        showError(null);
+        state.activeExecutionID = trimmed;
+        el.executionInput.value = trimmed;
+        renderRecent();
+
+        if (!options.silent) {
+          el.emptyState.classList.add("hidden");
+          el.executionPanel.classList.remove("hidden");
+          el.nodeList.innerHTML = `<div class="empty">Loading node executions.</div>`;
+        }
+
+        try {
+          const [execution, nodesBody] = await Promise.all([
+            fetchJSON(`/api/workflow/executions/${encodeURIComponent(trimmed)}`),
+            fetchJSON("/api/workflow/node-executions", {
+              workflow_execution_id: trimmed,
+              limit: 200,
+            }),
+          ]);
+
+          state.execution = execution;
+          state.nodes = sortByTime(normalizeNodes(nodesBody));
+          renderExecution();
+          updateURL(trimmed);
+          scheduleRefresh();
+        } catch (error) {
+          showError(error);
+        }
+      }
+
+      function renderExecution() {
+        const execution = state.execution;
+        if (!execution) return;
+
+        el.emptyState.classList.add("hidden");
+        el.executionPanel.classList.remove("hidden");
+        el.pageTitle.textContent = execution.workflow_id || "Execution";
+        el.pageSubtitle.textContent = execution.id || "";
+        el.workflowInput.textContent = pretty(execution.input_snapshot);
+        el.workflowOutput.textContent = pretty(execution.output_snapshot);
+        el.nodeCount.textContent = `${state.nodes.length} nodes`;
+
+        el.summaryGrid.innerHTML = [
+          metric("Status", statusPill(execution.status)),
+          metric("Workflow", escapeHTML(execution.workflow_id || "")),
+          metric("Version", escapeHTML(execution.workflow_version || "")),
+          metric("Duration", escapeHTML(formatDuration(execution.started_at, execution.finished_at))),
+          metric("Started", escapeHTML(formatTime(execution.started_at))),
+          metric("Finished", escapeHTML(formatTime(execution.finished_at))),
+          metric("Execution ID", `<span class="mono">${escapeHTML(execution.id || "")}</span>`),
+          metric("Nodes", escapeHTML(String(state.nodes.length))),
+        ].join("");
+
+        renderNodes();
+      }
+
+      function metric(label, valueHTML) {
+        return `
+          <div class="metric">
+            <div class="label">${escapeHTML(label)}</div>
+            <div class="value">${valueHTML || ""}</div>
+          </div>
+        `;
+      }
+
+      function renderNodes() {
+        if (state.nodes.length === 0) {
+          el.nodeList.innerHTML = `<div class="empty">No node executions found.</div>`;
+          return;
+        }
+
+        const depthByID = buildDepths(state.nodes);
+        el.nodeList.innerHTML = state.nodes
+          .map((node, index) => renderNode(node, index, depthByID.get(node.id) || 0))
+          .join("");
+      }
+
+      function buildDepths(nodes) {
+        const byID = new Map(nodes.map((node) => [node.id, node]));
+        const depths = new Map();
+        function depth(node) {
+          if (!node || !node.parent_node_execution_id) return 0;
+          if (depths.has(node.id)) return depths.get(node.id);
+          const parent = byID.get(node.parent_node_execution_id);
+          const value = parent ? depth(parent) + 1 : 0;
+          depths.set(node.id, value);
+          return value;
+        }
+        nodes.forEach((node) => depths.set(node.id, depth(node)));
+        return depths;
+      }
+
+      function renderNode(node, index, depth) {
+        const opened = index < 3 ? " open" : "";
+        const meta = [
+          node.kind,
+          node.branch_name ? `branch ${node.branch_name}` : "",
+          node.iteration_index !== undefined && node.iteration_index !== null ? `iteration ${node.iteration_index}` : "",
+          formatDuration(node.started_at, node.finished_at),
+        ].filter(Boolean);
+
+        return `
+          <details class="node"${opened} style="--depth:${depth}">
+            <summary>
+              <div>
+                <div class="node-title">
+                  <strong class="truncate">${escapeHTML(node.node_id || node.id)}</strong>
+                  ${statusPill(node.status)}
+                </div>
+                <div class="node-meta small">
+                  ${meta.map((item) => `<span>${escapeHTML(item)}</span>`).join("")}
+                </div>
+              </div>
+              <span class="small mono">${escapeHTML(compactID(node.id))}</span>
+            </summary>
+            <div class="node-body">
+              <div class="json-grid">
+                <div class="json-box">
+                  <header>
+                    <h3>Input</h3>
+                    <button type="button" data-copy-node="${escapeHTML(node.id)}" data-copy-field="input_snapshot">Copy</button>
+                  </header>
+                  <pre class="mono">${escapeHTML(pretty(node.input_snapshot))}</pre>
+                </div>
+                <div class="json-box">
+                  <header>
+                    <h3>Output</h3>
+                    <button type="button" data-copy-node="${escapeHTML(node.id)}" data-copy-field="output_snapshot">Copy</button>
+                  </header>
+                  <pre class="mono">${escapeHTML(pretty(node.output_snapshot))}</pre>
+                </div>
+              </div>
+              ${node.trace ? renderTrace(node.trace) : ""}
+            </div>
+          </details>
+        `;
+      }
+
+      function renderTrace(trace) {
+        return `
+          <div class="section-head">
+            <h3>Trace</h3>
+          </div>
+          <div class="json-box">
+            <pre class="mono">${escapeHTML(pretty(trace))}</pre>
+          </div>
+        `;
+      }
+
+      function updateURL(executionID) {
+        const url = new URL(window.location.href);
+        url.searchParams.set("execution_id", executionID);
+        window.history.replaceState({}, "", url.toString());
+      }
+
+      function scheduleRefresh() {
+        window.clearTimeout(state.refreshTimer);
+        const running = ["running", "queued"].includes(statusClass(state.execution?.status));
+        if (!el.autoRefresh.checked || !running || !state.activeExecutionID) return;
+        state.refreshTimer = window.setTimeout(() => {
+          loadExecution(state.activeExecutionID, { silent: true });
+        }, 2500);
+      }
+
+      async function copyText(value) {
+        await navigator.clipboard.writeText(value || "");
+      }
+
+      el.loadForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        loadExecution(el.executionInput.value);
+      });
+
+      el.reloadRecent.addEventListener("click", loadRecent);
+      el.workflowFilter.addEventListener("change", loadRecent);
+      el.refreshExecution.addEventListener("click", () => loadExecution(state.activeExecutionID || el.executionInput.value));
+      el.autoRefresh.addEventListener("change", scheduleRefresh);
+
+      el.recentList.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-execution-id]");
+        if (!button) return;
+        loadExecution(button.dataset.executionId);
+      });
+
+      document.addEventListener("click", (event) => {
+        const workflowCopy = event.target.closest("[data-copy]");
+        if (workflowCopy) {
+          const key = workflowCopy.dataset.copy;
+          const value = key === "workflow-input" ? el.workflowInput.textContent : el.workflowOutput.textContent;
+          copyText(value).catch(showError);
+          return;
+        }
+
+        const nodeCopy = event.target.closest("[data-copy-node]");
+        if (!nodeCopy) return;
+        const node = state.nodes.find((item) => item.id === nodeCopy.dataset.copyNode);
+        if (!node) return;
+        copyText(pretty(node[nodeCopy.dataset.copyField])).catch(showError);
+      });
+
+      const initialExecutionID = new URLSearchParams(window.location.search).get("execution_id");
+      loadRecent().then(() => {
+        if (initialExecutionID) {
+          loadExecution(initialExecutionID);
+        }
+      });
+    </script>
+  </body>
+</html>

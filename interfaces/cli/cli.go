@@ -296,8 +296,8 @@ func runServer(ctx context.Context, shellRoot string) error {
 		return err
 	}
 
-	app := restserver.New(stack.Controller, stack.HooksAPI, stack.WorkflowAPI)
 	group, gctx := errgroup.WithContext(ctx)
+	app := restserver.New(gctx, stack.Controller, stack.HooksAPI, stack.WorkflowAPI)
 
 	group.Go(func() error {
 		stack.StartScheduler(gctx)
@@ -536,7 +536,7 @@ func runWorkflow(ctx context.Context, workflowID string, filePath string, inputF
 		return err
 	}
 
-	return printJSON(response.Output)
+	return printJSON(response)
 }
 
 func loadWorkflowInput(workflowID string, filePath string, inputFile string, inputJSON string, inputString string, hasInputFile bool, hasInputJSON bool, hasInputString bool) (map[string]any, error) {

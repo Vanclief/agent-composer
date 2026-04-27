@@ -29,7 +29,7 @@ type workflowGetArgs struct {
 	ExecutionID string `json:"execution_id" jsonschema:"required" jsonschema_description:"Workflow execution id returned by agc_workflow_start"`
 }
 
-type WorkflowStartResult = workflowexecutions.StartResponse
+type WorkflowStartResult = workflowexecutions.CreateResponse
 type WorkflowGetResult = workflowexecutions.StatusResponse
 
 type workflowListArgs struct{}
@@ -98,7 +98,7 @@ func NewServer(rootCtx context.Context, stack *core.Stack, defaultShellRoot stri
 			shellRoot = defaultShellRoot
 		}
 
-		response, err := stack.WorkflowAPI.Executions.Start(rootCtx, nil, &workflowexecutions.CreateRequest{
+		response, err := stack.WorkflowAPI.Executions.Create(rootCtx, nil, &workflowexecutions.CreateRequest{
 			WorkflowID: args.ID,
 			File:       args.File,
 			Input:      args.Input,

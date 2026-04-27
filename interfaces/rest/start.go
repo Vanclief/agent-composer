@@ -2,6 +2,7 @@ package rest
 
 import (
 	"context"
+	"embed"
 	"errors"
 	"net/http"
 	"time"
@@ -13,6 +14,9 @@ import (
 	"github.com/vanclief/agent-composer/interfaces/rest/handler"
 	"github.com/vanclief/agent-composer/interfaces/rest/server"
 )
+
+//go:embed static/*
+var staticFiles embed.FS
 
 func Start(ctx context.Context, s *server.Server, log zerolog.Logger) error {
 	e := echo.New()
@@ -49,6 +53,7 @@ func Start(ctx context.Context, s *server.Server, log zerolog.Logger) error {
 
 	// Routes
 	addAPIRoutes(e, h)
+	addWebRoutes(e)
 
 	// Config
 	e.HideBanner = true
@@ -85,4 +90,29 @@ func Start(ctx context.Context, s *server.Server, log zerolog.Logger) error {
 	case err := <-serverErr:
 		return err
 	}
+}
+
+func addWebRoutes(e *echo.Echo) {
+	e.GET("/", serveWebIndex)
+	e.GET("/index.html", serveWebIndex)
+	e.GET("/workflow", serveWorkflow)
+	e.GET("/workflow.html", serveWorkflow)
+}
+
+func serveWebIndex(c echo.Context) error {
+	content, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		return err
+	}
+
+	return c.HTMLBlob(http.StatusOK, content)
+}
+
+func serveWorkflow(c echo.Context) error {
+	content, err := staticFiles.ReadFile("static/workflow.html")
+	if err != nil {
+		return err
+	}
+
+	return c.HTMLBlob(http.StatusOK, content)
 }

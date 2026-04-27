@@ -19,6 +19,8 @@ tags:
     description: Manage agent conversation runs and forks.
   - name: Hooks
     description: Manage runtime hooks that trigger external commands.
+  - name: Workflows
+    description: Inspect installed workflow blueprints.
 paths:
   /agents/specs:
     get:
@@ -460,6 +462,42 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
+  /workflows:
+    get:
+      tags: [Workflows]
+      operationId: listWorkflows
+      summary: List workflows
+      description: Returns installed workflow blueprints from the local workflow registry.
+      responses:
+        '200':
+          description: Installed workflow summaries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowListResponse'
+        '500':
+          $ref: '#/components/responses/Error'
+  /workflows/{id}:
+    get:
+      tags: [Workflows]
+      operationId: getWorkflow
+      summary: Retrieve a workflow spec
+      description: Returns the raw YAML blueprint spec for an installed workflow.
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdParam'
+      responses:
+        '200':
+          description: Raw workflow blueprint spec.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowGetResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
 components:
   parameters:
     LimitParam:
@@ -509,6 +547,13 @@ components:
       schema:
         type: string
         format: uuid
+    WorkflowIdParam:
+      name: id
+      in: path
+      required: true
+      description: Workflow blueprint identifier.
+      schema:
+        type: string
   responses:
     Error:
       description: Error response with machine-readable code and request identifier.
@@ -915,6 +960,45 @@ components:
                 $ref: '#/components/schemas/Hook'
           required:
             - hooks
+    WorkflowSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        inputs:
+          type: object
+          additionalProperties:
+            type: string
+        outputs:
+          type: object
+          additionalProperties:
+            type: string
+      required:
+        - id
+        - inputs
+        - outputs
+    WorkflowListResponse:
+      type: object
+      properties:
+        workflows:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowSummary'
+      required:
+        - workflows
+    WorkflowGetResponse:
+      type: object
+      properties:
+        workflow_id:
+          type: string
+        spec:
+          type: string
+          description: Raw workflow YAML blueprint.
+      required:
+        - workflow_id
+        - spec
     CreateHookRequest:
       type: object
       required:

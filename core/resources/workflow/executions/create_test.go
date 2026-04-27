@@ -101,7 +101,9 @@ flow:
 		t.Fatalf("write workflow file: %v", err)
 	}
 
-	recorder := &stubRecorder{}
+	recorder := &stubRecorder{
+		workflowStatuses: make(chan executionmodels.WorkflowExecutionStatus, 1),
+	}
 	api := &API{
 		rt: &runtime.Runtime{},
 		newRecorder: func() workflowruntime.ExecutionRecorder {
@@ -128,102 +130,8 @@ flow:
 		t.Fatalf("expected execution id to be returned")
 	}
 
-	out, ok := response.Output["out"].(map[string]any)
-	if !ok {
-		t.Fatalf("unexpected output shape: %#v", response.Output["out"])
-	}
-
-	if out["title"] != "Bridge update" {
-		t.Fatalf("unexpected title: %#v", out["title"])
-	}
-
-	if out["content"] != "Widened sidewalks and new bike lanes." {
-		t.Fatalf("unexpected content: %#v", out["content"])
-	}
-
-	if recorder.startedWorkflows != 1 || recorder.finishedWorkflows != 1 {
-		t.Fatalf("unexpected workflow persistence calls: start=%d finish=%d", recorder.startedWorkflows, recorder.finishedWorkflows)
-	}
-
-	if recorder.startedNodes != 1 || recorder.finishedNodes != 1 {
-		t.Fatalf("unexpected node persistence calls: start=%d finish=%d", recorder.startedNodes, recorder.finishedNodes)
-	}
-}
-
-func TestStartReturnsExecutionIDImmediately(t *testing.T) {
-	tempDir := t.TempDir()
-	workflowPath := filepath.Join(tempDir, "async-pack-workflow.yaml")
-
-	err := os.WriteFile(workflowPath, []byte(`
-workflow:
-  id: workflow_execution_start_test
-  version: "1"
-  inputs:
-    title: string
-    content: string
-  outputs:
-    out:
-      schema: Draft
-      from: instance.pack_draft.out
-
-schemas:
-  Draft:
-    type: object
-    properties:
-      title:
-        type: string
-      content:
-        type: string
-
-nodes:
-  pack_draft:
-    kind: connector
-    operation: pack
-    inputs:
-      title: string
-      content: string
-    outputs:
-      out: Draft
-
-flow:
-  instances:
-    pack_draft:
-      node: pack_draft
-      inputs:
-        title: workflow_input.title
-        content: workflow_input.content
-`), 0644)
-	if err != nil {
-		t.Fatalf("write workflow file: %v", err)
-	}
-
-	recorder := &stubRecorder{
-		workflowStatuses: make(chan executionmodels.WorkflowExecutionStatus, 1),
-	}
-	api := &API{
-		rt: &runtime.Runtime{},
-		newRecorder: func() workflowruntime.ExecutionRecorder {
-			return recorder
-		},
-	}
-
-	response, err := api.Start(context.Background(), nil, &CreateRequest{
-		File: workflowPath,
-		Input: map[string]any{
-			"title":   "Async bridge update",
-			"content": "Started without waiting for the full workflow response.",
-		},
-	})
-	if err != nil {
-		t.Fatalf("start workflow execution: %v", err)
-	}
-
-	if response.ExecutionID == "" {
-		t.Fatal("expected execution id to be returned")
-	}
-
 	if response.Status != executionmodels.WorkflowExecutionStatusRunning {
-		t.Fatalf("unexpected start status: %q", response.Status)
+		t.Fatalf("unexpected create status: %q", response.Status)
 	}
 
 	select {
@@ -233,6 +141,14 @@ flow:
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for detached workflow completion")
+	}
+
+	if recorder.startedWorkflows != 1 || recorder.finishedWorkflows != 1 {
+		t.Fatalf("unexpected workflow persistence calls: start=%d finish=%d", recorder.startedWorkflows, recorder.finishedWorkflows)
+	}
+
+	if recorder.startedNodes != 1 || recorder.finishedNodes != 1 {
+		t.Fatalf("unexpected node persistence calls: start=%d finish=%d", recorder.startedNodes, recorder.finishedNodes)
 	}
 }
 
@@ -290,7 +206,9 @@ flow:
 		t.Fatalf("write workflow file: %v", err)
 	}
 
-	recorder := &stubRecorder{}
+	recorder := &stubRecorder{
+		workflowStatuses: make(chan executionmodels.WorkflowExecutionStatus, 1),
+	}
 	api := &API{
 		rt: &runtime.Runtime{},
 		newRecorder: func() workflowruntime.ExecutionRecorder {
@@ -313,21 +231,21 @@ flow:
 		t.Fatalf("unexpected workflow id: %q", response.WorkflowID)
 	}
 
-	out, ok := response.Output["out"].(map[string]any)
-	if !ok {
-		t.Fatalf("unexpected output shape: %#v", response.Output["out"])
+	if response.Status != executionmodels.WorkflowExecutionStatusRunning {
+		t.Fatalf("unexpected create status: %q", response.Status)
 	}
 
-	if out["title"] != "Registry bridge update" {
-		t.Fatalf("unexpected title: %#v", out["title"])
-	}
-
-	if out["content"] != "Copied starter workflow and ran it from the registry." {
-		t.Fatalf("unexpected content: %#v", out["content"])
+	select {
+	case status := <-recorder.workflowStatuses:
+		if status != executionmodels.WorkflowExecutionStatusSucceeded {
+			t.Fatalf("unexpected finished status: %q", status)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for detached workflow completion")
 	}
 }
 
-func TestCreateReturnsExecutionFailedErrorOnRuntimeFailure(t *testing.T) {
+func TestCreateRecordsFailedStatusOnRuntimeFailure(t *testing.T) {
 	tempDir := t.TempDir()
 	workflowPath := filepath.Join(tempDir, "failing-workflow.yaml")
 
@@ -369,7 +287,9 @@ flow:
 		t.Fatalf("write workflow file: %v", err)
 	}
 
-	recorder := &stubRecorder{}
+	recorder := &stubRecorder{
+		workflowStatuses: make(chan executionmodels.WorkflowExecutionStatus, 1),
+	}
 	api := &API{
 		rt: &runtime.Runtime{},
 		newRecorder: func() workflowruntime.ExecutionRecorder {
@@ -377,27 +297,31 @@ flow:
 		},
 	}
 
-	_, err = api.Create(context.Background(), nil, &CreateRequest{
+	response, err := api.Create(context.Background(), nil, &CreateRequest{
 		File: workflowPath,
 		Input: map[string]any{
 			"source": "not an object",
 		},
 	})
-	if err == nil {
-		t.Fatal("expected create workflow execution to fail")
+	if err != nil {
+		t.Fatalf("create workflow execution: %v", err)
 	}
 
-	failedErr, ok := err.(*ExecutionFailedError)
-	if !ok {
-		t.Fatalf("expected ExecutionFailedError, got %T", err)
+	if response.ExecutionID == "" {
+		t.Fatal("expected execution id to be returned")
 	}
 
-	if failedErr.Details.ExecutionID == "" {
-		t.Fatalf("expected execution id on failure: %#v", failedErr.Details)
+	if response.Status != executionmodels.WorkflowExecutionStatusRunning {
+		t.Fatalf("unexpected create status: %q", response.Status)
 	}
 
-	if !strings.Contains(failedErr.Error(), "execution_id=") {
-		t.Fatalf("expected execution id in error string: %q", failedErr.Error())
+	select {
+	case status := <-recorder.workflowStatuses:
+		if status != executionmodels.WorkflowExecutionStatusFailed {
+			t.Fatalf("unexpected finished status: %q", status)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for detached workflow failure")
 	}
 }
 

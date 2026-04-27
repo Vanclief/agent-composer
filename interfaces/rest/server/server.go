@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -17,16 +18,22 @@ import (
 )
 
 type Server struct {
+	RootContext context.Context
 	Ctrl        *controller.Controller
 	RateLimiter *ratelimit.WindowCounter
 	HooksAPI    *hooks.API
 	WorkflowAPI *workflowapi.API
 }
 
-func New(ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API) *Server {
+func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API) *Server {
+	if rootCtx == nil {
+		rootCtx = context.Background()
+	}
+
 	limiter := ratelimit.NewWindowCounter(ctrl.Config.App.RateLimitWindow, ctrl.Config.App.RateLimit)
 
 	return &Server{
+		RootContext: rootCtx,
 		Ctrl:        ctrl,
 		RateLimiter: limiter,
 		HooksAPI:    hooksAPI,
@@ -69,8 +76,12 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 	case *hooks.DeleteRequest:
 		return s.HooksAPI.Delete(request.GetContext(), nil, body)
 
+	case *workflowapi.ListRequest:
+		return s.WorkflowAPI.List(request.GetContext(), nil, body)
+	case *workflowapi.GetRequest:
+		return s.WorkflowAPI.Get(request.GetContext(), nil, body)
 	case *workflowexecutions.CreateRequest:
-		return s.WorkflowAPI.Executions.Create(request.GetContext(), nil, body)
+		return s.WorkflowAPI.Executions.Create(s.workflowExecutionStartContext(), nil, body)
 	case *workflowexecutions.ListRequest:
 		return s.WorkflowAPI.Executions.List(request.GetContext(), nil, body)
 	case *workflowexecutions.GetRequest:
@@ -83,6 +94,14 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 	default:
 		return nil, ez.New("rest.Server.handleRequest", ez.EINVALID, "Unsupported request type", nil)
 	}
+}
+
+func (s *Server) workflowExecutionStartContext() context.Context {
+	if s.RootContext != nil {
+		return s.RootContext
+	}
+
+	return context.Background()
 }
 
 func logRequest(request requests.Request, requester *user.User) {

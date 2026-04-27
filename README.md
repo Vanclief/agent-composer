@@ -93,13 +93,21 @@ agc
 agc rest
 ```
 
-**Run a workflow**
+Workflow execution inspector:
+
+```
+http://localhost:8080
+```
+
+**Start a workflow run**
 
 ```bash
 agc workflow run \
   --id binary_vote_round \
   --input-json '{"question":"Are cats blue?"}'
 ```
+
+This returns an execution id immediately. Use the REST execution get endpoint or MCP `agc_workflow_get` to poll for `running`, `succeeded`, or `failed`.
 
 Workflow commands live under `agc workflow`, with `agc wf` and `agc w` as aliases.
 
@@ -121,6 +129,23 @@ agc workflow compile --file ./examples/binary_vote_round.yaml
 
 ```bash
 agc workflow list
+```
+
+REST:
+
+```bash
+curl http://localhost:8080/api/workflows
+curl http://localhost:8080/api/workflows/binary_vote_round
+```
+
+Creating a workflow execution through REST returns an execution id immediately:
+
+```bash
+curl -X POST http://localhost:8080/api/workflow/executions \
+  -H 'Content-Type: application/json' \
+  -d '{"workflow_id":"binary_vote_round","input":{"question":"Are cats blue?"}}'
+
+curl http://localhost:8080/api/workflow/executions/<execution_id>
 ```
 
 **Show a workflow's raw YAML**
