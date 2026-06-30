@@ -1,0 +1,225 @@
+workflow:
+  id: triage_review_issues
+  version: "1"
+  description: >
+    Take a list of review issues (e.g. the output of parallel_pr_review) and
+    triage each one independently. Phase one runs a read-only investigator per
+    issue in parallel: it reproduces the issue (running tests or builds as
+    needed) to decide if the finding is real, then classifies a real finding as
+    a mechanical fix or a design decision that needs a human. Phase two runs
+    serially over the verdicts and, for confirmed mechanical issues only,
+    applies the fix to the working tree and re-runs the relevant test to confirm
+    it is green. The output is a flat list where every issue carries its verdict
+    and its final disposition: fixed, dropped as a false positive, needs a human
+    decision, or attempted-but-failed.
+  inputs:
+    issues: ReviewIssueList
+  outputs:
+    issues:
+      schema: TriagedIssueList
+      from: instance.fix_all.out
+
+schemas:
+  ReviewIssue:
+    type: object
+    properties:
+      title:
+        type: string
+      description:
+        type: string
+      severity:
+        type: string
+        enum: [low, medium, high]
+      location:
+        type: string
+
+  ReviewIssueList:
+    type: array
+    items:
+      schema_ref: ReviewIssue
+
+  TriageVerdict:
+    type: object
+    properties:
+      issue_id:
+        type: string
+        description: >
+          Stable short kebab-case identifier derived from the issue title, used
+          to match a human decision back to this issue in a later run.
+      issue:
+        schema_ref: ReviewIssue
+      reproducible:
+        type: string
+        enum: [confirmed, refuted, uncertain]
+        description: >
+          confirmed = a concrete repro demonstrated the problem; refuted = the
+          claim does not hold (false positive); uncertain = could not be
+          verified mechanically.
+      repro_command:
+        type: string
+        description: >
+          The exact command(s) run to verify the issue (test, build, grep, or a
+          probe). Required and non-empty for confirmed and refuted verdicts.
+      observed_result:
+        type: string
+        description: What actually happened when the repro command ran.
+      fix_class:
+        type: string
+        enum: [mechanical, design, not_applicable]
+        description: >
+          mechanical = exactly one obviously-correct fix that a test can prove
+          right; design = correctness depends on intent, changes a contract, or
+          a reasonable maintainer could disagree; not_applicable = refuted or
+          uncertain.
+      recommended_fix:
+        type: string
+        description: For mechanical issues, the concrete change to apply. Empty otherwise.
+      question:
+        type: string
+        description: For design issues, the decision the human must make. Empty otherwise.
+      options:
+        type: array
+        items:
+          type: string
+        description: For design issues, the candidate choices the human can pick from.
+      recommendation:
+        type: string
+        description: For design issues, which option the investigator recommends and why.
+
+  TriageVerdictList:
+    type: array
+    items:
+      schema_ref: TriageVerdict
+
+  TriagedIssue:
+    type: object
+    properties:
+      verdict:
+        schema_ref: TriageVerdict
+      disposition:
+        type: string
+        enum: [fixed, dropped_false_positive, needs_decision, fix_failed]
+      fix_summary:
+        type: string
+        description: >
+          For fixed/fix_failed, what was changed and the result. For other
+          dispositions, a one-line reason (e.g. why it was dropped).
+      tests_passed:
+        type: boolean
+        description: >
+          Whether the verifying test/build was green after the fix. False for
+          non-fix dispositions.
+
+  TriagedIssueList:
+    type: array
+    items:
+      schema_ref: TriagedIssue
+
+nodes:
+  issue_triager:
+    kind: inference
+    inputs:
+      issue: ReviewIssue
+    outputs:
+      out: TriageVerdict
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.5
+        reasoning_effort: high
+      instruction: >
+        You are triaging a single review issue against the current codebase.
+        Do NOT modify, create, or delete any source files in this step; you may
+        read files, grep, and run tests or build commands to verify the claim.
+
+        First set issue_id to a stable short kebab-case slug derived from the
+        issue title (append a word from the location if the title is generic).
+
+        Then reproduce the issue. Run the most direct check possible: the failing
+        test, a build, a grep, or a small probe. Record the exact command in
+        repro_command and what happened in observed_result. Set reproducible to
+        confirmed if the check demonstrates the problem, refuted if the check
+        shows the claim does not hold (a false positive), or uncertain if you
+        genuinely cannot verify it mechanically. repro_command and
+        observed_result must be non-empty for confirmed and refuted.
+
+        Finally classify a confirmed issue. Set fix_class to mechanical only when
+        there is exactly one obviously-correct fix whose correctness a test could
+        prove. Set it to design when any of these hold: more than one valid fix
+        exists, the fix changes a public API, schema, DB constraint, security
+        posture, or intended behavior, or a reasonable maintainer could argue it
+        is intentional and not a bug. For mechanical issues, write the concrete
+        change in recommended_fix and leave question/options/recommendation
+        empty. For design issues, leave recommended_fix empty and fill question
+        with the decision to make, options with the candidate choices, and
+        recommendation with your preferred option and why. For refuted or
+        uncertain verdicts set fix_class to not_applicable and leave the fix and
+        decision fields empty.
+
+  triage_all:
+    kind: loop
+    operation: foreach
+    executes: issue_triager
+    over: issue
+    inputs:
+      issue: ReviewIssueList
+    outputs:
+      out: TriageVerdictList
+    parallelism: max
+    preserve_order: true
+
+  issue_fixer:
+    kind: inference
+    inputs:
+      verdict: TriageVerdict
+    outputs:
+      out: TriagedIssue
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.5
+        reasoning_effort: high
+      instruction: >
+        You are given one triage verdict and must produce its final disposition.
+        Carry the verdict through unchanged in the output.
+
+        If reproducible is refuted, make no code changes, set disposition to
+        dropped_false_positive, set tests_passed to false, and put the
+        evidence-backed reason (referencing the verdict's repro_command and
+        observed_result) in fix_summary.
+
+        If reproducible is uncertain, or it is confirmed with fix_class design,
+        make no code changes, set disposition to needs_decision, set
+        tests_passed to false, and summarize in fix_summary why a human must
+        decide (echo the question for design issues).
+
+        Only if reproducible is confirmed and fix_class is mechanical: apply the
+        verdict's recommended_fix to the working tree, then run the most relevant
+        test or build to verify it. If it passes, set disposition to fixed and
+        tests_passed to true. If your change does not make the check pass, revert
+        your change, set disposition to fix_failed and tests_passed to false.
+        Describe exactly what you changed and the test result in fix_summary.
+
+  fix_all:
+    kind: loop
+    operation: foreach
+    executes: issue_fixer
+    over: verdict
+    inputs:
+      verdict: TriageVerdictList
+    outputs:
+      out: TriagedIssueList
+    parallelism: serial
+    preserve_order: true
+
+flow:
+  instances:
+    triage_all:
+      node: triage_all
+      inputs:
+        issue: workflow_input.issues
+
+    fix_all:
+      node: fix_all
+      inputs:
+        verdict: instance.triage_all.out
