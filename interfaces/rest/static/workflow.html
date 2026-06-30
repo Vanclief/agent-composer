@@ -1119,6 +1119,18 @@ function fmt(v) {
   try { return JSON.stringify(v, null, 2); } catch { return String(v); }
 }
 
+function workflowIdFromURL() {
+  const m = window.location.pathname.match(/^\/workflow\/([^\/?#]+)/);
+  if (m) return decodeURIComponent(m[1]);
+  return new URLSearchParams(window.location.search).get('id') || null;
+}
+
+function syncWorkflowURL(workflowId, replace) {
+  const target = '/workflow/' + encodeURIComponent(workflowId);
+  if (window.location.pathname === target) return;
+  window.history[replace ? 'replaceState' : 'pushState']({ workflowId }, '', target);
+}
+
 async function copyText(text) {
   try {
     if (navigator.clipboard && window.isSecureContext) {
@@ -1343,20 +1355,43 @@ Object.assign(window, { Inspector });
 <!-- Run Input Modal -->
 <script type="text/babel">
 function RunInputModal({ workflowId, inputDefs, onRun, onClose }) {
+  const inputEntries = Object.entries(inputDefs || {});
+
   const [values, setValues] = React.useState(() => {
     const init = {};
-    for (const [k, type] of Object.entries(inputDefs || {})) {
-      init[k] = '';
-    }
+    for (const [k] of inputEntries) init[k] = '';
     return init;
   });
+  // Each field is interpreted as raw text or parsed JSON. Default to JSON for
+  // structured inputs (anything that isn't a plain string type) so pasting an
+  // array or object just works, while `string` inputs stay literal text.
+  const [modes, setModes] = React.useState(() => {
+    const init = {};
+    for (const [k, type] of inputEntries) init[k] = type === 'string' ? 'text' : 'json';
+    return init;
+  });
+  const [errors, setErrors] = React.useState({});
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onRun(values);
+    const payload = {};
+    const nextErrors = {};
+    for (const [name] of inputEntries) {
+      const raw = values[name] ?? '';
+      if (modes[name] === 'json') {
+        try {
+          payload[name] = JSON.parse(raw);
+        } catch (err) {
+          nextErrors[name] = 'Invalid JSON: ' + err.message;
+        }
+      } else {
+        payload[name] = raw;
+      }
+    }
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+    onRun(payload);
   };
-
-  const inputEntries = Object.entries(inputDefs || {});
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -1373,22 +1408,28 @@ function RunInputModal({ workflowId, inputDefs, onRun, onClose }) {
           )}
           {inputEntries.map(([name, type]) => (
             <div key={name} className="field-row">
-              <label>{name} <span style={{fontWeight:400, textTransform:'none', letterSpacing:0, opacity:.7}}>({type})</span></label>
-              {type === 'string' ? (
-                <textarea
-                  className="textarea"
-                  rows="5"
-                  placeholder={`Enter ${name}...`}
-                  value={values[name] || ''}
-                  onChange={(e) => setValues(v => ({ ...v, [name]: e.target.value }))}
-                />
-              ) : (
-                <input
-                  className="input"
-                  placeholder={`Enter ${name}...`}
-                  value={values[name] || ''}
-                  onChange={(e) => setValues(v => ({ ...v, [name]: e.target.value }))}
-                />
+              <div style={{display:'flex', alignItems:'center', gap:8}}>
+                <label style={{flex:'0 1 auto'}}>{name} <span style={{fontWeight:400, textTransform:'none', letterSpacing:0, opacity:.7}}>({type})</span></label>
+                <select className="select" value={modes[name]}
+                  style={{marginLeft:'auto', width:'auto', fontSize:11, padding:'2px 6px'}}
+                  onChange={(e) => setModes(m => ({ ...m, [name]: e.target.value }))}>
+                  <option value="text">Text</option>
+                  <option value="json">JSON</option>
+                </select>
+              </div>
+              <textarea
+                className="textarea"
+                rows={modes[name] === 'json' ? 6 : 4}
+                placeholder={modes[name] === 'json' ? `Enter ${name} as JSON…` : `Enter ${name}…`}
+                value={values[name] || ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setValues(v => ({ ...v, [name]: val }));
+                  if (errors[name]) setErrors(er => { const n = { ...er }; delete n[name]; return n; });
+                }}
+              />
+              {errors[name] && (
+                <div style={{color:'var(--st-err)', fontSize:11}}>{errors[name]}</div>
               )}
             </div>
           ))}
@@ -1550,7 +1591,9 @@ function App() {
         setLoading(true);
         const wfs = await refreshWorkflows();
         if (wfs.length > 0) {
-          await selectWorkflow(wfs[0].id);
+          const urlId = workflowIdFromURL();
+          const initial = (urlId && wfs.some(w => w.id === urlId)) ? urlId : wfs[0].id;
+          await selectWorkflow(initial, { replace: true });
         }
       } catch (e) {
         setError(e.message);
@@ -1560,8 +1603,21 @@ function App() {
     })();
   }, []);
 
-  async function selectWorkflow(workflowId) {
+  // Back/forward navigation: re-select the workflow named in the URL.
+  useEffect(() => {
+    const onPop = () => {
+      const id = workflowIdFromURL();
+      if (id && id !== activeWorkflowId && workflows.some(w => w.id === id)) {
+        selectWorkflow(id, { replace: true });
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [activeWorkflowId, workflows]);
+
+  async function selectWorkflow(workflowId, opts = {}) {
     setActiveWorkflowId(workflowId);
+    syncWorkflowURL(workflowId, opts.replace);
     setSelectedId(null);
     setRunState({});
     setEdgeFlow({});

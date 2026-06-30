@@ -176,8 +176,8 @@ nodes:
       out: TriagedIssue
     config:
       harness:
-        id: codex_cli
-        model: gpt-5.5
+        id: claude_code
+        model: claude-opus-4-8
         reasoning_effort: high
       instruction: >
         You are given one triage verdict and must produce its final disposition.

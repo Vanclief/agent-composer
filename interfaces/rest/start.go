@@ -97,6 +97,7 @@ func addWebRoutes(e *echo.Echo) {
 	e.GET("/index.html", serveWebIndex)
 	e.GET("/workflow", serveWorkflow)
 	e.GET("/workflow.html", serveWorkflow)
+	e.GET("/workflow/:id", serveWorkflow)
 }
 
 func serveWebIndex(c echo.Context) error {
