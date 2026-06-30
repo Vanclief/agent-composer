@@ -3,14 +3,15 @@ workflow:
   version: "1"
   description: >
     Run three independent gpt-5.5 agents that each review the current changes
-    against the provided branch using the pr-review skill, then merge all of
-    their issues into a single list.
+    against the provided branch using the pr-review skill, merge all of their
+    issues into a single list, then deduplicate issues that the reviewers
+    reported in common.
   inputs:
     branch: string
   outputs:
     issues:
       schema: ReviewIssueList
-      from: instance.merge_issues.out
+      from: instance.dedupe_issues.out
 
 schemas:
   ReviewIssue:
@@ -58,6 +59,24 @@ nodes:
     outputs:
       out: ReviewIssueList
 
+  issue_deduplicator:
+    kind: inference
+    inputs:
+      issues: ReviewIssueList
+    outputs:
+      out: ReviewIssueList
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.5
+        reasoning_effort: xhigh
+      instruction: >
+        You are given a list of review issues collected from three independent
+        reviewers. Remove duplicates: when two or more issues describe the same
+        underlying problem (same root cause and location, even if worded
+        differently), keep a single best entry and drop the rest. Do not merge
+        distinct issues and do not invent new ones. Return the deduplicated list.
+
 flow:
   instances:
     review_a:
@@ -81,3 +100,8 @@ flow:
         issues_a: instance.review_a.out
         issues_b: instance.review_b.out
         issues_c: instance.review_c.out
+
+    dedupe_issues:
+      node: issue_deduplicator
+      inputs:
+        issues: instance.merge_issues.out

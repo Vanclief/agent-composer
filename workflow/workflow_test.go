@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/vanclief/agent-composer/models/agent"
 	"github.com/vanclief/agent-composer/runtime/harnesses"
@@ -1792,6 +1794,7 @@ func TestExampleWorkflowCoverage(t *testing.T) {
 		"section_summary_batch.yaml":              true,
 		"conditional_boolean_routing_review.yaml": true,
 		"parallel_code_review.yaml":               true,
+		"parallel_pr_review.yaml":                 true,
 		"loop_while_binary_consensus.yaml":        true,
 		"plan-new-blueprint.yaml":                 true,
 		"review_fix_cycle.yaml":                   true,
@@ -1833,6 +1836,78 @@ func TestExampleWorkflowCoverage(t *testing.T) {
 	if !seen["article_summary.yaml"] || !seen["binary_vote_round.yaml"] {
 		t.Fatalf("expected core example workflows to be present, got %#v", seen)
 	}
+}
+
+func TestExecuteParallelPRReviewRunsReviewersConcurrently(t *testing.T) {
+	blueprint, err := LoadBlueprintFile("../examples/parallel_pr_review.yaml")
+	if err != nil {
+		t.Fatalf("load blueprint: %v", err)
+	}
+
+	snapshot, err := Compile(blueprint)
+	if err != nil {
+		t.Fatalf("compile workflow: %v", err)
+	}
+
+	barrier := &concurrencyBarrier{target: 3, released: make(chan struct{})}
+	executor := NewExecutor("")
+	executor.NewHarness = func(kind agent.Harness) (harnesses.Harness, error) {
+		return barrierHarness{barrier: barrier}, nil
+	}
+
+	output, err := executor.Run(context.Background(), snapshot, map[string]any{
+		"branch": "master",
+	})
+	if err != nil {
+		t.Fatalf("run workflow: %v", err)
+	}
+
+	issues, err := toAnySlice(output["issues"])
+	if err != nil {
+		t.Fatalf("unexpected issues output: %v", err)
+	}
+
+	if len(issues) != 3 {
+		t.Fatalf("expected one merged issue per reviewer, got: %d", len(issues))
+	}
+}
+
+// concurrencyBarrier blocks each arriving caller until `target` callers have
+// arrived. If the workflow ran the reviewers sequentially, the first caller
+// would wait forever for siblings that never start, so the harness times out
+// and the test fails.
+type concurrencyBarrier struct {
+	mu       sync.Mutex
+	count    int
+	target   int
+	released chan struct{}
+}
+
+type barrierHarness struct {
+	barrier *concurrencyBarrier
+}
+
+func (barrierHarness) Validate(ctx context.Context, model string, config json.RawMessage) error {
+	return nil
+}
+
+func (h barrierHarness) Run(ctx context.Context, conversation *agent.Conversation, prompt string) (*harnesses.RunResult, error) {
+	h.barrier.mu.Lock()
+	h.barrier.count++
+	if h.barrier.count == h.barrier.target {
+		close(h.barrier.released)
+	}
+	h.barrier.mu.Unlock()
+
+	select {
+	case <-h.barrier.released:
+	case <-time.After(5 * time.Second):
+		return nil, fmt.Errorf("reviewers did not run concurrently: barrier timed out")
+	}
+
+	return &harnesses.RunResult{
+		LastAssistantMessage: `{"value":[{"title":"issue","description":"found","severity":"low","location":"file.go:1"}]}`,
+	}, nil
 }
 
 type fakeHarness struct{}

@@ -7,12 +7,19 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/vanclief/agent-composer/models/agent"
 	executionmodels "github.com/vanclief/agent-composer/models/execution"
 	"github.com/vanclief/agent-composer/runtime/types"
 	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/ez"
 )
+
+// maxParallelNodes bounds how many dependency-independent nodes run
+// concurrently within a single workflow scope, to avoid spawning an unbounded
+// number of harness subprocesses at once.
+const maxParallelNodes = 8
 
 func (e *Executor) Run(ctx context.Context, snapshot *Snapshot, input map[string]any) (map[string]any, error) {
 	output, _, err := e.RunWithHandle(ctx, snapshot, input)
@@ -123,66 +130,63 @@ func (e *Executor) runSnapshot(ctx context.Context, snapshot *Snapshot, input ma
 	const op = "workflow.Executor.runSnapshot"
 
 	instanceOutputs := make(map[string]map[string]any, len(snapshot.Nodes))
+	completed := make(map[string]bool, len(snapshot.Order))
 
+	dependencies := make(map[string]map[string]bool, len(snapshot.Order))
 	for _, instanceID := range snapshot.Order {
-		node := snapshot.Nodes[instanceID]
-		values, err := resolveNodeInputs(node, input, instanceOutputs)
+		dependencies[instanceID] = nodeDependencies(snapshot.Nodes[instanceID])
+	}
+
+	// Run the graph in dependency waves: every node whose producers have all
+	// finished is launched concurrently, so independent nodes (such as parallel
+	// reviewers) execute at the same time instead of one after another.
+	for len(completed) < len(snapshot.Order) {
+		ready := make([]string, 0, len(snapshot.Order))
+		for _, instanceID := range snapshot.Order {
+			if completed[instanceID] {
+				continue
+			}
+			if dependenciesSatisfied(dependencies[instanceID], completed) {
+				ready = append(ready, instanceID)
+			}
+		}
+
+		if len(ready) == 0 {
+			return nil, ez.New(op, ez.EINTERNAL, "workflow has unsatisfiable node dependencies", nil)
+		}
+
+		type nodeResult struct {
+			instanceID string
+			outputs    map[string]any
+		}
+		results := make([]nodeResult, len(ready))
+
+		group, groupCtx := errgroup.WithContext(ctx)
+		group.SetLimit(maxParallelNodes)
+		for index, instanceID := range ready {
+			index := index
+			instanceID := instanceID
+			group.Go(func() error {
+				nodeOutputs, err := e.runNode(groupCtx, snapshot, instanceID, input, instanceOutputs, workflowHandle, scope)
+				if err != nil {
+					return err
+				}
+
+				results[index] = nodeResult{instanceID: instanceID, outputs: nodeOutputs}
+
+				return nil
+			})
+		}
+
+		err := group.Wait()
 		if err != nil {
-			return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("node %q: %v", instanceID, err), err)
+			return nil, err
 		}
 
-		var nodeHandle *NodeExecutionHandle
-		if workflowHandle != nil && e.Recorder != nil {
-			handle, startErr := e.Recorder.StartNode(ctx, *workflowHandle, node, values, scope)
-			if startErr != nil {
-				return nil, ez.Wrap(op, startErr)
-			}
-
-			nodeHandle = &handle
+		for _, result := range results {
+			instanceOutputs[result.instanceID] = result.outputs
+			completed[result.instanceID] = true
 		}
-
-		var (
-			trace map[string]any
-			value any
-		)
-
-		switch node.Kind {
-		case "inference":
-			value, err = e.runInference(ctx, node, values, nodeHandle)
-		case "connector":
-			value, err = runConnector(node, values)
-		case "loop":
-			value, trace, err = e.runLoop(ctx, node, values, workflowHandle, nodeHandle)
-		case "conditional":
-			value, trace, err = e.runConditional(ctx, node, values, workflowHandle, nodeHandle)
-		default:
-			err = ez.New(op, ez.EINVALID, "unsupported node kind: "+node.Kind, nil)
-		}
-		if err != nil {
-			if nodeHandle != nil && e.Recorder != nil {
-				_ = e.Recorder.FinishNode(ctx, *nodeHandle, nil, executionmodels.NodeExecutionStatusFailed, makeErrorTrace(err))
-			}
-
-			return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("node %q failed", instanceID), err)
-		}
-
-		nodeOutputs, err := materializeNodeOutputs(node, value)
-		if err != nil {
-			if nodeHandle != nil && e.Recorder != nil {
-				_ = e.Recorder.FinishNode(ctx, *nodeHandle, nil, executionmodels.NodeExecutionStatusFailed, makeErrorTrace(err))
-			}
-
-			return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("node %q returned invalid outputs", instanceID), err)
-		}
-
-		if nodeHandle != nil && e.Recorder != nil {
-			err = e.Recorder.FinishNode(ctx, *nodeHandle, nodeOutputs, executionmodels.NodeExecutionStatusSucceeded, trace)
-			if err != nil {
-				return nil, ez.Wrap(op, err)
-			}
-		}
-
-		instanceOutputs[instanceID] = nodeOutputs
 	}
 
 	outputs := make(map[string]any, len(snapshot.Outputs))
@@ -201,6 +205,93 @@ func (e *Executor) runSnapshot(ctx context.Context, snapshot *Snapshot, input ma
 	}
 
 	return outputs, nil
+}
+
+// nodeDependencies returns the set of producer instance ids a node consumes
+// through its input bindings. A node is ready to run once all of these have
+// finished.
+func nodeDependencies(node NodeSnapshot) map[string]bool {
+	deps := make(map[string]bool, len(node.InputBindings))
+	for _, binding := range node.InputBindings {
+		if binding.Kind == BindingKindInstance && binding.InstanceID != "" {
+			deps[binding.InstanceID] = true
+		}
+	}
+
+	return deps
+}
+
+func dependenciesSatisfied(deps map[string]bool, completed map[string]bool) bool {
+	for dep := range deps {
+		if !completed[dep] {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (e *Executor) runNode(ctx context.Context, snapshot *Snapshot, instanceID string, input map[string]any, instanceOutputs map[string]map[string]any, workflowHandle *WorkflowExecutionHandle, scope NodeExecutionScope) (map[string]any, error) {
+	const op = "workflow.Executor.runNode"
+
+	node := snapshot.Nodes[instanceID]
+	values, err := resolveNodeInputs(node, input, instanceOutputs)
+	if err != nil {
+		return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("node %q: %v", instanceID, err), err)
+	}
+
+	var nodeHandle *NodeExecutionHandle
+	if workflowHandle != nil && e.Recorder != nil {
+		handle, startErr := e.Recorder.StartNode(ctx, *workflowHandle, node, values, scope)
+		if startErr != nil {
+			return nil, ez.Wrap(op, startErr)
+		}
+
+		nodeHandle = &handle
+	}
+
+	var (
+		trace map[string]any
+		value any
+	)
+
+	switch node.Kind {
+	case "inference":
+		value, err = e.runInference(ctx, node, values, nodeHandle)
+	case "connector":
+		value, err = runConnector(node, values)
+	case "loop":
+		value, trace, err = e.runLoop(ctx, node, values, workflowHandle, nodeHandle)
+	case "conditional":
+		value, trace, err = e.runConditional(ctx, node, values, workflowHandle, nodeHandle)
+	default:
+		err = ez.New(op, ez.EINVALID, "unsupported node kind: "+node.Kind, nil)
+	}
+	if err != nil {
+		if nodeHandle != nil && e.Recorder != nil {
+			_ = e.Recorder.FinishNode(ctx, *nodeHandle, nil, executionmodels.NodeExecutionStatusFailed, makeErrorTrace(err))
+		}
+
+		return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("node %q failed", instanceID), err)
+	}
+
+	nodeOutputs, err := materializeNodeOutputs(node, value)
+	if err != nil {
+		if nodeHandle != nil && e.Recorder != nil {
+			_ = e.Recorder.FinishNode(ctx, *nodeHandle, nil, executionmodels.NodeExecutionStatusFailed, makeErrorTrace(err))
+		}
+
+		return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("node %q returned invalid outputs", instanceID), err)
+	}
+
+	if nodeHandle != nil && e.Recorder != nil {
+		err = e.Recorder.FinishNode(ctx, *nodeHandle, nodeOutputs, executionmodels.NodeExecutionStatusSucceeded, trace)
+		if err != nil {
+			return nil, ez.Wrap(op, err)
+		}
+	}
+
+	return nodeOutputs, nil
 }
 
 func materializeNodeOutputs(node NodeSnapshot, value any) (map[string]any, error) {

@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -39,6 +40,7 @@ type recordedConversation struct {
 }
 
 type recordingRecorder struct {
+	mu                      sync.Mutex
 	workflows               []recordedWorkflowExecution
 	nodes                   []recordedNodeExecution
 	conversations           []recordedConversation
@@ -56,6 +58,9 @@ func newRecordingRecorder() *recordingRecorder {
 }
 
 func (r *recordingRecorder) StartWorkflow(ctx context.Context, snapshot *Snapshot, input map[string]any, shellRoot string) (WorkflowExecutionHandle, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	handle := WorkflowExecutionHandle{ID: uuid.New()}
 	index := len(r.workflows)
 	r.workflowIndexByID[handle.ID] = index
@@ -70,6 +75,9 @@ func (r *recordingRecorder) StartWorkflow(ctx context.Context, snapshot *Snapsho
 }
 
 func (r *recordingRecorder) FinishWorkflow(ctx context.Context, handle WorkflowExecutionHandle, output map[string]any, status executionmodels.WorkflowExecutionStatus) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	index, found := r.workflowIndexByID[handle.ID]
 	if !found {
 		return nil
@@ -81,6 +89,9 @@ func (r *recordingRecorder) FinishWorkflow(ctx context.Context, handle WorkflowE
 }
 
 func (r *recordingRecorder) StartNode(ctx context.Context, workflowHandle WorkflowExecutionHandle, node NodeSnapshot, input map[string]any, scope NodeExecutionScope) (NodeExecutionHandle, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	handle := NodeExecutionHandle{ID: uuid.New()}
 	index := len(r.nodes)
 	r.nodeIndexByID[handle.ID] = index
@@ -96,6 +107,9 @@ func (r *recordingRecorder) StartNode(ctx context.Context, workflowHandle Workfl
 }
 
 func (r *recordingRecorder) FinishNode(ctx context.Context, handle NodeExecutionHandle, output map[string]any, status executionmodels.NodeExecutionStatus, trace map[string]any) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	index, found := r.nodeIndexByID[handle.ID]
 	if !found {
 		return nil
@@ -108,6 +122,9 @@ func (r *recordingRecorder) FinishNode(ctx context.Context, handle NodeExecution
 }
 
 func (r *recordingRecorder) StartConversation(ctx context.Context, handle NodeExecutionHandle, conversation *agent.Conversation, input map[string]any) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	conversation.NodeExecutionID = handle.ID
 	conversation.InputSnapshot = cloneMap(input)
 	index := len(r.conversations)
@@ -122,6 +139,9 @@ func (r *recordingRecorder) StartConversation(ctx context.Context, handle NodeEx
 }
 
 func (r *recordingRecorder) FinishConversation(ctx context.Context, conversation *agent.Conversation, output any) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	index, found := r.conversationIndexByNode[conversation.NodeExecutionID]
 	if !found {
 		return nil
