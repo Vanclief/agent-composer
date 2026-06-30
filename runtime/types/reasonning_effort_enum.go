@@ -5,12 +5,14 @@ import "github.com/vanclief/compose/primitives/enums"
 type ReasoningEffort string
 
 const (
+	ReasoningEffortXHigh  ReasoningEffort = "xhigh"
 	ReasoningEffortHigh   ReasoningEffort = "high"
 	ReasoningEffortMedium ReasoningEffort = "medium"
 	ReasoningEffortLow    ReasoningEffort = "low"
 )
 
 var reasoningEffortSet = enums.Set([]ReasoningEffort{
+	ReasoningEffortXHigh,
 	ReasoningEffortHigh,
 	ReasoningEffortMedium,
 	ReasoningEffortLow,

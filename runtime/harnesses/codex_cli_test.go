@@ -54,6 +54,41 @@ func TestBuildArgsIncludesOutputSchemaWhenStructuredOutputSchemaIsPresent(t *tes
 	}
 }
 
+func TestBuildArgsForwardsReasoningEffortConfigOverride(t *testing.T) {
+	conversation := &agent.Conversation{
+		Model:           "gpt-5.5",
+		ReasoningEffort: "xhigh",
+	}
+
+	args := (&CodexCLI{}).buildArgs(conversation, codexCLIConfig{}, "prompt", "/tmp/last-message.txt", "")
+
+	found := false
+	for index := 0; index < len(args)-1; index++ {
+		if args[index] == "-c" && args[index+1] == `model_reasoning_effort="xhigh"` {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Fatalf("expected model_reasoning_effort config override in args: %#v", args)
+	}
+}
+
+func TestBuildArgsOmitsReasoningEffortWhenUnset(t *testing.T) {
+	conversation := &agent.Conversation{
+		Model: "gpt-5.5",
+	}
+
+	args := (&CodexCLI{}).buildArgs(conversation, codexCLIConfig{}, "prompt", "/tmp/last-message.txt", "")
+
+	for index := 0; index < len(args); index++ {
+		if args[index] == "-c" {
+			t.Fatalf("did not expect a config override when reasoning effort is unset: %#v", args)
+		}
+	}
+}
+
 func TestSelectCodexHarnessErrorPrefersStructuredSummaryErrors(t *testing.T) {
 	summary := codexRunSummary{
 		Errors: []string{

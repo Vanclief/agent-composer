@@ -230,6 +230,10 @@ func (c *CodexCLI) buildArgs(conversation *agent.Conversation, cfg codexCLIConfi
 
 	args = append(args, "--json")
 	args = append(args, "-m", conversation.Model)
+	effort := strings.TrimSpace(string(conversation.ReasoningEffort))
+	if effort != "" {
+		args = append(args, "-c", "model_reasoning_effort="+strconv.Quote(effort))
+	}
 	args = append(args, "-o", lastMessagePath)
 	if strings.TrimSpace(schemaPath) != "" {
 		args = append(args, "--output-schema", schemaPath)

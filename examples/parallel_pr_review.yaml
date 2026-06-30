@@ -1,0 +1,83 @@
+workflow:
+  id: parallel_pr_review
+  version: "1"
+  description: >
+    Run three independent gpt-5.5 agents that each review the current changes
+    against the provided branch using the pr-review skill, then merge all of
+    their issues into a single list.
+  inputs:
+    branch: string
+  outputs:
+    issues:
+      schema: ReviewIssueList
+      from: instance.merge_issues.out
+
+schemas:
+  ReviewIssue:
+    type: object
+    properties:
+      title:
+        type: string
+      description:
+        type: string
+      severity:
+        type: string
+        enum: [low, medium, high]
+      location:
+        type: string
+
+  ReviewIssueList:
+    type: array
+    items:
+      schema_ref: ReviewIssue
+
+nodes:
+  pr_reviewer:
+    kind: inference
+    inputs:
+      branch: string
+    outputs:
+      out: ReviewIssueList
+    config:
+      harness:
+        id: codex_cli
+        model: gpt-5.5
+        reasoning_effort: xhigh
+      instruction: >
+        Run the pr-review skill in read-only mode to review the current changes
+        against the provided branch. Do not modify any files. Return every issue
+        you find as a structured list of review issues.
+
+  merged_issues:
+    kind: connector
+    operation: concat
+    inputs:
+      issues_a: ReviewIssueList
+      issues_b: ReviewIssueList
+      issues_c: ReviewIssueList
+    outputs:
+      out: ReviewIssueList
+
+flow:
+  instances:
+    review_a:
+      node: pr_reviewer
+      inputs:
+        branch: workflow_input.branch
+
+    review_b:
+      node: pr_reviewer
+      inputs:
+        branch: workflow_input.branch
+
+    review_c:
+      node: pr_reviewer
+      inputs:
+        branch: workflow_input.branch
+
+    merge_issues:
+      node: merged_issues
+      inputs:
+        issues_a: instance.review_a.out
+        issues_b: instance.review_b.out
+        issues_c: instance.review_c.out
