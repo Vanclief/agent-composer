@@ -725,6 +725,8 @@ func (e *Executor) runWhileLoop(ctx context.Context, node NodeSnapshot, input ma
 		currentInput[key] = value
 	}
 
+	var lastState any
+
 	for iteration := 0; iteration < node.MaxIterations; iteration++ {
 		iterationInput, err := selectWhileTargetInput(*node.WhileTarget, currentInput)
 		if err != nil {
@@ -745,6 +747,7 @@ func (e *Executor) runWhileLoop(ctx context.Context, node NodeSnapshot, input ma
 		}
 
 		currentInput[node.Updates] = nextState
+		lastState = nextState
 		if shouldStop {
 			trace := map[string]any{
 				"operation":  "while",
@@ -759,9 +762,10 @@ func (e *Executor) runWhileLoop(ctx context.Context, node NodeSnapshot, input ma
 		"operation":               "while",
 		"iterations":              node.MaxIterations,
 		"max_iterations_exceeded": true,
+		"stopped_gracefully":      true,
 	}
 
-	return nil, trace, ez.New(op, ez.EINVALID, "while loop exceeded max_iterations", nil)
+	return lastState, trace, nil
 }
 
 func (e *Executor) runWhileTarget(ctx context.Context, target WhileTargetSnapshot, input map[string]any, workflowHandle *WorkflowExecutionHandle, scope NodeExecutionScope) (any, bool, error) {

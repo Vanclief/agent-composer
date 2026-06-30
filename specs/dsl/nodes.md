@@ -256,7 +256,7 @@ Rules:
 - on later iterations, the executed node receives the previous iteration's output named by `updates`
 - all other loop inputs are passed through unchanged to every iteration
 - for v1, `while` runs sequentially
-- for v1, hitting `max_iterations` before `breaks_on` becomes `true` is an execution failure
+- reaching `max_iterations` before `breaks_on` becomes `true` stops the loop gracefully and returns the most recent `updates` state, rather than failing the execution
 
 Example:
 

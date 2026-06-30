@@ -1330,6 +1330,56 @@ func TestExecuteLoopWhileBinaryConsensus(t *testing.T) {
 	}
 }
 
+func TestExecuteWhileLoopStopsGracefullyAtMaxIterations(t *testing.T) {
+	blueprint, err := LoadBlueprintFile("../examples/loop_while_binary_consensus.yaml")
+	if err != nil {
+		t.Fatalf("load blueprint: %v", err)
+	}
+
+	snapshot, err := Compile(blueprint)
+	if err != nil {
+		t.Fatalf("compile workflow: %v", err)
+	}
+
+	executor := NewExecutor("")
+	executor.NewHarness = func(kind agent.Harness) (harnesses.Harness, error) {
+		return neverConsensusHarness{}, nil
+	}
+
+	output, err := executor.Run(context.Background(), snapshot, map[string]any{
+		"question": "Should we deploy the bridge update today?",
+		"vote_state": map[string]any{
+			"votes":                 []any{},
+			"yes_count":             0,
+			"no_count":              0,
+			"agreement_ratio":       0.0,
+			"minimum_votes_reached": false,
+			"consensus_reached":     false,
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected graceful stop, got error: %v", err)
+	}
+
+	voteState, ok := output["vote_state"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected vote_state shape: %#v", output["vote_state"])
+	}
+
+	if voteState["consensus_reached"] != false {
+		t.Fatalf("expected consensus_reached false, got: %#v", voteState["consensus_reached"])
+	}
+
+	votes, ok := voteState["votes"].([]any)
+	if !ok {
+		t.Fatalf("unexpected votes shape: %#v", voteState["votes"])
+	}
+
+	if len(votes) != 10 {
+		t.Fatalf("expected 10 votes carried from the final iteration, got: %d", len(votes))
+	}
+}
+
 func TestCompilePipelineParallelReviewFixCycle(t *testing.T) {
 	blueprint, err := LoadBlueprintFile("../examples/review_fix_cycle.yaml")
 	if err != nil {
@@ -1998,6 +2048,53 @@ func (whileHarness) Run(ctx context.Context, conversation *agent.Conversation, p
 	payload, err := json.Marshal(map[string]any{
 		"vote_state":  nextState,
 		"should_stop": consensusReached,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &harnesses.RunResult{LastAssistantMessage: string(payload)}, nil
+}
+
+type neverConsensusHarness struct{}
+
+func (neverConsensusHarness) Validate(ctx context.Context, model string, config json.RawMessage) error {
+	return nil
+}
+
+func (neverConsensusHarness) Run(ctx context.Context, conversation *agent.Conversation, prompt string) (*harnesses.RunResult, error) {
+	input, err := promptInputs(prompt)
+	if err != nil {
+		return nil, err
+	}
+
+	voteState, ok := input["vote_state"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("missing vote_state in prompt input")
+	}
+
+	votes, err := toMapSlice(voteState["votes"])
+	if err != nil {
+		return nil, err
+	}
+
+	votes = append(votes, map[string]any{
+		"answer":    "yes",
+		"rationale": fmt.Sprintf("Vote %d never reaches consensus.", len(votes)+1),
+	})
+
+	nextState := map[string]any{
+		"votes":                 votes,
+		"yes_count":             len(votes),
+		"no_count":              0,
+		"agreement_ratio":       1.0,
+		"minimum_votes_reached": false,
+		"consensus_reached":     false,
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"vote_state":  nextState,
+		"should_stop": false,
 	})
 	if err != nil {
 		return nil, err

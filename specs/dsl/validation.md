@@ -76,7 +76,7 @@ These rules apply to the workflow blueprint before compilation into the internal
 - the executed node must declare one boolean output named by `breaks_on`
 - all other loop inputs must exist on the executed node with the same names and compatible types
 - `over`, `parallelism`, and `preserve_order` are invalid on loop nodes with `operation: while`
-- for v1, hitting `max_iterations` before `breaks_on` becomes `true` is an execution failure
+- reaching `max_iterations` before `breaks_on` becomes `true` stops the loop gracefully and returns the most recent `updates` state, rather than failing the execution
 
 ## Workflow Composition Rules
 
