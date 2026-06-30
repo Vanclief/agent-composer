@@ -1119,6 +1119,50 @@ function fmt(v) {
   try { return JSON.stringify(v, null, 2); } catch { return String(v); }
 }
 
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) { /* fall through to legacy path */ }
+  try {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(area);
+    return ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+function CopyButton({ value }) {
+  const [copied, setCopied] = React.useState(false);
+  if (value == null || value === '' || value === '\u2014') return null;
+  const onClick = async (e) => {
+    e.stopPropagation();
+    const ok = await copyText(value);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    }
+  };
+  return (
+    <button type="button" onClick={onClick} title="Copy to clipboard"
+      style={{marginLeft:'auto', border:'1px solid var(--line-2)',
+        background:'var(--paper)', color: copied ? 'var(--t-json)' : 'var(--ink-3)',
+        cursor:'pointer', fontSize:10, lineHeight:1.2, padding:'2px 7px',
+        borderRadius:5, fontFamily:'inherit'}}>
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  );
+}
+
 function InspectorLiveIO({ node, runtime, currentRun }) {
   const last = node.last || {};
   const snap = currentRun?.nodes?.[node.id] || {};
@@ -1160,6 +1204,7 @@ function InspectorLiveIO({ node, runtime, currentRun }) {
               <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4,fontSize:11,color:'var(--ink-3)'}}>
                 <span style={{color:'var(--ink-2)',fontWeight:500}}>{p.label}</span>
                 <span style={{fontFamily:'JetBrains Mono, monospace', color:'var(--ink-3)'}}>&middot; {p.type}</span>
+                <CopyButton value={fmt(last.input?.[p.id])}/>
               </div>
               <div className="io-card in">{fmt(last.input?.[p.id])}</div>
             </div>
@@ -1173,6 +1218,7 @@ function InspectorLiveIO({ node, runtime, currentRun }) {
           <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4,fontSize:11,color:'var(--ink-3)'}}>
             <span style={{color:'var(--ink-2)',fontWeight:500}}>{p.label}</span>
             <span style={{fontFamily:'JetBrains Mono, monospace', color:'var(--ink-3)'}}>&middot; {p.type}</span>
+            <CopyButton value={status === 'run' && live?.[p.id] ? live[p.id] : fmt(last.output?.[p.id])}/>
           </div>
           <div className="io-card out">
             {status === 'run' && live?.[p.id] ? (
