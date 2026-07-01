@@ -80,7 +80,8 @@ Rules:
 - `config.harness.id` selects the harness, for example `codex_cli` or `claude_code`
 - `config.harness.model` selects the model used by that harness
 - `config.harness.reasoning_effort` is optional
-- additional keys under `config.harness` are harness-specific settings such as `sandbox` or `permission_mode`
+- `config.harness.permissions` sets the access tier and is the same for every harness: `read_only` (default), `exec`, or `dangerously-exec`. `read_only` may only read the workspace; `exec` may modify it and run shell commands scoped to it; `dangerously-exec` removes all guardrails (network, writes anywhere). Each harness translates the tier into its own backend flags.
+- additional keys under `config.harness` are harness-specific settings (for example `profile`/`config_overrides` for `codex_cli`, or `allowed_tools`/`mcp_config` for `claude_code`)
 - task-specific settings such as `instruction` remain as sibling fields under `config`
 
 ### Connector

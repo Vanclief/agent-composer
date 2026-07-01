@@ -19,14 +19,20 @@ import (
 type CodexCLI struct{}
 
 type codexCLIConfig struct {
-	Profile                              string   `json:"profile,omitempty"`
-	Sandbox                              string   `json:"sandbox,omitempty"`
-	FullAuto                             bool     `json:"full_auto,omitempty"`
-	DangerouslyBypassApprovalsAndSandbox bool     `json:"dangerously_bypass_approvals_and_sandbox,omitempty"`
-	SkipGitRepoCheck                     bool     `json:"skip_git_repo_check,omitempty"`
-	Ephemeral                            bool     `json:"ephemeral,omitempty"`
-	AddDirs                              []string `json:"add_dirs,omitempty"`
-	ConfigOverrides                      []string `json:"config_overrides,omitempty"`
+	Profile          string      `json:"profile,omitempty"`
+	Permissions      Permissions `json:"permissions,omitempty"`
+	SkipGitRepoCheck bool        `json:"skip_git_repo_check,omitempty"`
+	Ephemeral        bool        `json:"ephemeral,omitempty"`
+	AddDirs          []string    `json:"add_dirs,omitempty"`
+	ConfigOverrides  []string    `json:"config_overrides,omitempty"`
+}
+
+// codexLegacyPermissionKeys are the pre-`permissions` raw fields that are now
+// rejected with a migration error.
+var codexLegacyPermissionKeys = []string{
+	"sandbox",
+	"full_auto",
+	"dangerously_bypass_approvals_and_sandbox",
 }
 
 type codexRunSummary struct {
@@ -213,11 +219,13 @@ func (c *CodexCLI) buildArgs(conversation *agent.Conversation, cfg codexCLIConfi
 			args = append(args, "--profile", cfg.Profile)
 		}
 
-		sandbox := cfg.Sandbox
-		if sandbox == "" {
-			sandbox = "workspace-write"
+		perms := resolveCodexPermissions(cfg.Permissions)
+		if perms.Sandbox != "" {
+			args = append(args, "--sandbox", perms.Sandbox)
 		}
-		args = append(args, "--sandbox", sandbox)
+		if perms.DangerousBypass {
+			args = append(args, "--dangerously-bypass-approvals-and-sandbox")
+		}
 
 		for _, dir := range cfg.AddDirs {
 			trimmed := strings.TrimSpace(dir)
@@ -237,14 +245,6 @@ func (c *CodexCLI) buildArgs(conversation *agent.Conversation, cfg codexCLIConfi
 	args = append(args, "-o", lastMessagePath)
 	if strings.TrimSpace(schemaPath) != "" {
 		args = append(args, "--output-schema", schemaPath)
-	}
-
-	if cfg.FullAuto {
-		args = append(args, "--full-auto")
-	}
-
-	if cfg.DangerouslyBypassApprovalsAndSandbox {
-		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
 	}
 
 	if cfg.SkipGitRepoCheck {
@@ -288,23 +288,28 @@ func parseCodexCLIConfig(raw json.RawMessage) (codexCLIConfig, error) {
 		return codexCLIConfig{}, nil
 	}
 
-	var cfg codexCLIConfig
-	err := json.Unmarshal(raw, &cfg)
+	var probe map[string]any
+	err := json.Unmarshal(raw, &probe)
 	if err != nil {
 		return codexCLIConfig{}, ez.New(op, ez.EINVALID, "invalid codex harness_config", err)
 	}
 
-	if cfg.Sandbox != "" {
-		switch cfg.Sandbox {
-		case "read-only", "workspace-write", "danger-full-access":
-		default:
-			return codexCLIConfig{}, ez.New(op, ez.EINVALID, "invalid codex sandbox", nil)
-		}
+	err = rejectLegacyPermissionKeys(probe, codexLegacyPermissionKeys)
+	if err != nil {
+		return codexCLIConfig{}, ez.Wrap(op, err)
 	}
 
-	if cfg.FullAuto && cfg.DangerouslyBypassApprovalsAndSandbox {
-		return codexCLIConfig{}, ez.New(op, ez.EINVALID, "full_auto and dangerously_bypass_approvals_and_sandbox cannot both be enabled", nil)
+	var cfg codexCLIConfig
+	err = json.Unmarshal(raw, &cfg)
+	if err != nil {
+		return codexCLIConfig{}, ez.New(op, ez.EINVALID, "invalid codex harness_config", err)
 	}
+
+	normalizedPermissions, err := ParsePermissions(string(cfg.Permissions))
+	if err != nil {
+		return codexCLIConfig{}, ez.Wrap(op, err)
+	}
+	cfg.Permissions = normalizedPermissions
 
 	for _, override := range cfg.ConfigOverrides {
 		if strings.TrimSpace(override) == "" {

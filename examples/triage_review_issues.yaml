@@ -128,6 +128,7 @@ nodes:
         id: codex_cli
         model: gpt-5.5
         reasoning_effort: high
+        permissions: exec
       instruction: >
         You are triaging a single review issue against the current codebase.
         Do NOT modify, create, or delete any source files in this step; you may
@@ -177,9 +178,10 @@ nodes:
       out: TriagedIssue
     config:
       harness:
-        id: claude_code
-        model: claude-opus-4-8
+        id: codex_cli
+        model: gpt-5.5
         reasoning_effort: high
+        permissions: exec
       instruction: >
         You are given one triage verdict and must produce its final disposition.
         Carry the verdict through unchanged in the output.

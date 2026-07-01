@@ -89,6 +89,46 @@ func TestBuildArgsOmitsReasoningEffortWhenUnset(t *testing.T) {
 	}
 }
 
+func TestParseCodexCLIConfigRejectsLegacySandbox(t *testing.T) {
+	_, err := parseCodexCLIConfig([]byte(`{"sandbox":"workspace-write"}`))
+	if err == nil {
+		t.Fatal("expected error for legacy sandbox key")
+	}
+}
+
+func TestParseCodexCLIConfigDefaultsToReadOnly(t *testing.T) {
+	cfg, err := parseCodexCLIConfig([]byte(`{}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.Permissions != PermissionsReadOnly {
+		t.Fatalf("expected read_only default, got %q", cfg.Permissions)
+	}
+}
+
+func TestCodexBuildArgsMapsPermissionsToSandbox(t *testing.T) {
+	conversation := &agent.Conversation{Model: "gpt-5.5"}
+
+	readOnly := (&CodexCLI{}).buildArgs(conversation, codexCLIConfig{Permissions: PermissionsReadOnly}, "prompt", "/tmp/last.txt", "")
+	if !argsContainPair(readOnly, "--sandbox", "read-only") {
+		t.Fatalf("expected --sandbox read-only: %#v", readOnly)
+	}
+
+	exec := (&CodexCLI{}).buildArgs(conversation, codexCLIConfig{Permissions: PermissionsExec}, "prompt", "/tmp/last.txt", "")
+	if !argsContainPair(exec, "--sandbox", "workspace-write") {
+		t.Fatalf("expected --sandbox workspace-write: %#v", exec)
+	}
+
+	danger := (&CodexCLI{}).buildArgs(conversation, codexCLIConfig{Permissions: PermissionsDangerouslyExec}, "prompt", "/tmp/last.txt", "")
+	if !argsContain(danger, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Fatalf("expected --dangerously-bypass-approvals-and-sandbox: %#v", danger)
+	}
+	if argsContain(danger, "--sandbox") {
+		t.Fatalf("did not expect --sandbox for dangerously-exec: %#v", danger)
+	}
+}
+
 func TestSelectCodexHarnessErrorPrefersStructuredSummaryErrors(t *testing.T) {
 	summary := codexRunSummary{
 		Errors: []string{

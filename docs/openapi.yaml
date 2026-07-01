@@ -678,13 +678,13 @@ components:
         harness_config:
           $ref: '#/components/schemas/JSONValue'
           description: >
-            Harness-specific configuration. For `codex_cli` this may include fields such as
-            `sandbox`, `profile`, `full_auto`, `skip_git_repo_check`, `ephemeral`, `add_dirs`,
-            and `config_overrides`. For `claude_code` this may include fields such as
-            `permission_mode`, `allowed_tools`, `disallowed_tools`, `add_dirs`, `mcp_config`,
-            `tools`, `settings`, `system_prompt`, `append_system_prompt`, `bare`, `verbose`,
-            `strict_mcp_config`, `dangerously_skip_permissions`, and
-            `allow_dangerously_skip_permissions`.
+            Harness-specific configuration. The access tier is set with the shared
+            `permissions` field (`read_only` default, `exec`, or `dangerously-exec`) and works
+            the same for every harness. For `codex_cli` other fields may include `profile`,
+            `skip_git_repo_check`, `ephemeral`, `add_dirs`, and `config_overrides`. For
+            `claude_code` other fields may include `allowed_tools`, `disallowed_tools`,
+            `add_dirs`, `mcp_config`, `tools`, `settings`, `system_prompt`,
+            `append_system_prompt`, `bare`, `verbose`, and `strict_mcp_config`.
         instructions:
           type: string
       description: >

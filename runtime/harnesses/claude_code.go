@@ -17,20 +17,26 @@ import (
 type ClaudeCode struct{}
 
 type claudeCodeConfig struct {
-	PermissionMode                  string   `json:"permission_mode,omitempty"`
-	AllowedTools                    []string `json:"allowed_tools,omitempty"`
-	DisallowedTools                 []string `json:"disallowed_tools,omitempty"`
-	AddDirs                         []string `json:"add_dirs,omitempty"`
-	MCPConfig                       []string `json:"mcp_config,omitempty"`
-	Tools                           []string `json:"tools,omitempty"`
-	Settings                        string   `json:"settings,omitempty"`
-	SystemPrompt                    string   `json:"system_prompt,omitempty"`
-	AppendSystemPrompt              string   `json:"append_system_prompt,omitempty"`
-	Bare                            bool     `json:"bare,omitempty"`
-	Verbose                         bool     `json:"verbose,omitempty"`
-	StrictMCPConfig                 bool     `json:"strict_mcp_config,omitempty"`
-	DangerouslySkipPermissions      bool     `json:"dangerously_skip_permissions,omitempty"`
-	AllowDangerouslySkipPermissions bool     `json:"allow_dangerously_skip_permissions,omitempty"`
+	Permissions        Permissions `json:"permissions,omitempty"`
+	AllowedTools       []string    `json:"allowed_tools,omitempty"`
+	DisallowedTools    []string    `json:"disallowed_tools,omitempty"`
+	AddDirs            []string    `json:"add_dirs,omitempty"`
+	MCPConfig          []string    `json:"mcp_config,omitempty"`
+	Tools              []string    `json:"tools,omitempty"`
+	Settings           string      `json:"settings,omitempty"`
+	SystemPrompt       string      `json:"system_prompt,omitempty"`
+	AppendSystemPrompt string      `json:"append_system_prompt,omitempty"`
+	Bare               bool        `json:"bare,omitempty"`
+	Verbose            bool        `json:"verbose,omitempty"`
+	StrictMCPConfig    bool        `json:"strict_mcp_config,omitempty"`
+}
+
+// claudeLegacyPermissionKeys are the pre-`permissions` raw fields that are now
+// rejected with a migration error.
+var claudeLegacyPermissionKeys = []string{
+	"permission_mode",
+	"dangerously_skip_permissions",
+	"allow_dangerously_skip_permissions",
 }
 
 type claudeCodeResult struct {
@@ -174,8 +180,14 @@ func (c *ClaudeCode) buildArgs(conversation *agent.Conversation, cfg claudeCodeC
 			args = append(args, "--effort", effort)
 		}
 
-		if cfg.PermissionMode != "" {
-			args = append(args, "--permission-mode", cfg.PermissionMode)
+		perms := resolveClaudePermissions(cfg.Permissions)
+
+		if perms.PermissionMode != "" {
+			args = append(args, "--permission-mode", perms.PermissionMode)
+		}
+
+		if perms.DangerouslySkip {
+			args = append(args, "--dangerously-skip-permissions")
 		}
 
 		if cfg.Bare {
@@ -188,14 +200,6 @@ func (c *ClaudeCode) buildArgs(conversation *agent.Conversation, cfg claudeCodeC
 
 		if cfg.StrictMCPConfig {
 			args = append(args, "--strict-mcp-config")
-		}
-
-		if cfg.DangerouslySkipPermissions {
-			args = append(args, "--dangerously-skip-permissions")
-		}
-
-		if cfg.AllowDangerouslySkipPermissions {
-			args = append(args, "--allow-dangerously-skip-permissions")
 		}
 
 		if strings.TrimSpace(cfg.Settings) != "" {
@@ -228,7 +232,9 @@ func (c *ClaudeCode) buildArgs(conversation *agent.Conversation, cfg claudeCodeC
 			args = append(args, "--allowedTools", trimmed)
 		}
 
-		for _, tool := range cfg.DisallowedTools {
+		disallowed := append([]string{}, perms.DisallowedTools...)
+		disallowed = append(disallowed, cfg.DisallowedTools...)
+		for _, tool := range disallowed {
 			trimmed := strings.TrimSpace(tool)
 			if trimmed == "" {
 				continue
@@ -258,6 +264,11 @@ func (c *ClaudeCode) buildArgs(conversation *agent.Conversation, cfg claudeCodeC
 		args = append(args, "--resume", sessionRef)
 	}
 
+	// Terminate option parsing before the positional prompt. Variadic flags such
+	// as --disallowedTools/--allowedTools/--tools would otherwise greedily consume
+	// the prompt as additional tool values.
+	args = append(args, "--")
+
 	if sessionRef == "" {
 		args = append(args, buildInitialPrompt(conversation))
 	} else {
@@ -274,23 +285,28 @@ func parseClaudeCodeConfig(raw json.RawMessage) (claudeCodeConfig, error) {
 		return claudeCodeConfig{}, nil
 	}
 
-	var cfg claudeCodeConfig
-	err := json.Unmarshal(raw, &cfg)
+	var probe map[string]any
+	err := json.Unmarshal(raw, &probe)
 	if err != nil {
 		return claudeCodeConfig{}, ez.New(op, ez.EINVALID, "invalid claude harness_config", err)
 	}
 
-	if cfg.PermissionMode != "" {
-		switch cfg.PermissionMode {
-		case "acceptEdits", "bypassPermissions", "default", "dontAsk", "plan", "auto":
-		default:
-			return claudeCodeConfig{}, ez.New(op, ez.EINVALID, "invalid claude permission_mode", nil)
-		}
+	err = rejectLegacyPermissionKeys(probe, claudeLegacyPermissionKeys)
+	if err != nil {
+		return claudeCodeConfig{}, ez.Wrap(op, err)
 	}
 
-	if cfg.DangerouslySkipPermissions && cfg.AllowDangerouslySkipPermissions {
-		return claudeCodeConfig{}, ez.New(op, ez.EINVALID, "dangerously_skip_permissions and allow_dangerously_skip_permissions cannot both be enabled", nil)
+	var cfg claudeCodeConfig
+	err = json.Unmarshal(raw, &cfg)
+	if err != nil {
+		return claudeCodeConfig{}, ez.New(op, ez.EINVALID, "invalid claude harness_config", err)
 	}
+
+	normalizedPermissions, err := ParsePermissions(string(cfg.Permissions))
+	if err != nil {
+		return claudeCodeConfig{}, ez.Wrap(op, err)
+	}
+	cfg.Permissions = normalizedPermissions
 
 	if strings.TrimSpace(cfg.Settings) == "" && cfg.Settings != "" {
 		return claudeCodeConfig{}, ez.New(op, ez.EINVALID, "settings cannot be empty", nil)
