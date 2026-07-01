@@ -1,5 +1,6 @@
 workflow:
   id: loop_while_binary_consensus
+  name: "Loop While Binary Consensus"
   version: "1"
   description: >
     Keep collecting binary votes until the executed step says the loop should

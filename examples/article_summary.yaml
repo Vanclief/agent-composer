@@ -1,5 +1,6 @@
 workflow:
   id: article_summary
+  name: "Article Summary"
   version: "7"
   description: >
     Summarize one input article, critique the draft for accuracy and omissions,

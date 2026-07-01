@@ -1,5 +1,6 @@
 workflow:
   id: triage_review_issues
+  name: "Triage Review Issues"
   version: "1"
   description: >
     Take a list of review issues (e.g. the output of parallel_pr_review) and

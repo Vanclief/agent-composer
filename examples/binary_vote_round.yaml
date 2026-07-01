@@ -1,5 +1,6 @@
 workflow:
   id: binary_vote_round
+  name: "Binary Vote Round"
   version: "1"
   description: >
     Ask one binary question to seven voter workers and collect the raw votes.

@@ -21,6 +21,7 @@ type Blueprint struct {
 
 type WorkflowSpec struct {
 	ID          string                        `yaml:"id"`
+	Name        string                        `yaml:"name"`
 	Version     string                        `yaml:"version"`
 	Description string                        `yaml:"description"`
 	Inputs      map[string]string             `yaml:"inputs"`
@@ -34,6 +35,7 @@ type WorkflowOutputSpec struct {
 
 type WorkflowSummary struct {
 	ID          string            `json:"id"`
+	Name        string            `json:"name"`
 	Description string            `json:"description,omitempty"`
 	Inputs      map[string]string `json:"inputs"`
 	Outputs     map[string]string `json:"outputs"`

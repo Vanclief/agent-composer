@@ -1,5 +1,6 @@
 workflow:
   id: iterative_code_review_repair
+  name: "Iterative Code Review & Repair"
   version: "1"
   description: >
     Implement a coding task, then repeatedly review, validate, and fix issues

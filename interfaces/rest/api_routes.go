@@ -9,6 +9,7 @@ import (
 func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	// API
 	api := e.Group("/api")
+	api.GET("/config", h.GetConfig)
 
 	// Hooks
 	hooks := api.Group("/hooks")

@@ -633,8 +633,14 @@ func workflowSummaryFromBlueprint(blueprint *Blueprint) (WorkflowSummary, error)
 		outputs[outputName] = strings.TrimSpace(outputSpec.Schema)
 	}
 
+	name := strings.TrimSpace(blueprint.Workflow.Name)
+	if name == "" {
+		name = workflowID
+	}
+
 	return WorkflowSummary{
 		ID:          workflowID,
+		Name:        name,
 		Description: strings.TrimSpace(blueprint.Workflow.Description),
 		Inputs:      inputs,
 		Outputs:     outputs,

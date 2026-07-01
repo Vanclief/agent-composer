@@ -1452,6 +1452,72 @@ const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
 const NODE_W = 260;
 
+// Persistent shell-root picker shown in the top bar. Lets you pick a saved
+// working directory, add new ones, or fall back to the server default.
+function ShellRootPicker({ value, options, defaultRoot, onChange, onAddOption, onRemoveOption, disabled }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const commitDraft = () => {
+    const v = draft.trim();
+    if (!v) return;
+    onAddOption(v);
+    onChange(v);
+    setDraft('');
+    setOpen(false);
+  };
+
+  const label = value || defaultRoot || 'Shell root…';
+
+  return (
+    <span className="runmenu-anchor" ref={ref}>
+      <button type="button" className="ghostbtn" disabled={disabled}
+        title={value ? `Shell root: ${value}` : 'Shell root'}
+        onClick={() => setOpen(o => !o)}>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M1.5 3.5 A1 1 0 0 1 2.5 2.5 H5.5 L6.8 3.9 H11.5 A1 1 0 0 1 12.5 4.9 V10.5 A1 1 0 0 1 11.5 11.5 H2.5 A1 1 0 0 1 1.5 10.5 Z"/>
+        </svg>
+        <span style={{minWidth:200, maxWidth:420, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', direction:'rtl', textAlign:'left', fontFamily:"'JetBrains Mono', monospace", fontSize:12, color:'var(--ink)'}}>{label}</span>
+        <svg className="chev" width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 4 L5 6.5 L7.5 4"/></svg>
+      </button>
+      {open && (
+        <div className="runmenu" style={{ top: 36, left: 0, minWidth: 380 }}>
+          <div className="runmenu-head"><span>Shell root</span><span style={{color:'var(--ink-3)'}}>{options.length}</span></div>
+          {options.map(opt => (
+            <div key={opt} className={'runmenu-item ' + (opt === value ? 'active' : '')} onClick={() => { onChange(opt); setOpen(false); }}>
+              <span className="stat"/>
+              <span className="id" style={{flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', direction:'rtl', textAlign:'left'}}>{opt}</span>
+              {opt === defaultRoot ? (
+                <span style={{fontSize:10, letterSpacing:'0.04em', textTransform:'uppercase', color:'var(--ink-3)'}}>current</span>
+              ) : (
+                <span className="iconbtn" role="button" title="Remove" style={{width:20, height:20, border:0}}
+                  onClick={(e) => { e.stopPropagation(); onRemoveOption(opt); }}>
+                  <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M3 3 L11 11 M11 3 L3 11"/></svg>
+                </span>
+              )}
+            </div>
+          ))}
+          <div style={{display:'flex', gap:6, padding:'8px 8px 4px', borderTop:'1px solid var(--line)', marginTop:4}}>
+            <input className="input" style={{flex:1}} placeholder="Add an absolute path"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitDraft(); } }}/>
+            <button type="button" className="ghostbtn" onClick={commitDraft} disabled={!draft.trim()}>Add</button>
+          </div>
+        </div>
+      )}
+    </span>
+  );
+}
+
 function getPortPos(node, side, portId) {
   const headerH = 48;
   const bodyFields = node.body?.length || 0;
@@ -1567,6 +1633,28 @@ function App() {
   const [drawer, setDrawer] = useState('workflows');
   const [runsMenuOpen, setRunsMenuOpen] = useState(false);
   const [showRunModal, setShowRunModal] = useState(false);
+  // Persistent shell root: the working directory passed to every run. `shellRoots`
+  // is the saved list shown in the dropdown; `shellRoot` is the active selection.
+  const [shellRoots, setShellRoots] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('agc.shellRoots') || '[]'); } catch { return []; }
+  });
+  const [shellRoot, setShellRoot] = useState(() => localStorage.getItem('agc.shellRoot') || '');
+  const [defaultShellRoot, setDefaultShellRoot] = useState('');
+  useEffect(() => { try { localStorage.setItem('agc.shellRoots', JSON.stringify(shellRoots)); } catch {} }, [shellRoots]);
+  useEffect(() => { try { localStorage.setItem('agc.shellRoot', shellRoot); } catch {} }, [shellRoot]);
+  // Fetch the server's effective working directory and use it as the default.
+  useEffect(() => {
+    let alive = true;
+    fetchJSON('/api/config').then(cfg => {
+      if (!alive) return;
+      const root = (cfg && cfg.shell_root) || '';
+      if (!root) return;
+      setDefaultShellRoot(root);
+      setShellRoots(list => list.includes(root) ? list : [root, ...list]);
+      setShellRoot(cur => cur || root);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
   const currentRun = runHistory.find(r => r.id === selectedRunId) || runHistory[0] || null;
   const [zoom, setZoom] = useState(0.9);
   const [pan, setPan] = useState({ x: 40, y: -40 });
@@ -1825,10 +1913,13 @@ function App() {
 
     let runError = null;
     try {
-      await postJSON('/api/workflow/executions', {
+      const body = {
         workflow_id: activeWorkflowId,
         input,
-      });
+      };
+      const root = shellRoot.trim();
+      if (root) body.shell_root = root;
+      await postJSON('/api/workflow/executions', body);
     } catch (e) {
       runError = e.message;
     }
@@ -1839,7 +1930,7 @@ function App() {
     } catch {}
     if (runError) setError(runError);
     // Leave running=true — polling effect handles setting it to false
-  }, [running, activeWorkflowId]);
+  }, [running, activeWorkflowId, shellRoot]);
 
   // Poll for live execution status
   useEffect(() => {
@@ -1937,6 +2028,15 @@ function App() {
           <span className="cur">{activeWf?.id || 'none'}</span>
         </div>
         <div className="spacer"/>
+        <ShellRootPicker
+          value={shellRoot}
+          options={shellRoots}
+          defaultRoot={defaultShellRoot}
+          onChange={setShellRoot}
+          onAddOption={(v) => setShellRoots(list => list.includes(v) ? list : [...list, v])}
+          onRemoveOption={(v) => { setShellRoots(list => list.filter(x => x !== v)); if (shellRoot === v) setShellRoot(''); }}
+          disabled={running}
+        />
         {currentRun && (
           <span className="runmenu-anchor">
             <button className="ghostbtn" onClick={() => setRunsMenuOpen(o=>!o)}>
@@ -1990,8 +2090,7 @@ function App() {
                   onClick={() => { if (w.id !== activeWorkflowId) selectWorkflow(w.id); }}
                 >
                   <span className="ws-dot"/>
-                  <span style={{flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{w.id}</span>
-                  {w.description && <span className="ws-meta" title={w.description}>{w.description.substring(0,16)}</span>}
+                  <span style={{flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={w.id}>{w.name || w.id}</span>
                 </div>
               ))}
             </div>

@@ -1,5 +1,6 @@
 workflow:
   id: review_fix_cycle
+  name: "Review Fix Cycle"
   version: "1"
   description: >
     Apply actionable review issues, run parallel reviewers, validate the raised

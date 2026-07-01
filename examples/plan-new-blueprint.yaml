@@ -1,5 +1,6 @@
 workflow:
   id: plan-new-blueprint
+  name: "Plan New Blueprint"
   version: "1"
   description: >
     Plan a new AGC workflow blueprint by drafting an initial blueprint plan and

@@ -1,5 +1,6 @@
 workflow:
   id: blueprint-plan-cycle
+  name: "Blueprint Plan Cycle"
   version: "1"
   description: >
     Revise a proposed AGC workflow blueprint plan, review it for product and

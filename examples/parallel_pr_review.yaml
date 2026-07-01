@@ -1,5 +1,6 @@
 workflow:
   id: parallel_pr_review
+  name: "Parallel PR Review"
   version: "1"
   description: >
     Run three independent gpt-5.5 agents that each review the current changes

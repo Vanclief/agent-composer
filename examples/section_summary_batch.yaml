@@ -1,5 +1,6 @@
 workflow:
   id: section_summary_batch
+  name: "Section Summary Batch"
   version: "1"
   description: >
     Summarize each input section in parallel while passing the same tone setting

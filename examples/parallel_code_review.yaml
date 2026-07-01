@@ -1,5 +1,6 @@
 workflow:
   id: parallel_code_review
+  name: "Parallel Code Review"
   version: "12"
   description: >
     Compare against a target branch, run three review agents in parallel,

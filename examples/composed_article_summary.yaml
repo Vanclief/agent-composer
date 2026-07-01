@@ -1,5 +1,6 @@
 workflow:
   id: composed_article_summary
+  name: "Composed Article Summary"
   version: "1"
   description: >
     Compose the installed article_summary workflow and then generate a short

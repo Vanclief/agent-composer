@@ -1,5 +1,6 @@
 workflow:
   id: conditional_boolean_routing_review
+  name: "Conditional Boolean Routing Review"
   version: "1"
   description: >
     Decide whether the reviewer agrees with the text. If yes, summarize it. If
