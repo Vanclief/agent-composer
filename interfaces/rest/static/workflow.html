@@ -1125,10 +1125,17 @@ function workflowIdFromURL() {
   return new URLSearchParams(window.location.search).get('id') || null;
 }
 
-function syncWorkflowURL(workflowId, replace) {
-  const target = '/workflow/' + encodeURIComponent(workflowId);
-  if (window.location.pathname === target) return;
-  window.history[replace ? 'replaceState' : 'pushState']({ workflowId }, '', target);
+function runIdFromURL() {
+  return new URLSearchParams(window.location.search).get('run') || null;
+}
+
+function syncWorkflowURL(workflowId, replace, runId) {
+  const path = '/workflow/' + encodeURIComponent(workflowId);
+  const target = runId ? path + '?run=' + encodeURIComponent(runId) : path;
+  if (window.location.pathname + window.location.search === target) return;
+  // Only push a history entry when the workflow itself changes; run changes replace.
+  const samePath = window.location.pathname === path;
+  window.history[(replace || samePath) ? 'replaceState' : 'pushState']({ workflowId, runId }, '', target);
 }
 
 async function copyText(text) {
@@ -1681,7 +1688,7 @@ function App() {
         if (wfs.length > 0) {
           const urlId = workflowIdFromURL();
           const initial = (urlId && wfs.some(w => w.id === urlId)) ? urlId : wfs[0].id;
-          await selectWorkflow(initial, { replace: true });
+          await selectWorkflow(initial, { replace: true, runId: runIdFromURL() });
         }
       } catch (e) {
         setError(e.message);
@@ -1691,17 +1698,22 @@ function App() {
     })();
   }, []);
 
-  // Back/forward navigation: re-select the workflow named in the URL.
+  // Back/forward navigation: re-select the workflow and run named in the URL.
   useEffect(() => {
     const onPop = () => {
       const id = workflowIdFromURL();
-      if (id && id !== activeWorkflowId && workflows.some(w => w.id === id)) {
-        selectWorkflow(id, { replace: true });
+      const runId = runIdFromURL();
+      if (!id) return;
+      if (id !== activeWorkflowId && workflows.some(w => w.id === id)) {
+        selectWorkflow(id, { replace: true, runId });
+      } else if (id === activeWorkflowId) {
+        const run = runHistory.find(r => r.id === runId || r.fullId === runId);
+        if (run && run.id !== selectedRunId) handleSelectRun(run.id);
       }
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, [activeWorkflowId, workflows]);
+  }, [activeWorkflowId, workflows, runHistory, selectedRunId]);
 
   async function selectWorkflow(workflowId, opts = {}) {
     setActiveWorkflowId(workflowId);
@@ -1764,6 +1776,12 @@ function App() {
       setEdges(parsed.edges);
       setNodeOrder(parsed.order);
 
+      // The run to focus: the one named in the URL (short or full id), else the latest
+      const wantedExec = opts.runId
+        ? executions.find(x => x.id === opts.runId || (x.id && x.id.startsWith(opts.runId)))
+        : null;
+      const focusExec = wantedExec || latestExec;
+
       // Build run history entries with node execution data
       const runs = [];
       for (const exec of executions) {
@@ -1771,8 +1789,8 @@ function App() {
           const nodeExecs = await fetchNodeExecutions(exec.id);
           const entry = buildRunEntry(exec, nodeExecs);
 
-          // Populate node.last from the most recent run's node executions
-          if (exec === latestExec) {
+          // Populate node.last from the focused run's node executions
+          if (exec === focusExec) {
             for (const n of parsed.nodes) {
               const ne = nodeExecs.find(ne => ne.node_id === n.id);
               if (ne) {
@@ -1794,7 +1812,9 @@ function App() {
         }
       }
       setRunHistory(runs);
-      setSelectedRunId(runs[0]?.id || null);
+      const focusRunId = runs.find(r => r.fullId === focusExec.id)?.id || runs[0]?.id || null;
+      setSelectedRunId(focusRunId);
+      syncWorkflowURL(workflowId, true, focusRunId);
     } catch (e) {
       setError(e.message);
     }
@@ -1802,6 +1822,7 @@ function App() {
 
   async function handleSelectRun(runId) {
     setSelectedRunId(runId);
+    if (activeWorkflowId) syncWorkflowURL(activeWorkflowId, true, runId);
     const run = runHistory.find(r => r.id === runId);
     if (!run?.fullId) return;
 
@@ -1951,6 +1972,7 @@ function App() {
           return [entry, ...prev];
         });
         setSelectedRunId(entry.id);
+        syncWorkflowURL(activeWorkflowId, true, entry.id);
 
         // Update per-node status on canvas
         setNodes(prev => prev.map(n => {

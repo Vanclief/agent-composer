@@ -26,7 +26,7 @@ import (
 	"github.com/vanclief/ez"
 )
 
-const version = "0.2.18"
+const version = "0.3.0"
 
 type compileResult struct {
 	ID          string            `json:"id"`
