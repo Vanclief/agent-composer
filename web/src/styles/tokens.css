@@ -1,0 +1,113 @@
+:root {
+  color-scheme: light;
+  --bg: oklch(0.985 0.005 90);
+  --paper: oklch(0.995 0.003 90);
+  --ink: oklch(0.22 0.01 270);
+  --ink-2: oklch(0.42 0.01 270);
+  --ink-3: oklch(0.62 0.01 270);
+  --ink-4: oklch(0.82 0.008 270);
+  --line: oklch(0.92 0.008 270);
+  --line-2: oklch(0.88 0.01 270);
+  --hover: oklch(0.96 0.006 270);
+  --accent: oklch(0.62 0.16 250);
+  --accent-soft: oklch(0.95 0.04 250);
+  --accent-ink: oklch(0.42 0.18 250);
+
+  --t-text: oklch(0.62 0.14 250);
+  --t-text-soft: oklch(0.95 0.04 250);
+  --t-json: oklch(0.62 0.14 145);
+  --t-json-soft: oklch(0.95 0.04 145);
+  --t-file: oklch(0.62 0.14 50);
+  --t-file-soft: oklch(0.95 0.04 50);
+  --t-any: oklch(0.62 0.02 270);
+  --t-any-soft: oklch(0.95 0.005 270);
+
+  --st-idle: oklch(0.78 0.005 270);
+  --st-run: oklch(0.62 0.16 250);
+  --st-ok: oklch(0.62 0.14 145);
+  --st-warn: oklch(0.7 0.15 70);
+  --st-err: oklch(0.6 0.2 25);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01", "ss03";
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+::selection {
+  background: oklch(0.85 0.08 250);
+}
+
+.mono {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+
+.scrollnice::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollnice::-webkit-scrollbar-thumb {
+  background: var(--line-2);
+  border-radius: 4px;
+}
+
+.scrollnice::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-4);
+}
+
+.route-placeholder {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  padding: 24px;
+  text-align: center;
+}
+
+.route-placeholder h1,
+.route-placeholder p {
+  margin: 0;
+}
+
+.route-placeholder h1 {
+  margin-bottom: 8px;
+  font-size: 22px;
+}
+
+.route-placeholder p {
+  color: var(--ink-3);
+}
+
+.route-placeholder__eyebrow {
+  margin-bottom: 6px !important;
+  color: var(--accent-ink) !important;
+  font: 600 11px/1 "JetBrains Mono", monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

@@ -35,3 +35,6 @@ go.work.sum
 # .idea/
 # .vscode/
 .claude/
+
+# Web dependencies (the production build in web/dist is committed)
+web/node_modules/
