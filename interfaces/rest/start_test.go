@@ -57,12 +57,42 @@ func TestSPALegacyRedirects(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, path := range []string{"/index.html", "/workflow.html"} {
-		path := path
-		t.Run(path, func(t *testing.T) {
+	testCases := []struct {
+		name     string
+		path     string
+		location string
+	}{
+		{
+			name:     "index",
+			path:     "/index.html",
+			location: "/",
+		},
+		{
+			name:     "workflow",
+			path:     "/workflow.html",
+			location: "/",
+		},
+		{
+			name:     "execution bookmark",
+			path:     "/index.html?execution_id=%20abc-123%20",
+			location: "/runs/abc-123",
+		},
+		{
+			name:     "workflow bookmark",
+			path:     "/workflow.html?id=example&run=abc-123",
+			location: "/workflow/example?run=abc-123",
+		},
+	}
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			request := httptest.NewRequest(http.MethodGet, path, nil)
+			request := httptest.NewRequest(
+				http.MethodGet,
+				testCase.path,
+				nil,
+			)
 			response := httptest.NewRecorder()
 			e.ServeHTTP(response, request)
 
@@ -74,8 +104,12 @@ func TestSPALegacyRedirects(t *testing.T) {
 				)
 			}
 			location := response.Header().Get(echo.HeaderLocation)
-			if location != "/" {
-				t.Errorf("location = %q, want /", location)
+			if location != testCase.location {
+				t.Errorf(
+					"location = %q, want %q",
+					location,
+					testCase.location,
+				)
 			}
 		})
 	}

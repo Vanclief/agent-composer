@@ -58,13 +58,8 @@ export function mapPortType(typeRef?: string): PortType {
 
 function blueprintPorts(definitions?: Record<string, unknown>): CanvasPort[] {
   return Object.entries(definitions ?? {}).map(([name, definition]) => {
-    let typeRef = typeof definition === "string" ? definition : undefined;
-    if (definition && typeof definition === "object") {
-      const schema = (definition as Record<string, unknown>).schema;
-      if (typeof schema === "string") {
-        typeRef = schema;
-      }
-    }
+    const typeRef =
+      typeof definition === "string" ? definition : "any";
     return {
       id: name,
       label: name,
@@ -335,7 +330,7 @@ export function parseSnapshot(
         ? (JSON.parse(workflowExecution.workflow_snapshot) as WorkflowSnapshot)
         : workflowExecution.workflow_snapshot;
   } catch {
-    return emptyWorkflow();
+    throw new Error("The workflow snapshot is not valid JSON.");
   }
 
   if (!snapshot?.Nodes) {
@@ -361,8 +356,8 @@ export function parseSnapshot(
     if (nodeSpec.Model) {
       body.push({ k: "model", v: nodeSpec.Model, mono: true });
     }
-    if (nodeSpec.Harness?.ID) {
-      body.push({ k: "harness", v: nodeSpec.Harness.ID, mono: true });
+    if (nodeSpec.Harness) {
+      body.push({ k: "harness", v: nodeSpec.Harness, mono: true });
     }
     const sub = [nodeSpec.Kind, nodeSpec.Model].filter(Boolean).join(" · ");
 
@@ -376,7 +371,7 @@ export function parseSnapshot(
       config: {
         model: nodeSpec.Model ?? "",
         instruction: nodeSpec.Instruction ?? "",
-        harnessId: nodeSpec.Harness?.ID ?? "",
+        harnessId: nodeSpec.Harness ?? "",
         kind: nodeSpec.Kind ?? "",
         operation: nodeSpec.Operation ?? "",
       },

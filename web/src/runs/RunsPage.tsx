@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -20,6 +21,7 @@ import type {
 import { copyText } from "../utils/clipboard";
 
 const RUNNING_STATUSES = new Set(["running", "queued"]);
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 
 function statusClass(status?: string) {
   return String(status ?? "").toLowerCase();
@@ -102,24 +104,21 @@ function sortByTime(items: NodeExecution[]) {
 function buildDepths(nodes: NodeExecution[]) {
   const byID = new Map(nodes.map((node) => [node.id, node]));
   const depths = new Map<string, number>();
-  const visiting = new Set<string>();
 
   function depth(node?: NodeExecution): number {
-    if (!node?.parent_node_execution_id) {
+    if (
+      !node ||
+      node.parent_node_execution_id.toLowerCase() === NIL_UUID
+    ) {
       return 0;
     }
     const cached = depths.get(node.id);
     if (cached !== undefined) {
       return cached;
     }
-    if (visiting.has(node.id)) {
-      return 0;
-    }
 
-    visiting.add(node.id);
     const parent = byID.get(node.parent_node_execution_id);
     const value = parent ? depth(parent) + 1 : 0;
-    visiting.delete(node.id);
     depths.set(node.id, value);
     return value;
   }
@@ -128,6 +127,10 @@ function buildDepths(nodes: NodeExecution[]) {
     depths.set(node.id, depth(node));
   }
   return depths;
+}
+
+function isAbortError(caught: unknown) {
+  return caught instanceof Error && caught.name === "AbortError";
 }
 
 function Metric({
@@ -253,57 +256,93 @@ function NodeCard({
 export function RunsPage() {
   const navigate = useNavigate();
   const { executionId } = useParams();
-  const [lookup, setLookup] = useState(executionId ?? "");
+  const selectedExecutionId = (executionId ?? "").trim();
+  const routeIsCanonical =
+    executionId === undefined || executionId === selectedExecutionId;
+  const [lookup, setLookup] = useState(selectedExecutionId);
   const [workflowFilter, setWorkflowFilter] = useState("");
-  const [appliedWorkflowFilter, setAppliedWorkflowFilter] = useState("");
   const [recent, setRecent] = useState<WorkflowExecution[]>([]);
   const [recentLoading, setRecentLoading] = useState(true);
+  const [recentRefresh, setRecentRefresh] = useState(0);
   const [execution, setExecution] = useState<WorkflowExecution | null>(
     null,
   );
   const [nodes, setNodes] = useState<NodeExecution[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailRefresh, setDetailRefresh] = useState(0);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [error, setError] = useState("");
+  const detailRequest = useRef(0);
 
   useEffect(() => {
     document.title = "Workflow Runs";
   }, []);
 
   useEffect(() => {
-    setLookup(executionId ?? "");
+    if (
+      executionId !== undefined &&
+      !routeIsCanonical
+    ) {
+      navigate(
+        selectedExecutionId
+          ? `/runs/${encodeURIComponent(selectedExecutionId)}`
+          : "/runs",
+        { replace: true },
+      );
+      return;
+    }
+    setLookup(selectedExecutionId);
     setExecution(null);
     setNodes([]);
-  }, [executionId]);
-
-  const loadRecent = useCallback(async () => {
-    setError("");
-    setRecentLoading(true);
-    try {
-      const items = await fetchWorkflowExecutions(
-        appliedWorkflowFilter || undefined,
-        20,
-      );
-      setRecent(items);
-    } catch (caught) {
-      setRecent([]);
-      setError(
-        caught instanceof Error ? caught.message : String(caught),
-      );
-    } finally {
-      setRecentLoading(false);
-    }
-  }, [appliedWorkflowFilter]);
+  }, [
+    executionId,
+    navigate,
+    routeIsCanonical,
+    selectedExecutionId,
+  ]);
 
   useEffect(() => {
-    void loadRecent();
-  }, [loadRecent]);
+    const controller = new AbortController();
+    let cancelled = false;
+    setError("");
+    setRecentLoading(true);
+    fetchWorkflowExecutions(
+      workflowFilter.trim() || undefined,
+      25,
+      controller.signal,
+    )
+      .then((items) => {
+        if (!cancelled) {
+          setRecent(items);
+        }
+      })
+      .catch((caught: unknown) => {
+        if (cancelled || isAbortError(caught)) {
+          return;
+        }
+        setRecent([]);
+        setError(
+          caught instanceof Error ? caught.message : String(caught),
+        );
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setRecentLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [recentRefresh, workflowFilter]);
 
   const loadExecution = useCallback(
-    async (silent = false) => {
-      if (!executionId) {
-        return;
-      }
+    async (
+      id: string,
+      signal: AbortSignal,
+      silent = false,
+    ) => {
+      const request = ++detailRequest.current;
       setError("");
       if (!silent) {
         setDetailLoading(true);
@@ -311,46 +350,93 @@ export function RunsPage() {
 
       try {
         const [nextExecution, nextNodes] = await Promise.all([
-          fetchWorkflowExecution(executionId),
-          fetchNodeExecutions(executionId, 200),
+          fetchWorkflowExecution(id, signal),
+          fetchNodeExecutions(id, 200, signal),
         ]);
+        if (signal.aborted || request !== detailRequest.current) {
+          return;
+        }
         setExecution(nextExecution);
         setNodes(sortByTime(nextNodes));
-        setRecent((items) =>
-          items.map((item) =>
-            item.id === nextExecution.id ? nextExecution : item,
-          ),
-        );
       } catch (caught) {
+        if (
+          signal.aborted ||
+          request !== detailRequest.current ||
+          isAbortError(caught)
+        ) {
+          return;
+        }
         setError(
           caught instanceof Error ? caught.message : String(caught),
         );
       } finally {
-        if (!silent) {
+        if (!signal.aborted && request === detailRequest.current) {
           setDetailLoading(false);
         }
       }
     },
-    [executionId],
+    [],
   );
 
   useEffect(() => {
-    void loadExecution();
-  }, [loadExecution]);
+    if (!selectedExecutionId || !routeIsCanonical) {
+      setDetailLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    void loadExecution(
+      selectedExecutionId,
+      controller.signal,
+    );
+    return () => {
+      controller.abort();
+    };
+  }, [
+    detailRefresh,
+    loadExecution,
+    routeIsCanonical,
+    selectedExecutionId,
+  ]);
 
   useEffect(() => {
     if (
       !autoRefresh ||
-      !executionId ||
+      !selectedExecutionId ||
       !RUNNING_STATUSES.has(statusClass(execution?.status))
     ) {
       return;
     }
-    const timer = window.setInterval(() => {
-      void loadExecution(true);
-    }, 2500);
-    return () => window.clearInterval(timer);
-  }, [autoRefresh, execution?.status, executionId, loadExecution]);
+
+    let cancelled = false;
+    let timer: number | undefined;
+    let controller: AbortController | undefined;
+
+    async function poll() {
+      controller = new AbortController();
+      await loadExecution(
+        selectedExecutionId,
+        controller.signal,
+        true,
+      );
+      if (!cancelled) {
+        timer = window.setTimeout(poll, 2500);
+      }
+    }
+
+    timer = window.setTimeout(poll, 2500);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+      }
+      controller?.abort();
+    };
+  }, [
+    autoRefresh,
+    execution?.status,
+    loadExecution,
+    selectedExecutionId,
+  ]);
 
   const depths = useMemo(() => buildDepths(nodes), [nodes]);
 
@@ -360,6 +446,18 @@ export function RunsPage() {
     if (id) {
       navigate(`/runs/${encodeURIComponent(id)}`);
     }
+  }
+
+  function refreshExecution() {
+    const id = lookup.trim();
+    if (!id) {
+      return;
+    }
+    if (id !== selectedExecutionId) {
+      navigate(`/runs/${encodeURIComponent(id)}`);
+      return;
+    }
+    setDetailRefresh((value) => value + 1);
   }
 
   function showCopyError(copyError: Error) {
@@ -377,7 +475,9 @@ export function RunsPage() {
               type="button"
               title="Reload recent executions"
               aria-label="Reload recent executions"
-              onClick={() => void loadRecent()}
+              onClick={() =>
+                setRecentRefresh((value) => value + 1)
+              }
             >
               R
             </button>
@@ -405,14 +505,6 @@ export function RunsPage() {
             aria-label="Workflow ID filter"
             value={workflowFilter}
             onChange={(event) => setWorkflowFilter(event.target.value)}
-            onBlur={() =>
-              setAppliedWorkflowFilter(workflowFilter.trim())
-            }
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                setAppliedWorkflowFilter(workflowFilter.trim());
-              }
-            }}
           />
 
           <div className="runs-row">
@@ -429,7 +521,7 @@ export function RunsPage() {
                 <button
                   key={item.id}
                   className={`runs-recent-item ${
-                    item.id === executionId ? "active" : ""
+                    item.id === selectedExecutionId ? "active" : ""
                   }`}
                   type="button"
                   onClick={() =>
@@ -461,7 +553,7 @@ export function RunsPage() {
             <div>
               <h2>{execution?.workflow_id || "Execution"}</h2>
               <div className="runs-small mono">
-                {execution?.id || executionId || ""}
+                {execution?.id || selectedExecutionId}
               </div>
             </div>
             <div className="runs-toolbar">
@@ -477,15 +569,15 @@ export function RunsPage() {
               </label>
               <button
                 type="button"
-                disabled={!executionId}
-                onClick={() => void loadExecution()}
+                disabled={!lookup.trim()}
+                onClick={refreshExecution}
               >
                 Refresh
               </button>
             </div>
           </div>
 
-          {!executionId ? (
+          {!selectedExecutionId ? (
             <div className="runs-empty">Select a workflow execution.</div>
           ) : detailLoading && !execution ? (
             <div className="runs-empty">Loading execution.</div>
@@ -535,7 +627,11 @@ export function RunsPage() {
 
               <div className="runs-section-head">
                 <h2>Node Executions</h2>
-                <span className="runs-small">{nodes.length} nodes</span>
+                <span className="runs-small">
+                  {detailLoading
+                    ? "Refreshing…"
+                    : `${nodes.length} nodes`}
+                </span>
               </div>
               <div className="runs-node-list">
                 {nodes.length === 0 ? (

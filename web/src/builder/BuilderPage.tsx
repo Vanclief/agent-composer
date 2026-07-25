@@ -232,6 +232,7 @@ export function BuilderPage() {
   const [runHistory, setRunHistory] = useState<RunEntry[]>([]);
   const [selectedRunFullId, setSelectedRunFullId] = useState("");
   const [running, setRunning] = useState(false);
+  const [runningWorkflowId, setRunningWorkflowId] = useState("");
   const [liveExecutionId, setLiveExecutionId] = useState("");
   const [showRunModal, setShowRunModal] = useState(false);
 
@@ -246,24 +247,35 @@ export function BuilderPage() {
   const flowInstance = useRef<
     ReactFlowInstance<BuilderFlowNode, WorkflowFlowEdge> | undefined
   >(undefined);
+  const workflowSpecsRef = useRef(workflowSpecs);
+  workflowSpecsRef.current = workflowSpecs;
 
   const activeWorkflowId = useMemo(() => {
+    const legacyWorkflowId =
+      new URLSearchParams(location.search).get("id")?.trim() ?? "";
+    const requestedWorkflowId =
+      routeWorkflowId?.trim() || legacyWorkflowId;
     if (
-      routeWorkflowId &&
-      workflows.some((workflow) => workflow.id === routeWorkflowId)
+      requestedWorkflowId &&
+      workflows.some(
+        (workflow) => workflow.id === requestedWorkflowId,
+      )
     ) {
-      return routeWorkflowId;
+      return requestedWorkflowId;
     }
     return "";
-  }, [routeWorkflowId, workflows]);
+  }, [location.search, routeWorkflowId, workflows]);
+  const activeWorkflowIdRef = useRef(activeWorkflowId);
+  activeWorkflowIdRef.current = activeWorkflowId;
 
   const activeWorkflow = workflows.find(
     (workflow) => workflow.id === activeWorkflowId,
   );
+  const activeWorkflowSpec = workflowSpecs[activeWorkflowId] ?? "";
   const currentRun =
-    runHistory.find((run) => run.fullId === selectedRunFullId) ??
-    runHistory[0] ??
-    null;
+    runHistory.find((run) => run.fullId === selectedRunFullId) ?? null;
+  const isRunning =
+    running && runningWorkflowId === activeWorkflowId;
   const selectedNode =
     flowNodes.find((node) => node.id === selectedNodeId)?.data.canvas ??
     null;
@@ -334,11 +346,21 @@ export function BuilderPage() {
     }
     if (!activeWorkflowId) {
       navigate(workflowPath(workflows[0]!.id), { replace: true });
+      return;
+    }
+    if (routeWorkflowId !== activeWorkflowId) {
+      const requestedRun =
+        new URLSearchParams(location.search).get("run") ?? undefined;
+      navigate(workflowPath(activeWorkflowId, requestedRun), {
+        replace: true,
+      });
     }
   }, [
     activeWorkflowId,
     catalogReady,
+    location.search,
     navigate,
+    routeWorkflowId,
     workflows,
   ]);
 
@@ -363,6 +385,9 @@ export function BuilderPage() {
     setCanvasEdges([]);
     setRunHistory([]);
     setSelectedRunFullId("");
+    setRunning(false);
+    setRunningWorkflowId("");
+    setLiveExecutionId("");
 
     async function loadWorkflow() {
       let executions: WorkflowExecution[] = [];
@@ -374,12 +399,20 @@ export function BuilderPage() {
           caught instanceof Error ? caught.message : String(caught);
       }
 
-      let parsed: ParsedWorkflow = parseBlueprintYAML(
-        workflowSpecs[activeWorkflowId] || "",
-        workflowSpecs,
-      );
-      if (parsed.nodes.length === 0 && executions[0]) {
+      let parsed: ParsedWorkflow;
+      if (executions[0]) {
         parsed = parseSnapshot(executions[0]);
+        if (parsed.nodes.length === 0) {
+          parsed = parseBlueprintYAML(
+            activeWorkflowSpec,
+            workflowSpecsRef.current,
+          );
+        }
+      } else {
+        parsed = parseBlueprintYAML(
+          activeWorkflowSpec,
+          workflowSpecsRef.current,
+        );
       }
       const laidOut = layoutWorkflow(parsed);
 
@@ -445,9 +478,9 @@ export function BuilderPage() {
     };
   }, [
     activeWorkflowId,
+    activeWorkflowSpec,
     catalogReady,
     navigate,
-    workflowSpecs,
   ]);
 
   useEffect(() => {
@@ -598,12 +631,17 @@ export function BuilderPage() {
   }, [navigate]);
 
   useEffect(() => {
-    if (!running || !activeWorkflowId || !liveExecutionId) {
+    if (
+      !isRunning ||
+      !activeWorkflowId ||
+      !liveExecutionId
+    ) {
       return;
     }
 
     let active = true;
     let polling = false;
+    let failures = 0;
 
     async function poll() {
       if (polling) {
@@ -618,6 +656,11 @@ export function BuilderPage() {
         const execution =
           recent.find((item) => item.id === liveExecutionId) ??
           (await fetchWorkflowExecution(liveExecutionId));
+        if (execution.workflow_id !== activeWorkflowId) {
+          throw new Error(
+            "The live execution belongs to a different workflow.",
+          );
+        }
         const nodeExecutions = await fetchNodeExecutions(
           execution.id,
           200,
@@ -627,6 +670,7 @@ export function BuilderPage() {
         if (!active) {
           return;
         }
+        failures = 0;
         setRunHistory((history) => {
           const present = history.some(
             (run) => run.fullId === entry.fullId,
@@ -638,12 +682,17 @@ export function BuilderPage() {
             : [entry, ...history].slice(0, 20);
         });
         setSelectedRunFullId(entry.fullId);
-        navigate(workflowPath(activeWorkflowId, entry.id), {
-          replace: true,
-        });
+        const nextPath = workflowPath(activeWorkflowId, entry.id);
+        if (
+          window.location.pathname + window.location.search !==
+          nextPath
+        ) {
+          navigate(nextPath, { replace: true });
+        }
 
         if (isTerminalStatus(execution.status)) {
           setRunning(false);
+          setRunningWorkflowId("");
           setLiveExecutionId("");
           if (TERMINAL_ERROR_STATUSES.has(execution.status)) {
             const failedNode = nodeExecutions.find(
@@ -664,8 +713,17 @@ export function BuilderPage() {
             }
           }
         }
-      } catch {
-        // A transient poll failure is retried on the next interval.
+      } catch (caught) {
+        failures += 1;
+        if (!active || failures < 3) {
+          return;
+        }
+        setRunning(false);
+        setRunningWorkflowId("");
+        setLiveExecutionId("");
+        const message =
+          caught instanceof Error ? caught.message : String(caught);
+        setError(`Live run refresh stopped: ${message}`);
       } finally {
         polling = false;
       }
@@ -679,37 +737,48 @@ export function BuilderPage() {
     };
   }, [
     activeWorkflowId,
+    isRunning,
     liveExecutionId,
     navigate,
-    running,
   ]);
 
   const startRun = useCallback(
     async (input: Record<string, unknown>) => {
-      if (running || !activeWorkflowId) {
+      if (isRunning || !activeWorkflowId) {
         return;
       }
+      const workflowId = activeWorkflowId;
       setShowRunModal(false);
       setRunning(true);
+      setRunningWorkflowId(workflowId);
+      setLiveExecutionId("");
+      setSelectedRunFullId("");
       setError("");
 
       try {
         const response = await createWorkflowExecution({
-          workflow_id: activeWorkflowId,
+          workflow_id: workflowId,
           input,
           shell_root: shellRoot.trim() || undefined,
         });
         if (!response.execution_id) {
           throw new Error("The server did not return an execution ID.");
         }
+        if (activeWorkflowIdRef.current !== workflowId) {
+          return;
+        }
         setLiveExecutionId(response.execution_id);
       } catch (caught) {
+        if (activeWorkflowIdRef.current !== workflowId) {
+          return;
+        }
         setRunning(false);
+        setRunningWorkflowId("");
         setLiveExecutionId("");
         setError(caught instanceof Error ? caught.message : String(caught));
       }
     },
-    [activeWorkflowId, running, shellRoot],
+    [activeWorkflowId, isRunning, shellRoot],
   );
 
   const onNodeClick: NodeMouseHandler<BuilderFlowNode> = (
@@ -844,7 +913,7 @@ export function BuilderPage() {
                 setShellRoot(defaultShellRoot);
               }
             }}
-            disabled={running}
+            disabled={isRunning}
           />
           {currentRun && (
             <RunMenuButton
@@ -856,11 +925,13 @@ export function BuilderPage() {
           )}
           <button
             type="button"
-            className={`builder-run-button ${running ? "running" : ""}`}
-            disabled={!activeWorkflowId || running}
+            className={`builder-run-button ${
+              isRunning ? "running" : ""
+            }`}
+            disabled={!activeWorkflowId || isRunning}
             onClick={() => setShowRunModal(true)}
           >
-            {running ? (
+            {isRunning ? (
               <>
                 <StopIcon /> Running…
               </>
@@ -876,10 +947,7 @@ export function BuilderPage() {
           <button
             type="button"
             className={drawer === "workflows" ? "active" : ""}
-            onClick={() => {
-              setDrawer("workflows");
-              void refreshCatalog();
-            }}
+            onClick={() => setDrawer("workflows")}
             title="Workflows"
           >
             <StackIcon />

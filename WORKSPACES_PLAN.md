@@ -180,8 +180,8 @@ Handlers read the shared `*worktree.Manager` off the server/stack (same place
 
 ## 8. SPA
 
-`interfaces/rest/static/workflow.html`, extending the existing `ShellRootPicker` (commit
-d6808e9, ~line 1455; run body sends `shell_root` ~line 1913):
+`web/src/builder/ShellRootPicker.tsx` and `web/src/builder/BuilderPage.tsx`,
+extending the existing shell-root picker and run request:
 - When the chosen path changes, `GET /api/worktrees?repo=<path>`. If `is_git === false`,
   hide all worktree UI (behaves exactly like today — just runs in the dir).
 - If git: show a **free-text** "branch / worktree" input (type an existing branch to reuse

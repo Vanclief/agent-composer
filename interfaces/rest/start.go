@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -103,8 +104,31 @@ func useSPA(e *echo.Echo) error {
 	redirectToRoot := func(c echo.Context) error {
 		return c.Redirect(http.StatusMovedPermanently, "/")
 	}
-	e.GET("/index.html", redirectToRoot)
-	e.GET("/workflow.html", redirectToRoot)
+	e.GET("/index.html", func(c echo.Context) error {
+		executionID := strings.TrimSpace(c.QueryParam("execution_id"))
+		if executionID == "" {
+			return redirectToRoot(c)
+		}
+
+		return c.Redirect(
+			http.StatusMovedPermanently,
+			"/runs/"+url.PathEscape(executionID),
+		)
+	})
+	e.GET("/workflow.html", func(c echo.Context) error {
+		workflowID := strings.TrimSpace(c.QueryParam("id"))
+		if workflowID == "" {
+			return redirectToRoot(c)
+		}
+
+		target := "/workflow/" + url.PathEscape(workflowID)
+		runID := strings.TrimSpace(c.QueryParam("run"))
+		if runID != "" {
+			target += "?run=" + url.QueryEscape(runID)
+		}
+
+		return c.Redirect(http.StatusMovedPermanently, target)
+	})
 
 	e.Use(middleware.StaticWithConfig(middleware.StaticConfig{
 		Skipper: func(c echo.Context) bool {

@@ -3,7 +3,6 @@ type QueryParams = Record<string, QueryValue>;
 
 interface ErrorEnvelope {
   message?: string;
-  error?: string | { message?: string };
 }
 
 export function apiPath(path: string, params: QueryParams = {}) {
@@ -20,20 +19,6 @@ export function apiPath(path: string, params: QueryParams = {}) {
   }
 
   return url.toString();
-}
-
-function unwrap<T>(body: unknown): T {
-  if (body && typeof body === "object") {
-    const envelope = body as Record<string, unknown>;
-    if (envelope.data && typeof envelope.data === "object") {
-      return envelope.data as T;
-    }
-    if (envelope.response && typeof envelope.response === "object") {
-      return envelope.response as T;
-    }
-  }
-
-  return body as T;
 }
 
 async function readBody(response: Response): Promise<unknown> {
@@ -55,16 +40,6 @@ function errorMessage(body: unknown, response: Response) {
     if (envelope.message) {
       return envelope.message;
     }
-    if (typeof envelope.error === "string") {
-      return envelope.error;
-    }
-    if (envelope.error?.message) {
-      return envelope.error.message;
-    }
-  }
-
-  if (typeof body === "string" && body.trim()) {
-    return body;
   }
 
   return response.statusText || `Request failed with status ${response.status}`;
@@ -88,11 +63,15 @@ async function requestJSON<T>(
     throw new Error(errorMessage(body, response));
   }
 
-  return unwrap<T>(body);
+  return body as T;
 }
 
-export function fetchJSON<T>(path: string, params?: QueryParams) {
-  return requestJSON<T>(path, {}, params);
+export function fetchJSON<T>(
+  path: string,
+  params?: QueryParams,
+  signal?: AbortSignal,
+) {
+  return requestJSON<T>(path, { signal }, params);
 }
 
 export function postJSON<T>(path: string, data: unknown) {
@@ -101,16 +80,4 @@ export function postJSON<T>(path: string, data: unknown) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-}
-
-export function putJSON<T>(path: string, data: unknown) {
-  return requestJSON<T>(path, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-}
-
-export function deleteJSON<T>(path: string) {
-  return requestJSON<T>(path, { method: "DELETE" });
 }

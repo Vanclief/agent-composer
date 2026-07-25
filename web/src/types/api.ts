@@ -10,44 +10,6 @@ export interface AppConfig {
   shell_root: string;
 }
 
-export type HookEventType =
-  | "conversation_started"
-  | "conversation_ended"
-  | "context_exceeded"
-  | "pre_context_compaction"
-  | "post_context_compaction"
-  | "pre_tool_use"
-  | "post_tool_use";
-
-export interface Hook {
-  id: string;
-  event_type: HookEventType;
-  agent_name: string;
-  command: string;
-  args: string[];
-  enabled: boolean;
-}
-
-export interface HookCreateRequest {
-  event_type: HookEventType;
-  agent_name: string;
-  command: string;
-  args: string[];
-  enabled: boolean;
-}
-
-export interface HookUpdateRequest {
-  event_type?: HookEventType;
-  agent_name?: string;
-  command?: string;
-  args?: string[];
-  enabled?: boolean;
-}
-
-export interface HookListResponse extends CursorPage {
-  hooks: Hook[];
-}
-
 export interface WorkflowSummary {
   id: string;
   name: string;
@@ -94,11 +56,6 @@ export interface SnapshotBinding {
   OutputName?: string;
 }
 
-export interface SnapshotHarness {
-  ID?: string;
-  [key: string]: unknown;
-}
-
 export interface SnapshotNode {
   InstanceID?: string;
   NodeName?: string;
@@ -113,7 +70,7 @@ export interface SnapshotNode {
   WhenTrue?: string;
   WhenFalse?: string;
   Instruction?: string;
-  Harness?: SnapshotHarness;
+  Harness?: string;
   Model?: string;
   ReasoningEffort?: string;
   HarnessConfig?: unknown;
@@ -127,6 +84,27 @@ export interface SnapshotNode {
   StructuredOutputSchema?: JsonObject;
   StructuredOutputSchemaRaw?: unknown;
   WrapStructuredOutput?: boolean;
+  LoopTarget?: SnapshotNode;
+  WhileTarget?: SnapshotWhileTarget;
+  TrueTarget?: SnapshotNode;
+  FalseTarget?: SnapshotNode;
+}
+
+export interface SnapshotWhileTarget {
+  InstanceID?: string;
+  NodeName?: string;
+  Instruction?: string;
+  Harness?: string;
+  Model?: string;
+  ReasoningEffort?: string;
+  HarnessConfig?: unknown;
+  Inputs?: Record<string, SnapshotPort>;
+  Workflow?: WorkflowSnapshot;
+  UpdateOutputName?: string;
+  UpdateOutputSchema?: JsonObject;
+  BreakOutputName?: string;
+  StructuredOutputSchema?: JsonObject;
+  StructuredOutputSchemaRaw?: unknown;
 }
 
 export interface WorkflowSnapshot {
@@ -158,12 +136,20 @@ export interface WorkflowExecutionListResponse extends CursorPage {
   workflow_executions: WorkflowExecution[];
 }
 
-export interface WorkflowExecutionCreateRequest {
-  workflow_id?: string;
-  file?: string;
+interface WorkflowExecutionCreateOptions {
   input: JsonObject;
   shell_root?: string;
 }
+
+export type WorkflowExecutionCreateRequest =
+  | (WorkflowExecutionCreateOptions & {
+      workflow_id: string;
+      file?: never;
+    })
+  | (WorkflowExecutionCreateOptions & {
+      workflow_id?: never;
+      file: string;
+    });
 
 export interface WorkflowExecutionCreateResponse {
   execution_id?: string;
@@ -172,30 +158,10 @@ export interface WorkflowExecutionCreateResponse {
   status: WorkflowExecutionStatus;
 }
 
-export interface WorkflowFailureDetails {
-  node_execution_id?: string;
-  node_id?: string;
-  node_error?: string;
-  conversation_id?: string;
-  harness_exit_code?: number;
-  harness_error?: string;
-}
-
-export interface WorkflowExecutionStatusResponse {
-  execution_id: string;
-  workflow_id: string;
-  workflow_version: string;
-  status: WorkflowExecutionStatus;
-  started_at?: string;
-  finished_at?: string;
-  output?: JsonObject;
-  failure?: WorkflowFailureDetails;
-}
-
 export interface NodeExecution {
   id: string;
   workflow_execution_id: string;
-  parent_node_execution_id?: string;
+  parent_node_execution_id: string;
   node_id: string;
   kind: string;
   status: NodeExecutionStatus;
