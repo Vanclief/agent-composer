@@ -93,6 +93,12 @@ agc
 agc rest
 ```
 
+For live reload during Go development:
+
+```bash
+air
+```
+
 Workflow execution inspector:
 
 ```

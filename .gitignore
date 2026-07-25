@@ -19,6 +19,7 @@ profile.cov
 
 .gocache/
 .cache/
+tmp/
 
 
 # Dependency directories (remove the comment below to include it)

@@ -1,0 +1,11 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/main main.go"
+  entrypoint = ["./tmp/main", "rest"]
+  exclude_dir = ["bin", "tmp", "vendor", "testdata", "web/dist", "web/node_modules"]
+  exclude_regex = ["_test.go"]
+  include_ext = ["go"]
+  kill_delay = "1s"
+  send_interrupt = true
