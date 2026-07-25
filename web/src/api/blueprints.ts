@@ -57,11 +57,30 @@ export function mapPortType(typeRef?: string): PortType {
 }
 
 function blueprintPorts(definitions?: Record<string, unknown>): CanvasPort[] {
-  return Object.entries(definitions ?? {}).map(([name, type]) => ({
-    id: name,
-    label: name,
-    type: mapPortType(typeof type === "string" ? type : "any"),
-  }));
+  return Object.entries(definitions ?? {}).map(([name, definition]) => {
+    let typeRef = typeof definition === "string" ? definition : undefined;
+    if (definition && typeof definition === "object") {
+      const schema = (definition as Record<string, unknown>).schema;
+      if (typeof schema === "string") {
+        typeRef = schema;
+      }
+    }
+    return {
+      id: name,
+      label: name,
+      type: mapPortType(typeRef),
+    };
+  });
+}
+
+function preferPorts(
+  declared: Record<string, unknown> | undefined,
+  referenced: Record<string, unknown> | undefined,
+) {
+  if (declared && Object.keys(declared).length > 0) {
+    return declared;
+  }
+  return referenced;
 }
 
 function blueprintBody(node: BlueprintNode): CanvasField[] {
@@ -215,8 +234,18 @@ export function parseBlueprintYAML(
             operation: nodeSpec.operation ?? "",
             instruction: description,
           },
-          inputs: blueprintPorts(nodeSpec.inputs),
-          outputs: blueprintPorts(nodeSpec.outputs),
+          inputs: blueprintPorts(
+            preferPorts(
+              nodeSpec.inputs,
+              subBlueprint.workflow?.inputs,
+            ),
+          ),
+          outputs: blueprintPorts(
+            preferPorts(
+              nodeSpec.outputs,
+              subBlueprint.workflow?.outputs,
+            ),
+          ),
           body,
           last: {},
           parentGroup: parentGroupId,
