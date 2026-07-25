@@ -2,9 +2,10 @@ package rest
 
 import (
 	"context"
-	"embed"
 	"errors"
+	"io/fs"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -13,10 +14,8 @@ import (
 
 	"github.com/vanclief/agent-composer/interfaces/rest/handler"
 	"github.com/vanclief/agent-composer/interfaces/rest/server"
+	"github.com/vanclief/agent-composer/web"
 )
-
-//go:embed static/*
-var staticFiles embed.FS
 
 func Start(ctx context.Context, s *server.Server, log zerolog.Logger) error {
 	e := echo.New()
@@ -53,7 +52,10 @@ func Start(ctx context.Context, s *server.Server, log zerolog.Logger) error {
 
 	// Routes
 	addAPIRoutes(e, h)
-	addWebRoutes(e)
+	err := useSPA(e)
+	if err != nil {
+		return err
+	}
 
 	// Config
 	e.HideBanner = true
@@ -92,28 +94,28 @@ func Start(ctx context.Context, s *server.Server, log zerolog.Logger) error {
 	}
 }
 
-func addWebRoutes(e *echo.Echo) {
-	e.GET("/", serveWebIndex)
-	e.GET("/index.html", serveWebIndex)
-	e.GET("/workflow", serveWorkflow)
-	e.GET("/workflow.html", serveWorkflow)
-	e.GET("/workflow/:id", serveWorkflow)
-}
-
-func serveWebIndex(c echo.Context) error {
-	content, err := staticFiles.ReadFile("static/index.html")
+func useSPA(e *echo.Echo) error {
+	dist, err := fs.Sub(web.DistFS, "dist")
 	if err != nil {
 		return err
 	}
 
-	return c.HTMLBlob(http.StatusOK, content)
-}
-
-func serveWorkflow(c echo.Context) error {
-	content, err := staticFiles.ReadFile("static/workflow.html")
-	if err != nil {
-		return err
+	redirectToRoot := func(c echo.Context) error {
+		return c.Redirect(http.StatusMovedPermanently, "/")
 	}
+	e.GET("/index.html", redirectToRoot)
+	e.GET("/workflow.html", redirectToRoot)
 
-	return c.HTMLBlob(http.StatusOK, content)
+	e.Use(middleware.StaticWithConfig(middleware.StaticConfig{
+		Skipper: func(c echo.Context) bool {
+			path := c.Request().URL.Path
+			isAPI := path == "/api" || strings.HasPrefix(path, "/api/")
+			isLegacyRedirect := path == "/index.html" || path == "/workflow.html"
+			return isAPI || isLegacyRedirect
+		},
+		HTML5:      true,
+		Filesystem: http.FS(dist),
+	}))
+
+	return nil
 }
