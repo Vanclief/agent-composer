@@ -3,6 +3,7 @@ type QueryParams = Record<string, QueryValue>;
 
 interface ErrorEnvelope {
   message?: string;
+  error?: { message?: string };
 }
 
 export function apiPath(path: string, params: QueryParams = {}) {
@@ -37,6 +38,9 @@ async function readBody(response: Response): Promise<unknown> {
 function errorMessage(body: unknown, response: Response) {
   if (body && typeof body === "object") {
     const envelope = body as ErrorEnvelope;
+    if (envelope.error?.message) {
+      return envelope.error.message;
+    }
     if (envelope.message) {
       return envelope.message;
     }
