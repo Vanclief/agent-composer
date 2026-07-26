@@ -1,25 +1,23 @@
-import {
-  type MouseEvent,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { forwardRef, type MouseEvent, type ReactNode } from "react";
 import type { RunDisplayStatus } from "../types/workflow";
+import { Menu, MenuItem } from "../ui/Menu";
 import type { RunEntry } from "./runData";
 
-export function StatusPill({
-  status,
-  tokens,
-  milliseconds,
-  onClick,
-  runId,
-}: {
-  status: RunDisplayStatus;
-  tokens?: number;
-  milliseconds?: number;
-  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
-  runId?: string;
-}) {
+export const StatusPill = forwardRef<
+  HTMLButtonElement,
+  {
+    status: RunDisplayStatus;
+    tokens?: number;
+    milliseconds?: number;
+    /** Render as a button (menu triggers inject their own onClick). */
+    interactive?: boolean;
+    onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
+    runId?: string;
+  }
+>(function StatusPill(
+  { status, tokens, milliseconds, interactive, onClick, runId },
+  ref,
+) {
   const details: string[] = [];
   if (status === "ok") {
     if (tokens) {
@@ -45,9 +43,10 @@ export function StatusPill({
             ? details.join(" · ") || "ok"
             : "idle";
 
-  if (onClick) {
+  if (interactive || onClick) {
     return (
       <button
+        ref={ref}
         type="button"
         className={`builder-pill builder-pill--${status} builder-pill--clickable nodrag nopan`}
         onClick={onClick}
@@ -69,47 +68,29 @@ export function StatusPill({
       {label}
     </span>
   );
-}
+});
 
-export function RunMenu({
+/**
+ * Run picker dropdown. The trigger must be a single element that
+ * forwards its ref (StatusPill with an onClick qualifies).
+ */
+export function RunMenuDropdown({
+  trigger,
   runs,
   currentFullId,
   onPick,
-  onClose,
-  onViewAll,
   nodeId,
-  align = "left",
+  align = "end",
 }: {
+  trigger: ReactNode;
   runs: RunEntry[];
   currentFullId?: string;
   onPick: (fullId: string) => void;
-  onClose: () => void;
-  onViewAll: () => void;
   nodeId?: string;
-  align?: "left" | "right";
+  align?: "start" | "end";
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function closeOnOutside(event: globalThis.MouseEvent) {
-      if (
-        ref.current &&
-        event.target instanceof globalThis.Node &&
-        !ref.current.contains(event.target)
-      ) {
-        onClose();
-      }
-    }
-    document.addEventListener("mousedown", closeOnOutside);
-    return () => document.removeEventListener("mousedown", closeOnOutside);
-  }, [onClose]);
-
   return (
-    <div
-      ref={ref}
-      className={`builder-runmenu builder-runmenu--${align} nodrag nopan`}
-      onMouseDown={(event) => event.stopPropagation()}
-    >
+    <Menu trigger={trigger} align={align}>
       <div className="builder-runmenu__head">
         <span>{nodeId ? `Runs · ${nodeId}` : "Workflow runs"}</span>
         <span>{runs.length}</span>
@@ -121,13 +102,12 @@ export function RunMenu({
         const snapshot = nodeId ? run.nodes[nodeId] : undefined;
         const status = snapshot?.status ?? run.status;
         return (
-          <button
-            type="button"
+          <MenuItem
             key={run.fullId}
             className={`builder-runmenu__item ${
               run.fullId === currentFullId ? "active" : ""
             }`}
-            onClick={() => onPick(run.fullId)}
+            onSelect={() => onPick(run.fullId)}
           >
             <span
               className={`builder-runmenu__status builder-runmenu__status--${status}`}
@@ -143,62 +123,12 @@ export function RunMenu({
                 : `${(run.duration / 1000).toFixed(1)}s · ${run.tokens.toLocaleString()} tok`}
             </span>
             <span className="builder-runmenu__when">{run.when}</span>
-          </button>
+          </MenuItem>
         );
       })}
       <div className="builder-runmenu__foot">
         <span>Showing latest {runs.length}</span>
-        <button
-          type="button"
-          onClick={() => {
-            onClose();
-            onViewAll();
-          }}
-        >
-          View all runs →
-        </button>
       </div>
-    </div>
-  );
-}
-
-export function RunMenuButton({
-  run,
-  runs,
-  onPick,
-  onViewAll,
-}: {
-  run: RunEntry;
-  runs: RunEntry[];
-  onPick: (fullId: string) => void;
-  onViewAll: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <span className="builder-runmenu-anchor">
-      <button
-        type="button"
-        className="builder-ghost-button"
-        onClick={() => setOpen((value) => !value)}
-      >
-        <span aria-hidden="true">↶</span>
-        {run.id}
-        <span className="builder-chevron">⌄</span>
-      </button>
-      {open && (
-        <RunMenu
-          runs={runs}
-          currentFullId={run.fullId}
-          onPick={(fullId) => {
-            setOpen(false);
-            onPick(fullId);
-          }}
-          onClose={() => setOpen(false)}
-          onViewAll={onViewAll}
-          align="right"
-        />
-      )}
-    </span>
+    </Menu>
   );
 }

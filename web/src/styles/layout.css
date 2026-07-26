@@ -1,0 +1,184 @@
+/*
+ * Shared page furniture: TopBar, LeftPanel, RightPanel.
+ *
+ * Every page is built from these three plus its own main content, so
+ * moving between pages never moves the chrome. Track widths live here
+ * as custom properties and are consumed by each page's grid.
+ */
+:root {
+  --left-panel: minmax(220px, 20%);
+  --rail: 64px;
+  /* Pages without a rail keep the title flush with the LeftPanel. */
+  --rail-w: 0px;
+  --right-panel: 340px;
+  --top-bar-h: 58px;
+}
+
+/* ── TopBar ─────────────────────────────────────────────────────── */
+.top-bar {
+  grid-column: 1 / -1;
+  z-index: 50;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  height: var(--top-bar-h);
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  padding: 0 12px;
+}
+
+/*
+ * Matches the LeftPanel track (minmax resolves to the larger side)
+ * minus this bar's padding and gap, so the title starts exactly where
+ * the main content does.
+ */
+.top-bar__lead {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: calc(var(--rail-w) + max(220px, 20%) - 24px);
+}
+
+.top-bar__title {
+  min-width: 0;
+  flex: 0 1 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  overflow: hidden;
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.top-bar__spacer {
+  flex: 1;
+}
+
+.top-bar__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── LeftPanel ──────────────────────────────────────────────────── */
+.left-panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.left-panel__header {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.left-panel__body {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+/* ── RightPanel ─────────────────────────────────────────────────── */
+.right-panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--line);
+  background: var(--paper);
+}
+
+/* ── LeftRail ───────────────────────────────────────────────────── */
+.left-rail {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  border-right: 1px solid var(--line);
+  background: var(--paper);
+  padding: 8px 0;
+}
+
+.left-rail > button {
+  width: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-3);
+  padding: 7px 2px 6px;
+  cursor: pointer;
+}
+
+.left-rail__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+}
+
+.left-rail__label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+.left-rail > button:hover {
+  background: var(--hover);
+  color: var(--ink-2);
+}
+
+.left-rail > button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.left-rail > button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Tabs inside a LeftPanel header — which list the panel is showing. */
+.left-rail > a {
+  width: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  color: var(--ink-3);
+  padding: 7px 2px 6px;
+  text-decoration: none;
+}
+
+.left-rail > a:hover {
+  background: var(--hover);
+  color: var(--ink-2);
+}
+
+.left-rail > a.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}

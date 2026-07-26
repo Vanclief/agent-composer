@@ -6,6 +6,8 @@ import type {
 import type { RunDisplayStatus } from "../types/workflow";
 
 export interface RunNodeSnapshot {
+  /** The node execution row's id — the key to its conversations. */
+  nodeExecutionId: string;
   status: RunDisplayStatus;
   ms: number;
   tokens: number;
@@ -24,6 +26,7 @@ export interface RunEntry {
   duration: number;
   tokens: number;
   cost: number;
+  outputs?: Record<string, unknown>;
   nodes: Record<string, RunNodeSnapshot>;
 }
 
@@ -116,6 +119,7 @@ export function buildRunEntry(
   const nodeMap: Record<string, RunNodeSnapshot> = {};
   for (const nodeExecution of nodeExecutions) {
     nodeMap[nodeExecution.node_id] = {
+      nodeExecutionId: nodeExecution.id,
       status: mapStatus(nodeExecution.status),
       ms: computeMilliseconds(
         nodeExecution.started_at,
@@ -141,6 +145,7 @@ export function buildRunEntry(
     ),
     tokens: 0,
     cost: 0,
+    outputs: execution.output_snapshot,
     nodes: nodeMap,
   };
 }

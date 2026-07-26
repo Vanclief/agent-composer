@@ -10,7 +10,9 @@ import "@fontsource/jetbrains-mono/latin-500.css";
 import "@fontsource/jetbrains-mono/latin-600.css";
 import "./styles/tokens.css";
 import "./styles/builder.css";
-import "./styles/runs.css";
+import "./styles/layout.css";
+import "./styles/tasks.css";
+import "./styles/debug.css";
 import App from "./App";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

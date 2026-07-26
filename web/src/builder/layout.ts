@@ -4,9 +4,24 @@ import type {
   ParsedWorkflow,
 } from "../types/workflow";
 
-export const NODE_WIDTH = 260;
-const COLUMN_GAP = 380;
-const ROW_GAP = 200;
+export const NODE_WIDTH = 240;
+const COLUMN_GAP = 340;
+const ROW_GAP = 48;
+
+// Card sections, mirroring WorkflowNode's markup: header, body
+// fields, then the connections zone (rows per side, side by side).
+const HEAD_HEIGHT = 58;
+const FIELD_HEIGHT = 26;
+const PORT_HEIGHT = 32;
+
+/** Rough rendered height of a node card, so stacks never overlap. */
+export function estimateNodeHeight(node: CanvasNode) {
+  const body = node.body.length * FIELD_HEIGHT + 16;
+  const ports =
+    Math.max(node.inputs.length, node.outputs.length) * PORT_HEIGHT +
+    22;
+  return HEAD_HEIGHT + body + ports;
+}
 
 export function autoLayout(nodes: CanvasNode[], edges: CanvasEdge[]) {
   const dependencies = new Map(
@@ -51,13 +66,25 @@ export function autoLayout(nodes: CanvasNode[], edges: CanvasEdge[]) {
     columns.set(depth, column);
   }
 
+  const columnHeights = new Map<number, number>();
+  for (const [depth, column] of columns) {
+    const total = column.reduce(
+      (sum, node) => sum + estimateNodeHeight(node) + ROW_GAP,
+      -ROW_GAP,
+    );
+    columnHeights.set(depth, total);
+  }
+  const tallest = Math.max(0, ...columnHeights.values());
+
   for (const [depth, column] of columns) {
     const x = depth * COLUMN_GAP + 80;
-    const startY = Math.max(0, ((4 - column.length) * ROW_GAP) / 2);
-    column.forEach((node, index) => {
+    // Center each column against the tallest one.
+    let y = 60 + (tallest - (columnHeights.get(depth) ?? 0)) / 2;
+    for (const node of column) {
       node.x = x;
-      node.y = startY + index * ROW_GAP + 60;
-    });
+      node.y = y;
+      y += estimateNodeHeight(node) + ROW_GAP;
+    }
   }
 }
 

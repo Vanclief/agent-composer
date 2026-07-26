@@ -6,14 +6,19 @@ import (
 	"strings"
 
 	"github.com/vanclief/agent-composer/core/controller"
+	"github.com/vanclief/agent-composer/core/resources/workflow/conversations"
 	"github.com/vanclief/agent-composer/core/resources/workflow/executions"
 	"github.com/vanclief/agent-composer/core/resources/workflow/nodeexecutions"
+	"github.com/vanclief/agent-composer/core/resources/workflow/worktrees"
 	"github.com/vanclief/agent-composer/runtime"
+	"github.com/vanclief/agent-composer/worktree"
 )
 
 type API struct {
 	Executions     *executions.API
 	NodeExecutions *nodeexecutions.API
+	Conversations  *conversations.API
+	Worktrees      *worktrees.API
 	rt             *runtime.Runtime
 }
 
@@ -22,12 +27,17 @@ func NewAPI(ctrl *controller.Controller, rt *runtime.Runtime) *API {
 		panic("Controller reference is nil")
 	}
 
-	executionsAPI := executions.NewAPI(ctrl, rt)
+	manager := &worktree.Manager{Root: worktree.DefaultRoot()}
+	executionsAPI := executions.NewAPI(ctrl, rt, manager)
 	nodeExecutionsAPI := nodeexecutions.NewAPI(ctrl)
+	conversationsAPI := conversations.NewAPI(ctrl)
+	worktreesAPI := worktrees.NewAPI(manager)
 
 	return &API{
 		Executions:     executionsAPI,
 		NodeExecutions: nodeExecutionsAPI,
+		Conversations:  conversationsAPI,
+		Worktrees:      worktreesAPI,
 		rt:             rt,
 	}
 }

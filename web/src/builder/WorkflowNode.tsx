@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Handle,
   type NodeProps,
@@ -11,35 +10,29 @@ import type {
   WorkflowFlowNode,
 } from "./flowTypes";
 import { KindIcon } from "./Icons";
-import { RunMenu, StatusPill } from "./RunMenu";
+import { RunMenuDropdown, StatusPill } from "./RunMenu";
 
-function NodePorts({
-  ports,
-  side,
-}: {
-  ports: WorkflowFlowNode["data"]["canvas"]["inputs"];
-  side: "in" | "out";
-}) {
-  return (
-    <div className={`builder-ports builder-ports--${side}`}>
-      {ports.map((port) => (
-        <div
-          key={port.id}
-          className={`builder-port builder-port--${side} builder-port--${port.type}`}
-        >
-          <Handle
-            id={port.id}
-            type={side === "in" ? "target" : "source"}
-            position={side === "in" ? Position.Left : Position.Right}
-            isConnectable={false}
-            className="builder-port__handle"
-          />
-          <span className="builder-port__label">{port.label}</span>
-          <span className="builder-port__type">{port.type}</span>
-        </div>
-      ))}
-    </div>
-  );
+// The header sub already shows kind · model.
+const REDUNDANT_FIELDS = new Set(["kind", "model"]);
+
+function outputPreview(value: unknown): string | null {
+  if (typeof value === "string") {
+    return value.trim() || null;
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return null;
+    }
+    return `${value.length} item${value.length === 1 ? "" : "s"}`;
+  }
+  if (value && typeof value === "object") {
+    const keys = Object.keys(value);
+    if (keys.length === 0) {
+      return null;
+    }
+    return `{ ${keys.join(", ")} }`;
+  }
+  return null;
 }
 
 export function WorkflowNode({
@@ -51,15 +44,19 @@ export function WorkflowNode({
     expandedGroups,
     onSelectRun,
     onToggleGroup,
-    onViewRuns,
     runs,
+    showRunStatus,
   } = useBuilderRuntime();
-  const [menuOpen, setMenuOpen] = useState(false);
   const node = data.canvas;
   const snapshot = currentRun?.nodes[node.id];
-  const status = snapshot?.status ?? node.last.status ?? "idle";
+  const status = showRunStatus
+    ? snapshot?.status ?? node.last.status ?? "idle"
+    : "idle";
   const visual = KIND_VISUAL[node.kind];
   const preview = (() => {
+    if (!showRunStatus) {
+      return null;
+    }
     if (status === "run") {
       return "⋯ streaming";
     }
@@ -71,15 +68,12 @@ export function WorkflowNode({
     if (!key) {
       return null;
     }
-    const value = output[key];
-    if (typeof value === "string") {
-      return value;
-    }
-    if (Array.isArray(value)) {
-      return `[${value.length}] ${String(value[0] ?? "")}`;
-    }
-    return value == null ? String(value) : JSON.stringify(value);
+    return outputPreview(output[key]);
   })();
+
+  const fields = node.body.filter(
+    (field) => !REDUNDANT_FIELDS.has(field.k),
+  );
 
   const classes = [
     "builder-node",
@@ -108,80 +102,123 @@ export function WorkflowNode({
           <div className="builder-node__name">{node.name}</div>
           <div className="builder-node__sub">{node.sub}</div>
         </div>
-        <span
-          className="builder-runmenu-anchor"
-          onMouseDown={(event) => event.stopPropagation()}
-        >
-          <StatusPill
-            status={status}
-            tokens={snapshot?.tokens}
-            milliseconds={snapshot?.ms}
-            runId={currentRun?.id}
-            onClick={
-              status === "run"
-                ? undefined
-                : (event) => {
-                    event.stopPropagation();
-                    setMenuOpen((value) => !value);
-                  }
-            }
-          />
-          {menuOpen && (
-            <RunMenu
-              runs={runs}
-              currentFullId={currentRun?.fullId}
-              nodeId={node.id}
-              onPick={(fullId) => {
-                setMenuOpen(false);
-                onSelectRun(fullId);
-              }}
-              onClose={() => setMenuOpen(false)}
-              onViewAll={onViewRuns}
-              align="right"
+        {showRunStatus &&
+          (status === "run" || runs.length < 2 ? (
+            <StatusPill
+              status={status}
+              tokens={snapshot?.tokens}
+              milliseconds={snapshot?.ms}
+              runId={currentRun?.id}
             />
-          )}
-        </span>
-      </div>
-
-      <div className="builder-node__body">
-        {node.body.map((field, index) => (
-          <div key={`${field.k}-${index}`} className="builder-node__field">
-            <span>{field.k}</span>
-            <span className={field.mono ? "mono" : ""}>{field.v}</span>
-          </div>
-        ))}
-        {node.isGroup && node.groupLabel && (
-          <button
-            type="button"
-            className="builder-group-toggle nodrag nopan"
-            onClick={(event) => {
-              event.stopPropagation();
-              onToggleGroup(node.id);
-            }}
-          >
+          ) : (
             <span
-              className={
-                expandedGroups.has(node.id)
-                  ? "builder-group-toggle__arrow expanded"
-                  : "builder-group-toggle__arrow"
-              }
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
             >
-              ▶
+              <RunMenuDropdown
+                trigger={
+                  <StatusPill
+                    status={status}
+                    tokens={snapshot?.tokens}
+                    milliseconds={snapshot?.ms}
+                    runId={currentRun?.id}
+                    interactive
+                  />
+                }
+                runs={runs}
+                currentFullId={currentRun?.fullId}
+                nodeId={node.id}
+                onPick={onSelectRun}
+              />
             </span>
-            {node.groupLabel}
-            {node.childCount ? ` (${node.childCount} nodes)` : ""}
-          </button>
-        )}
-        {preview !== null && (
-          <div className="builder-node__preview">{preview}</div>
-        )}
+          ))}
       </div>
 
-      {node.inputs.length > 0 && (
-        <NodePorts ports={node.inputs} side="in" />
+      {(fields.length > 0 ||
+        preview !== null ||
+        (node.isGroup && node.groupLabel)) && (
+        <div className="builder-node__body">
+          {fields.map((field, index) => (
+            <div key={`${field.k}-${index}`} className="builder-node__field">
+              <span>{field.k}</span>
+              <span className={field.mono ? "mono" : ""}>{field.v}</span>
+            </div>
+          ))}
+          {node.isGroup && node.groupLabel && (
+            <button
+              type="button"
+              className="builder-group-toggle nodrag nopan"
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggleGroup(node.id);
+              }}
+            >
+              <span
+                className={
+                  expandedGroups.has(node.id)
+                    ? "builder-group-toggle__arrow expanded"
+                    : "builder-group-toggle__arrow"
+                }
+              >
+                ▶
+              </span>
+              {node.groupLabel}
+              {node.childCount ? ` (${node.childCount} nodes)` : ""}
+            </button>
+          )}
+          {preview !== null && (
+            <div className="builder-node__preview">{preview}</div>
+          )}
+        </div>
       )}
-      {node.outputs.length > 0 && (
-        <NodePorts ports={node.outputs} side="out" />
+
+      {(node.inputs.length > 0 || node.outputs.length > 0) && (
+        <div className="builder-node__ports">
+          <div className="builder-node__ports-col builder-node__ports-col--in">
+            {node.inputs.map((port) => (
+              <div
+                key={port.id}
+                className={`builder-port builder-port--in builder-port--${port.type}`}
+              >
+                <Handle
+                  id={port.id}
+                  type="target"
+                  position={Position.Left}
+                  isConnectable={false}
+                  className="builder-port__handle"
+                />
+                <span
+                  className="builder-port__label"
+                  title={`${port.label} · ${port.type}`}
+                >
+                  {port.label}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="builder-node__ports-col builder-node__ports-col--out">
+            {node.outputs.map((port) => (
+              <div
+                key={port.id}
+                className={`builder-port builder-port--out builder-port--${port.type}`}
+              >
+                <span
+                  className="builder-port__label"
+                  title={`${port.label} · ${port.type}`}
+                >
+                  {port.label}
+                </span>
+                <Handle
+                  id={port.id}
+                  type="source"
+                  position={Position.Right}
+                  isConnectable={false}
+                  className="builder-port__handle"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

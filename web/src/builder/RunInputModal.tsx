@@ -1,17 +1,54 @@
-import { type FormEvent, useMemo, useState } from "react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useMemo,
+  useState,
+} from "react";
 import type { JsonObject } from "../types/api";
+import { Modal } from "../ui/Modal";
 import { PlayIcon } from "./Icons";
 
 type InputMode = "text" | "json";
 
+function storageKey(workflowId: string) {
+  return `agc.runInputs.${workflowId}`;
+}
+
+function readStoredValues(workflowId: string) {
+  try {
+    const raw = JSON.parse(
+      localStorage.getItem(storageKey(workflowId)) || "{}",
+    ) as unknown;
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      return Object.fromEntries(
+        Object.entries(raw as Record<string, unknown>).filter(
+          (entry): entry is [string, string] =>
+            typeof entry[1] === "string",
+        ),
+      );
+    }
+  } catch {
+    // Ignore invalid values left by an older browser session.
+  }
+  return {};
+}
+
 export function RunInputModal({
   workflowId,
   inputDefinitions,
+  title,
+  headerSlot,
+  locationSlot,
   onRun,
   onClose,
 }: {
   workflowId: string;
   inputDefinitions: Record<string, string>;
+  title?: string;
+  /** Rendered above the inputs — used to pick what is being run. */
+  headerSlot?: ReactNode;
+  /** Project + workspace sections (self-labeled). */
+  locationSlot?: ReactNode;
   onRun: (input: JsonObject) => void;
   onClose: () => void;
 }) {
@@ -19,9 +56,12 @@ export function RunInputModal({
     () => Object.entries(inputDefinitions),
     [inputDefinitions],
   );
-  const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(entries.map(([name]) => [name, ""])),
-  );
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const stored = readStoredValues(workflowId);
+    return Object.fromEntries(
+      entries.map(([name]) => [name, stored[name] ?? ""]),
+    );
+  });
   const [modes, setModes] = useState<Record<string, InputMode>>(() =>
     Object.fromEntries(
       entries.map(([name, type]) => [
@@ -54,29 +94,40 @@ export function RunInputModal({
 
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length === 0) {
+      try {
+        localStorage.setItem(
+          storageKey(workflowId),
+          JSON.stringify(values),
+        );
+      } catch {
+        // Storage can be disabled without preventing workflow execution.
+      }
       onRun(payload);
     }
   }
 
   return (
-    <div className="builder-modal-overlay" onMouseDown={onClose}>
-      <form
-        className="builder-modal"
-        onMouseDown={(event) => event.stopPropagation()}
-        onSubmit={submit}
-      >
-        <div className="builder-modal__head">
-          <h3>Run {workflowId}</h3>
+    <Modal
+      title={title || `Run ${workflowId}`}
+      onClose={onClose}
+      onSubmit={submit}
+      footer={
+        <>
           <button
             type="button"
-            className="builder-icon-button"
+            className="builder-ghost-button"
             onClick={onClose}
-            aria-label="Close"
           >
-            ×
+            Cancel
           </button>
-        </div>
-        <div className="builder-modal__body scrollnice">
+          <button type="submit" className="builder-run-button">
+            <PlayIcon /> Run
+          </button>
+        </>
+      }
+    >
+      {headerSlot}
+          {locationSlot}
           {entries.length === 0 && (
             <div className="builder-modal__empty">
               This workflow has no inputs.
@@ -131,20 +182,6 @@ export function RunInputModal({
               )}
             </div>
           ))}
-        </div>
-        <div className="builder-modal__foot">
-          <button
-            type="button"
-            className="builder-ghost-button"
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-          <button type="submit" className="builder-run-button">
-            <PlayIcon /> Run
-          </button>
-        </div>
-      </form>
-    </div>
+    </Modal>
   );
 }

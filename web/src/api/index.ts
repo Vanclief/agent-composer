@@ -1,5 +1,8 @@
 import type {
   AppConfig,
+  Conversation,
+  ConversationListResponse,
+  DirectoryBrowseResponse,
   NodeExecutionListResponse,
   WorkflowExecution,
   WorkflowExecutionCreateRequest,
@@ -8,8 +11,10 @@ import type {
   WorkflowListResponse,
   WorkflowSpecResponse,
   WorkflowSummary,
+  WorktreeCreateResponse,
+  WorktreeListResponse,
 } from "../types/api";
-import { fetchJSON, postJSON } from "./client";
+import { deleteJSON, fetchJSON, postJSON } from "./client";
 
 export function fetchConfig(signal?: AbortSignal) {
   return fetchJSON<AppConfig>("/api/config", undefined, signal);
@@ -91,6 +96,65 @@ export function createWorkflowExecution(
     "/api/workflow/executions",
     request,
   );
+}
+
+export function browseDirectories(
+  path: string,
+  signal?: AbortSignal,
+) {
+  return fetchJSON<DirectoryBrowseResponse>(
+    "/api/filesystem/directories",
+    { path },
+    signal,
+  );
+}
+
+export function fetchWorktrees(
+  repo: string,
+  signal?: AbortSignal,
+  fetchOrigin = false,
+) {
+  return fetchJSON<WorktreeListResponse>(
+    "/api/worktrees",
+    { repo, fetch: fetchOrigin ? "true" : undefined },
+    signal,
+  );
+}
+
+export function createWorktree(
+  repo: string,
+  branch: string,
+  base?: string,
+) {
+  return postJSON<WorktreeCreateResponse>("/api/worktrees", {
+    repo,
+    branch,
+    base: base?.trim() || undefined,
+  });
+}
+
+export function removeWorktree(
+  repo: string,
+  path: string,
+  force = false,
+) {
+  return deleteJSON<{ removed: string }>("/api/worktrees", {
+    repo,
+    path,
+    force: force ? "true" : undefined,
+  });
+}
+
+export async function fetchConversations(
+  nodeExecutionId: string,
+  signal?: AbortSignal,
+): Promise<Conversation[]> {
+  const body = await fetchJSON<ConversationListResponse>(
+    "/api/workflow/conversations",
+    { node_execution_id: nodeExecutionId },
+    signal,
+  );
+  return body?.conversations ?? [];
 }
 
 export async function fetchNodeExecutions(

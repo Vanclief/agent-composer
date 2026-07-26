@@ -139,6 +139,50 @@ export interface WorkflowExecutionListResponse extends CursorPage {
 interface WorkflowExecutionCreateOptions {
   input: JsonObject;
   shell_root?: string;
+  /** Branch name — the run executes in that branch's worktree. */
+  worktree?: string;
+  /** Start point when the worktree branch is new (default HEAD). */
+  base?: string;
+}
+
+export interface WorktreeInfo {
+  path: string;
+  branch?: string;
+  head?: string;
+  is_main: boolean;
+  detached: boolean;
+}
+
+export interface BranchInfo {
+  name: string;
+  is_local: boolean;
+  is_remote: boolean;
+}
+
+export interface WorktreeListResponse {
+  exists: boolean;
+  is_git: boolean;
+  repo?: string;
+  worktrees: WorktreeInfo[] | null;
+  branches?: BranchInfo[] | null;
+}
+
+export interface DirectoryEntry {
+  name: string;
+  path: string;
+  has_git: boolean;
+}
+
+export interface DirectoryBrowseResponse {
+  path: string;
+  parent?: string;
+  directories: DirectoryEntry[] | null;
+}
+
+export interface WorktreeCreateResponse {
+  path: string;
+  branch: string;
+  created: boolean;
 }
 
 export type WorkflowExecutionCreateRequest =
@@ -179,4 +223,48 @@ export interface NodeExecution {
 
 export interface NodeExecutionListResponse extends CursorPage {
   node_executions: NodeExecution[];
+}
+
+/** runtime/types.Message has no json tags, so keys are PascalCase. */
+export interface ConversationToolCall {
+  Name?: string;
+  CallID?: string;
+  Arguments?: string;
+  JSONArguments?: unknown;
+}
+
+export interface ConversationMessage {
+  Role: "system" | "user" | "assistant" | "tool" | string;
+  Content?: string;
+  Name?: string;
+  ToolCallID?: string;
+  ToolCall?: ConversationToolCall | null;
+}
+
+export interface TraceEvent {
+  kind: "reasoning" | "message" | "command" | "tool" | "error" | string;
+  content: string;
+  detail?: string;
+}
+
+export interface Conversation {
+  id: string;
+  node_execution_id?: string;
+  agent_name: string;
+  harness: string;
+  model: string;
+  instructions?: string;
+  messages: ConversationMessage[] | null;
+  trace?: TraceEvent[] | null;
+  status: string;
+  harness_error?: string;
+  input_tokens: number;
+  output_tokens: number;
+  cached_tokens: number;
+  cost: number;
+  created_at: string;
+}
+
+export interface ConversationListResponse {
+  conversations: Conversation[] | null;
 }

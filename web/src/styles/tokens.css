@@ -1,32 +1,143 @@
+/*
+ * Factory floor.
+ *
+ * Cold steel ground with a blue bias (hue 260) on every neutral, so the
+ * two action colours are the only saturated things on screen:
+ *   accent (blue)  — view / navigate / inspect. Also links and focus.
+ *   create (green) — makes something new: run a task, add a workflow.
+ *
+ * Light is the default. Dark is the same palette re-derived for a dark
+ * ground and applies when the root carries data-theme="dark", which is
+ * what a theme toggle will stamp. Style components through these tokens
+ * only — nothing below should hardcode a colour.
+ */
 :root {
   color-scheme: light;
-  --bg: oklch(0.985 0.005 90);
-  --paper: oklch(0.995 0.003 90);
-  --ink: oklch(0.22 0.01 270);
-  --ink-2: oklch(0.42 0.01 270);
-  --ink-3: oklch(0.62 0.01 270);
-  --ink-4: oklch(0.82 0.008 270);
-  --line: oklch(0.92 0.008 270);
-  --line-2: oklch(0.88 0.01 270);
-  --hover: oklch(0.96 0.006 270);
-  --accent: oklch(0.62 0.16 250);
-  --accent-soft: oklch(0.95 0.04 250);
-  --accent-ink: oklch(0.42 0.18 250);
 
-  --t-text: oklch(0.62 0.14 250);
-  --t-text-soft: oklch(0.95 0.04 250);
-  --t-json: oklch(0.62 0.14 145);
-  --t-json-soft: oklch(0.95 0.04 145);
-  --t-file: oklch(0.62 0.14 50);
-  --t-file-soft: oklch(0.95 0.04 50);
-  --t-any: oklch(0.62 0.02 270);
-  --t-any-soft: oklch(0.95 0.005 270);
+  /* ── ground ─────────────────────────────────────────────────────── */
+  --bg: oklch(0.968 0.004 260);
+  --paper: oklch(0.995 0.002 260);
+  --paper-2: oklch(0.978 0.004 260);
+  --ink: oklch(0.24 0.014 260);
+  --ink-2: oklch(0.42 0.014 260);
+  --ink-3: oklch(0.56 0.014 260);
+  --ink-4: oklch(0.74 0.012 260);
+  --line: oklch(0.91 0.006 260);
+  --line-2: oklch(0.85 0.008 260);
+  --hover: oklch(0.952 0.006 260);
 
-  --st-idle: oklch(0.78 0.005 270);
-  --st-run: oklch(0.62 0.16 250);
-  --st-ok: oklch(0.62 0.14 145);
-  --st-warn: oklch(0.7 0.15 70);
-  --st-err: oklch(0.6 0.2 25);
+  --accent: oklch(0.54 0.17 250);
+  --accent-soft: oklch(0.945 0.035 250);
+  --accent-ink: oklch(0.45 0.16 250);
+  --accent-glow: oklch(0.54 0.17 250 / 0.22);
+
+  --create: oklch(0.5 0.14 155);
+  --create-soft: oklch(0.94 0.05 155);
+  --create-ink: oklch(0.42 0.12 155);
+  --create-glow: oklch(0.5 0.14 155 / 0.22);
+
+  /*
+   * Port and wire types. `file` sits at violet rather than amber so it
+   * cannot be confused with a warning.
+   */
+  --t-text: oklch(0.55 0.15 250);
+  --t-text-soft: oklch(0.945 0.035 250);
+  --t-json: oklch(0.55 0.14 155);
+  --t-json-soft: oklch(0.94 0.045 155);
+  --t-file: oklch(0.55 0.16 305);
+  --t-file-soft: oklch(0.945 0.04 305);
+  --t-any: oklch(0.58 0.02 260);
+  --t-any-soft: oklch(0.955 0.005 260);
+
+  /*
+   * Status. `warn` sits at true yellow, well clear of both action
+   * colours. `run` is blue but deliberately NOT the accent.
+   */
+  --st-idle: oklch(0.74 0.008 260);
+  --st-run: oklch(0.55 0.17 250);
+  --st-ok: oklch(0.51 0.14 155);
+  --st-warn: oklch(0.56 0.12 85);
+  --st-err: oklch(0.55 0.2 25);
+
+  --st-run-soft: oklch(0.945 0.035 250);
+  --st-ok-soft: oklch(0.94 0.05 155);
+  --st-warn-soft: oklch(0.95 0.06 85);
+  --st-err-soft: oklch(0.95 0.035 25);
+
+  --st-run-ink: oklch(0.44 0.16 250);
+  --st-ok-ink: oklch(0.4 0.12 155);
+  --st-warn-ink: oklch(0.45 0.11 85);
+  --st-err-ink: oklch(0.45 0.19 25);
+
+  /* Depth on a light ground: a white top edge and a soft cast shadow. */
+  --edge-hi: rgba(255, 255, 255, 0.8);
+  --shadow-1: 0 1px 2px oklch(0.3 0.02 260 / 0.09);
+  --shadow-2: 0 8px 24px -12px oklch(0.3 0.02 260 / 0.28);
+  --shadow-3: 0 12px 32px -8px oklch(0.3 0.02 260 / 0.24);
+  --scrim: oklch(0.4 0.02 260 / 0.32);
+  --paper-alpha: oklch(0.995 0.002 260 / 0.9);
+  --code-bg: oklch(0.955 0.006 260);
+  --danger-glow: oklch(0.55 0.2 25 / 0.25);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: oklch(0.18 0.012 260);
+  --paper: oklch(0.22 0.014 260);
+  --paper-2: oklch(0.26 0.016 260);
+  --ink: oklch(0.95 0.006 260);
+  --ink-2: oklch(0.8 0.012 260);
+  --ink-3: oklch(0.66 0.016 260);
+  --ink-4: oklch(0.46 0.016 260);
+  --line: oklch(0.3 0.016 260);
+  --line-2: oklch(0.38 0.018 260);
+  --hover: oklch(0.26 0.016 260);
+
+  --accent: oklch(0.65 0.16 250);
+  --accent-soft: oklch(0.3 0.06 250);
+  --accent-ink: oklch(0.8 0.13 250);
+  --accent-glow: oklch(0.65 0.16 250 / 0.3);
+
+  --create: oklch(0.66 0.15 155);
+  --create-soft: oklch(0.3 0.06 155);
+  --create-ink: oklch(0.86 0.12 155);
+  --create-glow: oklch(0.66 0.15 155 / 0.3);
+
+  --t-text: oklch(0.7 0.14 250);
+  --t-text-soft: oklch(0.32 0.06 250);
+  --t-json: oklch(0.72 0.14 155);
+  --t-json-soft: oklch(0.3 0.05 155);
+  --t-file: oklch(0.7 0.15 305);
+  --t-file-soft: oklch(0.32 0.06 305);
+  --t-any: oklch(0.68 0.02 260);
+  --t-any-soft: oklch(0.3 0.01 260);
+
+  --st-idle: oklch(0.5 0.008 260);
+  --st-run: oklch(0.68 0.15 250);
+  --st-ok: oklch(0.72 0.15 155);
+  --st-warn: oklch(0.85 0.15 95);
+  --st-err: oklch(0.66 0.2 25);
+
+  --st-run-soft: oklch(0.3 0.06 250);
+  --st-ok-soft: oklch(0.3 0.06 155);
+  --st-warn-soft: oklch(0.32 0.07 95);
+  --st-err-soft: oklch(0.31 0.08 25);
+
+  --st-run-ink: oklch(0.84 0.12 250);
+  --st-ok-ink: oklch(0.86 0.12 155);
+  --st-warn-ink: oklch(0.9 0.13 95);
+  --st-err-ink: oklch(0.82 0.13 25);
+
+  /* On a dark ground depth comes from a lit top edge and a deeper cast. */
+  --edge-hi: rgba(255, 255, 255, 0.07);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-2: 0 8px 24px -12px rgba(0, 0, 0, 0.75);
+  --shadow-3: 0 12px 32px -8px rgba(0, 0, 0, 0.8);
+  --scrim: oklch(0.12 0.01 260 / 0.62);
+  --paper-alpha: oklch(0.22 0.014 260 / 0.9);
+  --code-bg: oklch(0.14 0.012 260);
+  --danger-glow: oklch(0.66 0.2 25 / 0.3);
 }
 
 * {
@@ -61,7 +172,8 @@ button {
 }
 
 ::selection {
-  background: oklch(0.85 0.08 250);
+  background: var(--accent-soft);
+  color: var(--ink);
 }
 
 .mono {

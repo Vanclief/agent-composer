@@ -85,3 +85,7 @@ export function postJSON<T>(path: string, data: unknown) {
     body: JSON.stringify(data),
   });
 }
+
+export function deleteJSON<T>(path: string, params?: QueryParams) {
+  return requestJSON<T>(path, { method: "DELETE" }, params);
+}

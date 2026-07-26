@@ -8,11 +8,11 @@ import { copyText } from "../utils/clipboard";
 import { KIND_VISUAL } from "./constants";
 import { KindIcon } from "./Icons";
 import { type RunEntry } from "./runData";
-import { RunMenu, StatusPill } from "./RunMenu";
+import { RunMenuDropdown, StatusPill } from "./RunMenu";
 
-type InspectorTab = "inspector" | "config" | "runs";
+type InspectorTab = "overview" | "config" | "runs";
 
-function formatValue(value: unknown) {
+export function formatValue(value: unknown) {
   if (value === null || value === undefined) {
     return "—";
   }
@@ -26,7 +26,7 @@ function formatValue(value: unknown) {
   }
 }
 
-function CopyButton({ value }: { value: string }) {
+export function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
   if (!value || value === "—") {
     return null;
@@ -104,6 +104,18 @@ function LiveIO({
         </div>
       </div>
 
+      {Boolean(node.config.instruction) && (
+        <>
+          <div className="builder-io-meta">
+            <b>Prompt</b>
+            <CopyButton value={String(node.config.instruction)} />
+          </div>
+          <div className="builder-io-card builder-io-card--prompt">
+            {String(node.config.instruction)}
+          </div>
+        </>
+      )}
+
       {node.inputs.length > 0 && (
         <>
           <div className="builder-io-meta">
@@ -179,6 +191,8 @@ function Config({ node }: { node: CanvasNode }) {
           <select
             className="builder-select"
             defaultValue={String(config.model || "")}
+            disabled
+            title="Configuration is read from workflow YAML"
           >
             <option>{String(config.model || "default")}</option>
             <option>gpt-5</option>
@@ -191,6 +205,8 @@ function Config({ node }: { node: CanvasNode }) {
           <input
             className="builder-input mono"
             defaultValue={String(config.harnessId || "")}
+            readOnly
+            title="Configuration is read from workflow YAML"
           />
         </div>
         <div className="builder-field-row">
@@ -199,17 +215,42 @@ function Config({ node }: { node: CanvasNode }) {
             className="builder-textarea"
             rows={8}
             defaultValue={String(config.instruction || "")}
+            readOnly
+            title="Configuration is read from workflow YAML"
           />
         </div>
         <div className="builder-field-row">
           <label>Tools</label>
           <div className="builder-segment">
-            <button type="button" className="active">
+            <button
+              type="button"
+              className="active"
+              disabled
+              title="Configuration is read from workflow YAML"
+            >
               None
             </button>
-            <button type="button">Web</button>
-            <button type="button">Code</button>
-            <button type="button">Custom</button>
+            <button
+              type="button"
+              disabled
+              title="Configuration is read from workflow YAML"
+            >
+              Web
+            </button>
+            <button
+              type="button"
+              disabled
+              title="Configuration is read from workflow YAML"
+            >
+              Code
+            </button>
+            <button
+              type="button"
+              disabled
+              title="Configuration is read from workflow YAML"
+            >
+              Custom
+            </button>
           </div>
         </div>
       </div>
@@ -223,6 +264,8 @@ function Config({ node }: { node: CanvasNode }) {
         <input
           className="builder-input mono"
           defaultValue={String(config.kind || node.kind)}
+          readOnly
+          title="Configuration is read from workflow YAML"
         />
       </div>
       <div className="builder-field-row">
@@ -230,6 +273,8 @@ function Config({ node }: { node: CanvasNode }) {
         <input
           className="builder-input mono"
           defaultValue={String(config.operation || "")}
+          readOnly
+          title="Configuration is read from workflow YAML"
         />
       </div>
       {config.instruction && (
@@ -239,9 +284,53 @@ function Config({ node }: { node: CanvasNode }) {
             className="builder-textarea"
             rows={6}
             defaultValue={String(config.instruction)}
+            readOnly
+            title="Configuration is read from workflow YAML"
           />
         </div>
       )}
+    </div>
+  );
+}
+
+export function NodeConfigPanel({ node }: { node: CanvasNode | null }) {
+  if (!node) {
+    return (
+      <div className="builder-inspector">
+        <div className="builder-inspector__empty">
+          <b>Nothing selected</b>
+          <span>Click a node to inspect its YAML-backed config.</span>
+        </div>
+      </div>
+    );
+  }
+
+  const visual = KIND_VISUAL[node.kind];
+  return (
+    <div className="builder-inspector">
+      <div className="builder-inspector__head">
+        <div
+          className="builder-inspector__icon"
+          style={{
+            background: visual.background,
+            color: visual.foreground,
+          }}
+        >
+          <KindIcon kind={node.kind} size={15} />
+        </div>
+        <div className="builder-inspector__title">
+          <h3>{node.name}</h3>
+          <span className="mono">
+            {node.kind} · {node.id}
+          </span>
+        </div>
+      </div>
+      <div className="builder-config-note">
+        YAML-backed preview
+      </div>
+      <div className="builder-inspector__body scrollnice">
+        <Config node={node} />
+      </div>
     </div>
   );
 }
@@ -307,20 +396,16 @@ export function Inspector({
   currentRun,
   runs,
   onSelectRun,
-  onViewRuns,
 }: {
   node: CanvasNode | null;
   currentRun: RunEntry | null;
   runs: RunEntry[];
   onSelectRun: (fullId: string) => void;
-  onViewRuns: () => void;
 }) {
-  const [tab, setTab] = useState<InspectorTab>("inspector");
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [tab, setTab] = useState<InspectorTab>("overview");
 
   useEffect(() => {
-    setTab("inspector");
-    setMenuOpen(false);
+    setTab("overview");
   }, [node?.id]);
 
   if (!node) {
@@ -375,42 +460,39 @@ export function Inspector({
             {node.kind} · {node.id}
           </span>
         </div>
-        <span className="builder-runmenu-anchor">
+        {status === "run" ? (
           <StatusPill
             status={status}
             tokens={snapshot?.tokens}
             milliseconds={snapshot?.ms}
             runId={currentRun?.id}
-            onClick={
-              status === "run"
-                ? undefined
-                : () => setMenuOpen((value) => !value)
-            }
           />
-          {menuOpen && (
-            <RunMenu
-              runs={runs}
-              currentFullId={currentRun?.fullId}
-              nodeId={node.id}
-              onPick={(fullId) => {
-                setMenuOpen(false);
-                onSelectRun(fullId);
-              }}
-              onClose={() => setMenuOpen(false)}
-              onViewAll={onViewRuns}
-              align="right"
-            />
-          )}
-        </span>
+        ) : (
+          <RunMenuDropdown
+            trigger={
+              <StatusPill
+                status={status}
+                tokens={snapshot?.tokens}
+                milliseconds={snapshot?.ms}
+                runId={currentRun?.id}
+                interactive
+              />
+            }
+            runs={runs}
+            currentFullId={currentRun?.fullId}
+            nodeId={node.id}
+            onPick={onSelectRun}
+          />
+        )}
       </div>
 
       <div className="builder-tabs">
         <button
           type="button"
-          className={tab === "inspector" ? "active" : ""}
-          onClick={() => setTab("inspector")}
+          className={tab === "overview" ? "active" : ""}
+          onClick={() => setTab("overview")}
         >
-          Inspector
+          Overview
         </button>
         <button
           type="button"
@@ -429,7 +511,7 @@ export function Inspector({
       </div>
 
       <div className="builder-inspector__body scrollnice">
-        {tab === "inspector" && (
+        {tab === "overview" && (
           <LiveIO node={node} currentRun={currentRun} />
         )}
         {tab === "config" && <Config node={node} />}

@@ -32,4 +32,14 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	workflowNodeExecutions := workflow.Group("/node-executions")
 	workflowNodeExecutions.GET("", h.ListNodeExecutions)
 	workflowNodeExecutions.GET("/:id", h.GetNodeExecution)
+
+	workflowConversations := workflow.Group("/conversations")
+	workflowConversations.GET("", h.ListConversations)
+
+	api.GET("/filesystem/directories", h.BrowseDirectories)
+
+	worktrees := api.Group("/worktrees")
+	worktrees.GET("", h.ListWorktrees)
+	worktrees.POST("", h.CreateWorktree)
+	worktrees.DELETE("", h.RemoveWorktree)
 }

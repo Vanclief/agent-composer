@@ -7,10 +7,13 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/vanclief/agent-composer/core/controller"
+	"github.com/vanclief/agent-composer/core/resources/filesystem"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
+	workflowconversations "github.com/vanclief/agent-composer/core/resources/workflow/conversations"
 	workflowexecutions "github.com/vanclief/agent-composer/core/resources/workflow/executions"
 	workflownodeexecutions "github.com/vanclief/agent-composer/core/resources/workflow/nodeexecutions"
+	workflowworktrees "github.com/vanclief/agent-composer/core/resources/workflow/worktrees"
 	"github.com/vanclief/agent-composer/models/user"
 	"github.com/vanclief/compose/components/ratelimit"
 	"github.com/vanclief/compose/components/rest/requests"
@@ -18,11 +21,12 @@ import (
 )
 
 type Server struct {
-	RootContext context.Context
-	Ctrl        *controller.Controller
-	RateLimiter *ratelimit.WindowCounter
-	HooksAPI    *hooks.API
-	WorkflowAPI *workflowapi.API
+	RootContext   context.Context
+	Ctrl          *controller.Controller
+	RateLimiter   *ratelimit.WindowCounter
+	HooksAPI      *hooks.API
+	WorkflowAPI   *workflowapi.API
+	FilesystemAPI *filesystem.API
 }
 
 func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API) *Server {
@@ -33,11 +37,12 @@ func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.A
 	limiter := ratelimit.NewWindowCounter(ctrl.Config.App.RateLimitWindow, ctrl.Config.App.RateLimit)
 
 	return &Server{
-		RootContext: rootCtx,
-		Ctrl:        ctrl,
-		RateLimiter: limiter,
-		HooksAPI:    hooksAPI,
-		WorkflowAPI: workflowAPI,
+		RootContext:   rootCtx,
+		Ctrl:          ctrl,
+		RateLimiter:   limiter,
+		HooksAPI:      hooksAPI,
+		WorkflowAPI:   workflowAPI,
+		FilesystemAPI: filesystem.NewAPI(),
 	}
 }
 
@@ -90,6 +95,16 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.WorkflowAPI.NodeExecutions.List(request.GetContext(), nil, body)
 	case *workflownodeexecutions.GetRequest:
 		return s.WorkflowAPI.NodeExecutions.Get(request.GetContext(), nil, body)
+	case *workflowconversations.ListRequest:
+		return s.WorkflowAPI.Conversations.List(request.GetContext(), nil, body)
+	case *filesystem.BrowseRequest:
+		return s.FilesystemAPI.Browse(request.GetContext(), nil, body)
+	case *workflowworktrees.ListRequest:
+		return s.WorkflowAPI.Worktrees.List(request.GetContext(), nil, body)
+	case *workflowworktrees.CreateRequest:
+		return s.WorkflowAPI.Worktrees.Create(request.GetContext(), nil, body)
+	case *workflowworktrees.DeleteRequest:
+		return s.WorkflowAPI.Worktrees.Delete(request.GetContext(), nil, body)
 
 	default:
 		return nil, ez.New("rest.Server.handleRequest", ez.EINVALID, "Unsupported request type", nil)

@@ -9,9 +9,11 @@ interface BuilderRuntime {
   currentRun: RunEntry | null;
   expandedGroups: Set<string>;
   runs: RunEntry[];
+  showRunStatus: boolean;
   onSelectRun: (fullId: string) => void;
   onToggleGroup: (nodeId: string) => void;
-  onViewRuns: () => void;
+  /** Open a node's conversation (monitor only). */
+  onOpenNode?: (nodeId: string) => void;
 }
 
 const BuilderRuntimeContext = createContext<BuilderRuntime | null>(null);

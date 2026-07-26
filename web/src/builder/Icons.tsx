@@ -170,6 +170,25 @@ export function CogIcon({ size = 16 }: IconProps) {
   );
 }
 
+export function ChatIcon({ size = 13 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M13.5 8a5.5 5.5 0 0 1-8.1 4.8L2.5 13.5l.8-2.7A5.5 5.5 0 1 1 13.5 8Z" />
+      <path d="M5.6 7h4.8 M5.6 9.4h3" />
+    </svg>
+  );
+}
+
 export function FolderIcon({ size = 14 }: IconProps) {
   return (
     <svg
