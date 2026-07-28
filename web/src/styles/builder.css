@@ -2113,3 +2113,36 @@ a.builder-brand {
   border-left-color: var(--st-err);
   color: var(--st-err-ink);
 }
+
+/* ── wide launch modal: location left, workflow inputs right ──────── */
+
+.builder-modal--wide {
+  width: min(960px, calc(100vw - 48px));
+  height: min(640px, 86vh);
+}
+
+.builder-modal--wide .builder-modal__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.launch-grid {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 22px;
+  min-height: 0;
+}
+
+.launch-grid__col {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.launch-grid__col textarea.builder-textarea {
+  min-height: 200px;
+}

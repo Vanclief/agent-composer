@@ -11,14 +11,20 @@ export function Modal({
   onClose,
   onSubmit,
   footer,
+  wide = false,
   children,
 }: {
   title: string;
   onClose: () => void;
   onSubmit?: (event: FormEvent) => void;
   footer?: ReactNode;
+  /** Two-column layouts need more room than the default 520px. */
+  wide?: boolean;
   children: ReactNode;
 }) {
+  const contentClass = wide
+    ? "builder-modal builder-modal--wide"
+    : "builder-modal";
   const body = (
     <>
       <div className="builder-modal__head">
@@ -54,10 +60,10 @@ export function Modal({
           <Dialog.Content
             aria-describedby={undefined}
             asChild={Boolean(onSubmit)}
-            className={onSubmit ? undefined : "builder-modal"}
+            className={onSubmit ? undefined : contentClass}
           >
             {onSubmit ? (
-              <form className="builder-modal" onSubmit={onSubmit}>
+              <form className={contentClass} onSubmit={onSubmit}>
                 {body}
               </form>
             ) : (

@@ -106,10 +106,13 @@ export function RunInputModal({
     }
   }
 
+  const hasLocation = Boolean(headerSlot || locationSlot);
+
   return (
     <Modal
       title={title || `Run ${workflowId}`}
       onClose={onClose}
+      wide={hasLocation}
       onSubmit={submit}
       footer={
         <>
@@ -126,8 +129,12 @@ export function RunInputModal({
         </>
       }
     >
-      {headerSlot}
+      <div className={hasLocation ? "launch-grid" : undefined}>
+        <div className="launch-grid__col">
+          {headerSlot}
           {locationSlot}
+        </div>
+        <div className="launch-grid__col">
           {entries.length === 0 && (
             <div className="builder-modal__empty">
               This workflow has no inputs.
@@ -182,6 +189,8 @@ export function RunInputModal({
               )}
             </div>
           ))}
+        </div>
+      </div>
     </Modal>
   );
 }
