@@ -174,6 +174,10 @@ type Executor struct {
 	NewHarness func(kind agent.Harness) (harnesses.Harness, error)
 	Recorder   ExecutionRecorder
 	ShellRoot  string
+	// SeedOutputs pre-completes top-level nodes with recorded outputs
+	// from a previous execution ("re-run from here"). Seeded nodes are
+	// never executed or recorded again.
+	SeedOutputs map[string]map[string]any
 }
 
 type workflowResolver struct {

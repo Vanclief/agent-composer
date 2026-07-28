@@ -398,6 +398,9 @@ export function WorkflowsMonitor() {
         execution={selectedExecution}
         workflows={workflows}
         loading={loading}
+        onResumed={(executionId) =>
+          navigate(`/executions/${encodeURIComponent(executionId)}`)
+        }
         emptyTitle={
           taskId || totalStops > 0
             ? "No execution snapshot"

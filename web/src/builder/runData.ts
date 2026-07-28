@@ -9,6 +9,8 @@ import type { RunDisplayStatus } from "../types/workflow";
 export interface RunNodeSnapshot {
   /** The node execution row's id — the key to its conversations. */
   nodeExecutionId: string;
+  /** Set when this node's result was reused from a prior execution. */
+  reusedFrom?: string;
   status: RunDisplayStatus;
   ms: number;
   tokens: number;
@@ -113,24 +115,30 @@ function traceError(nodeExecution: NodeExecution) {
   return value == null ? null : JSON.stringify(value);
 }
 
+export function nodeSnapshotFrom(
+  nodeExecution: NodeExecution,
+): RunNodeSnapshot {
+  return {
+    nodeExecutionId: nodeExecution.id,
+    status: mapStatus(nodeExecution.status),
+    ms: computeMilliseconds(
+      nodeExecution.started_at,
+      nodeExecution.finished_at,
+    ),
+    tokens: 0,
+    inputSnapshot: nodeExecution.input_snapshot,
+    outputSnapshot: nodeExecution.output_snapshot,
+    error: traceError(nodeExecution),
+  };
+}
+
 export function buildRunEntry(
   execution: WorkflowExecution,
   nodeExecutions: NodeExecution[],
 ): RunEntry {
   const nodeMap: Record<string, RunNodeSnapshot> = {};
   for (const nodeExecution of nodeExecutions) {
-    nodeMap[nodeExecution.node_id] = {
-      nodeExecutionId: nodeExecution.id,
-      status: mapStatus(nodeExecution.status),
-      ms: computeMilliseconds(
-        nodeExecution.started_at,
-        nodeExecution.finished_at,
-      ),
-      tokens: 0,
-      inputSnapshot: nodeExecution.input_snapshot,
-      outputSnapshot: nodeExecution.output_snapshot,
-      error: traceError(nodeExecution),
-    };
+    nodeMap[nodeExecution.node_id] = nodeSnapshotFrom(nodeExecution);
   }
 
   if (

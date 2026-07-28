@@ -135,6 +135,14 @@ export function WorkflowNode({
           <div className="builder-node__name" title={node.name}>
             {node.name}
           </div>
+        {showRunStatus && snapshot?.reusedFrom && (
+          <span
+            className="builder-node__reused"
+            title={`Result reused from run ${snapshot.reusedFrom.slice(0, 8)}`}
+          >
+            reused
+          </span>
+        )}
         {showRunStatus &&
           node.kind !== "trigger" &&
           (status === "run" || runs.length < 2 ? (

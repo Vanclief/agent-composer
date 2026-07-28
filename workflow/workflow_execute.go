@@ -132,6 +132,17 @@ func (e *Executor) runSnapshot(ctx context.Context, snapshot *Snapshot, input ma
 	instanceOutputs := make(map[string]map[string]any, len(snapshot.Nodes))
 	completed := make(map[string]bool, len(snapshot.Order))
 
+	// Seeds apply to the top-level graph only — nested scopes (loops,
+	// conditionals, composed targets) always run in full.
+	if scope == (NodeExecutionScope{}) {
+		for instanceID, outputs := range e.SeedOutputs {
+			if _, exists := snapshot.Nodes[instanceID]; exists {
+				instanceOutputs[instanceID] = cloneMap(outputs)
+				completed[instanceID] = true
+			}
+		}
+	}
+
 	dependencies := make(map[string]map[string]bool, len(snapshot.Order))
 	for _, instanceID := range snapshot.Order {
 		dependencies[instanceID] = nodeDependencies(snapshot.Nodes[instanceID])

@@ -186,6 +186,18 @@ export function fetchTaskNodeExecutions(
   return fetchNodeExecutions(executionId, 200, signal);
 }
 
+/** Re-run one node (and everything downstream) of a prior run. */
+export function rerunFromNode(
+  executionId: string,
+  node: string,
+): Promise<WorkflowExecutionCreateResponse> {
+  return createWorkflowExecution({
+    resume_from_execution_id: executionId,
+    resume_from_node: node,
+    use_current_spec: true,
+  });
+}
+
 export function startTask(
   workflowId: string,
   input: JsonObject,

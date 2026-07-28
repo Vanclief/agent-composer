@@ -2249,3 +2249,41 @@ a.builder-brand {
   font-size: 10.5px;
   font-style: normal;
 }
+
+.builder-inspector__rerun {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 9px;
+  font-size: 11.5px;
+}
+
+.builder-node__reused {
+  flex: 0 0 auto;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  background: var(--hover);
+  color: var(--ink-3);
+  padding: 1px 5px;
+  font: 600 9px/1.5 "JetBrains Mono", monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.builder-overview__resumed {
+  display: block;
+  width: 100%;
+  margin-bottom: 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-2);
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 11.5px;
+  text-align: left;
+}
+
+.builder-overview__resumed:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}

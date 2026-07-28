@@ -9,12 +9,19 @@ export function WorkflowOverview({
   currentRun,
   onSelectRun,
   onSelectNode,
+  resumedFrom,
+  resumeNode,
+  onOpenExecution,
 }: {
   workflow: WorkflowSummary | undefined;
   runs: RunEntry[];
   currentRun: RunEntry | null;
   onSelectRun: (fullId: string) => void;
   onSelectNode: (nodeId: string) => void;
+  /** Set when this run resumed a prior one. */
+  resumedFrom?: string;
+  resumeNode?: string;
+  onOpenExecution?: (executionId: string) => void;
 }) {
   const failures = currentRun
     ? Object.entries(currentRun.nodes).filter(
@@ -64,6 +71,19 @@ export function WorkflowOverview({
                 </>
               )}
             </div>
+
+            {resumedFrom && (
+              <button
+                type="button"
+                className="builder-overview__resumed"
+                title="Open the run this one resumed from"
+                onClick={() => onOpenExecution?.(resumedFrom)}
+              >
+                ↺ resumed from{" "}
+                <b className="mono">{resumedFrom.slice(0, 8)}</b>
+                {resumeNode && <> at <b>{resumeNode}</b></>}
+              </button>
+            )}
 
             {failures.length > 0 && (
               <>

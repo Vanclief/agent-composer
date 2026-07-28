@@ -357,11 +357,14 @@ export function Inspector({
   currentRun,
   runs,
   onSelectRun,
+  onRerunFrom,
 }: {
   node: CanvasNode | null;
   currentRun: RunEntry | null;
   runs: RunEntry[];
   onSelectRun: (fullId: string) => void;
+  /** "Re-run from here": this node plus everything downstream. */
+  onRerunFrom?: (nodeId: string) => void;
 }) {
   const [tab, setTab] = useState<InspectorTab>("overview");
 
@@ -421,6 +424,16 @@ export function Inspector({
             {node.kind} · {node.id}
           </span>
         </div>
+        {onRerunFrom && node.kind !== "trigger" && status !== "run" && (
+          <button
+            type="button"
+            className="builder-ghost-button builder-inspector__rerun"
+            title="Re-run this node and everything downstream of it"
+            onClick={() => onRerunFrom(node.id)}
+          >
+            ↺ Re-run
+          </button>
+        )}
         {status === "run" ? (
           <StatusPill
             status={status}

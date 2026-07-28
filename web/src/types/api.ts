@@ -189,11 +189,25 @@ export type WorkflowExecutionCreateRequest =
   | (WorkflowExecutionCreateOptions & {
       workflow_id: string;
       file?: never;
+      resume_from_execution_id?: never;
     })
   | (WorkflowExecutionCreateOptions & {
       workflow_id?: never;
       file: string;
-    });
+      resume_from_execution_id?: never;
+    })
+  | {
+      /** Re-run one node (and everything downstream) of a prior run. */
+      resume_from_execution_id: string;
+      resume_from_node: string;
+      use_current_spec?: boolean;
+      input?: JsonObject;
+      shell_root?: string;
+      worktree?: string;
+      base?: string;
+      workflow_id?: never;
+      file?: never;
+    };
 
 export interface WorkflowExecutionCreateResponse {
   execution_id?: string;

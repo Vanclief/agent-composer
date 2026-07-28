@@ -9,11 +9,18 @@ import {
 import { useSearchParams } from "react-router-dom";
 import { parseSnapshot } from "../api/blueprints";
 import { Inspector } from "../builder/Inspector";
-import { buildRunEntry, type RunEntry } from "../builder/runData";
+import {
+  buildRunEntry,
+  nodeSnapshotFrom,
+  type RunEntry,
+} from "../builder/runData";
 import { WorkflowCanvas } from "../builder/WorkflowCanvas";
 import { WorkflowOverview } from "../builder/WorkflowOverview";
 import { RightPanel } from "../layout/RightPanel";
-import { fetchTaskNodeExecutions } from "../tasks/data";
+import {
+  fetchTaskNodeExecutions,
+  rerunFromNode,
+} from "../tasks/data";
 import { ConversationView } from "./ConversationView";
 import type {
   WorkflowExecution,
@@ -41,6 +48,7 @@ export function ExecutionCanvas({
   emptyTitle,
   emptyDescription,
   topOverlay,
+  onResumed,
 }: {
   execution?: WorkflowExecution;
   workflows: WorkflowSummary[];
@@ -48,6 +56,8 @@ export function ExecutionCanvas({
   emptyTitle: string;
   emptyDescription: string;
   topOverlay?: ReactNode;
+  /** Called with the new execution id after "re-run from here". */
+  onResumed?: (executionId: string) => void;
 }) {
   const [parsed, setParsed] = useState<ParsedWorkflow>(EMPTY_WORKFLOW);
   const [currentRun, setCurrentRun] = useState<RunEntry | null>(null);
@@ -128,17 +138,55 @@ export function ExecutionCanvas({
       }
     }
 
-    fetchTaskNodeExecutions(execution.id, controller.signal)
-      .then((nodes) => {
+    async function loadRunData() {
+      const entry = buildRunEntry(
+        execution!,
+        await fetchTaskNodeExecutions(execution!.id, controller.signal),
+      );
+
+      // Reused nodes are references into the source run — resolve
+      // them so the canvas and inspector show the original results.
+      const meta = execution!.metadata as
+        | {
+            resumed_from?: string;
+            reused_nodes?: Record<string, string>;
+          }
+        | undefined;
+      if (meta?.resumed_from && meta.reused_nodes) {
+        const sourceNodes = await fetchTaskNodeExecutions(
+          meta.resumed_from,
+          controller.signal,
+        );
+        const byId = new Map(
+          sourceNodes.map((node) => [node.id, node]),
+        );
+        for (const [nodeId, nodeExecutionId] of Object.entries(
+          meta.reused_nodes,
+        )) {
+          const source = byId.get(String(nodeExecutionId));
+          if (source) {
+            entry.nodes[nodeId] = {
+              ...nodeSnapshotFrom(source),
+              reusedFrom: meta.resumed_from,
+            };
+          }
+        }
+      }
+
+      return entry;
+    }
+
+    loadRunData()
+      .then((entry) => {
         if (active) {
-          setCurrentRun(buildRunEntry(execution, nodes));
+          setCurrentRun(entry);
         }
       })
       .catch((caught: unknown) => {
         if (!active) {
           return;
         }
-        setCurrentRun(buildRunEntry(execution, []));
+        setCurrentRun(buildRunEntry(execution!, []));
         setError(caught instanceof Error ? caught.message : String(caught));
       })
       .finally(() => {
@@ -185,6 +233,36 @@ export function ExecutionCanvas({
   const conversationExecutionId = conversationNodeId
     ? currentRun?.nodes[conversationNodeId]?.nodeExecutionId
     : undefined;
+
+  function openExecution(executionId: string) {
+    if (onResumed) {
+      onResumed(executionId);
+      return;
+    }
+    updateParams((params) => {
+      params.set("execution", executionId);
+      params.delete("node");
+      params.delete("convo");
+    });
+  }
+
+  async function rerunFrom(nodeId: string) {
+    if (!execution) {
+      return;
+    }
+    setError("");
+    try {
+      const response = await rerunFromNode(execution.id, nodeId);
+      if (!response.execution_id) {
+        throw new Error("The server did not return an execution ID.");
+      }
+      openExecution(response.execution_id);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : String(caught),
+      );
+    }
+  }
 
   function openConversation(nodeId: string) {
     const target = parsed.nodes.find((node) => node.id === nodeId);
@@ -236,6 +314,7 @@ export function ExecutionCanvas({
             currentRun={currentRun}
             runs={runs}
             onSelectRun={() => undefined}
+            onRerunFrom={(nodeId) => void rerunFrom(nodeId)}
           />
         ) : (
           <WorkflowOverview
@@ -244,6 +323,15 @@ export function ExecutionCanvas({
             currentRun={currentRun}
             onSelectRun={() => undefined}
             onSelectNode={selectNode}
+            resumedFrom={
+              (execution?.metadata as { resumed_from?: string })
+                ?.resumed_from
+            }
+            resumeNode={
+              (execution?.metadata as { resume_node?: string })
+                ?.resume_node
+            }
+            onOpenExecution={openExecution}
           />
         )}
       </RightPanel>
