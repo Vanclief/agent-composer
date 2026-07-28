@@ -28,3 +28,19 @@ func (h *Handler) GetWorkflow(c echo.Context) error {
 
 	return h.JSONResponse(c, op, request, body)
 }
+
+func (h *Handler) UpdateWorkflowNode(c echo.Context) error {
+	const op = "Handler.UpdateWorkflowNode"
+
+	request := requests.New(c.Request().Header, c.RealIP())
+
+	body := &workflowapi.UpdateNodeRequest{}
+	err := c.Bind(body)
+	if err != nil {
+		return h.ManageError(c, op, request, err)
+	}
+	body.WorkflowID = strings.TrimSpace(c.Param("id"))
+	body.Node = strings.TrimSpace(c.Param("node"))
+
+	return h.JSONResponse(c, op, request, body)
+}

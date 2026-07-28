@@ -188,23 +188,18 @@ function Config({ node }: { node: CanvasNode }) {
       <div>
         <div className="builder-field-row">
           <label>Model</label>
-          <select
-            className="builder-select"
-            defaultValue={String(config.model || "")}
-            disabled
+          <input
+            className="builder-input mono"
+            value={String(config.model || "")}
+            readOnly
             title="Configuration is read from workflow YAML"
-          >
-            <option>{String(config.model || "default")}</option>
-            <option>gpt-5</option>
-            <option>claude-sonnet-4.5</option>
-            <option>claude-opus-4.5</option>
-          </select>
+          />
         </div>
         <div className="builder-field-row">
           <label>Harness</label>
           <input
             className="builder-input mono"
-            defaultValue={String(config.harnessId || "")}
+            value={String(config.harnessId || "")}
             readOnly
             title="Configuration is read from workflow YAML"
           />
@@ -213,45 +208,11 @@ function Config({ node }: { node: CanvasNode }) {
           <label>System prompt</label>
           <textarea
             className="builder-textarea"
-            rows={8}
-            defaultValue={String(config.instruction || "")}
+            rows={10}
+            value={String(config.instruction || "")}
             readOnly
             title="Configuration is read from workflow YAML"
           />
-        </div>
-        <div className="builder-field-row">
-          <label>Tools</label>
-          <div className="builder-segment">
-            <button
-              type="button"
-              className="active"
-              disabled
-              title="Configuration is read from workflow YAML"
-            >
-              None
-            </button>
-            <button
-              type="button"
-              disabled
-              title="Configuration is read from workflow YAML"
-            >
-              Web
-            </button>
-            <button
-              type="button"
-              disabled
-              title="Configuration is read from workflow YAML"
-            >
-              Code
-            </button>
-            <button
-              type="button"
-              disabled
-              title="Configuration is read from workflow YAML"
-            >
-              Custom
-            </button>
-          </div>
         </div>
       </div>
     );

@@ -86,6 +86,14 @@ export function postJSON<T>(path: string, data: unknown) {
   });
 }
 
+export function putJSON<T>(path: string, data: unknown) {
+  return requestJSON<T>(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
 export function deleteJSON<T>(path: string, params?: QueryParams) {
   return requestJSON<T>(path, { method: "DELETE" }, params);
 }

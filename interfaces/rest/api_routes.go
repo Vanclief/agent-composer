@@ -22,6 +22,7 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	workflows := api.Group("/workflows")
 	workflows.GET("", h.ListWorkflows)
 	workflows.GET("/:id", h.GetWorkflow)
+	workflows.PUT("/:id/nodes/:node", h.UpdateWorkflowNode)
 
 	workflow := api.Group("/workflow")
 	workflowExecutions := workflow.Group("/executions")

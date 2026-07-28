@@ -2241,3 +2241,11 @@ a.builder-brand {
 .project-finder__list .workspace-picker__option--row:last-child {
   border-bottom: 0;
 }
+
+.builder-port__value {
+  margin-left: 6px;
+  color: var(--ink-3);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10.5px;
+  font-style: normal;
+}

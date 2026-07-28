@@ -85,6 +85,8 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.WorkflowAPI.List(request.GetContext(), nil, body)
 	case *workflowapi.GetRequest:
 		return s.WorkflowAPI.Get(request.GetContext(), nil, body)
+	case *workflowapi.UpdateNodeRequest:
+		return s.WorkflowAPI.UpdateNode(request.GetContext(), nil, body)
 	case *workflowexecutions.CreateRequest:
 		return s.WorkflowAPI.Executions.Create(s.workflowExecutionStartContext(), nil, body)
 	case *workflowexecutions.ListRequest:

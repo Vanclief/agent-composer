@@ -14,7 +14,7 @@ import type {
   WorktreeCreateResponse,
   WorktreeListResponse,
 } from "../types/api";
-import { deleteJSON, fetchJSON, postJSON } from "./client";
+import { deleteJSON, fetchJSON, postJSON, putJSON } from "./client";
 
 export function fetchConfig(signal?: AbortSignal) {
   return fetchJSON<AppConfig>("/api/config", undefined, signal);
@@ -59,6 +59,17 @@ export async function fetchWorkflowSpecs(
   );
   return Object.fromEntries(
     entries.filter((entry): entry is readonly [string, string] => entry !== null),
+  );
+}
+
+export function updateWorkflowNode(
+  workflowId: string,
+  node: string,
+  update: { model?: string; harness?: string; instruction?: string },
+) {
+  return putJSON<{ workflow_id: string; node: string; spec: string }>(
+    `/api/workflows/${encodeURIComponent(workflowId)}/nodes/${encodeURIComponent(node)}`,
+    update,
   );
 }
 
