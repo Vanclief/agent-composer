@@ -3,6 +3,7 @@ import type {
   WorkflowExecution,
   WorkflowExecutionStatus,
 } from "../types/api";
+import { WORKFLOW_INPUTS_NODE_ID } from "../api/blueprints";
 import type { RunDisplayStatus } from "../types/workflow";
 
 export interface RunNodeSnapshot {
@@ -129,6 +130,20 @@ export function buildRunEntry(
       inputSnapshot: nodeExecution.input_snapshot,
       outputSnapshot: nodeExecution.output_snapshot,
       error: traceError(nodeExecution),
+    };
+  }
+
+  if (
+    execution.input_snapshot &&
+    Object.keys(execution.input_snapshot).length > 0
+  ) {
+    nodeMap[WORKFLOW_INPUTS_NODE_ID] = {
+      nodeExecutionId: "",
+      status: "idle",
+      ms: 0,
+      tokens: 0,
+      outputSnapshot: execution.input_snapshot,
+      error: null,
     };
   }
 

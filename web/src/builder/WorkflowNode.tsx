@@ -45,23 +45,6 @@ function vendorClass(value: string) {
   return "neutral";
 }
 
-function inputValuePreview(value: unknown): string | null {
-  if (typeof value === "string") {
-    const compact = value.replace(/\s+/g, " ").trim();
-    if (!compact) {
-      return null;
-    }
-    return compact.length > 24 ? compact.slice(0, 23) + "…" : compact;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  if (Array.isArray(value)) {
-    return `${value.length} item${value.length === 1 ? "" : "s"}`;
-  }
-  return null;
-}
-
 function outputPreview(value: unknown): string | null {
   if (typeof value === "string") {
     return value.trim() || null;
@@ -101,7 +84,8 @@ export function WorkflowNode({
     : "idle";
   const visual = KIND_VISUAL[node.kind];
   const preview = (() => {
-    if (!showRunStatus) {
+    // The Inputs node lists its values in the body already.
+    if (!showRunStatus || node.kind === "trigger") {
       return null;
     }
     if (status === "run") {
@@ -152,6 +136,7 @@ export function WorkflowNode({
             {node.name}
           </div>
         {showRunStatus &&
+          node.kind !== "trigger" &&
           (status === "run" || runs.length < 2 ? (
             <StatusPill
               status={status}
@@ -250,39 +235,26 @@ export function WorkflowNode({
       {(node.inputs.length > 0 || node.outputs.length > 0) && (
         <div className="builder-node__ports">
           <div className="builder-node__ports-col builder-node__ports-col--in">
-            {node.inputs.map((port) => {
-              const raw = showRunStatus
-                ? snapshot?.inputSnapshot?.[port.id]
-                : undefined;
-              const valueText =
-                raw === undefined ? null : inputValuePreview(raw);
-              const tooltip =
-                typeof raw === "string"
-                  ? `${port.label} · ${port.type}: ${raw.slice(0, 400)}`
-                  : `${port.label} · ${port.type}`;
-              return (
-                <div
-                  key={port.id}
-                  className={`builder-port builder-port--in builder-port--${port.type}`}
+            {node.inputs.map((port) => (
+              <div
+                key={port.id}
+                className={`builder-port builder-port--in builder-port--${port.type}`}
+              >
+                <Handle
+                  id={port.id}
+                  type="target"
+                  position={Position.Left}
+                  isConnectable={false}
+                  className="builder-port__handle"
+                />
+                <span
+                  className="builder-port__label"
+                  title={`${port.label} · ${port.type}`}
                 >
-                  <Handle
-                    id={port.id}
-                    type="target"
-                    position={Position.Left}
-                    isConnectable={false}
-                    className="builder-port__handle"
-                  />
-                  <span className="builder-port__label" title={tooltip}>
-                    {port.label}
-                    {valueText && (
-                      <em className="builder-port__value">
-                        {valueText}
-                      </em>
-                    )}
-                  </span>
-                </div>
-              );
-            })}
+                  {port.label}
+                </span>
+              </div>
+            ))}
           </div>
           <div className="builder-node__ports-col builder-node__ports-col--out">
             {node.outputs.map((port) => (

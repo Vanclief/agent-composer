@@ -304,6 +304,28 @@ export function parseBlueprintYAML(
   };
 }
 
+/** Synthetic node that carries the run's workflow inputs. */
+export const WORKFLOW_INPUTS_NODE_ID = "__workflow_inputs__";
+
+function previewInputValue(value: unknown): string {
+  if (typeof value === "string") {
+    const compact = value.replace(/\s+/g, " ").trim();
+    return compact.length > 34
+      ? compact.slice(0, 33) + "…"
+      : compact || "—";
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return `${value.length} item${value.length === 1 ? "" : "s"}`;
+  }
+  if (value && typeof value === "object") {
+    return `{ ${Object.keys(value).join(", ")} }`;
+  }
+  return "—";
+}
+
 function snapshotPorts(
   definitions: SnapshotNode["Inputs"],
   order?: string[],
@@ -396,8 +418,45 @@ export function parseSnapshot(
           to: instanceId,
           toPort: inputName,
         });
+      } else if (
+        binding.Kind === "workflow_input" &&
+        binding.WorkflowInput
+      ) {
+        edges.push({
+          id: `e${edgeIndex++}`,
+          from: WORKFLOW_INPUTS_NODE_ID,
+          fromPort: binding.WorkflowInput,
+          to: instanceId,
+          toPort: inputName,
+        });
       }
     }
+  }
+
+  // The run's inputs become their own source node, so large values
+  // never crowd the consuming nodes.
+  const inputNames = Object.keys(snapshot.Inputs ?? {});
+  if (inputNames.length > 0) {
+    const values = workflowExecution.input_snapshot ?? {};
+    nodes.unshift({
+      id: WORKFLOW_INPUTS_NODE_ID,
+      kind: "trigger",
+      name: "Inputs",
+      sub: "workflow inputs",
+      x: 0,
+      y: 0,
+      config: {},
+      inputs: [],
+      outputs: snapshotPorts(snapshot.Inputs),
+      body: inputNames
+        .filter((name) => values[name] !== undefined)
+        .map((name) => ({
+          k: name,
+          v: previewInputValue(values[name]),
+          mono: true,
+        })),
+      last: {},
+    });
   }
 
   return { nodes, edges, order };
