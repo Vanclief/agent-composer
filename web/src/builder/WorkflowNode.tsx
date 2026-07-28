@@ -12,8 +12,38 @@ import type {
 import { KindIcon } from "./Icons";
 import { RunMenuDropdown, StatusPill } from "./RunMenu";
 
-// The header sub already shows kind · model.
-const REDUNDANT_FIELDS = new Set(["kind", "model"]);
+// kind is already the header subtitle; harness and model render as
+// dedicated tag rows.
+const SPECIAL_FIELDS = new Set(["kind", "model", "harness"]);
+
+/** Chip tint by model maker (anthropic orange, openai teal, …). */
+function vendorClass(value: string) {
+  const v = value.toLowerCase();
+  if (v.includes("claude") || v.includes("anthropic")) {
+    return "anthropic";
+  }
+  if (
+    v.includes("gpt") ||
+    v.includes("codex") ||
+    v.includes("openai") ||
+    /^o\d/.test(v)
+  ) {
+    return "openai";
+  }
+  if (v.includes("gemini") || v.includes("google")) {
+    return "google";
+  }
+  if (v.includes("llama") || v.includes("meta")) {
+    return "meta";
+  }
+  if (v.includes("mistral")) {
+    return "mistral";
+  }
+  if (v.includes("deepseek")) {
+    return "deepseek";
+  }
+  return "neutral";
+}
 
 function outputPreview(value: unknown): string | null {
   if (typeof value === "string") {
@@ -71,8 +101,10 @@ export function WorkflowNode({
     return outputPreview(output[key]);
   })();
 
+  const harnessField = node.body.find((field) => field.k === "harness");
+  const modelField = node.body.find((field) => field.k === "model");
   const fields = node.body.filter(
-    (field) => !REDUNDANT_FIELDS.has(field.k),
+    (field) => !SPECIAL_FIELDS.has(field.k),
   );
 
   const classes = [
@@ -89,19 +121,19 @@ export function WorkflowNode({
   return (
     <div className={classes}>
       <div className="builder-node__head">
-        <div
-          className="builder-node__icon"
-          style={{
-            background: visual.background,
-            color: visual.foreground,
-          }}
-        >
-          <KindIcon kind={node.kind} size={13} />
-        </div>
-        <div className="builder-node__title">
-          <div className="builder-node__name">{node.name}</div>
-          <div className="builder-node__sub">{node.sub}</div>
-        </div>
+        <div className="builder-node__head-row">
+          <div
+            className="builder-node__icon"
+            style={{
+              background: visual.background,
+              color: visual.foreground,
+            }}
+          >
+            <KindIcon kind={node.kind} size={13} />
+          </div>
+          <div className="builder-node__name" title={node.name}>
+            {node.name}
+          </div>
         {showRunStatus &&
           (status === "run" || runs.length < 2 ? (
             <StatusPill
@@ -132,12 +164,38 @@ export function WorkflowNode({
               />
             </span>
           ))}
+        </div>
+        <div className="builder-node__sub" title={node.sub}>
+          {node.sub}
+        </div>
       </div>
 
       {(fields.length > 0 ||
+        harnessField !== undefined ||
+        modelField !== undefined ||
         preview !== null ||
         (node.isGroup && node.groupLabel)) && (
         <div className="builder-node__body">
+          {harnessField && (
+            <div className="builder-node__field">
+              <span>harness</span>
+              <b
+                className={`builder-node__tag builder-node__tag--${vendorClass(harnessField.v)}`}
+              >
+                {harnessField.v}
+              </b>
+            </div>
+          )}
+          {modelField && (
+            <div className="builder-node__field">
+              <span>model</span>
+              <b
+                className={`builder-node__tag builder-node__tag--${vendorClass(modelField.v)}`}
+              >
+                {modelField.v}
+              </b>
+            </div>
+          )}
           {fields.map((field, index) => (
             <div key={`${field.k}-${index}`} className="builder-node__field">
               <span>{field.k}</span>

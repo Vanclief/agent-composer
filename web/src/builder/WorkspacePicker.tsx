@@ -76,13 +76,12 @@ export function WorkspacePicker({
     };
   }, [projectPath, refresh]);
 
-  // A project switch invalidates the chosen workspace.
+  // A project switch resets the create form; the parent owns the
+  // selected workspace and restores it per project.
   useEffect(() => {
-    onChange("");
     setCreating(false);
     setBranchChoice("");
     setDraft("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectPath]);
 
   if (!isGit) {
@@ -236,6 +235,26 @@ export function WorkspacePicker({
           </div>
         ))}
 
+        {value &&
+          !linked.some((worktree) => worktree.branch === value) &&
+          !creating && (
+            <div className="workspace-picker__option workspace-picker__option--row active">
+              <button type="button" disabled>
+                <b>{value}</b>
+                <small>will be prepared at launch</small>
+              </button>
+              <button
+                type="button"
+                className="workspace-picker__remove"
+                title="Clear workspace selection"
+                aria-label="Clear workspace selection"
+                onClick={() => onChange("")}
+              >
+                ×
+              </button>
+            </div>
+          )}
+
         {creating ? (
           <div className="workspace-picker__new active">
             <div className="workspace-picker__new-form">
@@ -245,6 +264,9 @@ export function WorkspacePicker({
                 disabled={busy}
                 onChange={(event) => {
                   setBranchChoice(event.target.value);
+                  // Selecting a branch IS choosing the workspace; the
+                  // backend prepares it at launch if Create is skipped.
+                  onChange(event.target.value);
                   setError("");
                 }}
               >
@@ -269,6 +291,7 @@ export function WorkspacePicker({
                   disabled={busy}
                   onChange={(event) => {
                     setDraft(event.target.value);
+                    onChange(event.target.value.trim());
                     setError("");
                   }}
                   onKeyDown={handleKeyDown}

@@ -362,10 +362,16 @@
 
 .builder-node__head {
   display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 11px 13px 10px;
+  cursor: grab;
+}
+
+.builder-node__head-row {
+  display: flex;
   align-items: center;
   gap: 9px;
-  padding: 12px 13px;
-  cursor: grab;
 }
 
 .builder-node__head:active {
@@ -382,12 +388,9 @@
   border-radius: 6px;
 }
 
-.builder-node__title {
+.builder-node__name {
   min-width: 0;
   flex: 1;
-}
-
-.builder-node__name {
   overflow: hidden;
   font-size: 14px;
   font-weight: 600;
@@ -398,13 +401,15 @@
 
 .builder-node__sub {
   overflow: hidden;
-  margin-top: 1px;
+  margin-left: 37px;
   color: var(--ink-3);
   font-family: "JetBrains Mono", monospace;
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+
 
 .builder-node__body {
   display: flex;
@@ -420,6 +425,54 @@
   gap: 8px;
   color: var(--ink-3);
   font-size: 12px;
+}
+
+.builder-node__tag {
+  overflow: hidden;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Model-maker brand tints. */
+.builder-node__tag--anthropic {
+  background: oklch(0.95 0.03 45);
+  color: oklch(0.55 0.14 40);
+}
+
+.builder-node__tag--openai {
+  /* OpenAI's brand is black — and green would read as "succeeded". */
+  background: oklch(0.92 0.006 270);
+  color: oklch(0.3 0.012 270);
+}
+
+.builder-node__tag--google {
+  background: oklch(0.95 0.03 255);
+  color: oklch(0.53 0.15 255);
+}
+
+.builder-node__tag--meta {
+  background: oklch(0.95 0.03 285);
+  color: oklch(0.52 0.15 285);
+}
+
+.builder-node__tag--mistral {
+  background: oklch(0.95 0.05 70);
+  color: oklch(0.58 0.14 60);
+}
+
+.builder-node__tag--deepseek {
+  background: oklch(0.95 0.03 305);
+  color: oklch(0.52 0.15 305);
+}
+
+.builder-node__tag--neutral {
+  background: var(--hover);
+  color: var(--ink-2);
 }
 
 .builder-node__field > span:last-child {

@@ -71,7 +71,7 @@ export function useLaunchLocation(disabled = false) {
     () => localStorage.getItem("agc.shellRoot") || "",
   );
   const [defaultShellRoot, setDefaultShellRoot] = useState("");
-  const [worktree, setWorktree] = useState("");
+  const [worktree, setWorktreeState] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -110,6 +110,31 @@ export function useLaunchLocation(disabled = false) {
   }, [projects, shellRoot]);
 
   const projectPath = shellRoot || defaultShellRoot;
+
+  // The chosen workspace is sticky per project: reopening the modal
+  // must not silently fall back to the repository root.
+  useEffect(() => {
+    try {
+      setWorktreeState(
+        localStorage.getItem(`agc.worktree:${projectPath}`) ?? "",
+      );
+    } catch {
+      setWorktreeState("");
+    }
+  }, [projectPath]);
+
+  const setWorktree = (branch: string) => {
+    setWorktreeState(branch);
+    try {
+      if (branch) {
+        localStorage.setItem(`agc.worktree:${projectPath}`, branch);
+      } else {
+        localStorage.removeItem(`agc.worktree:${projectPath}`);
+      }
+    } catch {
+      // Storage can be disabled without preventing workflow execution.
+    }
+  };
 
   const locationSlot = (
     <>
