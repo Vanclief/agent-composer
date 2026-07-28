@@ -1,6 +1,7 @@
 import {
   type KeyboardEvent,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import {
@@ -39,6 +40,8 @@ export function WorkspacePicker({
   // Set when a delete was refused (dirty worktree) — offers force.
   const [forcePath, setForcePath] = useState("");
   const [refresh, setRefresh] = useState(0);
+  // Each project gets one automatic origin fetch per mount.
+  const autoFetchedFor = useRef("");
 
   useEffect(() => {
     if (!projectPath.trim()) {
@@ -59,6 +62,30 @@ export function WorkspacePicker({
         setBranches(response.branches ?? []);
         setError("");
         setForcePath("");
+
+        // Fast data is on screen; refresh origin in the background so
+        // remote branches are current without a manual click. Failures
+        // (no remote, offline) keep the local view silently.
+        if (
+          response.is_git &&
+          autoFetchedFor.current !== projectPath
+        ) {
+          autoFetchedFor.current = projectPath;
+          setFetchingOrigin(true);
+          fetchWorktrees(projectPath, controller.signal, true)
+            .then((fresh) => {
+              if (active) {
+                setWorktrees(fresh.worktrees ?? []);
+                setBranches(fresh.branches ?? []);
+              }
+            })
+            .catch(() => undefined)
+            .finally(() => {
+              if (active) {
+                setFetchingOrigin(false);
+              }
+            });
+        }
       })
       .catch((caught: unknown) => {
         if (active) {

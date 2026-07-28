@@ -144,12 +144,26 @@ export function ProjectPicker({
 }) {
   const [showNewProject, setShowNewProject] = useState(false);
   // Collapsed by default: only the chosen project shows; expanding
-  // reveals the full list for switching, deleting, and adding.
+  // reveals a filterable list for switching, deleting, and adding.
   const [expanded, setExpanded] = useState(false);
+  const [query, setQuery] = useState("");
 
   const selected = projects.find(
     (project) => project.path === selectedPath,
   );
+  const trimmedQuery = query.trim().toLowerCase();
+  const filtered = projects.filter(
+    (project) =>
+      !trimmedQuery ||
+      project.name.toLowerCase().includes(trimmedQuery) ||
+      project.path.toLowerCase().includes(trimmedQuery),
+  );
+
+  function choose(path: string) {
+    onSelect(path);
+    setExpanded(false);
+    setQuery("");
+  }
 
   return (
     <div className="workspace-picker">
@@ -182,42 +196,70 @@ export function ProjectPicker({
           </div>
         ) : (
           <>
-            {projects.map((project) => (
-              <div
-                key={project.path}
-                className={`workspace-picker__option workspace-picker__option--row ${
-                  selectedPath === project.path ? "active" : ""
-                }`}
-              >
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => {
-                    onSelect(project.path);
-                    setExpanded(false);
-                  }}
-                >
-                  <b>{project.name}</b>
-                  <small className="mono">{project.path}</small>
-                </button>
-                {project.path === defaultRoot ? (
-                  <small className="workspace-picker__tag">
-                    default
-                  </small>
-                ) : (
-                  <button
-                    type="button"
-                    className="workspace-picker__remove"
-                    title="Remove project from this list (the folder is untouched)"
-                    aria-label={`Remove project ${project.name}`}
-                    disabled={disabled}
-                    onClick={() => onRemove(project.path)}
+            <div className="branch-finder">
+              <input
+                className="builder-input"
+                placeholder="Find a project…"
+                value={query}
+                autoFocus
+                disabled={disabled}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  const only = filtered[0];
+                  if (
+                    event.key === "Enter" &&
+                    filtered.length === 1 &&
+                    only
+                  ) {
+                    event.preventDefault();
+                    choose(only.path);
+                  }
+                  if (event.key === "Escape") {
+                    setQuery("");
+                  }
+                }}
+              />
+              <div className="branch-finder__list project-finder__list scrollnice">
+                {filtered.map((project) => (
+                  <div
+                    key={project.path}
+                    className={`workspace-picker__option workspace-picker__option--row ${
+                      selectedPath === project.path ? "active" : ""
+                    }`}
                   >
-                    ×
-                  </button>
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => choose(project.path)}
+                    >
+                      <b>{project.name}</b>
+                      <small className="mono">{project.path}</small>
+                    </button>
+                    {project.path === defaultRoot ? (
+                      <small className="workspace-picker__tag">
+                        default
+                      </small>
+                    ) : (
+                      <button
+                        type="button"
+                        className="workspace-picker__remove"
+                        title="Remove project from this list (the folder is untouched)"
+                        aria-label={`Remove project ${project.name}`}
+                        disabled={disabled}
+                        onClick={() => onRemove(project.path)}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {filtered.length === 0 && (
+                  <div className="branch-finder__empty">
+                    No matching projects
+                  </div>
                 )}
               </div>
-            ))}
+            </div>
 
             <button
               type="button"
@@ -236,8 +278,7 @@ export function ProjectPicker({
           existing={projects}
           onCreate={(project) => {
             onAdd(project);
-            onSelect(project.path);
-            setExpanded(false);
+            choose(project.path);
           }}
           onClose={() => setShowNewProject(false)}
         />
