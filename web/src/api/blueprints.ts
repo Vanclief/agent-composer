@@ -259,9 +259,8 @@ export function parseBlueprintYAML(
       }
 
       const kind = mapKind(nodeSpec.kind);
-      const sub = [nodeSpec.kind, nodeSpec.config?.harness?.model]
-        .filter(Boolean)
-        .join(" · ");
+      // The model gets its own tag row in the card body.
+      const sub = nodeSpec.kind ?? "";
 
       nodes.push({
         id: fullId,
@@ -359,7 +358,8 @@ export function parseSnapshot(
     if (nodeSpec.Harness) {
       body.push({ k: "harness", v: nodeSpec.Harness, mono: true });
     }
-    const sub = [nodeSpec.Kind, nodeSpec.Model].filter(Boolean).join(" · ");
+    // The model gets its own tag row in the card body.
+    const sub = nodeSpec.Kind ?? "";
 
     nodes.push({
       id: instanceId,
