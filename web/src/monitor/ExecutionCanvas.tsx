@@ -177,14 +177,23 @@ export function ExecutionCanvas({
       ? "The execution snapshot contains no renderable nodes."
       : "");
   const conversationNode = conversationNodeId
-    ? parsed.nodes.find((node) => node.id === conversationNodeId)
+    ? parsed.nodes.find(
+        (node) =>
+          node.id === conversationNodeId && node.kind === "llm",
+      )
     : null;
   const conversationExecutionId = conversationNodeId
     ? currentRun?.nodes[conversationNodeId]?.nodeExecutionId
     : undefined;
 
   function openConversation(nodeId: string) {
-    if (currentRun?.nodes[nodeId]?.nodeExecutionId) {
+    const target = parsed.nodes.find((node) => node.id === nodeId);
+    // Only LLM nodes hold a conversation — connectors and other
+    // transforms have nothing to show.
+    if (
+      target?.kind === "llm" &&
+      currentRun?.nodes[nodeId]?.nodeExecutionId
+    ) {
       updateParams((params) => {
         params.set("node", nodeId);
         params.set("convo", nodeId);

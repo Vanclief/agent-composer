@@ -143,6 +143,13 @@ export function ProjectPicker({
   disabled: boolean;
 }) {
   const [showNewProject, setShowNewProject] = useState(false);
+  // Collapsed by default: only the chosen project shows; expanding
+  // reveals the full list for switching, deleting, and adding.
+  const [expanded, setExpanded] = useState(false);
+
+  const selected = projects.find(
+    (project) => project.path === selectedPath,
+  );
 
   return (
     <div className="workspace-picker">
@@ -151,46 +158,77 @@ export function ProjectPicker({
       </div>
 
       <div className="workspace-picker__options">
-        {projects.map((project) => (
-          <div
-            key={project.path}
-            className={`workspace-picker__option workspace-picker__option--row ${
-              selectedPath === project.path ? "active" : ""
-            }`}
-          >
+        {!expanded ? (
+          <div className="workspace-picker__option workspace-picker__option--row active">
             <button
               type="button"
               disabled={disabled}
-              onClick={() => onSelect(project.path)}
+              title="Change project"
+              onClick={() => setExpanded(true)}
             >
-              <b>{project.name}</b>
-              <small className="mono">{project.path}</small>
+              <b>{selected?.name ?? "Choose a project…"}</b>
+              <small className="mono">
+                {selected?.path ?? selectedPath}
+              </small>
             </button>
-            {project.path === defaultRoot ? (
-              <small className="workspace-picker__tag">default</small>
-            ) : (
-              <button
-                type="button"
-                className="workspace-picker__remove"
-                title="Remove project from this list (the folder is untouched)"
-                aria-label={`Remove project ${project.name}`}
-                disabled={disabled}
-                onClick={() => onRemove(project.path)}
-              >
-                ×
-              </button>
-            )}
+            <button
+              type="button"
+              className="project-picker__change"
+              disabled={disabled}
+              onClick={() => setExpanded(true)}
+            >
+              Change
+            </button>
           </div>
-        ))}
+        ) : (
+          <>
+            {projects.map((project) => (
+              <div
+                key={project.path}
+                className={`workspace-picker__option workspace-picker__option--row ${
+                  selectedPath === project.path ? "active" : ""
+                }`}
+              >
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => {
+                    onSelect(project.path);
+                    setExpanded(false);
+                  }}
+                >
+                  <b>{project.name}</b>
+                  <small className="mono">{project.path}</small>
+                </button>
+                {project.path === defaultRoot ? (
+                  <small className="workspace-picker__tag">
+                    default
+                  </small>
+                ) : (
+                  <button
+                    type="button"
+                    className="workspace-picker__remove"
+                    title="Remove project from this list (the folder is untouched)"
+                    aria-label={`Remove project ${project.name}`}
+                    disabled={disabled}
+                    onClick={() => onRemove(project.path)}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
 
-        <button
-          type="button"
-          className="workspace-picker__new-toggle"
-          disabled={disabled}
-          onClick={() => setShowNewProject(true)}
-        >
-          + Add project
-        </button>
+            <button
+              type="button"
+              className="workspace-picker__new-toggle"
+              disabled={disabled}
+              onClick={() => setShowNewProject(true)}
+            >
+              + Add project
+            </button>
+          </>
+        )}
       </div>
 
       {showNewProject && (
@@ -199,6 +237,7 @@ export function ProjectPicker({
           onCreate={(project) => {
             onAdd(project);
             onSelect(project.path);
+            setExpanded(false);
           }}
           onClose={() => setShowNewProject(false)}
         />

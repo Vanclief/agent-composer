@@ -2146,3 +2146,90 @@ a.builder-brand {
 .launch-grid__col textarea.builder-textarea {
   min-height: 200px;
 }
+
+.project-picker__change {
+  flex: 0 0 auto;
+  margin-right: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--accent-ink);
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 550;
+}
+
+.project-picker__change:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+/* ── branch finder: type to filter, click to pick, create if new ──── */
+
+.branch-finder {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding: 9px 10px 10px;
+}
+
+.branch-finder__list {
+  max-height: 168px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper);
+}
+
+.branch-finder__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.branch-finder__row:last-child {
+  border-bottom: 0;
+}
+
+.branch-finder__row:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.branch-finder__row b {
+  overflow: hidden;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11.5px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-finder__row small {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--ink-3);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.branch-finder__row--create b {
+  color: var(--accent-ink);
+  font-family: "Inter", sans-serif;
+}
+
+.branch-finder__empty {
+  padding: 12px;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  text-align: center;
+}

@@ -11,9 +11,10 @@ import {
 import type { BranchInfo, WorktreeInfo } from "../types/api";
 
 /**
- * Workspace (git worktree) selection for a project. Only rendered
- * when the project is a git repository. Creating a workspace makes
- * the worktree immediately; the run then executes inside it.
+ * Workspace (git worktree) selection for a project. Collapsed to the
+ * current choice; expanding shows the repository root, existing
+ * workspaces, and a branch finder (GitHub-style: type to filter,
+ * click to pick, create when nothing matches).
  */
 export function WorkspacePicker({
   projectPath,
@@ -30,10 +31,8 @@ export function WorkspacePicker({
   const [repo, setRepo] = useState("");
   const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
   const [branches, setBranches] = useState<BranchInfo[]>([]);
-  const [creating, setCreating] = useState(false);
-  // "" = new branch (type a name); otherwise an existing branch name.
-  const [branchChoice, setBranchChoice] = useState("");
-  const [draft, setDraft] = useState("");
+  const [expanded, setExpanded] = useState(false);
+  const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [fetchingOrigin, setFetchingOrigin] = useState(false);
   const [error, setError] = useState("");
@@ -76,12 +75,11 @@ export function WorkspacePicker({
     };
   }, [projectPath, refresh]);
 
-  // A project switch resets the create form; the parent owns the
-  // selected workspace and restores it per project.
+  // A project switch collapses and clears the finder; the parent owns
+  // the selected workspace and restores it per project.
   useEffect(() => {
-    setCreating(false);
-    setBranchChoice("");
-    setDraft("");
+    setExpanded(false);
+    setQuery("");
   }, [projectPath]);
 
   if (!isGit) {
@@ -92,13 +90,27 @@ export function WorkspacePicker({
 
   const main = worktrees.find((worktree) => worktree.is_main);
   const linked = worktrees.filter((worktree) => !worktree.is_main);
-  // Branches that could become a workspace: no worktree yet.
   const taken = new Set(
     worktrees.map((worktree) => worktree.branch).filter(Boolean),
   );
-  const availableBranches = branches.filter(
-    (branch) => !taken.has(branch.name),
+  const trimmedQuery = query.trim();
+  const matchingBranches = branches.filter(
+    (branch) =>
+      !taken.has(branch.name) &&
+      (!trimmedQuery ||
+        branch.name
+          .toLowerCase()
+          .includes(trimmedQuery.toLowerCase())),
   );
+  const exactMatch = branches.some(
+    (branch) => branch.name === trimmedQuery,
+  );
+
+  function choose(branch: string) {
+    onChange(branch);
+    setExpanded(false);
+    setQuery("");
+  }
 
   async function refreshFromOrigin() {
     if (fetchingOrigin) {
@@ -119,8 +131,7 @@ export function WorkspacePicker({
     }
   }
 
-  async function handleCreate() {
-    const branch = branchChoice || draft.trim();
+  async function handleCreate(branch: string) {
     if (!branch || busy) {
       return;
     }
@@ -128,11 +139,8 @@ export function WorkspacePicker({
     setError("");
     try {
       const response = await createWorktree(repo, branch);
-      onChange(response.branch);
-      setCreating(false);
-      setBranchChoice("");
-      setDraft("");
       setRefresh((count) => count + 1);
+      choose(response.branch);
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : String(caught),
@@ -145,12 +153,15 @@ export function WorkspacePicker({
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
-      void handleCreate();
+      const only = matchingBranches[0];
+      if (matchingBranches.length === 1 && only) {
+        choose(only.name);
+      } else if (trimmedQuery && !exactMatch) {
+        void handleCreate(trimmedQuery);
+      }
     }
     if (event.key === "Escape") {
-      setCreating(false);
-      setDraft("");
-      setError("");
+      setQuery("");
     }
   }
 
@@ -174,6 +185,10 @@ export function WorkspacePicker({
     }
   }
 
+  const selectedPath = linked.find(
+    (worktree) => worktree.branch === value,
+  )?.path;
+
   return (
     <div className="workspace-picker">
       <div className="builder-modal__field-head">
@@ -193,138 +208,126 @@ export function WorkspacePicker({
       </div>
 
       <div className="workspace-picker__options">
-        <button
-          type="button"
-          className={`workspace-picker__option ${
-            value === "" ? "active" : ""
-          }`}
-          disabled={disabled}
-          onClick={() => onChange("")}
-        >
-          <b>Repository root</b>
-          <small>
-            runs directly on {main?.branch ?? "the checkout"}
-          </small>
-        </button>
-
-        {linked.map((worktree) => (
-          <div
-            key={worktree.path}
-            className={`workspace-picker__option workspace-picker__option--row ${
-              value === worktree.branch ? "active" : ""
-            }`}
-          >
+        {!expanded ? (
+          <div className="workspace-picker__option workspace-picker__option--row active">
             <button
               type="button"
               disabled={disabled}
-              onClick={() => onChange(worktree.branch ?? "")}
+              title="Change workspace"
+              onClick={() => setExpanded(true)}
             >
-              <b>{worktree.branch || worktree.path}</b>
-              <small className="mono">{worktree.path}</small>
+              <b>{value || "Repository root"}</b>
+              <small className={value ? "mono" : undefined}>
+                {value
+                  ? (selectedPath ?? "will be prepared at launch")
+                  : `runs directly on ${main?.branch ?? "the checkout"}`}
+              </small>
             </button>
             <button
               type="button"
-              className="workspace-picker__remove"
-              title="Delete workspace (keeps the branch)"
-              aria-label={`Delete workspace ${worktree.branch}`}
-              disabled={disabled || busy}
-              onClick={() => void handleRemove(worktree, false)}
+              className="project-picker__change"
+              disabled={disabled}
+              onClick={() => setExpanded(true)}
             >
-              ×
+              Change
             </button>
           </div>
-        ))}
+        ) : (
+          <>
+            <button
+              type="button"
+              className={`workspace-picker__option ${
+                value === "" ? "active" : ""
+              }`}
+              disabled={disabled}
+              onClick={() => choose("")}
+            >
+              <b>Repository root</b>
+              <small>
+                runs directly on {main?.branch ?? "the checkout"}
+              </small>
+            </button>
 
-        {value &&
-          !linked.some((worktree) => worktree.branch === value) &&
-          !creating && (
-            <div className="workspace-picker__option workspace-picker__option--row active">
-              <button type="button" disabled>
-                <b>{value}</b>
-                <small>will be prepared at launch</small>
-              </button>
-              <button
-                type="button"
-                className="workspace-picker__remove"
-                title="Clear workspace selection"
-                aria-label="Clear workspace selection"
-                onClick={() => onChange("")}
+            {linked.map((worktree) => (
+              <div
+                key={worktree.path}
+                className={`workspace-picker__option workspace-picker__option--row ${
+                  value === worktree.branch ? "active" : ""
+                }`}
               >
-                ×
-              </button>
-            </div>
-          )}
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => choose(worktree.branch ?? "")}
+                >
+                  <b>{worktree.branch || worktree.path}</b>
+                  <small className="mono">{worktree.path}</small>
+                </button>
+                <button
+                  type="button"
+                  className="workspace-picker__remove"
+                  title="Delete workspace (keeps the branch)"
+                  aria-label={`Delete workspace ${worktree.branch}`}
+                  disabled={disabled || busy}
+                  onClick={() => void handleRemove(worktree, false)}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
 
-        {creating ? (
-          <div className="workspace-picker__new active">
-            <div className="workspace-picker__new-form">
-              <select
-                className="builder-select"
-                value={branchChoice}
-                disabled={busy}
+            <div className="branch-finder">
+              <input
+                className="builder-input"
+                placeholder="Find or create a branch…"
+                value={query}
+                autoFocus
+                disabled={disabled || busy}
                 onChange={(event) => {
-                  setBranchChoice(event.target.value);
-                  // Selecting a branch IS choosing the workspace; the
-                  // backend prepares it at launch if Create is skipped.
-                  onChange(event.target.value);
+                  setQuery(event.target.value);
                   setError("");
                 }}
-              >
-                <option value="">New branch…</option>
-                {availableBranches.map((branch) => (
-                  <option key={branch.name} value={branch.name}>
-                    {branch.name}
-                    {!branch.is_local && branch.is_remote
-                      ? " (origin only)"
-                      : ""}
-                  </option>
+                onKeyDown={handleKeyDown}
+              />
+              <div className="branch-finder__list scrollnice">
+                {matchingBranches.map((branch) => (
+                  <button
+                    type="button"
+                    key={branch.name}
+                    className="branch-finder__row"
+                    disabled={disabled || busy}
+                    onClick={() => choose(branch.name)}
+                  >
+                    <b>{branch.name}</b>
+                    {!branch.is_local && branch.is_remote && (
+                      <small>origin only</small>
+                    )}
+                  </button>
                 ))}
-              </select>
+                {trimmedQuery && !exactMatch && (
+                  <button
+                    type="button"
+                    className="branch-finder__row branch-finder__row--create"
+                    disabled={disabled || busy}
+                    onClick={() => void handleCreate(trimmedQuery)}
+                  >
+                    <b>
+                      {busy
+                        ? "Creating…"
+                        : `+ Create branch “${trimmedQuery}”`}
+                    </b>
+                    <small>from {main?.branch ?? "HEAD"}</small>
+                  </button>
+                )}
+                {matchingBranches.length === 0 &&
+                  (!trimmedQuery || exactMatch) && (
+                    <div className="branch-finder__empty">
+                      No other branches
+                    </div>
+                  )}
+              </div>
             </div>
-            <div className="workspace-picker__new-form">
-              {branchChoice === "" && (
-                <input
-                  className="builder-input mono"
-                  placeholder="branch name, e.g. feature/faster-summary"
-                  value={draft}
-                  autoFocus
-                  disabled={busy}
-                  onChange={(event) => {
-                    setDraft(event.target.value);
-                    onChange(event.target.value.trim());
-                    setError("");
-                  }}
-                  onKeyDown={handleKeyDown}
-                />
-              )}
-              <button
-                type="button"
-                className="builder-run-button"
-                disabled={(!branchChoice && !draft.trim()) || busy}
-                onClick={() => void handleCreate()}
-              >
-                {busy ? "Creating…" : "Create"}
-              </button>
-            </div>
-            <small>
-              {branchChoice === ""
-                ? "Creates a new branch from the current HEAD."
-                : availableBranches.find(
-                      (branch) => branch.name === branchChoice,
-                    )?.is_local
-                  ? "Checks out the existing branch into its own workspace."
-                  : "Creates a local branch tracking origin and checks it out."}
-            </small>
-          </div>
-        ) : (
-          <button
-            type="button"
-            className="workspace-picker__new-toggle"
-            disabled={disabled}
-            onClick={() => setCreating(true)}
-          >
-            + New workspace
-          </button>
+          </>
         )}
       </div>
 
