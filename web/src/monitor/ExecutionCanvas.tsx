@@ -7,7 +7,10 @@ import {
   useState,
 } from "react";
 import { useSearchParams } from "react-router-dom";
-import { parseSnapshot } from "../api/blueprints";
+import {
+  parseSnapshot,
+  WORKFLOW_INPUTS_NODE_ID,
+} from "../api/blueprints";
 import { Inspector } from "../builder/Inspector";
 import {
   buildRunEntry,
@@ -216,6 +219,25 @@ export function ExecutionCanvas({
     );
   }, [workflowId, workflows]);
 
+  // The furthest node that has produced output — the overview shows it
+  // when the run has no workflow-level outputs (running/failed runs).
+  const lastNodeOutput = useMemo(() => {
+    if (!currentRun) {
+      return undefined;
+    }
+    for (let index = parsed.order.length - 1; index >= 0; index--) {
+      const nodeId = parsed.order[index];
+      if (!nodeId || nodeId === WORKFLOW_INPUTS_NODE_ID) {
+        continue;
+      }
+      const outputs = currentRun.nodes[nodeId]?.outputSnapshot;
+      if (outputs && Object.keys(outputs).length > 0) {
+        return { nodeId, outputs };
+      }
+    }
+    return undefined;
+  }, [parsed, currentRun]);
+
   const runs = currentRun ? [currentRun] : [];
   const selectedNode =
     parsed.nodes.find((node) => node.id === selectedNodeId) ?? null;
@@ -332,6 +354,8 @@ export function ExecutionCanvas({
                 ?.resume_node
             }
             onOpenExecution={openExecution}
+            shellRoot={execution?.shell_root}
+            lastNodeOutput={lastNodeOutput}
           />
         )}
       </RightPanel>

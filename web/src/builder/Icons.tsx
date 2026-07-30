@@ -207,6 +207,28 @@ export function FolderIcon({ size = 14 }: IconProps) {
   );
 }
 
+export function BranchIcon({ size = 14 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="3.5" cy="3.5" r="1.6" />
+      <circle cx="3.5" cy="10.5" r="1.6" />
+      <circle cx="10.5" cy="3.5" r="1.6" />
+      <path d="M3.5 5.1v3.8" />
+      <path d="M10.5 5.1a5.4 5.4 0 0 1-5.4 5.4" />
+    </svg>
+  );
+}
+
 export function KindIcon({
   kind,
   size,

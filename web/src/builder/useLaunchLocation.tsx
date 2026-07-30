@@ -31,7 +31,7 @@ function sanitizeProjects(value: unknown): Project[] {
   return projects;
 }
 
-function readStoredProjects(): Project[] {
+export function readStoredProjects(): Project[] {
   try {
     const stored = JSON.parse(
       localStorage.getItem("agc.projects") || "null",
