@@ -1,5 +1,6 @@
 import type {
   AppConfig,
+  HarnessListResponse,
   Conversation,
   ConversationListResponse,
   DirectoryBrowseResponse,
@@ -106,6 +107,14 @@ export function createWorkflowExecution(
   return postJSON<WorkflowExecutionCreateResponse>(
     "/api/workflow/executions",
     request,
+  );
+}
+
+export function fetchHarnesses(signal?: AbortSignal) {
+  return fetchJSON<HarnessListResponse>(
+    "/api/harnesses",
+    undefined,
+    signal,
   );
 }
 

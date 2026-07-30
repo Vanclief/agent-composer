@@ -21,6 +21,7 @@ import type {
 } from "../types/api";
 import type { ParsedWorkflow } from "../types/workflow";
 import { PlayIcon } from "./Icons";
+import { HarnessesPanel } from "./HarnessesPanel";
 import { NodeConfigPanel } from "./Inspector";
 import { WorkflowCanvas } from "./WorkflowCanvas";
 import { RunInputModal } from "./RunInputModal";
@@ -293,6 +294,7 @@ export function BuilderPage() {
                 );
               })}
           </ol>
+        <HarnessesPanel />
       </LeftPanel>
 
       <WorkflowCanvas

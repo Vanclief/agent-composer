@@ -167,6 +167,17 @@ export interface WorktreeListResponse {
   branches?: BranchInfo[] | null;
 }
 
+export interface HarnessInfo {
+  id: string;
+  binary: string;
+  available: boolean;
+  models: string[] | null;
+}
+
+export interface HarnessListResponse {
+  harnesses: HarnessInfo[];
+}
+
 export interface DirectoryEntry {
   name: string;
   path: string;

@@ -7,11 +7,13 @@ type Harness string
 const (
 	HarnessCodexCLI   Harness = "codex_cli"
 	HarnessClaudeCode Harness = "claude_code"
+	HarnessPi         Harness = "pi"
 )
 
 var harnessSet = enums.Set([]Harness{
 	HarnessCodexCLI,
 	HarnessClaudeCode,
+	HarnessPi,
 })
 
 func (e Harness) Validate() error {

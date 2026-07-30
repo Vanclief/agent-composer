@@ -8,6 +8,7 @@ import (
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/resources/filesystem"
+	"github.com/vanclief/agent-composer/core/resources/harnessinfo"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
 	workflowconversations "github.com/vanclief/agent-composer/core/resources/workflow/conversations"
@@ -27,6 +28,7 @@ type Server struct {
 	HooksAPI      *hooks.API
 	WorkflowAPI   *workflowapi.API
 	FilesystemAPI *filesystem.API
+	HarnessesAPI  *harnessinfo.API
 }
 
 func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API) *Server {
@@ -43,6 +45,7 @@ func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.A
 		HooksAPI:      hooksAPI,
 		WorkflowAPI:   workflowAPI,
 		FilesystemAPI: filesystem.NewAPI(),
+		HarnessesAPI:  harnessinfo.NewAPI(),
 	}
 }
 
@@ -101,6 +104,8 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.WorkflowAPI.Conversations.List(request.GetContext(), nil, body)
 	case *filesystem.BrowseRequest:
 		return s.FilesystemAPI.Browse(request.GetContext(), nil, body)
+	case *harnessinfo.ListRequest:
+		return s.HarnessesAPI.List(request.GetContext(), nil, body)
 	case *workflowworktrees.ListRequest:
 		return s.WorkflowAPI.Worktrees.List(request.GetContext(), nil, body)
 	case *workflowworktrees.CreateRequest:

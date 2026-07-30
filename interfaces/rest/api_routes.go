@@ -38,6 +38,7 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	workflowConversations.GET("", h.ListConversations)
 
 	api.GET("/filesystem/directories", h.BrowseDirectories)
+	api.GET("/harnesses", h.ListHarnesses)
 
 	worktrees := api.Group("/worktrees")
 	worktrees.GET("", h.ListWorktrees)

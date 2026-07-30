@@ -31,6 +31,8 @@ func New(kind agent.Harness) (Harness, error) {
 		return &CodexCLI{}, nil
 	case agent.HarnessClaudeCode:
 		return &ClaudeCode{}, nil
+	case agent.HarnessPi:
+		return &PiCLI{}, nil
 	default:
 		return nil, ez.New("harnesses.New", ez.EINVALID, "unsupported harness: "+string(kind), nil)
 	}
