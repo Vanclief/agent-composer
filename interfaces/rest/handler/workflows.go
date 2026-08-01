@@ -29,6 +29,20 @@ func (h *Handler) GetWorkflow(c echo.Context) error {
 	return h.JSONResponse(c, op, request, body)
 }
 
+func (h *Handler) CreateWorkflow(c echo.Context) error {
+	const op = "Handler.CreateWorkflow"
+
+	request := requests.New(c.Request().Header, c.RealIP())
+
+	body := &workflowapi.CreateRequest{}
+	err := c.Bind(body)
+	if err != nil {
+		return h.ManageError(c, op, request, err)
+	}
+
+	return h.JSONResponse(c, op, request, body)
+}
+
 func (h *Handler) ComposeWorkflow(c echo.Context) error {
 	const op = "Handler.ComposeWorkflow"
 

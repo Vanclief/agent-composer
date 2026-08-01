@@ -96,6 +96,95 @@ func DeleteDraft(workflowID string) error {
 	return nil
 }
 
+// slugifyWorkflowID turns a display name into a registry-style id:
+// lowercase snake_case, matching the installed files' convention.
+func slugifyWorkflowID(name string) string {
+	var builder strings.Builder
+	pendingSeparator := false
+	for _, char := range strings.ToLower(strings.TrimSpace(name)) {
+		isWordChar := (char >= 'a' && char <= 'z') ||
+			(char >= '0' && char <= '9')
+		if !isWordChar {
+			pendingSeparator = builder.Len() > 0
+			continue
+		}
+		if pendingSeparator {
+			builder.WriteByte('_')
+			pendingSeparator = false
+		}
+		builder.WriteRune(char)
+	}
+
+	return builder.String()
+}
+
+type CreatedDraft struct {
+	WorkflowID string
+	Spec       string
+}
+
+// CreateDraft scaffolds a new named workflow as a draft: just the
+// workflow header, no nodes — the composer and inspector fill in the
+// rest. The id derives from the name; collisions with installed
+// workflows or existing drafts are rejected.
+func CreateDraft(name, description string) (*CreatedDraft, error) {
+	const op = "workflow.CreateDraft"
+
+	trimmedName := strings.TrimSpace(name)
+	if trimmedName == "" {
+		return nil, ez.New(op, ez.EINVALID, "A workflow name is required", nil)
+	}
+
+	workflowID := slugifyWorkflowID(trimmedName)
+	if workflowID == "" {
+		return nil, ez.New(op, ez.EINVALID, "The name must contain letters or digits", nil)
+	}
+
+	_, err := loadRegistryBlueprintEntryByWorkflowID(workflowID)
+	if err == nil {
+		return nil, ez.New(op, ez.EINVALID, "Workflow "+workflowID+" already exists", nil)
+	}
+	if ez.ErrorCode(err) != ez.ENOTFOUND {
+		return nil, ez.Wrap(op, err)
+	}
+
+	existingDraft, err := ReadDraft(workflowID)
+	if err != nil {
+		return nil, ez.Wrap(op, err)
+	}
+	if existingDraft != "" {
+		return nil, ez.New(op, ez.EINVALID, "A draft for "+workflowID+" already exists", nil)
+	}
+
+	var scaffold struct {
+		Workflow struct {
+			ID          string `yaml:"id"`
+			Name        string `yaml:"name"`
+			Version     string `yaml:"version"`
+			Description string `yaml:"description,omitempty"`
+		} `yaml:"workflow"`
+	}
+	scaffold.Workflow.ID = workflowID
+	scaffold.Workflow.Name = trimmedName
+	scaffold.Workflow.Version = "1"
+	scaffold.Workflow.Description = strings.TrimSpace(description)
+
+	raw, err := yaml.Marshal(&scaffold)
+	if err != nil {
+		return nil, ez.Wrap(op, err)
+	}
+
+	err = WriteDraft(workflowID, raw)
+	if err != nil {
+		return nil, ez.Wrap(op, err)
+	}
+
+	return &CreatedDraft{
+		WorkflowID: workflowID,
+		Spec:       string(raw),
+	}, nil
+}
+
 // ListDraftOnlyBlueprints returns summaries for drafts whose workflow
 // is not installed in the registry — newly composed workflows that
 // have never been saved.

@@ -93,6 +93,8 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.WorkflowAPI.Get(request.GetContext(), nil, body)
 	case *workflowapi.UpdateNodeRequest:
 		return s.WorkflowAPI.UpdateNode(request.GetContext(), nil, body)
+	case *workflowapi.CreateRequest:
+		return s.WorkflowAPI.Create(request.GetContext(), nil, body)
 	case *workflowapi.ComposeRequest:
 		// Composer conversations outlive the default request timeout.
 		ctx, cancel := context.WithTimeout(

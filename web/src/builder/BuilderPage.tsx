@@ -34,6 +34,7 @@ import {
   ComposerPanel,
   type EditResult,
 } from "./ComposerPanel";
+import { NewWorkflowModal } from "./NewWorkflowModal";
 import { NodeConfigPanel } from "./Inspector";
 import { WorkflowCanvas } from "./WorkflowCanvas";
 import { RunInputModal } from "./RunInputModal";
@@ -80,6 +81,7 @@ export function BuilderPage() {
     );
   };
   const [showRun, setShowRun] = useState(false);
+  const [showNewWorkflow, setShowNewWorkflow] = useState(false);
   const [starting, setStarting] = useState(false);
   // The Composer panel — open state sticks across visits.
   const [composerOpen, setComposerOpen] = useState(
@@ -151,11 +153,11 @@ export function BuilderPage() {
   // A missing workflow (deleted from the registry, stale link) is an
   // empty state, not an error banner.
   const notInstalled = !loading && activeWorkflowId && !activeWorkflow;
-  const pageError =
-    error ||
-    (!loading && activeWorkflow && parsed.nodes.length === 0
-      ? "The workflow YAML contains no renderable nodes."
-      : "");
+  // A workflow with zero nodes is a legitimate state (a freshly
+  // created draft), so it gets an empty state, not an error.
+  const noNodes =
+    !loading && Boolean(activeWorkflow) && parsed.nodes.length === 0;
+  const pageError = error;
 
   const filteredWorkflows = workflows.filter((workflow) => {
     const query = workflowSearch.trim().toLowerCase();
@@ -354,8 +356,8 @@ export function BuilderPage() {
             <button
               type="button"
               className="builder-drawer__new"
-              title="Describe the workflow you want and the editor agent builds it"
-              onClick={() => navigate("/build")}
+              title="Name a new workflow — it starts as a draft"
+              onClick={() => setShowNewWorkflow(true)}
             >
               + New workflow
             </button>
@@ -423,16 +425,20 @@ export function BuilderPage() {
         emptyTitle={
           notInstalled
             ? "Not installed"
-            : activeWorkflowId
-              ? "No workflow nodes"
-              : "Nothing selected"
+            : noNodes
+              ? "No nodes yet"
+              : activeWorkflowId
+                ? "No workflow nodes"
+                : "Nothing selected"
         }
         emptyDescription={
           notInstalled
-            ? "This workflow is not in the registry anymore. Pick one on the left, or describe a new one below."
-            : activeWorkflowId
-              ? "Select a valid workflow definition to render it here."
-              : "Pick a workflow on the left, or describe a new one below."
+            ? "This workflow is not in the registry anymore. Pick one on the left, or create a new one."
+            : noNodes
+              ? "Describe what this workflow should do in the Composer — it proposes the nodes as a draft."
+              : activeWorkflowId
+                ? "Select a valid workflow definition to render it here."
+                : "Pick a workflow on the left, or create a new one."
         }
         topOverlay={
           activeWorkflow && (
@@ -488,6 +494,20 @@ export function BuilderPage() {
           workflowId={activeWorkflow ? activeWorkflowId : ""}
           onApplied={handleEditApplied}
           onClose={toggleComposer}
+        />
+      )}
+
+      {showNewWorkflow && (
+        <NewWorkflowModal
+          onCreated={(newWorkflowId) => {
+            setShowNewWorkflow(false);
+            void loadWorkflows().then(() => {
+              navigate(
+                `/workflow/${encodeURIComponent(newWorkflowId)}/build`,
+              );
+            });
+          }}
+          onClose={() => setShowNewWorkflow(false)}
         />
       )}
 

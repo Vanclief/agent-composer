@@ -31,6 +31,14 @@ export function updateSettings(settings: AppSettings) {
   return putJSON<AppSettings>("/api/settings", settings);
 }
 
+/** Scaffold a new named workflow — it starts life as a draft. */
+export function createWorkflow(name: string, description: string) {
+  return postJSON<{ workflow_id: string; name: string; draft: string }>(
+    "/api/workflows",
+    { name, description },
+  );
+}
+
 /** One composer conversation — resolves when the edit has landed. */
 export function composeWorkflow(workflowId: string, request: string) {
   return postJSON<ComposeResponse>("/api/workflows/compose", {
