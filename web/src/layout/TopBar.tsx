@@ -11,9 +11,12 @@ import { TopbarBrand } from "../nav/Brand";
  */
 export function TopBar({
   title,
+  context,
   actions,
 }: {
   title?: ReactNode;
+  /** Where the work happens — project/workspace chips after the title. */
+  context?: ReactNode;
   actions?: ReactNode;
 }) {
   return (
@@ -24,6 +27,7 @@ export function TopBar({
       {title !== undefined && (
         <h1 className="top-bar__title">{title}</h1>
       )}
+      {context}
       <div className="top-bar__spacer" />
       {actions !== undefined && (
         <div className="top-bar__actions">{actions}</div>

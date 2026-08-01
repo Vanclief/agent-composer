@@ -7,6 +7,7 @@ import {
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { fetchWorkflowExecutions, fetchWorkflows } from "../api";
 import { StopIcon } from "../builder/Icons";
+import { RunLocation } from "../builder/RunLocation";
 import { TopBar } from "../layout/TopBar";
 import { LeftPanel } from "../layout/LeftPanel";
 import { ExecutionCanvas } from "../monitor/ExecutionCanvas";
@@ -222,6 +223,13 @@ export function WorkflowsMonitor() {
           taskId
             ? task?.title || (loading ? "Loading task…" : "Task")
             : "Running workflows"
+        }
+        context={
+          selectedExecution?.shell_root && (
+            <RunLocation
+              shellRoot={selectedExecution.shell_root}
+            />
+          )
         }
         actions={
           <>

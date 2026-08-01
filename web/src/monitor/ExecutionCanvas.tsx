@@ -354,7 +354,6 @@ export function ExecutionCanvas({
                 ?.resume_node
             }
             onOpenExecution={openExecution}
-            shellRoot={execution?.shell_root}
             lastNodeOutput={lastNodeOutput}
           />
         )}

@@ -19,6 +19,7 @@ import { appRailItems } from "../layout/appRail";
 import { ExecutionCanvas } from "./ExecutionCanvas";
 import { LeftPanel } from "../layout/LeftPanel";
 import { RunInputModal } from "../builder/RunInputModal";
+import { RunLocation } from "../builder/RunLocation";
 import { useLaunchLocation } from "../builder/useLaunchLocation";
 import type { WorkflowSummary } from "../types/api";
 import {
@@ -490,6 +491,10 @@ export function MainMonitorPage({
   }, [orderedTasks, taskFilter, taskQuery, workflowNames]);
   const selectedTask =
     rows.find((task) => task.id === selectedExecutionId) || null;
+  const runShellRoot =
+    view === "workflows"
+      ? selectedTask?.executions[0]?.shell_root
+      : undefined;
 
   useEffect(() => {
     if (!ready) {
@@ -562,6 +567,9 @@ export function MainMonitorPage({
       <TopBar
         title={
           view === "workflows" ? selectedTask?.title : undefined
+        }
+        context={
+          runShellRoot && <RunLocation shellRoot={runShellRoot} />
         }
         actions={
           <button

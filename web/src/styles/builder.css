@@ -2288,48 +2288,6 @@ a.builder-brand {
   color: var(--accent-ink);
 }
 
-/* Where the run executed: project chip + workspace-branch chip. */
-.builder-overview__location {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  margin-bottom: 12px;
-}
-
-.builder-overview__location-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  max-width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--hover);
-  color: var(--ink-2);
-  padding: 3px 9px;
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.builder-overview__location-chip svg {
-  flex: none;
-  color: var(--ink-3);
-}
-
-.builder-overview__location-chip b {
-  white-space: nowrap;
-  font-weight: 600;
-}
-
-.builder-overview__location-chip--branch .mono {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: 10.5px;
-}
-
 /* Outputs shown from the furthest node instead of the workflow. */
 .builder-overview__outputs-source {
   display: block;
