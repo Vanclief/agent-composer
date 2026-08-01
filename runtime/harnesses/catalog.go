@@ -3,6 +3,7 @@ package harnesses
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os/exec"
 	"strings"
 	"sync"
@@ -20,23 +21,32 @@ type HarnessInfo struct {
 	Models    []string      `json:"models"`
 }
 
-// Model knowledge is per harness: pi ships a queryable catalog
-// (`pi --list-models`); codex and claude expose none, so a curated
-// list of their common models stands in.
+// Model knowledge is per harness: pi (`pi --list-models`) and codex
+// (`codex debug models`) ship queryable catalogs; claude exposes no
+// listing command, so a curated list of its common models stands in.
+// Any model id typed by hand still works — these are suggestions,
+// not a gate.
+
+// Fallback when `codex debug models` fails — its catalog per 2026-08.
 var codexModels = []string{
+	"gpt-5.6-sol",
+	"gpt-5.6-terra",
+	"gpt-5.6-luna",
 	"gpt-5.5",
-	"gpt-5.5-codex",
-	"gpt-5-codex",
-	"gpt-5",
-	"gpt-5-mini",
+	"gpt-5.4",
+	"gpt-5.4-mini",
+	"gpt-5.3-codex-spark",
 }
 
 var claudeModels = []string{
+	"claude-fable-5",
 	"claude-opus-5",
 	"claude-sonnet-5",
+	"claude-haiku-4-5",
+	"claude-opus-4-8",
+	"claude-opus-4-7",
 	"claude-opus-4-5",
 	"claude-sonnet-4-5",
-	"claude-haiku-4-5",
 }
 
 const catalogTTL = 5 * time.Minute
@@ -59,13 +69,20 @@ func ListHarnessInfo(ctx context.Context) []HarnessInfo {
 		return catalogCache.infos
 	}
 
+	codex := HarnessInfo{
+		ID:        agent.HarnessCodexCLI,
+		Binary:    "codex",
+		Available: binaryAvailable("codex"),
+		Models:    codexModels,
+	}
+	if codex.Available {
+		if models := listCodexModels(ctx); len(models) > 0 {
+			codex.Models = models
+		}
+	}
+
 	infos := []HarnessInfo{
-		{
-			ID:        agent.HarnessCodexCLI,
-			Binary:    "codex",
-			Available: binaryAvailable("codex"),
-			Models:    codexModels,
-		},
+		codex,
 		{
 			ID:        agent.HarnessClaudeCode,
 			Binary:    "claude",
@@ -93,6 +110,40 @@ func ListHarnessInfo(ctx context.Context) []HarnessInfo {
 func binaryAvailable(name string) bool {
 	_, err := exec.LookPath(name)
 	return err == nil
+}
+
+// listCodexModels reads codex's own model catalog. The command is
+// local and fast (~150ms, cached by codex itself); "hide" entries are
+// internal models not meant for the picker.
+func listCodexModels(ctx context.Context) []string {
+	cmd := exec.CommandContext(ctx, "codex", "debug", "models")
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	err := cmd.Run()
+	if err != nil {
+		return nil
+	}
+
+	var catalog struct {
+		Models []struct {
+			Slug       string `json:"slug"`
+			Visibility string `json:"visibility"`
+		} `json:"models"`
+	}
+	err = json.Unmarshal(stdout.Bytes(), &catalog)
+	if err != nil {
+		return nil
+	}
+
+	models := []string{}
+	for _, model := range catalog.Models {
+		if model.Slug == "" || model.Visibility == "hide" {
+			continue
+		}
+		models = append(models, model.Slug)
+	}
+
+	return models
 }
 
 func listPiModels(ctx context.Context) []string {

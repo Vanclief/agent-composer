@@ -9,6 +9,7 @@ import {
   updateSettings,
 } from "../api";
 import { CogIcon } from "../builder/Icons";
+import { ModelPicker } from "../builder/ModelPicker";
 import type { HarnessInfo } from "../types/api";
 import { Modal } from "../ui/Modal";
 
@@ -102,8 +103,12 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           value={harness}
           disabled={loading}
           onChange={(event) => {
-            setHarness(event.target.value);
-            setModel("");
+            const next = event.target.value;
+            setHarness(next);
+            setModel(
+              harnesses.find((info) => info.id === next)
+                ?.models?.[0] ?? "",
+            );
           }}
         >
           <option value="">Auto — first available</option>
@@ -124,19 +129,13 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           <label htmlFor="settings-composer-model">
             Composer model
           </label>
-          <input
+          <ModelPicker
             id="settings-composer-model"
-            className="builder-input mono"
-            list="settings-composer-models"
             value={model}
+            models={knownModels}
             disabled={loading}
-            onChange={(event) => setModel(event.target.value)}
+            onChange={setModel}
           />
-          <datalist id="settings-composer-models">
-            {knownModels.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
         </div>
       )}
       {error && <div className="builder-field-error">{error}</div>}

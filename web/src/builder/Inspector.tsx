@@ -9,6 +9,7 @@ import type { CanvasNode } from "../types/workflow";
 import { copyText } from "../utils/clipboard";
 import { KIND_VISUAL } from "./constants";
 import { KindIcon } from "./Icons";
+import { ModelPicker } from "./ModelPicker";
 import { type RunEntry } from "./runData";
 import { RunMenuDropdown, StatusPill } from "./RunMenu";
 
@@ -269,7 +270,21 @@ function EditableLLMConfig({
           <select
             className="builder-select mono"
             value={harness}
-            onChange={(event) => setHarness(event.target.value)}
+            onChange={(event) => {
+              const next = event.target.value;
+              setHarness(next);
+              // A model from another harness makes no sense here —
+              // snap to the new harness's lead model.
+              const nextModels =
+                harnesses.find((info) => info.id === next)?.models ??
+                [];
+              if (
+                nextModels.length > 0 &&
+                !nextModels.includes(model)
+              ) {
+                setModel(nextModels[0] ?? "");
+              }
+            }}
           >
             {!harnesses.some((info) => info.id === harness) && (
               <option value={harness}>{harness}</option>
@@ -291,17 +306,11 @@ function EditableLLMConfig({
       </div>
       <div className="builder-field-row">
         <label>Model</label>
-        <input
-          className="builder-input mono"
-          list={`model-options-${node.id}`}
+        <ModelPicker
           value={model}
-          onChange={(event) => setModel(event.target.value)}
+          models={knownModels}
+          onChange={setModel}
         />
-        <datalist id={`model-options-${node.id}`}>
-          {knownModels.map((name) => (
-            <option key={name} value={name} />
-          ))}
-        </datalist>
       </div>
       <div className="builder-field-row">
         <label>System prompt</label>
