@@ -1503,6 +1503,23 @@ a.builder-brand {
   cursor: default;
 }
 
+/* Save row under the editable node config. */
+.builder-config-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0 12px;
+}
+
+.builder-config-actions__hint {
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+/*
+ * "Describe a change…" — floats over the bottom of the canvas. A
+ * status line (the editor agent's run) stacks above the input row.
+ */
 .builder-change-composer {
   position: absolute;
   right: 50%;
@@ -1510,7 +1527,8 @@ a.builder-brand {
   z-index: 15;
   width: min(560px, calc(100% - 220px));
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
   transform: translateX(50%);
   border: 1px solid var(--line-2);
   border-radius: 10px;
@@ -1520,25 +1538,129 @@ a.builder-brand {
   backdrop-filter: blur(8px);
 }
 
+.builder-change-composer__input {
+  display: flex;
+  gap: 8px;
+}
+
 .builder-change-composer input {
   min-width: 0;
   flex: 1;
   border: 0;
   outline: 0;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--ink);
   padding: 4px 6px;
   font-size: 13px;
 }
 
-.builder-change-composer button {
+.builder-change-composer input::placeholder {
+  color: var(--ink-3);
+}
+
+.builder-change-composer__input button {
   border: 1px solid var(--line);
   border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 0 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.builder-change-composer__input button:disabled {
   background: var(--hover);
   color: var(--ink-3);
-  padding: 0 12px;
   cursor: not-allowed;
+  font-weight: 500;
+}
+
+.builder-change-composer__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-2);
+  padding: 2px 6px 7px;
   font-size: 12px;
+  line-height: 1.45;
+}
+
+.builder-change-composer__status span:not(.builder-stream-cursor) {
+  min-width: 0;
+  flex: 1;
+}
+
+.builder-change-composer__status a {
+  flex: none;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.builder-change-composer__status--failed {
+  color: var(--st-err);
+}
+
+.builder-change-composer__status button {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+/*
+ * Plain list of installed workflow definitions — names only, no run
+ * state; runs live on the Workflows monitor.
+ */
+.builder-workflow-list {
+  margin: 0;
+  padding: 4px 8px 10px;
+  list-style: none;
+}
+
+.builder-workflow-list button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  padding: 7px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.builder-workflow-list button:hover {
+  background: var(--hover);
+}
+
+.builder-workflow-list button.active {
+  background: var(--accent-soft);
+}
+
+.builder-workflow-list button.active b {
+  color: var(--accent-ink);
+}
+
+.builder-workflow-list b {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.builder-workflow-list small {
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .builder-drawer__new {

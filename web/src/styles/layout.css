@@ -42,6 +42,42 @@
   width: calc(var(--rail-w) + max(220px, 20%) - 24px);
 }
 
+/* Monitor | Edit — the Workflows section's mode switch. */
+.top-bar__mode {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.top-bar__mode a {
+  display: flex;
+  align-items: center;
+  color: var(--ink-3);
+  padding: 4px 11px;
+  font-size: 12px;
+  font-weight: 550;
+  text-decoration: none;
+}
+
+.top-bar__mode a + a {
+  border-left: 1px solid var(--line);
+}
+
+.top-bar__mode a:hover {
+  background: var(--hover);
+  color: var(--ink-2);
+}
+
+.top-bar__mode a.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .top-bar__title {
   min-width: 0;
   flex: 0 1 auto;

@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   parseSnapshot,
   WORKFLOW_INPUTS_NODE_ID,
@@ -206,6 +206,11 @@ export function ExecutionCanvas({
   }, [execution, selectNode]);
 
   const workflowId = execution?.workflow_id ?? "";
+  // Editing needs the definition to still exist — runs of deleted
+  // workflows render fine from their snapshot but have nothing to edit.
+  const installed = workflows.some(
+    (workflow) => workflow.id === workflowId,
+  );
   const activeWorkflow = useMemo<WorkflowSummary | undefined>(() => {
     if (!workflowId) {
       return undefined;
@@ -339,6 +344,17 @@ export function ExecutionCanvas({
                         status={currentRun.status}
                         runId={currentRun.id}
                       />
+                    )}
+                    {installed && (
+                      <Link
+                        className="canvas-head__edit"
+                        to={`/workflow/${encodeURIComponent(
+                          activeWorkflow.id,
+                        )}/build`}
+                        title="Open this workflow in the editor"
+                      >
+                        Edit
+                      </Link>
                     )}
                   </div>
                 )}

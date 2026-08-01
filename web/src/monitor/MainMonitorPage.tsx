@@ -20,6 +20,7 @@ import { ExecutionCanvas } from "./ExecutionCanvas";
 import { LeftPanel } from "../layout/LeftPanel";
 import { RunInputModal } from "../builder/RunInputModal";
 import { RunLocation } from "../builder/RunLocation";
+import { ModeToggle } from "../nav/ModeToggle";
 import { useLaunchLocation } from "../builder/useLaunchLocation";
 import type { WorkflowSummary } from "../types/api";
 import {
@@ -495,6 +496,11 @@ export function MainMonitorPage({
     view === "workflows"
       ? selectedTask?.executions[0]?.shell_root
       : undefined;
+  // Edit mode opens on the workflow of the run you are looking at.
+  const selectedWorkflowId =
+    view === "workflows"
+      ? selectedTask?.executions[0]?.workflow_id
+      : undefined;
 
   useEffect(() => {
     if (!ready) {
@@ -565,6 +571,20 @@ export function MainMonitorPage({
       data-component="MainMonitorPage"
     >
       <TopBar
+        mode={
+          view === "workflows" ? (
+            <ModeToggle
+              mode="monitor"
+              editTo={
+                selectedWorkflowId
+                  ? `/workflow/${encodeURIComponent(
+                      selectedWorkflowId,
+                    )}/build`
+                  : undefined
+              }
+            />
+          ) : undefined
+        }
         context={
           runShellRoot && <RunLocation shellRoot={runShellRoot} />
         }

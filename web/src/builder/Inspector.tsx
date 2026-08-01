@@ -3,6 +3,8 @@ import {
   useEffect,
   useState,
 } from "react";
+import { fetchHarnesses } from "../api";
+import type { HarnessInfo } from "../types/api";
 import type { CanvasNode } from "../types/workflow";
 import { copyText } from "../utils/clipboard";
 import { KIND_VISUAL } from "./constants";
@@ -11,6 +13,12 @@ import { type RunEntry } from "./runData";
 import { RunMenuDropdown, StatusPill } from "./RunMenu";
 
 type InspectorTab = "overview" | "config" | "runs";
+
+/** Saves one node's editable config; resolves when the YAML is written. */
+export type NodeConfigSave = (
+  nodeName: string,
+  update: { model?: string; harness?: string; instruction?: string },
+) => Promise<void>;
 
 export function formatValue(value: unknown) {
   if (value === null || value === undefined) {
@@ -181,11 +189,176 @@ function LiveIO({
   );
 }
 
-function Config({ node }: { node: CanvasNode }) {
+/**
+ * Editable config for an inference node. Saves through the node-update
+ * endpoint, which edits the YAML surgically and re-compiles before
+ * persisting — a bad value never lands.
+ */
+function EditableLLMConfig({
+  node,
+  onSave,
+}: {
+  node: CanvasNode;
+  onSave: NodeConfigSave;
+}) {
+  const config = node.config;
+  const [model, setModel] = useState(String(config.model || ""));
+  const [harness, setHarness] = useState(String(config.harnessId || ""));
+  const [instruction, setInstruction] = useState(
+    String(config.instruction || ""),
+  );
+  const [harnesses, setHarnesses] = useState<HarnessInfo[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  // Re-sync when the selection moves or the YAML changes underneath.
+  useEffect(() => {
+    setModel(String(node.config.model || ""));
+    setHarness(String(node.config.harnessId || ""));
+    setInstruction(String(node.config.instruction || ""));
+    setError("");
+  }, [node.id, node.config.model, node.config.harnessId, node.config.instruction]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchHarnesses(controller.signal)
+      .then((response) => setHarnesses(response?.harnesses ?? []))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+
+  const dirty =
+    model !== String(config.model || "") ||
+    harness !== String(config.harnessId || "") ||
+    instruction !== String(config.instruction || "");
+  const knownModels =
+    harnesses.find((info) => info.id === harness)?.models ?? [];
+
+  async function save() {
+    if (!dirty || saving) {
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await onSave(node.name, {
+        model: model !== String(config.model || "") ? model : undefined,
+        harness:
+          harness !== String(config.harnessId || "")
+            ? harness
+            : undefined,
+        instruction:
+          instruction !== String(config.instruction || "")
+            ? instruction
+            : undefined,
+      });
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : String(caught),
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="builder-field-row">
+        <label>Harness</label>
+        {harnesses.length > 0 ? (
+          <select
+            className="builder-select mono"
+            value={harness}
+            onChange={(event) => setHarness(event.target.value)}
+          >
+            {!harnesses.some((info) => info.id === harness) && (
+              <option value={harness}>{harness}</option>
+            )}
+            {harnesses.map((info) => (
+              <option key={info.id} value={info.id}>
+                {info.id}
+                {info.available ? "" : " (not installed)"}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            className="builder-input mono"
+            value={harness}
+            onChange={(event) => setHarness(event.target.value)}
+          />
+        )}
+      </div>
+      <div className="builder-field-row">
+        <label>Model</label>
+        <input
+          className="builder-input mono"
+          list={`model-options-${node.id}`}
+          value={model}
+          onChange={(event) => setModel(event.target.value)}
+        />
+        <datalist id={`model-options-${node.id}`}>
+          {knownModels.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
+      </div>
+      <div className="builder-field-row">
+        <label>System prompt</label>
+        <textarea
+          className="builder-textarea"
+          rows={14}
+          value={instruction}
+          onChange={(event) => setInstruction(event.target.value)}
+        />
+      </div>
+      {error && (
+        <div className="builder-inspector__error">
+          <strong>Save failed</strong>
+          {error}
+        </div>
+      )}
+      <div className="builder-config-actions">
+        <button
+          type="button"
+          className="builder-run-button"
+          disabled={!dirty || saving}
+          onClick={() => void save()}
+        >
+          {saving ? "Saving…" : "Save changes"}
+        </button>
+        {dirty && !saving && (
+          <span className="builder-config-actions__hint">
+            Unsaved changes
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Config({
+  node,
+  onSave,
+}: {
+  node: CanvasNode;
+  onSave?: NodeConfigSave;
+}) {
   const config = node.config;
   if (node.kind === "llm") {
+    // Nodes inside a composed sub-workflow belong to that workflow's
+    // YAML; editing them here would target the wrong file.
+    if (onSave && !node.parentGroup) {
+      return <EditableLLMConfig node={node} onSave={onSave} />;
+    }
     return (
       <div>
+        {onSave && node.parentGroup && (
+          <div className="builder-config-note">
+            Defined in a composed workflow — open that workflow to
+            edit it.
+          </div>
+        )}
         <div className="builder-field-row">
           <label>Model</label>
           <input
@@ -254,7 +427,14 @@ function Config({ node }: { node: CanvasNode }) {
   );
 }
 
-export function NodeConfigPanel({ node }: { node: CanvasNode | null }) {
+export function NodeConfigPanel({
+  node,
+  onSave,
+}: {
+  node: CanvasNode | null;
+  /** When set, inference-node config becomes editable. */
+  onSave?: NodeConfigSave;
+}) {
   if (!node) {
     return (
       <div className="builder-inspector">
@@ -286,11 +466,11 @@ export function NodeConfigPanel({ node }: { node: CanvasNode | null }) {
           </span>
         </div>
       </div>
-      <div className="builder-config-note">
-        YAML-backed preview
-      </div>
+      {!onSave && (
+        <div className="builder-config-note">YAML-backed preview</div>
+      )}
       <div className="builder-inspector__body scrollnice">
-        <Config node={node} />
+        <Config node={node} onSave={onSave} />
       </div>
     </div>
   );

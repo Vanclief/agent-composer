@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -8,29 +9,30 @@ import { LeftRail } from "../layout/LeftRail";
 import { appRailItems } from "../layout/appRail";
 import { LeftPanel } from "../layout/LeftPanel";
 import { RightPanel } from "../layout/RightPanel";
-import { useNavigate, useParams } from "react-router-dom";
 import {
-  fetchWorkflowExecutions,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
+import {
   fetchWorkflowSpecs,
   fetchWorkflows,
+  updateWorkflowNode,
 } from "../api";
 import { parseBlueprintYAML } from "../api/blueprints";
-import type {
-  WorkflowExecution,
-  WorkflowSummary,
-} from "../types/api";
+import type { WorkflowSummary } from "../types/api";
 import type { ParsedWorkflow } from "../types/workflow";
 import { PlayIcon } from "./Icons";
-import { HarnessesPanel } from "./HarnessesPanel";
+import { ModeToggle } from "../nav/ModeToggle";
+import {
+  ChangeComposer,
+  type EditResult,
+} from "./ChangeComposer";
 import { NodeConfigPanel } from "./Inspector";
 import { WorkflowCanvas } from "./WorkflowCanvas";
 import { RunInputModal } from "./RunInputModal";
 import { useLaunchLocation } from "./useLaunchLocation";
 import { startTask } from "../tasks/data";
-import {
-  executionDuration,
-  StatusMarker,
-} from "../workflows/StatusMarker";
 
 const EMPTY_WORKFLOW: ParsedWorkflow = {
   nodes: [],
@@ -49,14 +51,33 @@ export function BuilderPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [workflowSearch, setWorkflowSearch] = useState("");
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
-    null,
-  );
-  const [executions, setExecutions] = useState<WorkflowExecution[]>([]);
+  // Selection lives in the URL (?node=<id>), same as the run pages.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedNodeId = searchParams.get("node");
+  const setSelectedNodeId = (nodeId: string | null) => {
+    setSearchParams(
+      (params) => {
+        if (nodeId) {
+          params.set("node", nodeId);
+        } else {
+          params.delete("node");
+        }
+        return params;
+      },
+      { replace: true },
+    );
+  };
   const [showRun, setShowRun] = useState(false);
   const [starting, setStarting] = useState(false);
   const { shellRoot, worktree, locationSlot } =
     useLaunchLocation(starting);
+
+  const loadWorkflows = useCallback(async (signal?: AbortSignal) => {
+    const nextWorkflows = await fetchWorkflows(signal);
+    const nextSpecs = await fetchWorkflowSpecs(nextWorkflows, signal);
+    setWorkflows(nextWorkflows);
+    setWorkflowSpecs(nextSpecs);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -64,76 +85,25 @@ export function BuilderPage() {
     setLoading(true);
     setError("");
 
-    async function load() {
-      try {
-        const nextWorkflows = await fetchWorkflows(controller.signal);
-        const nextSpecs = await fetchWorkflowSpecs(
-          nextWorkflows,
-          controller.signal,
-        );
-        if (!active) {
-          return;
+    loadWorkflows(controller.signal)
+      .catch((caught: unknown) => {
+        if (active) {
+          setError(
+            caught instanceof Error ? caught.message : String(caught),
+          );
         }
-        setWorkflows(nextWorkflows);
-        setWorkflowSpecs(nextSpecs);
-      } catch (caught) {
-        if (!active) {
-          return;
-        }
-        setError(caught instanceof Error ? caught.message : String(caught));
-      } finally {
+      })
+      .finally(() => {
         if (active) {
           setLoading(false);
         }
-      }
-    }
+      });
 
-    void load();
     return () => {
       active = false;
       controller.abort();
     };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadExecutions() {
-      try {
-        const recent = await fetchWorkflowExecutions(undefined, 60);
-        if (active) {
-          setExecutions(recent);
-        }
-      } catch {
-        // The workflow list still renders without run state.
-      }
-    }
-
-    void loadExecutions();
-    const interval = window.setInterval(() => void loadExecutions(), 4000);
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-    };
-  }, []);
-
-  // Latest run per workflow — what the list shows beside each name.
-  const latestByWorkflow = useMemo(() => {
-    const map = new Map<string, WorkflowExecution>();
-    for (const execution of executions) {
-      const seen = map.get(execution.workflow_id);
-      const at = Date.parse(
-        execution.started_at || execution.created_at || "",
-      );
-      const seenAt = seen
-        ? Date.parse(seen.started_at || seen.created_at || "")
-        : -1;
-      if (!seen || at > seenAt) {
-        map.set(execution.workflow_id, execution);
-      }
-    }
-    return map;
-  }, [executions]);
+  }, [loadWorkflows]);
 
   const activeWorkflow = workflows.find(
     (workflow) => workflow.id === activeWorkflowId,
@@ -147,13 +117,14 @@ export function BuilderPage() {
   }, [activeSpec, activeWorkflow, workflowSpecs]);
   const selectedNode =
     parsed.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  // A missing workflow (deleted from the registry, stale link) is an
+  // empty state, not an error banner.
+  const notInstalled = !loading && activeWorkflowId && !activeWorkflow;
   const pageError =
     error ||
-    (!loading && activeWorkflowId && !activeWorkflow
-      ? `Workflow "${activeWorkflowId}" was not found.`
-      : !loading && activeWorkflow && parsed.nodes.length === 0
-        ? "The workflow YAML contains no renderable nodes."
-        : "");
+    (!loading && activeWorkflow && parsed.nodes.length === 0
+      ? "The workflow YAML contains no renderable nodes."
+      : "");
 
   const filteredWorkflows = workflows.filter((workflow) => {
     const query = workflowSearch.trim().toLowerCase();
@@ -171,6 +142,35 @@ export function BuilderPage() {
       : "AGC — Build";
   }, [activeWorkflow]);
 
+  function handleEditApplied(result: EditResult) {
+    // The registry changed on disk — re-read it, then follow the edit
+    // to its workflow (a created one, or a renamed target).
+    void loadWorkflows().then(() => {
+      if (result.workflow_id && result.workflow_id !== activeWorkflowId) {
+        navigate(
+          `/workflow/${encodeURIComponent(result.workflow_id)}/build`,
+        );
+      }
+    });
+  }
+
+  async function saveNodeConfig(
+    nodeName: string,
+    update: { model?: string; harness?: string; instruction?: string },
+  ) {
+    const response = await updateWorkflowNode(
+      activeWorkflowId,
+      nodeName,
+      update,
+    );
+    // The server returns the whole updated spec — the canvas and
+    // inspector re-derive from it.
+    setWorkflowSpecs((current) => ({
+      ...current,
+      [activeWorkflowId]: response.spec,
+    }));
+  }
+
   async function runWorkflow(input: Record<string, unknown>) {
     if (!activeWorkflow || starting) {
       return;
@@ -178,17 +178,24 @@ export function BuilderPage() {
     setStarting(true);
     setError("");
     try {
-      await startTask(activeWorkflow.id, input, shellRoot, worktree);
+      const response = await startTask(
+        activeWorkflow.id,
+        input,
+        shellRoot,
+        worktree,
+      );
       setShowRun(false);
-      const recent = await fetchWorkflowExecutions(undefined, 60);
-      setExecutions(recent);
+      if (response.execution_id) {
+        navigate(
+          `/executions/${encodeURIComponent(response.execution_id)}`,
+        );
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
       setStarting(false);
     }
   }
-
 
   return (
     <div
@@ -197,6 +204,7 @@ export function BuilderPage() {
     >
       <TopBar
         title={activeWorkflow?.name || activeWorkflowId || "No workflow"}
+        mode={<ModeToggle mode="edit" />}
         actions={
           <button
             type="button"
@@ -209,7 +217,7 @@ export function BuilderPage() {
         }
       />
 
-      <LeftRail items={appRailItems()} active="library" />
+      <LeftRail items={appRailItems()} active="workflows" />
 
       <LeftPanel
         className="builder-drawer"
@@ -232,69 +240,47 @@ export function BuilderPage() {
             <button
               type="button"
               className="builder-drawer__new"
-              disabled
-              title="Creating workflows from the UI is coming soon — add YAML to your workflows directory for now"
+              title="Describe the workflow you want and the editor agent builds it"
+              onClick={() => navigate("/build")}
             >
               + New workflow
             </button>
           </>
         }
       >
-        <ol className="builder-workflow-steps">
-              {loading && (
-                <div className="builder-drawer__message">Loading…</div>
-              )}
-              {!loading && filteredWorkflows.length === 0 && (
-                <div className="builder-drawer__message">
-                  No workflows found
-                </div>
-              )}
-              {filteredWorkflows.map((workflow) => {
-                const latest = latestByWorkflow.get(workflow.id);
-                const status = latest?.status ?? "never";
-                return (
-                  <li
-                    key={workflow.id}
-                    className={[
-                      "monitor-steps__stop",
-                      `monitor-steps__stop--${status}`,
-                      workflow.id === activeWorkflowId
-                        ? "monitor-steps__stop--current"
-                        : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                  >
-                    <span className="monitor-steps__rail">
-                      <i className="monitor-steps__dot">
-                        <StatusMarker status={status} />
-                      </i>
-                    </span>
-                    <button
-                      type="button"
-                      className="monitor-steps__label"
-                      title={workflow.description || workflow.id}
-                      onClick={() =>
-                        navigate(
-                          `/workflow/${encodeURIComponent(
-                            workflow.id,
-                          )}/build`,
-                        )
-                      }
-                    >
-                      <b>{workflow.name || workflow.id}</b>
-                      <small>
-                        {latest ? status : "never run"}
-                        <span>
-                          {latest ? executionDuration(latest) : ""}
-                        </span>
-                      </small>
-                    </button>
-                  </li>
-                );
-              })}
-          </ol>
-        <HarnessesPanel />
+        <ol className="builder-workflow-list">
+          {loading && (
+            <div className="builder-drawer__message">Loading…</div>
+          )}
+          {!loading && filteredWorkflows.length === 0 && (
+            <div className="builder-drawer__message">
+              No workflows found
+            </div>
+          )}
+          {filteredWorkflows.map((workflow) => (
+            <li key={workflow.id}>
+              <button
+                type="button"
+                className={
+                  workflow.id === activeWorkflowId ? "active" : ""
+                }
+                title={workflow.description || workflow.id}
+                onClick={() =>
+                  navigate(
+                    `/workflow/${encodeURIComponent(
+                      workflow.id,
+                    )}/build`,
+                  )
+                }
+              >
+                <b>{workflow.name || workflow.id}</b>
+                {workflow.description && (
+                  <small>{workflow.description}</small>
+                )}
+              </button>
+            </li>
+          ))}
+        </ol>
       </LeftPanel>
 
       <WorkflowCanvas
@@ -313,33 +299,33 @@ export function BuilderPage() {
           )
         }
         emptyTitle={
-          activeWorkflowId ? "No workflow nodes" : "Nothing selected"
+          notInstalled
+            ? "Not installed"
+            : activeWorkflowId
+              ? "No workflow nodes"
+              : "Nothing selected"
         }
         emptyDescription={
-          activeWorkflowId
-            ? "Select a valid workflow definition to render it here."
-            : "Pick a workflow on the left to start building."
+          notInstalled
+            ? "This workflow is not in the registry anymore. Pick one on the left, or describe a new one below."
+            : activeWorkflowId
+              ? "Select a valid workflow definition to render it here."
+              : "Pick a workflow on the left, or describe a new one below."
         }
         bottomOverlay={
-          <div
-            className="builder-change-composer"
-            title="natural-language editing coming soon"
-          >
-            <input
-              type="text"
-              placeholder="Describe a change…"
-              disabled
-              aria-label="Describe a change"
-            />
-            <button type="button" disabled>
-              Apply
-            </button>
-          </div>
+          <ChangeComposer
+            key={activeWorkflowId}
+            workflowId={activeWorkflow ? activeWorkflowId : ""}
+            onApplied={handleEditApplied}
+          />
         }
       />
 
       <RightPanel>
-        <NodeConfigPanel node={selectedNode} />
+        <NodeConfigPanel
+          node={selectedNode}
+          onSave={activeWorkflow ? saveNodeConfig : undefined}
+        />
       </RightPanel>
 
       {showRun && activeWorkflow && (

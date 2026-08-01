@@ -1071,6 +1071,21 @@
   white-space: nowrap;
 }
 
+/* Jump from a run to editing its workflow. */
+.canvas-head__edit {
+  flex: none;
+  border-left: 1px solid var(--line);
+  color: var(--ink-3);
+  padding-left: 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.canvas-head__edit:hover {
+  color: var(--accent);
+}
+
 /* Shows which task the workflows list is limited to. */
 /* Floats over the canvas: which task the workflows are scoped to. */
 .monitor-scope {

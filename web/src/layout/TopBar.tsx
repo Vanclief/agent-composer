@@ -11,10 +11,13 @@ import { TopbarBrand } from "../nav/Brand";
  */
 export function TopBar({
   title,
+  mode,
   context,
   actions,
 }: {
   title?: ReactNode;
+  /** Section mode switch (Monitor | Edit) — sits next to the brand. */
+  mode?: ReactNode;
   /** Where the work happens — project/workspace chips after the title. */
   context?: ReactNode;
   actions?: ReactNode;
@@ -23,6 +26,7 @@ export function TopBar({
     <header className="top-bar" data-component="TopBar">
       <div className="top-bar__lead">
         <TopbarBrand />
+        {mode}
       </div>
       {title !== undefined && (
         <h1 className="top-bar__title">{title}</h1>

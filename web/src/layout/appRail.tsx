@@ -1,13 +1,13 @@
 import {
   BlocksIcon,
-  CogIcon,
   StackIcon,
 } from "../builder/Icons";
 import type { RailItem } from "./LeftRail";
 
 /**
- * The app's only navigation. Every view is a real route: Tasks at /,
- * Workflows at /workflows, the Library (builder) at /build.
+ * The app's only navigation: Tasks at /, Workflows at /workflows.
+ * Editing is a mode of Workflows (the Monitor | Edit switch in the
+ * top bar), not a place of its own.
  */
 export function appRailItems(): RailItem[] {
   return [
@@ -22,12 +22,6 @@ export function appRailItems(): RailItem[] {
       label: "Workflows",
       icon: <BlocksIcon />,
       to: "/workflows",
-    },
-    {
-      key: "library",
-      label: "Library",
-      icon: <CogIcon />,
-      to: "/build",
     },
   ];
 }
