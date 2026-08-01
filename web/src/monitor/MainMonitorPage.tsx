@@ -565,9 +565,6 @@ export function MainMonitorPage({
       data-component="MainMonitorPage"
     >
       <TopBar
-        title={
-          view === "workflows" ? selectedTask?.title : undefined
-        }
         context={
           runShellRoot && <RunLocation shellRoot={runShellRoot} />
         }

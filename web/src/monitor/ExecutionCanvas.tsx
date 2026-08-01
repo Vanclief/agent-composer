@@ -17,6 +17,7 @@ import {
   nodeSnapshotFrom,
   type RunEntry,
 } from "../builder/runData";
+import { StatusPill } from "../builder/RunMenu";
 import { WorkflowCanvas } from "../builder/WorkflowCanvas";
 import { WorkflowOverview } from "../builder/WorkflowOverview";
 import { RightPanel } from "../layout/RightPanel";
@@ -325,7 +326,26 @@ export function ExecutionCanvas({
           onOpenNode={openConversation}
           emptyTitle={emptyTitle}
           emptyDescription={emptyDescription}
-          topOverlay={topOverlay}
+          topOverlay={
+            (activeWorkflow || topOverlay) && (
+              <div className="canvas-head">
+                {activeWorkflow && (
+                  <div className="canvas-head__title">
+                    <h2>
+                      {activeWorkflow.name || activeWorkflow.id}
+                    </h2>
+                    {currentRun && (
+                      <StatusPill
+                        status={currentRun.status}
+                        runId={currentRun.id}
+                      />
+                    )}
+                  </div>
+                )}
+                {topOverlay}
+              </div>
+            )
+          }
         />
       )}
 

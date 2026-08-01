@@ -25,6 +25,34 @@ interface Location {
 }
 
 /**
+ * Instant best guess from the path alone, so the bar never flashes a
+ * wrong value while git is being asked. Managed worktrees live at
+ * worktrees/<repo>-<hash8>/<branch-dir>; anything else is a project
+ * root running its checked-out branch.
+ */
+function guessLocation(shellRoot: string): Location {
+  const managed = stripSlash(shellRoot).match(
+    /\/worktrees\/(.+)-[0-9a-f]{8}\/([^/]+)$/,
+  );
+  if (managed) {
+    const repoBase = managed[1] ?? "";
+    const named = readStoredProjects().find(
+      (project) => projectBaseName(project.path) === repoBase,
+    );
+    return {
+      project: named?.name || repoBase,
+      branch: managed[2] ?? "",
+      worktree: true,
+    };
+  }
+  return {
+    project: projectNameFor(shellRoot),
+    branch: "",
+    worktree: false,
+  };
+}
+
+/**
  * Where a run executes: project chip + workspace chip. Only shell_root
  * is persisted, so git resolves the rest — for worktree runs the
  * project is the main checkout and the workspace is the worktree's
@@ -32,18 +60,12 @@ interface Location {
  * is on.
  */
 export function RunLocation({ shellRoot }: { shellRoot: string }) {
-  const [location, setLocation] = useState<Location>(() => ({
-    project: projectNameFor(shellRoot),
-    branch: "",
-    worktree: false,
-  }));
+  const [location, setLocation] = useState<Location>(() =>
+    guessLocation(shellRoot),
+  );
 
   useEffect(() => {
-    setLocation({
-      project: projectNameFor(shellRoot),
-      branch: "",
-      worktree: false,
-    });
+    setLocation(guessLocation(shellRoot));
     const controller = new AbortController();
     fetchWorktrees(shellRoot, controller.signal)
       .then((response) => {
@@ -70,21 +92,27 @@ export function RunLocation({ shellRoot }: { shellRoot: string }) {
 
   return (
     <div className="run-location" title={shellRoot}>
-      <span className="run-location__chip">
-        <FolderIcon size={12} />
-        <b>{location.project}</b>
+      <span className="run-location__seg">
+        <small>Project</small>
+        <span className="run-location__value">
+          <FolderIcon size={12} />
+          <b>{location.project}</b>
+        </span>
       </span>
       {location.branch && (
         <span
-          className="run-location__chip run-location__chip--branch"
+          className="run-location__seg run-location__seg--branch"
           title={
             location.worktree
               ? `Workspace worktree — ${shellRoot}`
               : "Runs directly on the repository root"
           }
         >
-          <BranchIcon size={12} />
-          <span className="mono">{location.branch}</span>
+          <small>Workspace</small>
+          <span className="run-location__value">
+            <BranchIcon size={12} />
+            <span className="mono">{location.branch}</span>
+          </span>
         </span>
       )}
     </div>

@@ -1026,6 +1026,51 @@
     var(--rail) var(--left-panel) minmax(0, 1fr) var(--right-panel);
 }
 
+/*
+ * Floating canvas header: names what the canvas is showing (title +
+ * run status), with the task-scope pill docked underneath.
+ */
+.canvas-head {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: calc(100% - 160px);
+  pointer-events: none;
+}
+
+.canvas-head > * {
+  pointer-events: auto;
+}
+
+.canvas-head__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  padding: 6px 12px;
+  box-shadow: var(--shadow-2);
+}
+
+.canvas-head__title h2 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Shows which task the workflows list is limited to. */
 /* Floats over the canvas: which task the workflows are scoped to. */
 .monitor-scope {
@@ -1084,6 +1129,12 @@
 .monitor-scope > button:hover {
   background: color-mix(in oklch, var(--accent) 16%, transparent);
   color: var(--ink);
+}
+
+/* Inside the canvas header the pill stacks below the title. */
+.canvas-head .monitor-scope {
+  position: static;
+  max-width: 100%;
 }
 
 .has-rail {
