@@ -25,6 +25,8 @@ func (r *GetRequest) Validate() error {
 type GetResponse struct {
 	WorkflowID string `json:"workflow_id"`
 	Spec       string `json:"spec"`
+	// Draft holds unsaved composer changes; empty when none exist.
+	Draft string `json:"draft,omitempty"`
 }
 
 func (api *API) Get(ctx context.Context, requester interface{}, request *GetRequest) (*GetResponse, error) {
@@ -36,13 +38,28 @@ func (api *API) Get(ctx context.Context, requester interface{}, request *GetRequ
 	}
 
 	workflowID := strings.TrimSpace(request.WorkflowID)
+
+	draft, err := workflowruntime.ReadDraft(workflowID)
+	if err != nil {
+		return nil, ez.Wrap(op, err)
+	}
+
 	raw, err := workflowruntime.ReadBlueprintBytesByWorkflowID(workflowID)
 	if err != nil {
+		// A never-saved workflow still exists as its draft.
+		if draft != "" && ez.ErrorCode(err) == ez.ENOTFOUND {
+			return &GetResponse{
+				WorkflowID: workflowID,
+				Draft:      draft,
+			}, nil
+		}
+
 		return nil, ez.Wrap(op, err)
 	}
 
 	return &GetResponse{
 		WorkflowID: workflowID,
 		Spec:       string(raw),
+		Draft:      draft,
 	}, nil
 }

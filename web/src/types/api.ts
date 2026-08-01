@@ -10,10 +10,32 @@ export interface AppConfig {
   shell_root: string;
 }
 
+/** Persisted app settings (settings.json on the server). */
+export interface AppSettings {
+  composer: {
+    harness: string;
+    model: string;
+  };
+}
+
+export interface ComposeResponse {
+  workflow_id: string;
+  action: string;
+  summary: string;
+  harness: string;
+  model: string;
+  /** The proposed blueprint, now stored as the workflow's draft. */
+  draft?: string;
+}
+
 export interface WorkflowSummary {
   id: string;
   name: string;
   description?: string;
+  /** Unsaved composer changes exist. */
+  has_draft?: boolean;
+  /** The workflow exists only as a draft — never saved. */
+  draft_only?: boolean;
   inputs: Record<string, string>;
   outputs: Record<string, string>;
 }
@@ -25,6 +47,8 @@ export interface WorkflowListResponse {
 export interface WorkflowSpecResponse {
   workflow_id: string;
   spec: string;
+  /** Unsaved composer changes, when a draft exists. */
+  draft?: string;
 }
 
 export type WorkflowExecutionStatus =

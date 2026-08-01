@@ -1663,6 +1663,33 @@ a.builder-brand {
   white-space: nowrap;
 }
 
+/* Unsaved composer changes on this workflow. */
+.builder-workflow-list__draft {
+  margin-left: 6px;
+  border: 1px solid var(--st-warn);
+  border-radius: 5px;
+  color: var(--st-warn);
+  padding: 0 5px;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+/*
+ * Floats over the canvas while a draft is shown: the draft is what
+ * Save installs, Discard returns to the saved version.
+ */
+.builder-draft-bar {
+  border-color: var(--st-warn);
+}
+
+.builder-draft-bar h2 {
+  color: var(--st-warn);
+}
+
 .builder-drawer__new {
   width: calc(100% - 20px);
   height: 30px;

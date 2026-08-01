@@ -21,6 +21,7 @@ import { LeftPanel } from "../layout/LeftPanel";
 import { RunInputModal } from "../builder/RunInputModal";
 import { RunLocation } from "../builder/RunLocation";
 import { ModeToggle } from "../nav/ModeToggle";
+import { SettingsRailButton } from "../nav/SettingsButton";
 import { useLaunchLocation } from "../builder/useLaunchLocation";
 import type { WorkflowSummary } from "../types/api";
 import {
@@ -609,6 +610,7 @@ export function MainMonitorPage({
         <LeftRail
           items={appRailItems()}
           active={view}
+          footer={<SettingsRailButton />}
         />
         <LeftPanel
           header={

@@ -39,6 +39,10 @@ type WorkflowSummary struct {
 	Description string            `json:"description,omitempty"`
 	Inputs      map[string]string `json:"inputs"`
 	Outputs     map[string]string `json:"outputs"`
+	// HasDraft marks unsaved composer changes; DraftOnly marks a
+	// workflow that exists only as a draft (never saved).
+	HasDraft  bool `json:"has_draft,omitempty"`
+	DraftOnly bool `json:"draft_only,omitempty"`
 }
 
 type SchemaSpec struct {

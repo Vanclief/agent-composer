@@ -15,8 +15,10 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import {
+  discardWorkflowDraft,
   fetchWorkflowSpecs,
   fetchWorkflows,
+  saveWorkflowDraft,
   updateWorkflowNode,
 } from "../api";
 import { parseBlueprintYAML } from "../api/blueprints";
@@ -24,6 +26,7 @@ import type { WorkflowSummary } from "../types/api";
 import type { ParsedWorkflow } from "../types/workflow";
 import { PlayIcon } from "./Icons";
 import { ModeToggle } from "../nav/ModeToggle";
+import { SettingsRailButton } from "../nav/SettingsButton";
 import {
   ChangeComposer,
   type EditResult,
@@ -48,6 +51,12 @@ export function BuilderPage() {
   const [workflowSpecs, setWorkflowSpecs] = useState<
     Record<string, string>
   >({});
+  // Unsaved composer proposals, keyed by workflow id. A draft is what
+  // the canvas shows until it is saved or discarded.
+  const [workflowDrafts, setWorkflowDrafts] = useState<
+    Record<string, string>
+  >({});
+  const [savingDraft, setSavingDraft] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [workflowSearch, setWorkflowSearch] = useState("");
@@ -74,9 +83,10 @@ export function BuilderPage() {
 
   const loadWorkflows = useCallback(async (signal?: AbortSignal) => {
     const nextWorkflows = await fetchWorkflows(signal);
-    const nextSpecs = await fetchWorkflowSpecs(nextWorkflows, signal);
+    const next = await fetchWorkflowSpecs(nextWorkflows, signal);
     setWorkflows(nextWorkflows);
-    setWorkflowSpecs(nextSpecs);
+    setWorkflowSpecs(next.specs);
+    setWorkflowDrafts(next.drafts);
   }, []);
 
   useEffect(() => {
@@ -109,12 +119,16 @@ export function BuilderPage() {
     (workflow) => workflow.id === activeWorkflowId,
   );
   const activeSpec = workflowSpecs[activeWorkflowId] ?? "";
+  const activeDraft = workflowDrafts[activeWorkflowId] ?? "";
+  // The canvas shows the draft when one exists — that is what Save
+  // would install.
+  const shownSpec = activeDraft || activeSpec;
   const parsed = useMemo(() => {
-    if (!activeWorkflow || !activeSpec) {
+    if (!activeWorkflow || !shownSpec) {
       return EMPTY_WORKFLOW;
     }
-    return parseBlueprintYAML(activeSpec, workflowSpecs);
-  }, [activeSpec, activeWorkflow, workflowSpecs]);
+    return parseBlueprintYAML(shownSpec, workflowSpecs);
+  }, [shownSpec, activeWorkflow, workflowSpecs]);
   const selectedNode =
     parsed.nodes.find((node) => node.id === selectedNodeId) ?? null;
   // A missing workflow (deleted from the registry, stale link) is an
@@ -143,8 +157,8 @@ export function BuilderPage() {
   }, [activeWorkflow]);
 
   function handleEditApplied(result: EditResult) {
-    // The registry changed on disk — re-read it, then follow the edit
-    // to its workflow (a created one, or a renamed target).
+    // The proposal landed as a draft — re-read, then follow it to its
+    // workflow (a created one shows up as draft-only in the list).
     void loadWorkflows().then(() => {
       if (result.workflow_id && result.workflow_id !== activeWorkflowId) {
         navigate(
@@ -152,6 +166,54 @@ export function BuilderPage() {
         );
       }
     });
+  }
+
+  async function saveDraft() {
+    if (!activeDraft || savingDraft) {
+      return;
+    }
+    setSavingDraft(true);
+    setError("");
+    try {
+      const response = await saveWorkflowDraft(activeWorkflowId);
+      setWorkflowSpecs((current) => ({
+        ...current,
+        [activeWorkflowId]: response.spec,
+      }));
+      setWorkflowDrafts((current) => {
+        const { [activeWorkflowId]: _saved, ...rest } = current;
+        return rest;
+      });
+      // A first save turns a draft-only workflow into a real one.
+      const nextWorkflows = await fetchWorkflows();
+      setWorkflows(nextWorkflows);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
+  async function discardDraft() {
+    if (!activeDraft || savingDraft) {
+      return;
+    }
+    setError("");
+    try {
+      await discardWorkflowDraft(activeWorkflowId);
+      setWorkflowDrafts((current) => {
+        const { [activeWorkflowId]: _dropped, ...rest } = current;
+        return rest;
+      });
+      if (!activeSpec) {
+        // A discarded draft-only workflow is gone entirely.
+        const nextWorkflows = await fetchWorkflows();
+        setWorkflows(nextWorkflows);
+        navigate("/build");
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    }
   }
 
   async function saveNodeConfig(
@@ -209,7 +271,14 @@ export function BuilderPage() {
           <button
             type="button"
             className="builder-run-button"
-            disabled={!activeWorkflow || starting}
+            disabled={
+              !activeWorkflow || starting || !activeSpec
+            }
+            title={
+              activeWorkflow && !activeSpec
+                ? "Save the draft first — runs always execute the saved version"
+                : undefined
+            }
             onClick={() => setShowRun(true)}
           >
             <PlayIcon /> {starting ? "Starting…" : "Run workflow"}
@@ -217,7 +286,11 @@ export function BuilderPage() {
         }
       />
 
-      <LeftRail items={appRailItems()} active="workflows" />
+      <LeftRail
+        items={appRailItems()}
+        active="workflows"
+        footer={<SettingsRailButton />}
+      />
 
       <LeftPanel
         className="builder-drawer"
@@ -273,7 +346,15 @@ export function BuilderPage() {
                   )
                 }
               >
-                <b>{workflow.name || workflow.id}</b>
+                <b>
+                  {workflow.name || workflow.id}
+                  {(workflow.has_draft ||
+                    workflowDrafts[workflow.id]) && (
+                    <i className="builder-workflow-list__draft">
+                      draft
+                    </i>
+                  )}
+                </b>
                 {workflow.description && (
                   <small>{workflow.description}</small>
                 )}
@@ -312,6 +393,31 @@ export function BuilderPage() {
               ? "Select a valid workflow definition to render it here."
               : "Pick a workflow on the left, or describe a new one below."
         }
+        topOverlay={
+          activeDraft && (
+            <div className="canvas-head">
+              <div className="canvas-head__title builder-draft-bar">
+                <h2>Draft — not saved</h2>
+                <button
+                  type="button"
+                  className="builder-run-button"
+                  disabled={savingDraft}
+                  onClick={() => void saveDraft()}
+                >
+                  {savingDraft ? "Saving…" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  className="builder-ghost-button"
+                  disabled={savingDraft}
+                  onClick={() => void discardDraft()}
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          )
+        }
         bottomOverlay={
           <ChangeComposer
             key={activeWorkflowId}
@@ -322,9 +428,14 @@ export function BuilderPage() {
       />
 
       <RightPanel>
+        {/* Node edits write to the saved file — while a draft is on
+            screen they would edit something you are not looking at,
+            so the inspector goes read-only until Save or Discard. */}
         <NodeConfigPanel
           node={selectedNode}
-          onSave={activeWorkflow ? saveNodeConfig : undefined}
+          onSave={
+            activeWorkflow && !activeDraft ? saveNodeConfig : undefined
+          }
         />
       </RightPanel>
 

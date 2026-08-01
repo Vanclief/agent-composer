@@ -17,10 +17,13 @@ export function LeftRail({
   items,
   active,
   onSelect,
+  footer,
 }: {
   items: RailItem[];
   active: string;
   onSelect?: (key: string) => void;
+  /** Pinned to the bottom of the rail (settings). */
+  footer?: ReactNode;
 }) {
   return (
     <nav className="left-rail" aria-label="Panel" data-component="LeftRail">
@@ -56,6 +59,7 @@ export function LeftRail({
           </button>
         );
       })}
+      {footer && <div className="left-rail__footer">{footer}</div>}
     </nav>
   );
 }

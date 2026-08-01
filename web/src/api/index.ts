@@ -1,5 +1,7 @@
 import type {
   AppConfig,
+  AppSettings,
+  ComposeResponse,
   HarnessListResponse,
   Conversation,
   ConversationListResponse,
@@ -19,6 +21,22 @@ import { deleteJSON, fetchJSON, postJSON, putJSON } from "./client";
 
 export function fetchConfig(signal?: AbortSignal) {
   return fetchJSON<AppConfig>("/api/config", undefined, signal);
+}
+
+export function fetchSettings(signal?: AbortSignal) {
+  return fetchJSON<AppSettings>("/api/settings", undefined, signal);
+}
+
+export function updateSettings(settings: AppSettings) {
+  return putJSON<AppSettings>("/api/settings", settings);
+}
+
+/** One composer conversation — resolves when the edit has landed. */
+export function composeWorkflow(workflowId: string, request: string) {
+  return postJSON<ComposeResponse>("/api/workflows/compose", {
+    workflow_id: workflowId,
+    request,
+  });
 }
 
 export async function fetchWorkflows(
@@ -41,9 +59,10 @@ export async function fetchWorkflowSpec(
     undefined,
     signal,
   );
-  return body?.spec ?? "";
+  return { spec: body?.spec ?? "", draft: body?.draft ?? "" };
 }
 
+/** Saved specs plus any unsaved drafts, keyed by workflow id. */
 export async function fetchWorkflowSpecs(
   workflows: WorkflowSummary[],
   signal?: AbortSignal,
@@ -51,15 +70,38 @@ export async function fetchWorkflowSpecs(
   const entries = await Promise.all(
     workflows.map(async (workflow) => {
       try {
-        const spec = await fetchWorkflowSpec(workflow.id, signal);
-        return [workflow.id, spec] as const;
+        const body = await fetchWorkflowSpec(workflow.id, signal);
+        return [workflow.id, body] as const;
       } catch {
         return null;
       }
     }),
   );
-  return Object.fromEntries(
-    entries.filter((entry): entry is readonly [string, string] => entry !== null),
+  const specs: Record<string, string> = {};
+  const drafts: Record<string, string> = {};
+  for (const entry of entries) {
+    if (!entry) {
+      continue;
+    }
+    specs[entry[0]] = entry[1].spec;
+    if (entry[1].draft) {
+      drafts[entry[0]] = entry[1].draft;
+    }
+  }
+  return { specs, drafts };
+}
+
+/** Promote a draft: bump the version and replace the saved file. */
+export function saveWorkflowDraft(workflowId: string) {
+  return postJSON<{ workflow_id: string; version: string; spec: string }>(
+    `/api/workflows/${encodeURIComponent(workflowId)}/save`,
+    {},
+  );
+}
+
+export function discardWorkflowDraft(workflowId: string) {
+  return deleteJSON<{ workflow_id: string; deleted: boolean }>(
+    `/api/workflows/${encodeURIComponent(workflowId)}/draft`,
   );
 }
 

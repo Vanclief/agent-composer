@@ -10,6 +10,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/filesystem"
 	"github.com/vanclief/agent-composer/core/resources/harnessinfo"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
+	settingsapi "github.com/vanclief/agent-composer/core/resources/settings"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
 	workflowconversations "github.com/vanclief/agent-composer/core/resources/workflow/conversations"
 	workflowexecutions "github.com/vanclief/agent-composer/core/resources/workflow/executions"
@@ -29,6 +30,7 @@ type Server struct {
 	WorkflowAPI   *workflowapi.API
 	FilesystemAPI *filesystem.API
 	HarnessesAPI  *harnessinfo.API
+	SettingsAPI   *settingsapi.API
 }
 
 func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API) *Server {
@@ -46,6 +48,7 @@ func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.A
 		WorkflowAPI:   workflowAPI,
 		FilesystemAPI: filesystem.NewAPI(),
 		HarnessesAPI:  harnessinfo.NewAPI(),
+		SettingsAPI:   settingsapi.NewAPI(),
 	}
 }
 
@@ -90,6 +93,22 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.WorkflowAPI.Get(request.GetContext(), nil, body)
 	case *workflowapi.UpdateNodeRequest:
 		return s.WorkflowAPI.UpdateNode(request.GetContext(), nil, body)
+	case *workflowapi.ComposeRequest:
+		// Composer conversations outlive the default request timeout.
+		ctx, cancel := context.WithTimeout(
+			s.workflowExecutionStartContext(),
+			10*time.Minute,
+		)
+		defer cancel()
+		return s.WorkflowAPI.Compose(ctx, nil, body)
+	case *workflowapi.SaveDraftRequest:
+		return s.WorkflowAPI.SaveDraft(request.GetContext(), nil, body)
+	case *workflowapi.DeleteDraftRequest:
+		return s.WorkflowAPI.DeleteDraft(request.GetContext(), nil, body)
+	case *settingsapi.GetRequest:
+		return s.SettingsAPI.Get(request.GetContext(), nil, body)
+	case *settingsapi.UpdateRequest:
+		return s.SettingsAPI.Update(request.GetContext(), nil, body)
 	case *workflowexecutions.CreateRequest:
 		return s.WorkflowAPI.Executions.Create(s.workflowExecutionStartContext(), nil, body)
 	case *workflowexecutions.ListRequest:
