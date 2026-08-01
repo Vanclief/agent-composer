@@ -231,7 +231,11 @@ export function WorkflowNode({
                 ▶
               </span>
               {node.groupLabel}
-              {node.childCount ? ` (${node.childCount} nodes)` : ""}
+              {node.childCount
+                ? ` (${node.childCount} node${
+                    node.childCount === 1 ? "" : "s"
+                  })`
+                : ""}
             </button>
           )}
           {preview !== null && (

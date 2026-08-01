@@ -125,6 +125,35 @@ function referencedWorkflow(
   return null;
 }
 
+/**
+ * Local nodes a loop or conditional executes. They are defined in the
+ * same file but never instantiated in the flow, so without this the
+ * canvas would hide what actually runs inside the loop.
+ */
+function localTargets(
+  node: BlueprintNode,
+  nodeSpecs: Record<string, BlueprintNode>,
+) {
+  if (node.kind !== "loop" && node.kind !== "conditional") {
+    return [];
+  }
+  const names = [node.executes, node.when_true, node.when_false];
+  const seen = new Set<string>();
+  const targets: { name: string; spec: BlueprintNode }[] = [];
+  for (const name of names) {
+    if (!name || seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    const spec = nodeSpecs[name];
+    // Workflow targets expand as composed sub-workflows instead.
+    if (spec && spec.kind !== "workflow") {
+      targets.push({ name, spec });
+    }
+  }
+  return targets;
+}
+
 /** The blueprint's workflow.version, or "" when absent/unparsable. */
 export function blueprintVersion(spec: string): string {
   const version = readBlueprint(spec)?.workflow?.version;
@@ -178,6 +207,7 @@ export function parseBlueprintYAML(
     nodeSpecs: Record<string, BlueprintNode>,
     prefix: string,
     parentGroupId: string | null,
+    foreign: boolean,
   ) {
     for (const instanceId of Object.keys(instances ?? {})) {
       const instance = instances?.[instanceId];
@@ -252,14 +282,88 @@ export function parseBlueprintYAML(
           parentGroup: parentGroupId,
           isGroup: true,
           groupLabel: workflowId,
+          foreign,
         });
 
+        // Everything inside a composed workflow belongs to that
+        // workflow's file.
         addInstanceNodes(
           subInstances,
           subNodeSpecs,
           fullId,
           fullId,
+          true,
         );
+        addInputEdges(instance.inputs, prefix, fullId);
+        continue;
+      }
+
+      const targets = localTargets(nodeSpec, nodeSpecs);
+      if (targets.length > 0) {
+        const body = blueprintBody(nodeSpec);
+        if (nodeSpec.over) {
+          body.push({ k: "over", v: nodeSpec.over, mono: true });
+        }
+        if (nodeSpec.max_iterations) {
+          body.push({
+            k: "max_iter",
+            v: String(nodeSpec.max_iterations),
+            mono: true,
+          });
+        }
+        const targetNames = targets
+          .map((target) => target.name)
+          .join(" / ");
+        const sub = [nodeSpec.kind, nodeSpec.operation, targetNames]
+          .filter(Boolean)
+          .join(" · ");
+
+        nodes.push({
+          id: fullId,
+          kind: mapKind(nodeSpec.kind),
+          name: instance.node,
+          sub: sub || mapKind(nodeSpec.kind),
+          x: 0,
+          y: 0,
+          config: {
+            kind: nodeSpec.kind,
+            operation: nodeSpec.operation ?? "",
+          },
+          inputs: blueprintPorts(nodeSpec.inputs),
+          outputs: blueprintPorts(nodeSpec.outputs),
+          body,
+          last: {},
+          parentGroup: parentGroupId,
+          isGroup: true,
+          groupLabel: targetNames,
+          foreign,
+          defaultExpanded: true,
+        });
+
+        for (const { name, spec } of targets) {
+          nodes.push({
+            id: `${fullId}.${name}`,
+            kind: mapKind(spec.kind),
+            name,
+            sub: spec.kind ?? mapKind(spec.kind),
+            x: 0,
+            y: 0,
+            config: {
+              model: spec.config?.harness?.model ?? "",
+              instruction: spec.config?.instruction ?? "",
+              harnessId: spec.config?.harness?.id ?? "",
+              kind: spec.kind ?? "",
+              operation: spec.operation ?? "",
+            },
+            inputs: blueprintPorts(spec.inputs),
+            outputs: blueprintPorts(spec.outputs),
+            body: blueprintBody(spec),
+            last: {},
+            parentGroup: fullId,
+            foreign,
+          });
+        }
+
         addInputEdges(instance.inputs, prefix, fullId);
         continue;
       }
@@ -287,13 +391,14 @@ export function parseBlueprintYAML(
         body: blueprintBody(nodeSpec),
         last: {},
         parentGroup: parentGroupId,
+        foreign,
       });
 
       addInputEdges(instance.inputs, prefix, fullId);
     }
   }
 
-  addInstanceNodes(rootInstances, rootNodeSpecs, "", null);
+  addInstanceNodes(rootInstances, rootNodeSpecs, "", null, false);
 
   for (const node of nodes) {
     if (node.isGroup) {

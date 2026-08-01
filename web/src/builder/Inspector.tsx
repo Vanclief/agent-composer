@@ -347,13 +347,14 @@ function Config({
   const config = node.config;
   if (node.kind === "llm") {
     // Nodes inside a composed sub-workflow belong to that workflow's
-    // YAML; editing them here would target the wrong file.
-    if (onSave && !node.parentGroup) {
+    // YAML; editing them here would target the wrong file. Loop and
+    // conditional targets live in this file, so they stay editable.
+    if (onSave && !node.foreign) {
       return <EditableLLMConfig node={node} onSave={onSave} />;
     }
     return (
       <div>
-        {onSave && node.parentGroup && (
+        {onSave && node.foreign && (
           <div className="builder-config-note">
             Defined in a composed workflow — open that workflow to
             edit it.

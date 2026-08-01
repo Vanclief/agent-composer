@@ -184,7 +184,15 @@ export function WorkflowCanvas({
     const laidOut = layoutWorkflow(parsed);
     setFlowNodes(toFlowNodes(laidOut.nodes, readOnly));
     setCanvasEdges(laidOut.edges);
-    setExpandedGroups(new Set());
+    // Loop/conditional targets start open — they are the workflow's
+    // actual work; composed sub-workflows start collapsed.
+    setExpandedGroups(
+      new Set(
+        laidOut.nodes
+          .filter((node) => node.isGroup && node.defaultExpanded)
+          .map((node) => node.id),
+      ),
+    );
     // Selection is the parent's (often the URL's); a stale id simply
     // matches nothing, so there is nothing to clear here.
   }, [parsed, readOnly]);
