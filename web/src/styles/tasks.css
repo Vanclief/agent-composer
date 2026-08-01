@@ -1071,6 +1071,18 @@
   white-space: nowrap;
 }
 
+/* Blueprint version beside the title — the run's or the file's. */
+.canvas-head__version {
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-3);
+  padding: 1px 8px;
+  font-size: 10.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Jump from a run to editing its workflow. */
 .canvas-head__edit {
   flex: none;

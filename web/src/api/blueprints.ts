@@ -125,6 +125,12 @@ function referencedWorkflow(
   return null;
 }
 
+/** The blueprint's workflow.version, or "" when absent/unparsable. */
+export function blueprintVersion(spec: string): string {
+  const version = readBlueprint(spec)?.workflow?.version;
+  return version == null ? "" : String(version);
+}
+
 export function parseBlueprintYAML(
   yamlSpec: string,
   allSpecs: Record<string, string> = {},

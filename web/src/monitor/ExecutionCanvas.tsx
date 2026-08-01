@@ -339,6 +339,11 @@ export function ExecutionCanvas({
                     <h2>
                       {activeWorkflow.name || activeWorkflow.id}
                     </h2>
+                    {execution?.workflow_version && (
+                      <span className="canvas-head__version">
+                        v{execution.workflow_version}
+                      </span>
+                    )}
                     {currentRun && (
                       <StatusPill
                         status={currentRun.status}

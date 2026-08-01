@@ -21,16 +21,19 @@ import {
   saveWorkflowDraft,
   updateWorkflowNode,
 } from "../api";
-import { parseBlueprintYAML } from "../api/blueprints";
+import {
+  blueprintVersion,
+  parseBlueprintYAML,
+} from "../api/blueprints";
 import type { WorkflowSummary } from "../types/api";
 import type { ParsedWorkflow } from "../types/workflow";
-import { PlayIcon } from "./Icons";
+import { ChatIcon, PlayIcon } from "./Icons";
 import { ModeToggle } from "../nav/ModeToggle";
 import { SettingsRailButton } from "../nav/SettingsButton";
 import {
-  ChangeComposer,
+  ComposerPanel,
   type EditResult,
-} from "./ChangeComposer";
+} from "./ComposerPanel";
 import { NodeConfigPanel } from "./Inspector";
 import { WorkflowCanvas } from "./WorkflowCanvas";
 import { RunInputModal } from "./RunInputModal";
@@ -78,6 +81,16 @@ export function BuilderPage() {
   };
   const [showRun, setShowRun] = useState(false);
   const [starting, setStarting] = useState(false);
+  // The Composer panel — open state sticks across visits.
+  const [composerOpen, setComposerOpen] = useState(
+    () => localStorage.getItem("agc.composer.open") !== "0",
+  );
+  function toggleComposer() {
+    setComposerOpen((open) => {
+      localStorage.setItem("agc.composer.open", open ? "0" : "1");
+      return !open;
+    });
+  }
   const { shellRoot, worktree, locationSlot } =
     useLaunchLocation(starting);
 
@@ -129,6 +142,10 @@ export function BuilderPage() {
     }
     return parseBlueprintYAML(shownSpec, workflowSpecs);
   }, [shownSpec, activeWorkflow, workflowSpecs]);
+  const shownVersion = useMemo(
+    () => (shownSpec ? blueprintVersion(shownSpec) : ""),
+    [shownSpec],
+  );
   const selectedNode =
     parsed.nodes.find((node) => node.id === selectedNodeId) ?? null;
   // A missing workflow (deleted from the registry, stale link) is an
@@ -261,28 +278,52 @@ export function BuilderPage() {
 
   return (
     <div
-      className="builder-app builder-app--build has-rail"
+      className={[
+        "builder-app builder-app--build has-rail",
+        composerOpen ? "builder-app--composer-open" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       data-component="BuilderPage"
     >
       <TopBar
         title={activeWorkflow?.name || activeWorkflowId || "No workflow"}
         mode={<ModeToggle mode="edit" />}
         actions={
-          <button
-            type="button"
-            className="builder-run-button"
-            disabled={
-              !activeWorkflow || starting || !activeSpec
-            }
-            title={
-              activeWorkflow && !activeSpec
-                ? "Save the draft first — runs always execute the saved version"
-                : undefined
-            }
-            onClick={() => setShowRun(true)}
-          >
-            <PlayIcon /> {starting ? "Starting…" : "Run workflow"}
-          </button>
+          <>
+            <button
+              type="button"
+              className="builder-run-button"
+              disabled={
+                !activeWorkflow || starting || !activeSpec
+              }
+              title={
+                activeWorkflow && !activeSpec
+                  ? "Save the draft first — runs always execute the saved version"
+                  : undefined
+              }
+              onClick={() => setShowRun(true)}
+            >
+              <PlayIcon /> {starting ? "Starting…" : "Run workflow"}
+            </button>
+            <button
+              type="button"
+              className={[
+                "builder-ghost-button",
+                composerOpen ? "active" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              title={
+                composerOpen
+                  ? "Close the composer"
+                  : "Talk to the composer agent"
+              }
+              onClick={toggleComposer}
+            >
+              <ChatIcon /> Composer
+            </button>
+          </>
         }
       />
 
@@ -394,36 +435,39 @@ export function BuilderPage() {
               : "Pick a workflow on the left, or describe a new one below."
         }
         topOverlay={
-          activeDraft && (
+          activeWorkflow && (
             <div className="canvas-head">
-              <div className="canvas-head__title builder-draft-bar">
-                <h2>Draft — not saved</h2>
-                <button
-                  type="button"
-                  className="builder-run-button"
-                  disabled={savingDraft}
-                  onClick={() => void saveDraft()}
-                >
-                  {savingDraft ? "Saving…" : "Save"}
-                </button>
-                <button
-                  type="button"
-                  className="builder-ghost-button"
-                  disabled={savingDraft}
-                  onClick={() => void discardDraft()}
-                >
-                  Discard
-                </button>
+              <div className="canvas-head__title">
+                <h2>{activeWorkflow.name || activeWorkflow.id}</h2>
+                {shownVersion && (
+                  <span className="canvas-head__version">
+                    v{shownVersion}
+                  </span>
+                )}
               </div>
+              {activeDraft && (
+                <div className="canvas-head__title builder-draft-bar">
+                  <h2>Draft — not saved</h2>
+                  <button
+                    type="button"
+                    className="builder-run-button"
+                    disabled={savingDraft}
+                    onClick={() => void saveDraft()}
+                  >
+                    {savingDraft ? "Saving…" : "Save"}
+                  </button>
+                  <button
+                    type="button"
+                    className="builder-ghost-button"
+                    disabled={savingDraft}
+                    onClick={() => void discardDraft()}
+                  >
+                    Discard
+                  </button>
+                </div>
+              )}
             </div>
           )
-        }
-        bottomOverlay={
-          <ChangeComposer
-            key={activeWorkflowId}
-            workflowId={activeWorkflow ? activeWorkflowId : ""}
-            onApplied={handleEditApplied}
-          />
         }
       />
 
@@ -438,6 +482,14 @@ export function BuilderPage() {
           }
         />
       </RightPanel>
+
+      {composerOpen && (
+        <ComposerPanel
+          workflowId={activeWorkflow ? activeWorkflowId : ""}
+          onApplied={handleEditApplied}
+          onClose={toggleComposer}
+        />
+      )}
 
       {showRun && activeWorkflow && (
         <RunInputModal
