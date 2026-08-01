@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/uptrace/bun"
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/resources/workflow/conversations"
 	"github.com/vanclief/agent-composer/core/resources/workflow/executions"
@@ -20,6 +21,7 @@ type API struct {
 	Conversations  *conversations.API
 	Worktrees      *worktrees.API
 	rt             *runtime.Runtime
+	db             bun.IDB
 }
 
 func NewAPI(ctrl *controller.Controller, rt *runtime.Runtime) *API {
@@ -39,6 +41,7 @@ func NewAPI(ctrl *controller.Controller, rt *runtime.Runtime) *API {
 		Conversations:  conversationsAPI,
 		Worktrees:      worktreesAPI,
 		rt:             rt,
+		db:             ctrl.DB,
 	}
 }
 

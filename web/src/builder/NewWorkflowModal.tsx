@@ -24,10 +24,12 @@ export function NewWorkflowModal({
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  // The id mirrors the name until it is edited by hand.
+  const [customId, setCustomId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
 
-  const workflowId = previewId(name);
+  const workflowId = customId ?? previewId(name);
 
   async function create() {
     if (!workflowId || creating) {
@@ -39,6 +41,7 @@ export function NewWorkflowModal({
       const response = await createWorkflow(
         name.trim(),
         description.trim(),
+        workflowId,
       );
       onCreated(response.workflow_id);
     } catch (caught) {
@@ -86,11 +89,20 @@ export function NewWorkflowModal({
           value={name}
           onChange={(event) => setName(event.target.value)}
         />
-        {workflowId && (
-          <small className="task-picker__hint mono">
-            id: {workflowId}
-          </small>
-        )}
+      </div>
+      <div className="builder-field-row">
+        <label htmlFor="new-workflow-id">Id</label>
+        <input
+          id="new-workflow-id"
+          className="builder-input mono"
+          placeholder="derived from the name"
+          value={workflowId}
+          onChange={(event) => setCustomId(event.target.value)}
+        />
+        <small className="task-picker__hint">
+          The workflow's handle in files, URLs, and the CLI — it can
+          be renamed later.
+        </small>
       </div>
       <div className="builder-field-row">
         <label htmlFor="new-workflow-description">

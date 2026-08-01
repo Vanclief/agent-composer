@@ -32,10 +32,26 @@ export function updateSettings(settings: AppSettings) {
 }
 
 /** Scaffold a new named workflow — it starts life as a draft. */
-export function createWorkflow(name: string, description: string) {
+export function createWorkflow(
+  name: string,
+  description: string,
+  workflowId?: string,
+) {
   return postJSON<{ workflow_id: string; name: string; draft: string }>(
     "/api/workflows",
-    { name, description },
+    { name, description, workflow_id: workflowId ?? "" },
+  );
+}
+
+/** Rename a workflow's id and/or display name. An id change cascades
+ * to the file, draft, versions, run history, and embedding workflows. */
+export function renameWorkflow(
+  workflowId: string,
+  update: { newId?: string; name?: string },
+) {
+  return putJSON<{ workflow_id: string; updated_refs?: string[] }>(
+    `/api/workflows/${encodeURIComponent(workflowId)}`,
+    { new_id: update.newId ?? "", name: update.name ?? "" },
   );
 }
 
@@ -104,6 +120,14 @@ export function saveWorkflowDraft(workflowId: string) {
   return postJSON<{ workflow_id: string; version: string; spec: string }>(
     `/api/workflows/${encodeURIComponent(workflowId)}/save`,
     {},
+  );
+}
+
+/** Remove a workflow from the library. Run history and the version
+ * archive stay — deleting never rewrites the past. */
+export function deleteWorkflow(workflowId: string) {
+  return deleteJSON<{ workflow_id: string; deleted: boolean }>(
+    `/api/workflows/${encodeURIComponent(workflowId)}`,
   );
 }
 

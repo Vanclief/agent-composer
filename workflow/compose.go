@@ -44,7 +44,7 @@ Do this:
 3. Validate it with "agc workflow compile --file <scratch>". Fix and re-compile until it passes, then delete the scratch file.
 4. Return the final blueprint as the yaml field of your result.
 
-Rules: when editing, keep workflow.id unchanged and change only what the request asks for — preserve every unrelated node, prompt, and schema. For a new workflow pick a short kebab-case id that is not already installed. Prefer the fewest nodes that satisfy the request, and reuse one node definition for parallel instances. If the request is impossible or too ambiguous to act on safely, return action unchanged with an empty yaml and explain why in the summary.
+Rules: when editing, keep workflow.id and workflow.uuid unchanged and change only what the request asks for — preserve every unrelated node, prompt, and schema. For a new workflow pick a short kebab-case id that is not already installed. Prefer the fewest nodes that satisfy the request, and reuse one node definition for parallel instances. If the request is impossible or too ambiguous to act on safely, return action unchanged with an empty yaml and explain why in the summary.
 
 Return workflow_id (the final id), action (created for a new id, updated when you changed an existing workflow, unchanged when you propose nothing), yaml (the complete blueprint, or "" when unchanged), and a 1-3 sentence summary.`
 

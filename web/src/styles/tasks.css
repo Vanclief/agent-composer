@@ -1098,6 +1098,20 @@
   color: var(--accent);
 }
 
+/* The same affordance as a button (Rename in the builder). */
+button.canvas-head__edit {
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.canvas-head__edit--danger:hover {
+  color: var(--st-err);
+}
+
 /* Shows which task the workflows list is limited to. */
 /* Floats over the canvas: which task the workflows are scoped to. */
 .monitor-scope {

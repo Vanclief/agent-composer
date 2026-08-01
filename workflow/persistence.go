@@ -63,6 +63,7 @@ func (r *DBRecorder) StartWorkflow(ctx context.Context, snapshot *Snapshot, inpu
 	record := &executionmodels.WorkflowExecution{
 		WorkflowID:       snapshot.WorkflowID,
 		WorkflowVersion:  snapshot.WorkflowVersion,
+		WorkflowUUID:     parseWorkflowUUID(snapshot.WorkflowUUID),
 		WorkflowSnapshot: snapshotJSON,
 		InputSnapshot:    cloneMap(input),
 		Status:           executionmodels.WorkflowExecutionStatusRunning,
@@ -190,6 +191,16 @@ func (r *DBRecorder) FinishConversation(ctx context.Context, conversation *agent
 	}
 
 	return nil
+}
+
+// parseWorkflowUUID maps the snapshot's uuid string to the DB column;
+// legacy blueprints without one record NULL.
+func parseWorkflowUUID(value string) uuid.UUID {
+	parsed, err := uuid.Parse(value)
+	if err != nil {
+		return uuid.Nil
+	}
+	return parsed
 }
 
 func cloneMap(src map[string]any) map[string]any {

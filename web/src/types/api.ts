@@ -30,6 +30,8 @@ export interface ComposeResponse {
 
 export interface WorkflowSummary {
   id: string;
+  /** Permanent identity — the id is a renameable slug. */
+  uuid?: string;
   name: string;
   description?: string;
   /** Unsaved composer changes exist. */
@@ -144,6 +146,8 @@ export interface WorkflowSnapshot {
 export interface WorkflowExecution {
   id: string;
   workflow_id: string;
+  /** Permanent workflow identity; absent on pre-uuid history. */
+  workflow_uuid?: string;
   workflow_version: string;
   workflow_snapshot: WorkflowSnapshot | string;
   input_snapshot?: JsonObject;

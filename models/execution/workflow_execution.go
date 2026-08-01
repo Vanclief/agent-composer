@@ -24,7 +24,10 @@ type WorkflowExecution struct {
 
 	ID               uuid.UUID               `bun:",pk,type:uuid" json:"id"`
 	WorkflowID       string                  `json:"workflow_id"`
-	WorkflowVersion  string                  `json:"workflow_version"`
+	// WorkflowUUID is the workflow's permanent identity — the slug in
+	// WorkflowID can be renamed, this cannot.
+	WorkflowUUID    uuid.UUID               `bun:"type:uuid,nullzero" json:"workflow_uuid,omitempty"`
+	WorkflowVersion string                  `json:"workflow_version"`
 	WorkflowSnapshot json.RawMessage         `bun:"type:jsonb" json:"workflow_snapshot"`
 	InputSnapshot    map[string]any          `bun:"type:jsonb,nullzero" json:"input_snapshot,omitempty"`
 	OutputSnapshot   map[string]any          `bun:"type:jsonb,nullzero" json:"output_snapshot,omitempty"`

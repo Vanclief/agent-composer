@@ -57,6 +57,13 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	hooksAPI := hooks.NewAPI(ctrl, rt)
 	workflowAPI := workflowapi.NewAPI(ctrl, rt)
 
+	// Best-effort: every installed workflow gets its permanent uuid
+	// and past runs are linked to it. Failure must not stop the app.
+	err = workflowAPI.BackfillWorkflowUUIDs(rootCtx)
+	if err != nil {
+		log.Warn().Err(err).Msg("workflow uuid backfill failed")
+	}
+
 	return &Stack{
 		Controller:  ctrl,
 		Scheduler:   sch,

@@ -11,6 +11,8 @@ import (
 type CreateRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	// WorkflowID overrides the id derived from the name.
+	WorkflowID string `json:"workflow_id"`
 }
 
 func (r *CreateRequest) Validate() error {
@@ -43,6 +45,7 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 	created, err := workflowruntime.CreateDraft(
 		request.Name,
 		request.Description,
+		request.WorkflowID,
 	)
 	if err != nil {
 		return nil, ez.Wrap(op, err)

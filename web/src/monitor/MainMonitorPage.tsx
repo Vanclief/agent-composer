@@ -497,11 +497,19 @@ export function MainMonitorPage({
     view === "workflows"
       ? selectedTask?.executions[0]?.shell_root
       : undefined;
-  // Edit mode opens on the workflow of the run you are looking at.
-  const selectedWorkflowId =
-    view === "workflows"
-      ? selectedTask?.executions[0]?.workflow_id
-      : undefined;
+  // Edit mode opens on the workflow of the run you are looking at —
+  // resolved through the library by permanent uuid (slug only for
+  // pre-uuid history), so deleted workflows offer nothing to edit and
+  // a recycled slug never points at an unrelated workflow.
+  const selectedExecution =
+    view === "workflows" ? selectedTask?.executions[0] : undefined;
+  const selectedWorkflowId = selectedExecution
+    ? workflows.find((workflow) =>
+        selectedExecution.workflow_uuid && workflow.uuid
+          ? workflow.uuid === selectedExecution.workflow_uuid
+          : workflow.id === selectedExecution.workflow_id,
+      )?.id
+    : undefined;
 
   useEffect(() => {
     if (!ready) {

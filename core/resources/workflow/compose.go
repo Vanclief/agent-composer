@@ -9,6 +9,7 @@ import (
 	"github.com/vanclief/agent-composer/runtime/harnesses"
 	workflowruntime "github.com/vanclief/agent-composer/workflow"
 	"github.com/vanclief/ez"
+	yaml "gopkg.in/yaml.v3"
 )
 
 type ComposeRequest struct {
@@ -36,6 +37,23 @@ type ComposeResponse struct {
 	// Draft is the proposed blueprint now waiting for Save — empty
 	// when the composer proposed nothing.
 	Draft string `json:"draft,omitempty"`
+}
+
+// workflowUUIDFromSpec reads workflow.uuid out of blueprint YAML —
+// "" when absent or unparsable.
+func workflowUUIDFromSpec(spec string) string {
+	if strings.TrimSpace(spec) == "" {
+		return ""
+	}
+	var doc struct {
+		Workflow struct {
+			UUID string `yaml:"uuid"`
+		} `yaml:"workflow"`
+	}
+	if err := yaml.Unmarshal([]byte(spec), &doc); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(doc.Workflow.UUID)
 }
 
 // composerAgent resolves which harness/model the composer runs on:
@@ -133,13 +151,26 @@ func (api *API) Compose(ctx context.Context, requester interface{}, request *Com
 		return nil, ez.Wrap(op, err)
 	}
 
-	err = workflowruntime.WriteDraft(proposedID, []byte(result.YAML))
+	// The permanent uuid is not the agent's to manage — carry the
+	// base's identity into the proposal.
+	draftBytes := []byte(result.YAML)
+	if baseUUID := workflowUUIDFromSpec(baseSpec); baseUUID != "" {
+		draftBytes, err = workflowruntime.StampWorkflowUUID(
+			draftBytes,
+			baseUUID,
+		)
+		if err != nil {
+			return nil, ez.Wrap(op, err)
+		}
+	}
+
+	err = workflowruntime.WriteDraft(proposedID, draftBytes)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
 
 	response.WorkflowID = proposedID
-	response.Draft = result.YAML
+	response.Draft = string(draftBytes)
 
 	return response, nil
 }

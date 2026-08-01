@@ -20,7 +20,11 @@ type Blueprint struct {
 }
 
 type WorkflowSpec struct {
-	ID          string                        `yaml:"id"`
+	ID string `yaml:"id"`
+	// UUID is the workflow's permanent identity — the id is a
+	// renameable slug for humans, files, and the CLI; the uuid is what
+	// run history keys on. Stamped automatically, never hand-edited.
+	UUID        string                        `yaml:"uuid,omitempty"`
 	Name        string                        `yaml:"name"`
 	Version     string                        `yaml:"version"`
 	Description string                        `yaml:"description"`
@@ -35,6 +39,7 @@ type WorkflowOutputSpec struct {
 
 type WorkflowSummary struct {
 	ID          string            `json:"id"`
+	UUID        string            `json:"uuid,omitempty"`
 	Name        string            `json:"name"`
 	Description string            `json:"description,omitempty"`
 	Inputs      map[string]string `json:"inputs"`
@@ -89,6 +94,7 @@ type InstanceSpec struct {
 
 type Snapshot struct {
 	WorkflowID      string
+	WorkflowUUID    string
 	WorkflowVersion string
 	Description     string
 	Inputs          map[string]Port

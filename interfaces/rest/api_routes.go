@@ -25,6 +25,8 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	workflows.POST("/compose", h.ComposeWorkflow)
 	workflows.GET("/:id", h.GetWorkflow)
 	workflows.PUT("/:id/nodes/:node", h.UpdateWorkflowNode)
+	workflows.PUT("/:id", h.RenameWorkflow)
+	workflows.DELETE("/:id", h.DeleteWorkflow)
 	workflows.POST("/:id/save", h.SaveWorkflowDraft)
 	workflows.DELETE("/:id/draft", h.DeleteWorkflowDraft)
 

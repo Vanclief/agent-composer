@@ -57,6 +57,32 @@ func (h *Handler) ComposeWorkflow(c echo.Context) error {
 	return h.JSONResponse(c, op, request, body)
 }
 
+func (h *Handler) RenameWorkflow(c echo.Context) error {
+	const op = "Handler.RenameWorkflow"
+
+	request := requests.New(c.Request().Header, c.RealIP())
+
+	body := &workflowapi.RenameRequest{}
+	err := c.Bind(body)
+	if err != nil {
+		return h.ManageError(c, op, request, err)
+	}
+	body.WorkflowID = strings.TrimSpace(c.Param("id"))
+
+	return h.JSONResponse(c, op, request, body)
+}
+
+func (h *Handler) DeleteWorkflow(c echo.Context) error {
+	const op = "Handler.DeleteWorkflow"
+
+	request := requests.New(c.Request().Header, c.RealIP())
+	body := &workflowapi.DeleteRequest{
+		WorkflowID: strings.TrimSpace(c.Param("id")),
+	}
+
+	return h.JSONResponse(c, op, request, body)
+}
+
 func (h *Handler) SaveWorkflowDraft(c echo.Context) error {
 	const op = "Handler.SaveWorkflowDraft"
 

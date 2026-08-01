@@ -35,6 +35,8 @@ import {
   type EditResult,
 } from "./ComposerPanel";
 import { NewWorkflowModal } from "./NewWorkflowModal";
+import { RenameWorkflowModal } from "./RenameWorkflowModal";
+import { DeleteWorkflowModal } from "./DeleteWorkflowModal";
 import { NodeConfigPanel } from "./Inspector";
 import { WorkflowCanvas } from "./WorkflowCanvas";
 import { RunInputModal } from "./RunInputModal";
@@ -82,6 +84,8 @@ export function BuilderPage() {
   };
   const [showRun, setShowRun] = useState(false);
   const [showNewWorkflow, setShowNewWorkflow] = useState(false);
+  const [showRename, setShowRename] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
   const [starting, setStarting] = useState(false);
   // The Composer panel — open state sticks across visits.
   const [composerOpen, setComposerOpen] = useState(
@@ -450,6 +454,22 @@ export function BuilderPage() {
                     v{shownVersion}
                   </span>
                 )}
+                <button
+                  type="button"
+                  className="canvas-head__edit"
+                  title="Rename this workflow or its id"
+                  onClick={() => setShowRename(true)}
+                >
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  className="canvas-head__edit canvas-head__edit--danger"
+                  title="Remove from the library — run history stays"
+                  onClick={() => setShowDelete(true)}
+                >
+                  Delete
+                </button>
               </div>
               {activeDraft && (
                 <div className="canvas-head__title builder-draft-bar">
@@ -494,6 +514,36 @@ export function BuilderPage() {
           workflowId={activeWorkflow ? activeWorkflowId : ""}
           onApplied={handleEditApplied}
           onClose={toggleComposer}
+        />
+      )}
+
+      {showDelete && activeWorkflow && (
+        <DeleteWorkflowModal
+          workflowId={activeWorkflowId}
+          name={activeWorkflow.name || ""}
+          onDeleted={() => {
+            setShowDelete(false);
+            void loadWorkflows().then(() => navigate("/build"));
+          }}
+          onClose={() => setShowDelete(false)}
+        />
+      )}
+
+      {showRename && activeWorkflow && (
+        <RenameWorkflowModal
+          workflowId={activeWorkflowId}
+          currentName={activeWorkflow.name || ""}
+          onRenamed={(renamedId) => {
+            setShowRename(false);
+            void loadWorkflows().then(() => {
+              if (renamedId !== activeWorkflowId) {
+                navigate(
+                  `/workflow/${encodeURIComponent(renamedId)}/build`,
+                );
+              }
+            });
+          }}
+          onClose={() => setShowRename(false)}
         />
       )}
 

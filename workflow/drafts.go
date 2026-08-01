@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/vanclief/ez"
 	yaml "gopkg.in/yaml.v3"
 )
@@ -125,9 +126,9 @@ type CreatedDraft struct {
 
 // CreateDraft scaffolds a new named workflow as a draft: just the
 // workflow header, no nodes — the composer and inspector fill in the
-// rest. The id derives from the name; collisions with installed
-// workflows or existing drafts are rejected.
-func CreateDraft(name, description string) (*CreatedDraft, error) {
+// rest. The id derives from the name unless the caller picks one;
+// collisions with installed workflows or existing drafts are rejected.
+func CreateDraft(name, description, explicitID string) (*CreatedDraft, error) {
 	const op = "workflow.CreateDraft"
 
 	trimmedName := strings.TrimSpace(name)
@@ -135,9 +136,17 @@ func CreateDraft(name, description string) (*CreatedDraft, error) {
 		return nil, ez.New(op, ez.EINVALID, "A workflow name is required", nil)
 	}
 
-	workflowID := slugifyWorkflowID(trimmedName)
+	workflowID := strings.TrimSpace(explicitID)
 	if workflowID == "" {
-		return nil, ez.New(op, ez.EINVALID, "The name must contain letters or digits", nil)
+		workflowID = slugifyWorkflowID(trimmedName)
+		if workflowID == "" {
+			return nil, ez.New(op, ez.EINVALID, "The name must contain letters or digits", nil)
+		}
+	} else {
+		err := ValidateWorkflowID(workflowID)
+		if err != nil {
+			return nil, ez.Wrap(op, err)
+		}
 	}
 
 	_, err := loadRegistryBlueprintEntryByWorkflowID(workflowID)
@@ -159,12 +168,14 @@ func CreateDraft(name, description string) (*CreatedDraft, error) {
 	var scaffold struct {
 		Workflow struct {
 			ID          string `yaml:"id"`
+			UUID        string `yaml:"uuid"`
 			Name        string `yaml:"name"`
 			Version     string `yaml:"version"`
 			Description string `yaml:"description,omitempty"`
 		} `yaml:"workflow"`
 	}
 	scaffold.Workflow.ID = workflowID
+	scaffold.Workflow.UUID = uuid.NewString()
 	scaffold.Workflow.Name = trimmedName
 	scaffold.Workflow.Version = "1"
 	scaffold.Workflow.Description = strings.TrimSpace(description)
@@ -259,10 +270,11 @@ func nextVersion(currentVersion string, installed bool) string {
 	return strconv.Itoa(parsed + 1)
 }
 
-// setWorkflowVersion rewrites workflow.version in place, preserving
-// the rest of the document byte-for-byte where possible.
-func setWorkflowVersion(raw []byte, version string) ([]byte, error) {
-	const op = "workflow.setWorkflowVersion"
+// stampWorkflowHeader rewrites workflow.version and workflow.uuid in
+// place, preserving the rest of the document byte-for-byte where
+// possible. Empty values leave their field untouched.
+func stampWorkflowHeader(raw []byte, version, workflowUUID string) ([]byte, error) {
+	const op = "workflow.stampWorkflowHeader"
 
 	var doc yaml.Node
 	err := yaml.Unmarshal(raw, &doc)
@@ -278,7 +290,12 @@ func setWorkflowVersion(raw []byte, version string) ([]byte, error) {
 		return nil, ez.New(op, ez.EINVALID, "the draft has no workflow section", nil)
 	}
 
-	setScalarValue(workflowMap, "version", version)
+	if version != "" {
+		setScalarValue(workflowMap, "version", version)
+	}
+	if workflowUUID != "" {
+		setScalarValue(workflowMap, "uuid", workflowUUID)
+	}
 
 	var buffer bytes.Buffer
 	encoder := yaml.NewEncoder(&buffer)
@@ -293,6 +310,13 @@ func setWorkflowVersion(raw []byte, version string) ([]byte, error) {
 	}
 
 	return buffer.Bytes(), nil
+}
+
+// StampWorkflowUUID forces workflow.uuid in a blueprint's bytes —
+// used to carry a workflow's permanent identity into a proposal that
+// dropped or fabricated it.
+func StampWorkflowUUID(raw []byte, workflowUUID string) ([]byte, error) {
+	return stampWorkflowHeader(raw, "", workflowUUID)
 }
 
 // archivePath finds a free file name for the outgoing version.
@@ -377,12 +401,25 @@ func SaveDraft(workflowID string) (*SavedDraft, error) {
 
 	version := nextVersion(currentVersion, installed)
 
+	// The permanent identity: the installed file's uuid always wins —
+	// a draft cannot change it. First installs mint one.
+	workflowUUID := ""
+	if installed {
+		workflowUUID = strings.TrimSpace(entry.Blueprint.Workflow.UUID)
+	}
+	if workflowUUID == "" {
+		workflowUUID = strings.TrimSpace(blueprint.Workflow.UUID)
+	}
+	if workflowUUID == "" {
+		workflowUUID = uuid.NewString()
+	}
+
 	raw, err := os.ReadFile(draftPath)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}
 
-	stamped, err := setWorkflowVersion(raw, version)
+	stamped, err := stampWorkflowHeader(raw, version, workflowUUID)
 	if err != nil {
 		return nil, ez.Wrap(op, err)
 	}

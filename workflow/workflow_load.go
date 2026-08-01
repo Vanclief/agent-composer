@@ -292,6 +292,7 @@ func compileSnapshot(blueprint *Blueprint, resolver *workflowResolver, stack []s
 
 	snapshot := &Snapshot{
 		WorkflowID:      workflowID,
+		WorkflowUUID:    strings.TrimSpace(blueprint.Workflow.UUID),
 		WorkflowVersion: blueprint.Workflow.Version,
 		Description:     strings.TrimSpace(blueprint.Workflow.Description),
 		Inputs:          make(map[string]Port, len(blueprint.Workflow.Inputs)),
@@ -640,6 +641,7 @@ func workflowSummaryFromBlueprint(blueprint *Blueprint) (WorkflowSummary, error)
 
 	return WorkflowSummary{
 		ID:          workflowID,
+		UUID:        strings.TrimSpace(blueprint.Workflow.UUID),
 		Name:        name,
 		Description: strings.TrimSpace(blueprint.Workflow.Description),
 		Inputs:      inputs,
