@@ -97,10 +97,10 @@ function blueprintBody(node: BlueprintNode): CanvasField[] {
       mono: true,
     });
   }
-  if (node.config?.harness?.reasoning_effort) {
+  if (node.kind === "inference") {
     fields.push({
       k: "effort",
-      v: node.config.harness.reasoning_effort,
+      v: node.config?.harness?.reasoning_effort || "medium",
       mono: true,
     });
   }
@@ -377,7 +377,9 @@ export function parseBlueprintYAML(
               instruction: spec.config?.instruction ?? "",
               harnessId: spec.config?.harness?.id ?? "",
               reasoningEffort:
-                spec.config?.harness?.reasoning_effort ?? "",
+                spec.kind === "inference"
+                  ? spec.config?.harness?.reasoning_effort || "medium"
+                  : "",
               kind: spec.kind ?? "",
               operation: spec.operation ?? "",
             },
@@ -410,7 +412,9 @@ export function parseBlueprintYAML(
           instruction: nodeSpec.config?.instruction ?? "",
           harnessId: nodeSpec.config?.harness?.id ?? "",
           reasoningEffort:
-            nodeSpec.config?.harness?.reasoning_effort ?? "",
+            nodeSpec.kind === "inference"
+              ? nodeSpec.config?.harness?.reasoning_effort || "medium"
+              : "",
           kind: nodeSpec.kind ?? "",
           operation: nodeSpec.operation ?? "",
         },

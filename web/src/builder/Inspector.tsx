@@ -341,8 +341,7 @@ function EditableLLMConfig({
           value={effort}
           onChange={(event) => setEffort(event.target.value)}
         >
-          <option value="">default</option>
-          {!REASONING_EFFORTS.includes(effort) && effort !== "" && (
+          {!REASONING_EFFORTS.includes(effort) && (
             <option value={effort}>{effort}</option>
           )}
           {REASONING_EFFORTS.map((level) => (
@@ -431,7 +430,7 @@ function Config({
           <label>Effort</label>
           <input
             className="builder-input mono"
-            value={String(config.reasoningEffort || "default")}
+            value={String(config.reasoningEffort || "medium")}
             readOnly
             title="Configuration is read from workflow YAML"
           />
