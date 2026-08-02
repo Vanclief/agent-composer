@@ -1,5 +1,6 @@
 import {
   BlocksIcon,
+  GaugeIcon,
   StackIcon,
 } from "../builder/Icons";
 import type { RailItem } from "./LeftRail";
@@ -23,6 +24,12 @@ export function appRailItems(): RailItem[] {
       label: "Workflows",
       icon: <BlocksIcon />,
       to: "/workflows",
+    },
+    {
+      key: "benchmark",
+      label: "Benchmark",
+      icon: <GaugeIcon />,
+      disabled: true,
     },
   ];
 }

@@ -185,6 +185,23 @@ export function parseBlueprintYAML(
         continue;
       }
       const parts = binding.split(".");
+      // Top-level workflow_input bindings wire from the synthetic
+      // Inputs node. Inside a composed sub-workflow they refer to
+      // that workflow's own inputs, which the group node carries.
+      if (
+        parts[0] === "workflow_input" &&
+        parts.length >= 2 &&
+        prefix === ""
+      ) {
+        edges.push({
+          id: `e${edgeIndex++}`,
+          from: WORKFLOW_INPUTS_NODE_ID,
+          fromPort: parts.slice(1).join("."),
+          to: targetId,
+          toPort: inputName,
+        });
+        continue;
+      }
       if (parts[0] !== "instance" || parts.length < 3) {
         continue;
       }
@@ -400,6 +417,33 @@ export function parseBlueprintYAML(
 
   addInstanceNodes(rootInstances, rootNodeSpecs, "", null, false);
 
+  // The declared inputs open the graph, mirroring the run view.
+  const declaredInputs = blueprint?.workflow?.inputs ?? {};
+  const inputNames = Object.keys(declaredInputs);
+  if (inputNames.length > 0) {
+    nodes.unshift({
+      id: WORKFLOW_INPUTS_NODE_ID,
+      kind: "input",
+      name: "Inputs",
+      sub: "workflow inputs",
+      x: 0,
+      y: 0,
+      config: {},
+      inputs: [],
+      outputs: inputNames.map((name) => ({
+        id: name,
+        label: name,
+        type: mapPortType(declaredInputs[name]),
+      })),
+      body: inputNames.map((name) => ({
+        k: name,
+        v: declaredInputs[name] || "any",
+        mono: true,
+      })),
+      last: {},
+    });
+  }
+
   // The workflow's declared outputs close the graph — without them
   // the final bindings point at nothing visible.
   const declaredOutputs = blueprint?.workflow?.outputs ?? {};
@@ -456,11 +500,13 @@ export function parseBlueprintYAML(
   };
 }
 
-/** Synthetic node that carries the run's workflow inputs. */
-export const WORKFLOW_INPUTS_NODE_ID = "__workflow_inputs__";
-
-/** Synthetic node that carries the workflow's declared outputs. */
-export const WORKFLOW_OUTPUTS_NODE_ID = "__workflow_outputs__";
+/**
+ * Synthetic node ids — url-friendly since node selection lives in the
+ * path. Hyphenated so they cannot collide with instance ids, which
+ * the DSL keeps snake_case.
+ */
+export const WORKFLOW_INPUTS_NODE_ID = "workflow-inputs";
+export const WORKFLOW_OUTPUTS_NODE_ID = "workflow-outputs";
 
 function previewInputValue(value: unknown): string {
   if (typeof value === "string") {

@@ -7,6 +7,14 @@ import (
 	"github.com/vanclief/ez"
 )
 
+// The canvas reserves these ids for its synthetic Inputs/Outputs
+// nodes (they live in node-selection URLs), so no flow instance may
+// claim them. Keep in sync with web/src/api/blueprints.ts.
+var reservedInstanceIDs = map[string]bool{
+	"workflow-inputs":  true,
+	"workflow-outputs": true,
+}
+
 func compileBlueprint(blueprint *Blueprint, namespace string, resolver *workflowResolver, inputResolver func(string) (Binding, error), stack []string) (*compiledWorkflow, error) {
 	const op = "workflow.compileBlueprint"
 
@@ -25,6 +33,15 @@ func compileBlueprint(blueprint *Blueprint, namespace string, resolver *workflow
 	workflowAliases := make(map[string]map[string]Binding)
 
 	instanceIDs := sortedKeys(blueprint.Flow.Instances)
+
+	// The canvas adds synthetic Inputs/Outputs nodes under these ids —
+	// a real instance shadowing them would corrupt the graph and its
+	// URLs.
+	for _, instanceID := range instanceIDs {
+		if reservedInstanceIDs[instanceID] {
+			return nil, ez.New(op, ez.EINVALID, "instance id "+instanceID+" is reserved for the workflow inputs/outputs nodes", nil)
+		}
+	}
 
 	err = compileWorkflowInstances(blueprint, instanceIDs, namespace, resolver, inputResolver, compiled, workflowAliases, stack)
 	if err != nil {

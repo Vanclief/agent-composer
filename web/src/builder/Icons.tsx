@@ -232,6 +232,27 @@ export function BranchIcon({ size = 14 }: IconProps) {
   );
 }
 
+export function GaugeIcon({ size = 14 }: IconProps) {
+  // A speedometer — benchmarking.
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M2.5 11.5 a5.5 5.5 0 0 1 11 0" />
+      <path d="M8 11.5 L11 7.5" />
+      <path d="M2.5 11.5 H4 M12 11.5 H13.5" />
+    </svg>
+  );
+}
+
 export function BoxArrowInIcon({ size = 14 }: IconProps) {
   // An arrow entering a box — the workflow's inputs.
   return (

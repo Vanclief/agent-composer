@@ -263,3 +263,23 @@ func TestUUIDSurvivesSaveAndRename(t *testing.T) {
 	}
 	_ = home
 }
+
+func TestCompileRejectsReservedInstanceIDs(t *testing.T) {
+	writeRenameFixture(t)
+
+	// "step" -> "workflow-inputs" collides with the canvas's
+	// synthetic node id and must not compile.
+	bad := strings.Replace(
+		renameTargetBlueprint,
+		"    step:",
+		"    workflow-inputs:",
+		1,
+	)
+	if err := WriteDraft("rename_target", []byte(bad)); err != nil {
+		t.Fatal(err)
+	}
+	_, err := SaveDraft("rename_target")
+	if err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("expected a reserved-id compile error, got %v", err)
+	}
+}

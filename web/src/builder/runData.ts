@@ -3,7 +3,10 @@ import type {
   WorkflowExecution,
   WorkflowExecutionStatus,
 } from "../types/api";
-import { WORKFLOW_INPUTS_NODE_ID } from "../api/blueprints";
+import {
+  WORKFLOW_INPUTS_NODE_ID,
+  WORKFLOW_OUTPUTS_NODE_ID,
+} from "../api/blueprints";
 import type { RunDisplayStatus } from "../types/workflow";
 
 export interface RunNodeSnapshot {
@@ -145,12 +148,31 @@ export function buildRunEntry(
     execution.input_snapshot &&
     Object.keys(execution.input_snapshot).length > 0
   ) {
+    // "ok", not "idle" — the inspector hides values of idle nodes,
+    // and inputs are known from the moment the run starts.
     nodeMap[WORKFLOW_INPUTS_NODE_ID] = {
       nodeExecutionId: "",
-      status: "idle",
+      status: "ok",
       ms: 0,
       tokens: 0,
       outputSnapshot: execution.input_snapshot,
+      error: null,
+    };
+  }
+
+  if (
+    execution.output_snapshot &&
+    Object.keys(execution.output_snapshot).length > 0
+  ) {
+    // The Outputs node's ports are inputs — the final values arrive
+    // into it.
+    nodeMap[WORKFLOW_OUTPUTS_NODE_ID] = {
+      nodeExecutionId: "",
+      status: mapStatus(execution.status),
+      ms: 0,
+      tokens: 0,
+      inputSnapshot: execution.output_snapshot,
+      outputSnapshot: execution.output_snapshot,
       error: null,
     };
   }

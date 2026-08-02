@@ -289,6 +289,7 @@ export function BuilderPage() {
       className={[
         "builder-app builder-app--build has-rail",
         composerOpen ? "builder-app--composer-open" : "",
+        selectedNode ? "" : "builder-app--no-inspector",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -501,17 +502,22 @@ export function BuilderPage() {
         }
       />
 
-      <RightPanel>
-        {/* Node edits write to the saved file — while a draft is on
-            screen they would edit something you are not looking at,
-            so the inspector goes read-only until Save or Discard. */}
-        <NodeConfigPanel
-          node={selectedNode}
-          onSave={
-            activeWorkflow && !activeDraft ? saveNodeConfig : undefined
-          }
-        />
-      </RightPanel>
+      {/* The Inspector only exists while a node is selected. Node
+          edits write to the saved file — while a draft is on screen
+          they would edit something you are not looking at, so it goes
+          read-only until Save or Discard. */}
+      {selectedNode && (
+        <RightPanel>
+          <NodeConfigPanel
+            node={selectedNode}
+            onSave={
+              activeWorkflow && !activeDraft
+                ? saveNodeConfig
+                : undefined
+            }
+          />
+        </RightPanel>
+      )}
 
       {composerOpen && (
         <ComposerPanel
