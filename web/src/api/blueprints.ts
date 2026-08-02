@@ -1,6 +1,7 @@
 import { load } from "js-yaml";
 import type {
   SnapshotNode,
+  SnapshotWhileTarget,
   WorkflowExecution,
   WorkflowSnapshot,
 } from "../types/api";
@@ -724,6 +725,93 @@ export function parseSnapshot(
       body,
       last: {},
     });
+
+    // Loop and conditional targets run as children of their instance —
+    // their iterations are recorded under the target's own id, so
+    // without these nodes the running work would be invisible.
+    const targets: (SnapshotNode | SnapshotWhileTarget)[] = [
+      nodeSpec.LoopTarget,
+      nodeSpec.WhileTarget,
+      nodeSpec.TrueTarget,
+      nodeSpec.FalseTarget,
+    ].filter(
+      (target): target is SnapshotNode | SnapshotWhileTarget =>
+        Boolean(target),
+    );
+    if (targets.length > 0) {
+      const parent = nodes[nodes.length - 1];
+      if (parent) {
+        parent.isGroup = true;
+        parent.groupLabel = targets
+          .map((target) => target.NodeName ?? "target")
+          .join(" / ");
+        parent.childCount = targets.length;
+        parent.defaultExpanded = true;
+      }
+      for (const target of targets) {
+        const targetKind =
+          "Kind" in target ? (target.Kind ?? "inference") : "inference";
+        const childId =
+          target.InstanceID ||
+          `${instanceId}__${target.NodeName ?? "target"}`;
+        const childBody: CanvasField[] = [
+          { k: "kind", v: targetKind, mono: true },
+        ];
+        if (target.Model) {
+          childBody.push({ k: "model", v: target.Model, mono: true });
+        }
+        if (target.Harness) {
+          childBody.push({
+            k: "harness",
+            v: target.Harness,
+            mono: true,
+          });
+        }
+        if (targetKind === "inference") {
+          childBody.push({
+            k: "effort",
+            v: target.ReasoningEffort || "medium",
+            mono: true,
+          });
+        }
+        const targetOutputs =
+          "Outputs" in target ? target.Outputs : undefined;
+        nodes.push({
+          id: childId,
+          kind: mapKind(targetKind),
+          name: target.NodeName ?? childId,
+          sub: targetKind,
+          x: 0,
+          y: 0,
+          config: {
+            model: target.Model ?? "",
+            instruction: target.Instruction ?? "",
+            harnessId: target.Harness ?? "",
+            reasoningEffort: target.ReasoningEffort ?? "",
+            outputSchema:
+              targetKind === "inference" && targetOutputs
+                ? JSON.stringify(
+                    Object.fromEntries(
+                      Object.entries(targetOutputs).map(
+                        ([name, port]) => [name, port.Schema ?? {}],
+                      ),
+                    ),
+                    null,
+                    2,
+                  )
+                : "",
+            kind: targetKind,
+            operation:
+              "Operation" in target ? (target.Operation ?? "") : "",
+          },
+          inputs: snapshotPorts(target.Inputs),
+          outputs: snapshotPorts(targetOutputs),
+          body: childBody,
+          last: {},
+          parentGroup: instanceId,
+        });
+      }
+    }
 
     for (const [inputName, binding] of Object.entries(
       nodeSpec.InputBindings ?? {},

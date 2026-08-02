@@ -139,9 +139,37 @@ export function buildRunEntry(
   execution: WorkflowExecution,
   nodeExecutions: NodeExecution[],
 ): RunEntry {
+  // Loop iterations share one node_id (differing by iteration_index),
+  // so a node's entry aggregates: any running iteration keeps the node
+  // running, failures beat successes, durations sum, and the latest
+  // iteration provides the snapshots.
+  const statusRank: Record<RunDisplayStatus, number> = {
+    run: 4,
+    err: 3,
+    warn: 2,
+    ok: 1,
+    idle: 0,
+  };
   const nodeMap: Record<string, RunNodeSnapshot> = {};
   for (const nodeExecution of nodeExecutions) {
-    nodeMap[nodeExecution.node_id] = nodeSnapshotFrom(nodeExecution);
+    const next = nodeSnapshotFrom(nodeExecution);
+    const prior = nodeMap[nodeExecution.node_id];
+    if (!prior) {
+      nodeMap[nodeExecution.node_id] = next;
+      continue;
+    }
+    nodeMap[nodeExecution.node_id] = {
+      ...next,
+      status:
+        statusRank[next.status] >= statusRank[prior.status]
+          ? next.status
+          : prior.status,
+      ms: prior.ms + next.ms,
+      tokens: prior.tokens + next.tokens,
+      error: next.error ?? prior.error,
+      inputSnapshot: next.inputSnapshot ?? prior.inputSnapshot,
+      outputSnapshot: next.outputSnapshot ?? prior.outputSnapshot,
+    };
   }
 
   if (
