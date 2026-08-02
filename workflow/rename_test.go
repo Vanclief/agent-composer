@@ -190,7 +190,8 @@ func TestRenameWorkflowIDRejectsCollision(t *testing.T) {
 func TestSetWorkflowDisplayName(t *testing.T) {
 	home := writeRenameFixture(t)
 
-	err := SetWorkflowDisplayName("rename_target", "Fancy New Name")
+	description := "A fancier description."
+	err := SetWorkflowHeader("rename_target", "Fancy New Name", &description)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,6 +207,9 @@ func TestSetWorkflowDisplayName(t *testing.T) {
 	}
 	if !strings.Contains(string(installed), "id: rename_target") {
 		t.Fatal("the id must not change on a name edit")
+	}
+	if !strings.Contains(string(installed), "A fancier description.") {
+		t.Fatal("the description should be rewritten")
 	}
 }
 

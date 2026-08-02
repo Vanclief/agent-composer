@@ -15,6 +15,9 @@ type RenameRequest struct {
 	NewID string `json:"new_id"`
 	// Name sets the display name; empty keeps the current.
 	Name string `json:"name"`
+	// Description sets the description; nil keeps the current, ""
+	// clears it.
+	Description *string `json:"description,omitempty"`
 }
 
 func (r *RenameRequest) Validate() error {
@@ -23,8 +26,9 @@ func (r *RenameRequest) Validate() error {
 	if strings.TrimSpace(r.WorkflowID) == "" {
 		return ez.New(op, ez.EINVALID, "workflow_id is required", nil)
 	}
-	if strings.TrimSpace(r.NewID) == "" && strings.TrimSpace(r.Name) == "" {
-		return ez.New(op, ez.EINVALID, "Nothing to rename", nil)
+	if strings.TrimSpace(r.NewID) == "" && strings.TrimSpace(r.Name) == "" &&
+		r.Description == nil {
+		return ez.New(op, ez.EINVALID, "Nothing to update", nil)
 	}
 
 	return nil
@@ -37,7 +41,8 @@ type RenameResponse struct {
 	UpdatedRefs []string `json:"updated_refs,omitempty"`
 }
 
-// Rename changes a workflow's id and/or display name. An id change
+// Rename edits a workflow's identity: id, display name, and/or
+// description. An id change
 // cascades: registry file, draft, versions archive, embedding
 // blueprints, and the run history rows that key Monitor's views.
 func (api *API) Rename(ctx context.Context, requester interface{}, request *RenameRequest) (*RenameResponse, error) {
@@ -73,10 +78,11 @@ func (api *API) Rename(ctx context.Context, requester interface{}, request *Rena
 		}
 	}
 
-	if strings.TrimSpace(request.Name) != "" {
-		err = workflowruntime.SetWorkflowDisplayName(
+	if strings.TrimSpace(request.Name) != "" || request.Description != nil {
+		err = workflowruntime.SetWorkflowHeader(
 			effectiveID,
 			request.Name,
+			request.Description,
 		)
 		if err != nil {
 			return nil, ez.Wrap(op, err)

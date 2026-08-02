@@ -58,10 +58,11 @@ func encodeYAMLDoc(doc *yaml.Node) ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-// rewriteWorkflowHeader surgically sets workflow.id and/or
-// workflow.name in a blueprint's bytes. Empty values leave the field
-// unchanged.
-func rewriteWorkflowHeader(raw []byte, id, name string) ([]byte, error) {
+// rewriteWorkflowHeader surgically sets workflow.id, workflow.name,
+// and/or workflow.description in a blueprint's bytes. Empty id/name
+// leave the field unchanged; a nil description does too, while ""
+// removes it.
+func rewriteWorkflowHeader(raw []byte, id, name string, description *string) ([]byte, error) {
 	const op = "workflow.rewriteWorkflowHeader"
 
 	var doc yaml.Node
@@ -83,6 +84,13 @@ func rewriteWorkflowHeader(raw []byte, id, name string) ([]byte, error) {
 	}
 	if name != "" {
 		setScalarValue(workflowMap, "name", name)
+	}
+	if description != nil {
+		if *description == "" {
+			removeMapKey(workflowMap, "description")
+		} else {
+			setScalarValue(workflowMap, "description", *description)
+		}
 	}
 
 	return encodeYAMLDoc(&doc)
@@ -207,7 +215,7 @@ func RenameWorkflowID(oldID, newID string) (*RenameResult, error) {
 		if err != nil {
 			return nil, ez.Wrap(op, err)
 		}
-		renamed, err := rewriteWorkflowHeader(raw, newID, "")
+		renamed, err := rewriteWorkflowHeader(raw, newID, "", nil)
 		if err != nil {
 			return nil, ez.Wrap(op, err)
 		}
@@ -235,7 +243,7 @@ func RenameWorkflowID(oldID, newID string) (*RenameResult, error) {
 
 	// 2. The draft follows.
 	if draft != "" {
-		renamedDraft, err := rewriteWorkflowHeader([]byte(draft), newID, "")
+		renamedDraft, err := rewriteWorkflowHeader([]byte(draft), newID, "", nil)
 		if err != nil {
 			return nil, ez.Wrap(op, err)
 		}
@@ -333,15 +341,17 @@ func RenameWorkflowID(oldID, newID string) (*RenameResult, error) {
 	}, nil
 }
 
-// SetWorkflowDisplayName rewrites workflow.name wherever the workflow
-// lives — the registry file and/or the pending draft.
-func SetWorkflowDisplayName(workflowID, name string) error {
-	const op = "workflow.SetWorkflowDisplayName"
+// SetWorkflowHeader rewrites workflow.name and/or
+// workflow.description wherever the workflow lives — the registry
+// file and/or the pending draft. An empty name is unchanged; a nil
+// description is unchanged, "" clears it.
+func SetWorkflowHeader(workflowID, name string, description *string) error {
+	const op = "workflow.SetWorkflowHeader"
 
 	workflowID = strings.TrimSpace(workflowID)
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return ez.New(op, ez.EINVALID, "A workflow name is required", nil)
+	if name == "" && description == nil {
+		return ez.New(op, ez.EINVALID, "Nothing to update", nil)
 	}
 
 	installed := true
@@ -365,7 +375,7 @@ func SetWorkflowDisplayName(workflowID, name string) error {
 		if err != nil {
 			return ez.Wrap(op, err)
 		}
-		renamed, err := rewriteWorkflowHeader(raw, "", name)
+		renamed, err := rewriteWorkflowHeader(raw, "", name, description)
 		if err != nil {
 			return ez.Wrap(op, err)
 		}
@@ -380,7 +390,7 @@ func SetWorkflowDisplayName(workflowID, name string) error {
 	}
 
 	if draft != "" {
-		renamedDraft, err := rewriteWorkflowHeader([]byte(draft), "", name)
+		renamedDraft, err := rewriteWorkflowHeader([]byte(draft), "", name, description)
 		if err != nil {
 			return ez.Wrap(op, err)
 		}

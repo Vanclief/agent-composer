@@ -1477,6 +1477,22 @@ button.builder-pill:hover {
   font-size: 12px;
 }
 
+/* Resolved output schema — read-only contract preview. */
+.builder-schema-view {
+  max-height: 260px;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--ink-2);
+  padding: 8px 10px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
 /* Plain prose inside a modal (confirmations). */
 .builder-modal__text {
   margin: 0;

@@ -78,6 +78,81 @@ function preferPorts(
   return referenced;
 }
 
+/**
+ * Expands schema_ref indirections so the inspector can show a node's
+ * real output contract. Depth-capped — the compiler is the authority
+ * on cycles; this is a preview.
+ */
+function expandSchema(
+  spec: unknown,
+  schemas: Record<string, unknown>,
+  depth = 0,
+): unknown {
+  if (depth > 12 || !spec || typeof spec !== "object") {
+    return spec;
+  }
+  const record = spec as Record<string, unknown>;
+  if (typeof record.schema_ref === "string") {
+    const target = schemas[record.schema_ref];
+    return target
+      ? expandSchema(target, schemas, depth + 1)
+      : { schema_ref: record.schema_ref };
+  }
+  const expanded: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (key === "properties" && value && typeof value === "object") {
+      expanded[key] = Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).map(
+          ([name, property]) => [
+            name,
+            expandSchema(property, schemas, depth + 1),
+          ],
+        ),
+      );
+    } else if (key === "items") {
+      expanded[key] = expandSchema(value, schemas, depth + 1);
+    } else {
+      expanded[key] = value;
+    }
+  }
+  return expanded;
+}
+
+function resolveTypeRefPreview(
+  typeRef: string,
+  schemas: Record<string, unknown>,
+): unknown {
+  const trimmed = typeRef.trim();
+  if (trimmed && schemas[trimmed]) {
+    return expandSchema(schemas[trimmed], schemas);
+  }
+  return { type: trimmed || "any" };
+}
+
+/** Resolved output schemas of an inference node, keyed by output. */
+function inferenceOutputSchema(
+  node: BlueprintNode,
+  schemas: Record<string, unknown>,
+): string {
+  if (node.kind !== "inference") {
+    return "";
+  }
+  const outputs = Object.entries(node.outputs ?? {});
+  if (outputs.length === 0) {
+    return "";
+  }
+  const resolved = Object.fromEntries(
+    outputs.map(([name, typeRef]) => [
+      name,
+      resolveTypeRefPreview(
+        typeof typeRef === "string" ? typeRef : "any",
+        schemas,
+      ),
+    ]),
+  );
+  return JSON.stringify(resolved, null, 2);
+}
+
 function blueprintBody(node: BlueprintNode): CanvasField[] {
   const fields: CanvasField[] = [];
   if (node.kind) {
@@ -229,6 +304,7 @@ export function parseBlueprintYAML(
   function addInstanceNodes(
     instances: NonNullable<BlueprintDocument["flow"]>["instances"],
     nodeSpecs: Record<string, BlueprintNode>,
+    schemas: Record<string, unknown>,
     prefix: string,
     parentGroupId: string | null,
     foreign: boolean,
@@ -314,6 +390,7 @@ export function parseBlueprintYAML(
         addInstanceNodes(
           subInstances,
           subNodeSpecs,
+          subBlueprint.schemas ?? {},
           fullId,
           fullId,
           true,
@@ -380,6 +457,7 @@ export function parseBlueprintYAML(
                 spec.kind === "inference"
                   ? spec.config?.harness?.reasoning_effort || "medium"
                   : "",
+              outputSchema: inferenceOutputSchema(spec, schemas),
               kind: spec.kind ?? "",
               operation: spec.operation ?? "",
             },
@@ -415,6 +493,7 @@ export function parseBlueprintYAML(
             nodeSpec.kind === "inference"
               ? nodeSpec.config?.harness?.reasoning_effort || "medium"
               : "",
+          outputSchema: inferenceOutputSchema(nodeSpec, schemas),
           kind: nodeSpec.kind ?? "",
           operation: nodeSpec.operation ?? "",
         },
@@ -430,7 +509,14 @@ export function parseBlueprintYAML(
     }
   }
 
-  addInstanceNodes(rootInstances, rootNodeSpecs, "", null, false);
+  addInstanceNodes(
+    rootInstances,
+    rootNodeSpecs,
+    blueprint?.schemas ?? {},
+    "",
+    null,
+    false,
+  );
 
   // The declared inputs open the graph, mirroring the run view.
   const declaredInputs = blueprint?.workflow?.inputs ?? {};
@@ -618,6 +704,18 @@ export function parseSnapshot(
         instruction: nodeSpec.Instruction ?? "",
         harnessId: nodeSpec.Harness ?? "",
         reasoningEffort: nodeSpec.ReasoningEffort ?? "",
+        outputSchema:
+          nodeSpec.Kind === "inference" && nodeSpec.Outputs
+            ? JSON.stringify(
+                Object.fromEntries(
+                  Object.entries(nodeSpec.Outputs).map(
+                    ([name, port]) => [name, port.Schema ?? {}],
+                  ),
+                ),
+                null,
+                2,
+              )
+            : "",
         kind: nodeSpec.Kind ?? "",
         operation: nodeSpec.Operation ?? "",
       },

@@ -43,15 +43,22 @@ export function createWorkflow(
   );
 }
 
-/** Rename a workflow's id and/or display name. An id change cascades
- * to the file, draft, versions, run history, and embedding workflows. */
+/** Edit a workflow's id, name, and/or description. An id change
+ * cascades to the file, draft, versions, run history, and embedding
+ * workflows. */
 export function renameWorkflow(
   workflowId: string,
-  update: { newId?: string; name?: string },
+  update: { newId?: string; name?: string; description?: string },
 ) {
   return putJSON<{ workflow_id: string; updated_refs?: string[] }>(
     `/api/workflows/${encodeURIComponent(workflowId)}`,
-    { new_id: update.newId ?? "", name: update.name ?? "" },
+    {
+      new_id: update.newId ?? "",
+      name: update.name ?? "",
+      ...(update.description !== undefined
+        ? { description: update.description }
+        : {}),
+    },
   );
 }
 

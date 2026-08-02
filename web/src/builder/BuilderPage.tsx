@@ -35,7 +35,7 @@ import {
   type EditResult,
 } from "./ComposerPanel";
 import { NewWorkflowModal } from "./NewWorkflowModal";
-import { RenameWorkflowModal } from "./RenameWorkflowModal";
+import { EditWorkflowModal } from "./EditWorkflowModal";
 import { DeleteWorkflowModal } from "./DeleteWorkflowModal";
 import { NodeConfigPanel } from "./Inspector";
 import { WorkflowCanvas } from "./WorkflowCanvas";
@@ -462,10 +462,10 @@ export function BuilderPage() {
                 <button
                   type="button"
                   className="canvas-head__edit"
-                  title="Rename this workflow or its id"
+                  title="Edit this workflow's name, id, or description"
                   onClick={() => setShowRename(true)}
                 >
-                  Rename
+                  Edit
                 </button>
                 <button
                   type="button"
@@ -540,9 +540,10 @@ export function BuilderPage() {
       )}
 
       {showRename && activeWorkflow && (
-        <RenameWorkflowModal
+        <EditWorkflowModal
           workflowId={activeWorkflowId}
           currentName={activeWorkflow.name || ""}
+          currentDescription={activeWorkflow.description || ""}
           onRenamed={(renamedId) => {
             setShowRename(false);
             void loadWorkflows().then(() => {

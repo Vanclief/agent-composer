@@ -34,6 +34,8 @@ export interface CanvasNodeConfig {
   instruction?: string;
   harnessId?: string;
   reasoningEffort?: string;
+  /** Pretty-printed resolved output schema, keyed by output name. */
+  outputSchema?: string;
   kind?: string;
   operation?: string;
   [key: string]: unknown;
@@ -126,6 +128,7 @@ export interface BlueprintInstance {
 
 export interface BlueprintDocument {
   workflow?: BlueprintWorkflow;
+  schemas?: Record<string, unknown>;
   nodes?: Record<string, BlueprintNode>;
   flow?: {
     instances?: Record<string, BlueprintInstance>;

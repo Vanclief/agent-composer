@@ -433,6 +433,17 @@ function EditableLLMConfig({
           </span>
         )}
       </div>
+      {Boolean(config.outputSchema) && (
+        <div className="builder-field-row">
+          <label>Output schema</label>
+          <pre
+            className="builder-schema-view scrollnice"
+            title="The structured output this node must produce — edit it via the Composer"
+          >
+            {String(config.outputSchema)}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }
@@ -497,6 +508,14 @@ function Config({
             title="Configuration is read from workflow YAML"
           />
         </div>
+        {Boolean(config.outputSchema) && (
+          <div className="builder-field-row">
+            <label>Output schema</label>
+            <pre className="builder-schema-view scrollnice">
+              {String(config.outputSchema)}
+            </pre>
+          </div>
+        )}
       </div>
     );
   }
