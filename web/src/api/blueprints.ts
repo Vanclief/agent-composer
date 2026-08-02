@@ -400,6 +400,47 @@ export function parseBlueprintYAML(
 
   addInstanceNodes(rootInstances, rootNodeSpecs, "", null, false);
 
+  // The workflow's declared outputs close the graph — without them
+  // the final bindings point at nothing visible.
+  const declaredOutputs = blueprint?.workflow?.outputs ?? {};
+  const declaredNames = Object.keys(declaredOutputs);
+  if (declaredNames.length > 0) {
+    nodes.push({
+      id: WORKFLOW_OUTPUTS_NODE_ID,
+      kind: "output",
+      name: "Outputs",
+      sub: "workflow outputs",
+      x: 0,
+      y: 0,
+      config: {},
+      inputs: declaredNames.map((name) => ({
+        id: name,
+        label: name,
+        type: mapPortType(declaredOutputs[name]?.schema),
+      })),
+      outputs: [],
+      body: declaredNames.map((name) => ({
+        k: name,
+        v: declaredOutputs[name]?.schema || "any",
+        mono: true,
+      })),
+      last: {},
+    });
+    for (const name of declaredNames) {
+      const from = declaredOutputs[name]?.from ?? "";
+      const parts = from.split(".");
+      if (parts[0] === "instance" && parts.length >= 3 && parts[1]) {
+        edges.push({
+          id: `e${edgeIndex++}`,
+          from: parts[1],
+          fromPort: parts.slice(2).join("."),
+          to: WORKFLOW_OUTPUTS_NODE_ID,
+          toPort: name,
+        });
+      }
+    }
+  }
+
   for (const node of nodes) {
     if (node.isGroup) {
       node.childCount = nodes.filter(
@@ -417,6 +458,9 @@ export function parseBlueprintYAML(
 
 /** Synthetic node that carries the run's workflow inputs. */
 export const WORKFLOW_INPUTS_NODE_ID = "__workflow_inputs__";
+
+/** Synthetic node that carries the workflow's declared outputs. */
+export const WORKFLOW_OUTPUTS_NODE_ID = "__workflow_outputs__";
 
 function previewInputValue(value: unknown): string {
   if (typeof value === "string") {
@@ -551,7 +595,7 @@ export function parseSnapshot(
     const values = workflowExecution.input_snapshot ?? {};
     nodes.unshift({
       id: WORKFLOW_INPUTS_NODE_ID,
-      kind: "trigger",
+      kind: "input",
       name: "Inputs",
       sub: "workflow inputs",
       x: 0,
@@ -568,6 +612,57 @@ export function parseSnapshot(
         })),
       last: {},
     });
+  }
+
+  // And the declared outputs close the graph, previewing what the
+  // run actually produced once it finished.
+  const outputBindings = snapshot.Outputs ?? {};
+  const outputNames = Object.keys(outputBindings);
+  if (outputNames.length > 0) {
+    const outputValues = workflowExecution.output_snapshot ?? {};
+    nodes.push({
+      id: WORKFLOW_OUTPUTS_NODE_ID,
+      kind: "output",
+      name: "Outputs",
+      sub: "workflow outputs",
+      x: 0,
+      y: 0,
+      config: {},
+      inputs: outputNames.map((name) => ({
+        id: name,
+        label: name,
+        type: mapPortType(
+          typeof outputBindings[name]?.Schema?.type === "string"
+            ? String(outputBindings[name]?.Schema?.type)
+            : undefined,
+        ),
+      })),
+      outputs: [],
+      body: outputNames
+        .filter((name) => outputValues[name] !== undefined)
+        .map((name) => ({
+          k: name,
+          v: previewInputValue(outputValues[name]),
+          mono: true,
+        })),
+      last: {},
+    });
+    for (const name of outputNames) {
+      const from = outputBindings[name]?.From;
+      if (
+        from?.Kind === "instance" &&
+        from.InstanceID &&
+        from.OutputName
+      ) {
+        edges.push({
+          id: `e${edgeIndex++}`,
+          from: from.InstanceID,
+          fromPort: from.OutputName,
+          to: WORKFLOW_OUTPUTS_NODE_ID,
+          toPort: name,
+        });
+      }
+    }
   }
 
   return { nodes, edges, order };

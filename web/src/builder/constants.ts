@@ -38,6 +38,14 @@ export const KIND_VISUAL: Record<
     background: "var(--st-warn-soft)",
     foreground: "var(--st-warn-ink)",
   },
+  input: {
+    background: "var(--st-warn-soft)",
+    foreground: "var(--st-warn-ink)",
+  },
+  output: {
+    background: "var(--st-ok-soft)",
+    foreground: "var(--st-ok-ink)",
+  },
   transform: {
     background: "var(--t-json-soft)",
     foreground: "var(--t-json)",

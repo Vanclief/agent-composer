@@ -614,7 +614,11 @@ export function Inspector({
             {node.kind} · {node.id}
           </span>
         </div>
-        {onRerunFrom && node.kind !== "trigger" && status !== "run" && (
+        {onRerunFrom &&
+          node.kind !== "trigger" &&
+          node.kind !== "input" &&
+          node.kind !== "output" &&
+          status !== "run" && (
           <button
             type="button"
             className="builder-ghost-button builder-inspector__rerun"

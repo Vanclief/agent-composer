@@ -85,7 +85,12 @@ export function WorkflowNode({
   const visual = KIND_VISUAL[node.kind];
   const preview = (() => {
     // The Inputs node lists its values in the body already.
-    if (!showRunStatus || node.kind === "trigger") {
+    if (
+      !showRunStatus ||
+      node.kind === "trigger" ||
+      node.kind === "input" ||
+      node.kind === "output"
+    ) {
       return null;
     }
     if (status === "run") {
@@ -145,6 +150,8 @@ export function WorkflowNode({
         )}
         {showRunStatus &&
           node.kind !== "trigger" &&
+          node.kind !== "input" &&
+          node.kind !== "output" &&
           (status === "run" || runs.length < 2 ? (
             <StatusPill
               status={status}

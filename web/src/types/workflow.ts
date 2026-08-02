@@ -1,6 +1,11 @@
 import type { JsonObject } from "./api";
 
-export type CanvasNodeKind = "llm" | "trigger" | "transform";
+export type CanvasNodeKind =
+  | "llm"
+  | "trigger"
+  | "transform"
+  | "input"
+  | "output";
 export type PortType = "text" | "json" | "file" | "any";
 export type RunDisplayStatus = "idle" | "run" | "ok" | "warn" | "err";
 

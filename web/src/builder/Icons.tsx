@@ -3,6 +3,7 @@ interface IconProps {
 }
 
 export function LlmIcon({ size = 14 }: IconProps) {
+  // A compute chip — the node that burns tokens.
   return (
     <svg
       width={size}
@@ -15,8 +16,10 @@ export function LlmIcon({ size = 14 }: IconProps) {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="M8 2.5 L13 5 L13 11 L8 13.5 L3 11 L3 5 Z" />
-      <path d="M8 2.5 V8 M8 8 L3 5 M8 8 L13 5 M8 8 V13.5" />
+      <rect x="4" y="4" width="8" height="8" rx="1.5" />
+      <rect x="6.7" y="6.7" width="2.6" height="2.6" />
+      <path d="M6 4 V1.8 M10 4 V1.8 M6 14.2 V12 M10 14.2 V12" />
+      <path d="M4 6 H1.8 M4 10 H1.8 M14.2 6 H12 M14.2 10 H12" />
     </svg>
   );
 }
@@ -229,12 +232,60 @@ export function BranchIcon({ size = 14 }: IconProps) {
   );
 }
 
+export function BoxArrowInIcon({ size = 14 }: IconProps) {
+  // An arrow entering a box — the workflow's inputs.
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8.5 3 H13 V13 H8.5" />
+      <path d="M2 8 H9.5" />
+      <path d="M7 5.5 L9.5 8 L7 10.5" />
+    </svg>
+  );
+}
+
+export function BoxArrowOutIcon({ size = 14 }: IconProps) {
+  // An arrow leaving a box — the workflow's outputs.
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M7.5 3 H3 V13 H7.5" />
+      <path d="M6.5 8 H14" />
+      <path d="M11.5 5.5 L14 8 L11.5 10.5" />
+    </svg>
+  );
+}
+
 export function KindIcon({
   kind,
   size,
 }: IconProps & { kind: string }) {
   if (kind === "llm") {
     return <LlmIcon size={size} />;
+  }
+  if (kind === "input") {
+    return <BoxArrowInIcon size={size} />;
+  }
+  if (kind === "output") {
+    return <BoxArrowOutIcon size={size} />;
   }
   if (kind === "trigger") {
     return <TriggerIcon size={size} />;
