@@ -674,7 +674,20 @@ export function MainMonitorPage({
             type="button"
             className="builder-run-button"
             disabled={!ready}
-            onClick={() => setShowNewTask(true)}
+            onClick={() => {
+              // The picker opens on the workflow you are looking at —
+              // the selected run's, or the one named in the path.
+              const current = selectedWorkflowId || routeWorkflowId;
+              if (
+                current &&
+                runnableWorkflows.some(
+                  (workflow) => workflow.id === current,
+                )
+              ) {
+                setNewTaskWorkflowId(current);
+              }
+              setShowNewTask(true);
+            }}
           >
             <PlayIcon />{" "}
             {view === "workflows" ? "Launch workflow" : "New task"}
