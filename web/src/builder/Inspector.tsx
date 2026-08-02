@@ -82,6 +82,58 @@ function LiveIO({
   const milliseconds = snapshot?.ms ?? node.last.ms ?? 0;
   const error = snapshot?.error ?? node.last.error;
 
+  // The synthetic Inputs/Outputs nodes are structurally inverted —
+  // Inputs emits (output ports), Outputs receives (input ports). Name
+  // the section after what the values ARE, not which side they sit on.
+  if (node.kind === "input" || node.kind === "output") {
+    const isInput = node.kind === "input";
+    const ports = isInput ? node.outputs : node.inputs;
+    const values = isInput
+      ? snapshot?.outputSnapshot
+      : snapshot?.inputSnapshot;
+    const cardClass = isInput
+      ? "builder-io-card builder-io-card--input"
+      : "builder-io-card builder-io-card--output";
+    return (
+      <div>
+        <div className="builder-inspector__run-meta">
+          <span className="mono">{currentRun?.id || "—"}</span>
+          <span>·</span>
+          <span>
+            {currentRun?.whenAbsolute || "—"} ·{" "}
+            {currentRun?.when || "—"}
+          </span>
+        </div>
+        <div className="builder-io-meta">
+          <b>{isInput ? "Workflow input" : "Workflow output"}</b>
+          <span>
+            {isInput
+              ? currentRun?.whenAbsolute || "—"
+              : status === "run"
+                ? "streaming…"
+                : status === "ok"
+                  ? "completed"
+                  : status}
+          </span>
+        </div>
+        {ports.length === 0 && <div className={cardClass}>—</div>}
+        {ports.map((port) => {
+          const value = formatValue(values?.[port.id]);
+          return (
+            <div key={port.id} className="builder-io-field">
+              <div className="builder-io-field__head">
+                <b>{port.label}</b>
+                <span className="mono">· {port.type}</span>
+                <CopyButton value={value} />
+              </div>
+              <div className={cardClass}>{value}</div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="builder-inspector__run-meta">
