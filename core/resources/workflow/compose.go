@@ -56,6 +56,30 @@ func workflowUUIDFromSpec(spec string) string {
 	return strings.TrimSpace(doc.Workflow.UUID)
 }
 
+// harnessCatalogText renders the installed harnesses and their model
+// ids for the composer agent — its only source of truth for
+// config.harness values. Pi's huge catalog is truncated; its ids
+// follow provider/model and the agent can list more via the CLI.
+func harnessCatalogText(ctx context.Context) string {
+	lines := []string{}
+	for _, info := range harnesses.ListHarnessInfo(ctx) {
+		if !info.Available {
+			continue
+		}
+		models := info.Models
+		suffix := ""
+		if len(models) > 24 {
+			models = models[:24]
+			suffix = ", …"
+		}
+		lines = append(
+			lines,
+			string(info.ID)+": "+strings.Join(models, ", ")+suffix,
+		)
+	}
+	return strings.Join(lines, "\n")
+}
+
 // composerAgent resolves which harness/model the composer runs on:
 // the settings choice, or the first installed harness in the catalog.
 func composerAgent(ctx context.Context) (agent.Harness, string, error) {
@@ -124,6 +148,7 @@ func (api *API) Compose(ctx context.Context, requester interface{}, request *Com
 		Request:    request.Request,
 		Harness:    harness,
 		Model:      model,
+		Catalog:    harnessCatalogText(ctx),
 	})
 	if err != nil {
 		return nil, ez.Wrap(op, err)

@@ -19,7 +19,9 @@ export function WorkflowRedirect() {
         }
         navigate(
           task
-            ? `/executions/${encodeURIComponent(task.id)}`
+            ? `/workflows/${encodeURIComponent(
+                id,
+              )}/executions/${encodeURIComponent(task.id)}`
             : `/workflow/${encodeURIComponent(id)}/build`,
           { replace: true },
         );

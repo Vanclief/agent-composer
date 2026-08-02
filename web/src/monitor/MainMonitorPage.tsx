@@ -6,6 +6,7 @@ import {
 import {
   useLocation,
   useNavigate,
+  useParams,
   useSearchParams,
 } from "react-router-dom";
 import { PlayIcon } from "../builder/Icons";
@@ -306,11 +307,17 @@ export function MainMonitorPage({
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("all");
   const [taskQuery, setTaskQuery] = useState("");
   // Everything you navigated to lives in the URL, so a reload lands
-  // on the same view: the path picks tasks vs workflows, ?execution
-  // is the selected run, ?scope limits the workflows list to one
-  // task's runs — plus ?node/?convo owned by ExecutionCanvas.
+  // on the same view. Runs are proper paths —
+  // /workflows/:workflowId/executions/:executionId[/node/:nodeId] —
+  // while ?scope limits the workflows list to one task's runs.
+  // Legacy ?execution links canonicalize once the run list is known.
+  const {
+    workflowId: routeWorkflowId = "",
+    executionId: routeExecutionId = "",
+  } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedExecutionId = searchParams.get("execution") ?? "";
+  const legacyExecutionId = searchParams.get("execution") ?? "";
+  const selectedExecutionId = routeExecutionId || legacyExecutionId;
   const scopeTaskId = searchParams.get("scope") ?? "";
 
   const patchParams = (
@@ -323,17 +330,6 @@ export function MainMonitorPage({
       },
       { replace: true },
     );
-  };
-  const setSelectedExecutionId = (executionId: string) => {
-    patchParams((params) => {
-      if (executionId) {
-        params.set("execution", executionId);
-      } else {
-        params.delete("execution");
-      }
-      params.delete("node");
-      params.delete("convo");
-    });
   };
 
   // Legacy links used /?view=workflows before the view was a route.
@@ -511,6 +507,71 @@ export function MainMonitorPage({
       )?.id
     : undefined;
 
+  // Selecting a run navigates to its canonical path. The run's own
+  // workflow slug names the path; "" clears back to /workflows.
+  const executionPath = (executionId: string) => {
+    const task = rows.find((row) => row.id === executionId);
+    const workflowSlug = task?.executions[0]?.workflow_id;
+    if (!workflowSlug) {
+      return "/workflows";
+    }
+    return `/workflows/${encodeURIComponent(
+      workflowSlug,
+    )}/executions/${encodeURIComponent(executionId)}`;
+  };
+  const setSelectedExecutionId = (executionId: string) => {
+    const pathname = executionId
+      ? executionPath(executionId)
+      : "/workflows";
+    const params = new URLSearchParams(searchParams);
+    params.delete("execution");
+    params.delete("node");
+    params.delete("convo");
+    navigate(
+      { pathname, search: params.toString() ? `?${params}` : "" },
+      { replace: true },
+    );
+  };
+
+  // Legacy ?execution links become canonical paths, keeping ?node and
+  // ?convo as their path segments.
+  useEffect(() => {
+    if (routeExecutionId || !legacyExecutionId || !ready) {
+      return;
+    }
+    const task = rows.find((row) => row.id === legacyExecutionId);
+    const workflowSlug = task?.executions[0]?.workflow_id;
+    if (!workflowSlug) {
+      return;
+    }
+    const params = new URLSearchParams(searchParams);
+    const node = params.get("node") ?? "";
+    const convo = params.get("convo") ?? "";
+    params.delete("execution");
+    params.delete("node");
+    params.delete("convo");
+    let pathname = `/workflows/${encodeURIComponent(
+      workflowSlug,
+    )}/executions/${encodeURIComponent(legacyExecutionId)}`;
+    if (node || convo) {
+      pathname += `/node/${encodeURIComponent(node || convo)}`;
+    }
+    if (convo) {
+      pathname += "/convo";
+    }
+    navigate(
+      { pathname, search: params.toString() ? `?${params}` : "" },
+      { replace: true },
+    );
+  }, [
+    legacyExecutionId,
+    navigate,
+    ready,
+    routeExecutionId,
+    rows,
+    searchParams,
+  ]);
+
   useEffect(() => {
     if (!ready) {
       return;
@@ -521,12 +582,30 @@ export function MainMonitorPage({
     ) {
       return;
     }
-    setSelectedExecutionId(filteredTasks[0]?.id || "");
-  }, [filteredTasks, ready, selectedExecutionId]);
+    // A workflow-only path (/workflows/:workflowId) means "this
+    // workflow's latest run"; otherwise the newest run wins.
+    const preferred = routeWorkflowId
+      ? filteredTasks.find(
+          (task) =>
+            task.executions[0]?.workflow_id === routeWorkflowId,
+        )
+      : undefined;
+    const nextId = (preferred ?? filteredTasks[0])?.id || "";
+    if (nextId !== selectedExecutionId) {
+      setSelectedExecutionId(nextId);
+    }
+  }, [filteredTasks, ready, routeWorkflowId, selectedExecutionId]);
 
+  // Never-saved drafts have nothing runnable — runs always execute
+  // the saved version.
+  const runnableWorkflows = workflows.filter(
+    (workflow) => !workflow.draft_only,
+  );
   const newTaskWorkflow =
-    workflows.find((workflow) => workflow.id === newTaskWorkflowId) ??
-    workflows[0] ??
+    runnableWorkflows.find(
+      (workflow) => workflow.id === newTaskWorkflowId,
+    ) ??
+    runnableWorkflows[0] ??
     null;
 
   function openWorkflowsFor(task: Task, executionId?: string) {
@@ -554,19 +633,12 @@ export function MainMonitorPage({
         throw new Error("The server did not return an execution ID.");
       }
       setShowNewTask(false);
-      if (view === "workflows") {
-        // Stay in the workflows console, watching the new run.
-        navigate({
-          pathname: "/workflows",
-          search: `?execution=${encodeURIComponent(
-            response.execution_id,
-          )}`,
-        });
-      } else {
-        navigate(
-          `/executions/${encodeURIComponent(response.execution_id)}`,
-        );
-      }
+      // Watch the new run at its canonical path.
+      navigate(
+        `/workflows/${encodeURIComponent(
+          newTaskWorkflow.id,
+        )}/executions/${encodeURIComponent(response.execution_id)}`,
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -744,7 +816,7 @@ export function MainMonitorPage({
                   setNewTaskWorkflowId(event.target.value)
                 }
               >
-                {workflows.map((workflow) => (
+                {runnableWorkflows.map((workflow) => (
                   <option key={workflow.id} value={workflow.id}>
                     {workflow.name || workflow.id}
                   </option>

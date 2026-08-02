@@ -5,9 +5,10 @@ import {
 import type { RailItem } from "./LeftRail";
 
 /**
- * The app's only navigation: Tasks at /, Workflows at /workflows.
- * Editing is a mode of Workflows (the Monitor | Edit switch in the
- * top bar), not a place of its own.
+ * Workflows is the app's place: monitoring and editing are its modes
+ * (the Monitor | Edit switch in the top bar), and every run lives in
+ * the monitor. Tasks is parked — visible but switched off — until it
+ * gets a real purpose again.
  */
 export function appRailItems(): RailItem[] {
   return [
@@ -15,7 +16,7 @@ export function appRailItems(): RailItem[] {
       key: "tasks",
       label: "Tasks",
       icon: <StackIcon />,
-      to: "/",
+      disabled: true,
     },
     {
       key: "workflows",

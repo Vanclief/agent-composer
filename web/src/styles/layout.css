@@ -82,7 +82,7 @@
   min-width: 0;
   flex: 0 1 auto;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   overflow: hidden;
   margin: 0;
@@ -92,6 +92,14 @@
   letter-spacing: -0.02em;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The name itself when the title also carries chips and actions. */
+.top-bar__title-text {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .top-bar__spacer {
@@ -271,6 +279,14 @@
 .left-rail > button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+.left-rail > button.left-rail__disabled,
+.left-rail > button.left-rail__disabled:hover {
+  background: transparent;
+  color: var(--ink-3);
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* Tabs inside a LeftPanel header — which list the panel is showing. */

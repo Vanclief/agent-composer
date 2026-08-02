@@ -6,7 +6,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import {
   parseSnapshot,
   WORKFLOW_INPUTS_NODE_ID,
@@ -67,38 +72,48 @@ export function ExecutionCanvas({
   const [currentRun, setCurrentRun] = useState<RunEntry | null>(null);
   const [canvasLoading, setCanvasLoading] = useState(false);
   const [error, setError] = useState("");
-  // Selection lives in the URL so a reload lands on the same view:
-  // ?node=<nodeId> selects a node, ?convo=<nodeId> opens its
+  // Selection lives in the URL path so a reload lands on the same
+  // view: …/node/:nodeId selects a node, a trailing /convo opens its
   // conversation in place of the canvas.
-  const [searchParams, setSearchParams] = useSearchParams();
-  const selectedNodeId = searchParams.get("node");
-  const conversationNodeId = searchParams.get("convo");
+  const navigate = useNavigate();
+  const location = useLocation();
+  const {
+    workflowId: routeWorkflowId = "",
+    executionId: routeExecutionId = "",
+    nodeId: routeNodeId = "",
+  } = useParams();
+  const selectedNodeId = routeNodeId || null;
+  const conversationNodeId =
+    routeNodeId && location.pathname.endsWith("/convo")
+      ? routeNodeId
+      : null;
 
-  const updateParams = useCallback(
-    (mutate: (params: URLSearchParams) => void) => {
-      setSearchParams(
-        (params) => {
-          mutate(params);
-          return params;
+  // Legacy query-param URLs have no path base yet — selection waits
+  // for the monitor's canonicalization pass.
+  const goTo = useCallback(
+    (suffix: string) => {
+      if (!routeWorkflowId || !routeExecutionId) {
+        return;
+      }
+      navigate(
+        {
+          pathname:
+            `/workflows/${encodeURIComponent(routeWorkflowId)}` +
+            `/executions/${encodeURIComponent(routeExecutionId)}` +
+            suffix,
+          search: location.search,
         },
         { replace: true },
       );
     },
-    [setSearchParams],
+    [location.search, navigate, routeExecutionId, routeWorkflowId],
   );
 
   const selectNode = useCallback(
     (nodeId: string | null) => {
-      updateParams((params) => {
-        if (nodeId) {
-          params.set("node", nodeId);
-        } else {
-          params.delete("node");
-        }
-        params.delete("convo");
-      });
+      goTo(nodeId ? `/node/${encodeURIComponent(nodeId)}` : "");
     },
-    [updateParams],
+    [goTo],
   );
   // The execution whose snapshot is currently parsed. Polling hands us
   // a fresh object every few seconds; only a different id may re-parse
@@ -271,11 +286,15 @@ export function ExecutionCanvas({
       onResumed(executionId);
       return;
     }
-    updateParams((params) => {
-      params.set("execution", executionId);
-      params.delete("node");
-      params.delete("convo");
-    });
+    navigate(
+      {
+        pathname:
+          `/workflows/${encodeURIComponent(routeWorkflowId)}` +
+          `/executions/${encodeURIComponent(executionId)}`,
+        search: location.search,
+      },
+      { replace: true },
+    );
   }
 
   async function rerunFrom(nodeId: string) {
@@ -304,10 +323,7 @@ export function ExecutionCanvas({
       target?.kind === "llm" &&
       currentRun?.nodes[nodeId]?.nodeExecutionId
     ) {
-      updateParams((params) => {
-        params.set("node", nodeId);
-        params.set("convo", nodeId);
-      });
+      goTo(`/node/${encodeURIComponent(nodeId)}/convo`);
     }
   }
 
@@ -318,7 +334,7 @@ export function ExecutionCanvas({
           nodeName={conversationNode.name}
           nodeExecutionId={conversationExecutionId}
           onBack={() =>
-            updateParams((params) => params.delete("convo"))
+            goTo(`/node/${encodeURIComponent(conversationNodeId ?? "")}`)
           }
         />
       ) : (

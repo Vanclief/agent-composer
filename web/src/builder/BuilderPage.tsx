@@ -272,7 +272,9 @@ export function BuilderPage() {
       setShowRun(false);
       if (response.execution_id) {
         navigate(
-          `/executions/${encodeURIComponent(response.execution_id)}`,
+          `/workflows/${encodeURIComponent(
+            activeWorkflow.id,
+          )}/executions/${encodeURIComponent(response.execution_id)}`,
         );
       }
     } catch (caught) {
@@ -293,7 +295,6 @@ export function BuilderPage() {
       data-component="BuilderPage"
     >
       <TopBar
-        title={activeWorkflow?.name || activeWorkflowId || "No workflow"}
         mode={<ModeToggle mode="edit" />}
         actions={
           <>
@@ -301,10 +302,13 @@ export function BuilderPage() {
               type="button"
               className="builder-run-button"
               disabled={
-                !activeWorkflow || starting || !activeSpec
+                !activeWorkflow ||
+                starting ||
+                !activeSpec ||
+                Boolean(activeDraft)
               }
               title={
-                activeWorkflow && !activeSpec
+                activeWorkflow && (activeDraft || !activeSpec)
                   ? "Save the draft first — runs always execute the saved version"
                   : undefined
               }

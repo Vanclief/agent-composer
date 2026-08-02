@@ -36,7 +36,7 @@ schemas: named types (type object/array/string/integer/number/boolean, propertie
 nodes: reusable definitions — kinds are inference (typed inputs/outputs plus config.harness {id, model, reasoning_effort, permissions} and config.instruction), connector (operation: collect | concat | pack | unpack), loop (operation: foreach | while, executes: <node>, over/updates/breaks_on/max_iterations), conditional (operation: if, routes_on, when_true/when_false: <node>), and workflow (workflow_id: <id>) for composition.
 flow.instances: instance_id: {node: <node>, inputs: {port: workflow_input.<name> | instance.<id>.<output>}}.
 
-The current_blueprint input holds the blueprint you are editing (it may already contain unsaved draft changes); it is empty when the request is to create a new workflow.
+The current_blueprint input holds the blueprint you are editing (it may already contain unsaved draft changes); it is empty when the request is to create a new workflow. The available_harnesses input lists the installed harnesses and their real model ids — config.harness.id and config.harness.model must come from that list, exactly as written; never invent or abbreviate a model name.
 
 Do this:
 1. If you need DSL patterns beyond the reference above, run "agc workflow list" and "agc workflow show --id <id>" to study installed blueprints. Never use "agc workflow import" or "agc workflow delete".
@@ -70,6 +70,9 @@ type ComposeOptions struct {
 	Request  string
 	Harness  agent.Harness
 	Model    string
+	// Catalog lists installed harnesses and their real model ids, so
+	// the agent never invents a model name.
+	Catalog string
 }
 
 type ComposeResult struct {
@@ -121,9 +124,10 @@ func Compose(ctx context.Context, opts ComposeOptions) (*ComposeResult, error) {
 		composeResultSchema,
 		schemaRaw,
 		map[string]any{
-			"workflow_id":       strings.TrimSpace(opts.WorkflowID),
-			"current_blueprint": opts.BaseSpec,
-			"request":           strings.TrimSpace(opts.Request),
+			"workflow_id":         strings.TrimSpace(opts.WorkflowID),
+			"current_blueprint":   opts.BaseSpec,
+			"request":             strings.TrimSpace(opts.Request),
+			"available_harnesses": opts.Catalog,
 		},
 		nil,
 	)

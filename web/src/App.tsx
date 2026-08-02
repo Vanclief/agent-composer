@@ -2,20 +2,26 @@ import {
   Navigate,
   Route,
   Routes,
+  useLocation,
   useParams,
 } from "react-router-dom";
 import { BuilderPage } from "./builder/BuilderPage";
 import { DebugMode } from "./debug/DebugMode";
-import { WorkflowsMonitor } from "./workflows/WorkflowsMonitor";
 import { MainMonitorPage } from "./monitor/MainMonitorPage";
 import { WorkflowRedirect } from "./workflows/WorkflowRedirect";
 
-/** Old per-task monitor links carried the execution in the path. */
-function LegacyTaskRedirect() {
+/**
+ * Runs have exactly one home: the workflows monitor. Old detail URLs
+ * (/executions/:id, /tasks/:id) fold into it, keeping ?node/?convo.
+ */
+function ExecutionRedirect() {
   const { executionId = "" } = useParams();
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  params.set("execution", executionId);
   return (
     <Navigate
-      to={`/executions/${encodeURIComponent(executionId)}`}
+      to={{ pathname: "/workflows", search: `?${params}` }}
       replace
     />
   );
@@ -26,14 +32,30 @@ export default function App() {
     <>
       <DebugMode />
       <Routes>
-        <Route path="/" element={<MainMonitorPage view="tasks" />} />
+        <Route path="/" element={<Navigate to="/workflows" replace />} />
         <Route
           path="/workflows"
           element={<MainMonitorPage view="workflows" />}
         />
         <Route
+          path="/workflows/:workflowId"
+          element={<MainMonitorPage view="workflows" />}
+        />
+        <Route
+          path="/workflows/:workflowId/executions/:executionId"
+          element={<MainMonitorPage view="workflows" />}
+        />
+        <Route
+          path="/workflows/:workflowId/executions/:executionId/node/:nodeId"
+          element={<MainMonitorPage view="workflows" />}
+        />
+        <Route
+          path="/workflows/:workflowId/executions/:executionId/node/:nodeId/convo"
+          element={<MainMonitorPage view="workflows" />}
+        />
+        <Route
           path="/executions/:executionId"
-          element={<WorkflowsMonitor />}
+          element={<ExecutionRedirect />}
         />
         <Route path="/build" element={<BuilderPage />} />
         <Route
@@ -50,9 +72,9 @@ export default function App() {
         />
         <Route
           path="/tasks/:executionId"
-          element={<LegacyTaskRedirect />}
+          element={<ExecutionRedirect />}
         />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/workflows" replace />} />
       </Routes>
     </>
   );

@@ -7,6 +7,8 @@ export interface RailItem {
   icon: ReactNode;
   /** Set when the item is a different page rather than a panel swap. */
   to?: string;
+  /** Shown but inert — a surface that is temporarily switched off. */
+  disabled?: boolean;
 }
 
 /**
@@ -36,6 +38,19 @@ export function LeftRail({
             <span className="left-rail__label">{item.label}</span>
           </>
         );
+        if (item.disabled) {
+          return (
+            <button
+              key={item.key}
+              type="button"
+              className="left-rail__disabled"
+              title={`${item.label} — temporarily disabled`}
+              disabled
+            >
+              {body}
+            </button>
+          );
+        }
         return item.to ? (
           <Link
             key={item.key}
