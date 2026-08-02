@@ -15,6 +15,8 @@ type NodeConfigUpdate struct {
 	Model       *string
 	Harness     *string
 	Instruction *string
+	// "" removes the field — the harness default takes over.
+	ReasoningEffort *string
 }
 
 // UpdateNodeConfig edits one node's config in the workflow's YAML
@@ -57,13 +59,25 @@ func UpdateNodeConfig(workflowID, nodeName string, update NodeConfigUpdate) erro
 	if update.Instruction != nil {
 		setScalarValue(configMap, "instruction", *update.Instruction)
 	}
-	if update.Model != nil || update.Harness != nil {
+	if update.Model != nil || update.Harness != nil ||
+		update.ReasoningEffort != nil {
 		harnessMap := ensureMapValue(configMap, "harness")
 		if update.Harness != nil {
 			setScalarValue(harnessMap, "id", *update.Harness)
 		}
 		if update.Model != nil {
 			setScalarValue(harnessMap, "model", *update.Model)
+		}
+		if update.ReasoningEffort != nil {
+			if *update.ReasoningEffort == "" {
+				removeMapKey(harnessMap, "reasoning_effort")
+			} else {
+				setScalarValue(
+					harnessMap,
+					"reasoning_effort",
+					*update.ReasoningEffort,
+				)
+			}
 		}
 	}
 
@@ -133,6 +147,21 @@ func ensureMapValue(mapping *yaml.Node, key string) *yaml.Node {
 	valueNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	mapping.Content = append(mapping.Content, keyNode, valueNode)
 	return valueNode
+}
+
+func removeMapKey(mapping *yaml.Node, key string) {
+	if mapping == nil || mapping.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			mapping.Content = append(
+				mapping.Content[:i],
+				mapping.Content[i+2:]...,
+			)
+			return
+		}
+	}
 }
 
 func setScalarValue(mapping *yaml.Node, key, value string) {

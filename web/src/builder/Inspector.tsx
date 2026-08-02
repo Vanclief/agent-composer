@@ -18,8 +18,15 @@ type InspectorTab = "overview" | "config" | "runs";
 /** Saves one node's editable config; resolves when the YAML is written. */
 export type NodeConfigSave = (
   nodeName: string,
-  update: { model?: string; harness?: string; instruction?: string },
+  update: {
+    model?: string;
+    harness?: string;
+    instruction?: string;
+    reasoning_effort?: string;
+  },
 ) => Promise<void>;
+
+const REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
 
 export function formatValue(value: unknown) {
   if (value === null || value === undefined) {
@@ -205,6 +212,9 @@ function EditableLLMConfig({
   const config = node.config;
   const [model, setModel] = useState(String(config.model || ""));
   const [harness, setHarness] = useState(String(config.harnessId || ""));
+  const [effort, setEffort] = useState(
+    String(config.reasoningEffort || ""),
+  );
   const [instruction, setInstruction] = useState(
     String(config.instruction || ""),
   );
@@ -216,9 +226,16 @@ function EditableLLMConfig({
   useEffect(() => {
     setModel(String(node.config.model || ""));
     setHarness(String(node.config.harnessId || ""));
+    setEffort(String(node.config.reasoningEffort || ""));
     setInstruction(String(node.config.instruction || ""));
     setError("");
-  }, [node.id, node.config.model, node.config.harnessId, node.config.instruction]);
+  }, [
+    node.id,
+    node.config.model,
+    node.config.harnessId,
+    node.config.reasoningEffort,
+    node.config.instruction,
+  ]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -231,6 +248,7 @@ function EditableLLMConfig({
   const dirty =
     model !== String(config.model || "") ||
     harness !== String(config.harnessId || "") ||
+    effort !== String(config.reasoningEffort || "") ||
     instruction !== String(config.instruction || "");
   const knownModels =
     harnesses.find((info) => info.id === harness)?.models ?? [];
@@ -247,6 +265,10 @@ function EditableLLMConfig({
         harness:
           harness !== String(config.harnessId || "")
             ? harness
+            : undefined,
+        reasoning_effort:
+          effort !== String(config.reasoningEffort || "")
+            ? effort
             : undefined,
         instruction:
           instruction !== String(config.instruction || "")
@@ -311,6 +333,24 @@ function EditableLLMConfig({
           models={knownModels}
           onChange={setModel}
         />
+      </div>
+      <div className="builder-field-row">
+        <label>Effort</label>
+        <select
+          className="builder-select mono"
+          value={effort}
+          onChange={(event) => setEffort(event.target.value)}
+        >
+          <option value="">default</option>
+          {!REASONING_EFFORTS.includes(effort) && effort !== "" && (
+            <option value={effort}>{effort}</option>
+          )}
+          {REASONING_EFFORTS.map((level) => (
+            <option key={level} value={level}>
+              {level}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="builder-field-row">
         <label>System prompt</label>
@@ -383,6 +423,15 @@ function Config({
           <input
             className="builder-input mono"
             value={String(config.harnessId || "")}
+            readOnly
+            title="Configuration is read from workflow YAML"
+          />
+        </div>
+        <div className="builder-field-row">
+          <label>Effort</label>
+          <input
+            className="builder-input mono"
+            value={String(config.reasoningEffort || "default")}
             readOnly
             title="Configuration is read from workflow YAML"
           />

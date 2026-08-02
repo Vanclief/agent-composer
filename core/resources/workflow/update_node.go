@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/vanclief/agent-composer/models/agent"
+	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 	workflowruntime "github.com/vanclief/agent-composer/workflow"
 	"github.com/vanclief/ez"
 )
@@ -16,6 +17,8 @@ type UpdateNodeRequest struct {
 	Model       *string `json:"model,omitempty"`
 	Harness     *string `json:"harness,omitempty"`
 	Instruction *string `json:"instruction,omitempty"`
+	// "" resets to the harness default.
+	ReasoningEffort *string `json:"reasoning_effort,omitempty"`
 }
 
 func (r *UpdateNodeRequest) Validate() error {
@@ -24,7 +27,8 @@ func (r *UpdateNodeRequest) Validate() error {
 	if strings.TrimSpace(r.WorkflowID) == "" || strings.TrimSpace(r.Node) == "" {
 		return ez.New(op, ez.EINVALID, "workflow_id and node are required", nil)
 	}
-	if r.Model == nil && r.Harness == nil && r.Instruction == nil {
+	if r.Model == nil && r.Harness == nil && r.Instruction == nil &&
+		r.ReasoningEffort == nil {
 		return ez.New(op, ez.EINVALID, "Nothing to update", nil)
 	}
 	if r.Model != nil && strings.TrimSpace(*r.Model) == "" {
@@ -34,6 +38,14 @@ func (r *UpdateNodeRequest) Validate() error {
 		err := agent.Harness(strings.TrimSpace(*r.Harness)).Validate()
 		if err != nil {
 			return ez.New(op, ez.EINVALID, "Unknown harness "+*r.Harness, err)
+		}
+	}
+	if r.ReasoningEffort != nil && strings.TrimSpace(*r.ReasoningEffort) != "" {
+		err := runtimetypes.ReasoningEffort(
+			strings.TrimSpace(*r.ReasoningEffort),
+		).Validate()
+		if err != nil {
+			return ez.New(op, ez.EINVALID, "Unknown reasoning effort "+*r.ReasoningEffort, err)
 		}
 	}
 
@@ -66,8 +78,9 @@ func (api *API) UpdateNode(ctx context.Context, requester interface{}, request *
 		strings.TrimSpace(request.WorkflowID),
 		strings.TrimSpace(request.Node),
 		workflowruntime.NodeConfigUpdate{
-			Model:   trim(request.Model),
-			Harness: trim(request.Harness),
+			Model:           trim(request.Model),
+			Harness:         trim(request.Harness),
+			ReasoningEffort: trim(request.ReasoningEffort),
 			// Instruction keeps its exact text — only the caller knows
 			// whether whitespace matters.
 			Instruction: request.Instruction,

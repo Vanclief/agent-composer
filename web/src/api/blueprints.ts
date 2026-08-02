@@ -97,6 +97,13 @@ function blueprintBody(node: BlueprintNode): CanvasField[] {
       mono: true,
     });
   }
+  if (node.config?.harness?.reasoning_effort) {
+    fields.push({
+      k: "effort",
+      v: node.config.harness.reasoning_effort,
+      mono: true,
+    });
+  }
   if (node.operation) {
     fields.push({ k: "operation", v: node.operation, mono: true });
   }
@@ -369,6 +376,8 @@ export function parseBlueprintYAML(
               model: spec.config?.harness?.model ?? "",
               instruction: spec.config?.instruction ?? "",
               harnessId: spec.config?.harness?.id ?? "",
+              reasoningEffort:
+                spec.config?.harness?.reasoning_effort ?? "",
               kind: spec.kind ?? "",
               operation: spec.operation ?? "",
             },
@@ -400,6 +409,8 @@ export function parseBlueprintYAML(
           model: nodeSpec.config?.harness?.model ?? "",
           instruction: nodeSpec.config?.instruction ?? "",
           harnessId: nodeSpec.config?.harness?.id ?? "",
+          reasoningEffort:
+            nodeSpec.config?.harness?.reasoning_effort ?? "",
           kind: nodeSpec.kind ?? "",
           operation: nodeSpec.operation ?? "",
         },
@@ -581,6 +592,13 @@ export function parseSnapshot(
     if (nodeSpec.Harness) {
       body.push({ k: "harness", v: nodeSpec.Harness, mono: true });
     }
+    if (nodeSpec.ReasoningEffort) {
+      body.push({
+        k: "effort",
+        v: nodeSpec.ReasoningEffort,
+        mono: true,
+      });
+    }
     // The model gets its own tag row in the card body.
     const sub = nodeSpec.Kind ?? "";
 
@@ -595,6 +613,7 @@ export function parseSnapshot(
         model: nodeSpec.Model ?? "",
         instruction: nodeSpec.Instruction ?? "",
         harnessId: nodeSpec.Harness ?? "",
+        reasoningEffort: nodeSpec.ReasoningEffort ?? "",
         kind: nodeSpec.Kind ?? "",
         operation: nodeSpec.Operation ?? "",
       },

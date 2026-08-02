@@ -140,7 +140,12 @@ export function discardWorkflowDraft(workflowId: string) {
 export function updateWorkflowNode(
   workflowId: string,
   node: string,
-  update: { model?: string; harness?: string; instruction?: string },
+  update: {
+    model?: string;
+    harness?: string;
+    instruction?: string;
+    reasoning_effort?: string;
+  },
 ) {
   return putJSON<{ workflow_id: string; node: string; spec: string }>(
     `/api/workflows/${encodeURIComponent(workflowId)}/nodes/${encodeURIComponent(node)}`,

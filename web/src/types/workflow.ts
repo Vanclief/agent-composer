@@ -33,6 +33,7 @@ export interface CanvasNodeConfig {
   model?: string;
   instruction?: string;
   harnessId?: string;
+  reasoningEffort?: string;
   kind?: string;
   operation?: string;
   [key: string]: unknown;
