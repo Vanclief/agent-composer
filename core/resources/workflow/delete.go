@@ -4,25 +4,24 @@ import (
 	"context"
 	"strings"
 
-	workflowruntime "github.com/vanclief/agent-composer/workflow"
 	"github.com/vanclief/ez"
 )
 
 type DeleteRequest struct {
-	WorkflowID string `json:"workflow_id"`
+	WorkflowSlug string `json:"workflow_slug"`
 }
 
 func (r *DeleteRequest) Validate() error {
-	if strings.TrimSpace(r.WorkflowID) == "" {
-		return ez.New(ez.EINVALID, "workflow_id is required", nil)
+	if strings.TrimSpace(r.WorkflowSlug) == "" {
+		return ez.New(ez.EINVALID, "workflow_slug is required", nil)
 	}
 
 	return nil
 }
 
 type DeleteResponse struct {
-	WorkflowID string `json:"workflow_id"`
-	Deleted    bool   `json:"deleted"`
+	WorkflowSlug string `json:"workflow_slug"`
+	Deleted      bool   `json:"deleted"`
 }
 
 // Delete removes a workflow from the library only — its run history
@@ -33,13 +32,13 @@ func (api *API) Delete(ctx context.Context, requester interface{}, request *Dele
 		return nil, ez.Wrap(err)
 	}
 
-	err = workflowruntime.DeleteWorkflow(request.WorkflowID)
+	err = api.Registry.Delete(ctx, request.WorkflowSlug)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
 	return &DeleteResponse{
-		WorkflowID: strings.TrimSpace(request.WorkflowID),
-		Deleted:    true,
+		WorkflowSlug: strings.TrimSpace(request.WorkflowSlug),
+		Deleted:      true,
 	}, nil
 }

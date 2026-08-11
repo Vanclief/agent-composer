@@ -22,12 +22,12 @@ var (
 type WorkflowExecution struct {
 	bun.BaseModel `bun:"table:workflow_executions"`
 
-	ID               uuid.UUID               `bun:",pk,type:uuid" json:"id"`
-	WorkflowID       string                  `json:"workflow_id"`
-	// WorkflowUUID is the workflow's permanent identity — the slug in
-	// WorkflowID can be renamed, this cannot.
-	WorkflowUUID    uuid.UUID               `bun:"type:uuid,nullzero" json:"workflow_uuid,omitempty"`
-	WorkflowVersion string                  `json:"workflow_version"`
+	ID           uuid.UUID `bun:",pk,type:uuid" json:"id"`
+	WorkflowSlug string    `json:"workflow_slug"`
+	// WorkflowID is the workflow's permanent identity — the slug can
+	// be renamed, this cannot.
+	WorkflowID       uuid.UUID               `bun:"type:uuid,nullzero" json:"workflow_id,omitempty"`
+	WorkflowVersion  string                  `json:"workflow_version"`
 	WorkflowSnapshot json.RawMessage         `bun:"type:jsonb" json:"workflow_snapshot"`
 	InputSnapshot    map[string]any          `bun:"type:jsonb,nullzero" json:"input_snapshot,omitempty"`
 	OutputSnapshot   map[string]any          `bun:"type:jsonb,nullzero" json:"output_snapshot,omitempty"`
@@ -44,7 +44,7 @@ func (w *WorkflowExecution) Validate() error {
 		return ez.New(ez.EINVALID, "workflow execution is nil", nil)
 	}
 
-	if w.WorkflowID == "" {
+	if w.WorkflowSlug == "" {
 		return ez.New(ez.EINVALID, "workflow_id is required", nil)
 	}
 

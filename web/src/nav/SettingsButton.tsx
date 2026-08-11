@@ -121,7 +121,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
         </select>
         <small className="task-picker__hint">
           The agent behind “Describe a change…” — it creates and edits
-          workflow blueprints.
+          workflow specs.
         </small>
       </div>
       {harness && (

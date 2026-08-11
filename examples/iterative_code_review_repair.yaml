@@ -1,5 +1,5 @@
 workflow:
-  id: iterative_code_review_repair
+  slug: iterative_code_review_repair
   name: "Iterative Code Review & Repair"
   version: "1"
   description: >
@@ -84,7 +84,7 @@ nodes:
 
   review_fix_cycle_worker:
     kind: workflow
-    workflow_id: review_fix_cycle
+    workflow_slug: review_fix_cycle
 
   review_fix_loop:
     kind: loop

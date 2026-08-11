@@ -227,7 +227,7 @@ function TaskDetail({
           </div>
           {task.executions.map((execution, index) => {
             const workflowId =
-              execution.workflow_id ||
+              execution.workflow_slug ||
               task.workflowIds[index] ||
               "unknown-workflow";
             const workflowName =
@@ -399,7 +399,7 @@ export function MainMonitorPage({
       (item) => item.id === state.newTaskWorkflowId,
     );
     if (workflow) {
-      setNewTaskWorkflowId(workflow.id);
+      setNewTaskWorkflowId(workflow.slug);
       setShowNewTask(true);
     }
     navigate(location.pathname + location.search, {
@@ -418,8 +418,8 @@ export function MainMonitorPage({
     () =>
       new Map(
         workflows.map((workflow) => [
-          workflow.id,
-          workflow.name || workflow.id,
+          workflow.slug,
+          workflow.name || workflow.slug,
         ]),
     ),
     [workflows],
@@ -501,9 +501,9 @@ export function MainMonitorPage({
     view === "workflows" ? selectedTask?.executions[0] : undefined;
   const selectedWorkflowId = selectedExecution
     ? workflows.find((workflow) =>
-        selectedExecution.workflow_uuid && workflow.uuid
-          ? workflow.uuid === selectedExecution.workflow_uuid
-          : workflow.id === selectedExecution.workflow_id,
+        selectedExecution.workflow_id && workflow.id
+          ? workflow.id === selectedExecution.workflow_id
+          : workflow.slug === selectedExecution.workflow_slug,
       )?.id
     : undefined;
 
@@ -511,7 +511,7 @@ export function MainMonitorPage({
   // workflow slug names the path; "" clears back to /workflows.
   const executionPath = (executionId: string) => {
     const task = rows.find((row) => row.id === executionId);
-    const workflowSlug = task?.executions[0]?.workflow_id;
+    const workflowSlug = task?.executions[0]?.workflow_slug;
     if (!workflowSlug) {
       return "/workflows";
     }
@@ -540,7 +540,7 @@ export function MainMonitorPage({
       return;
     }
     const task = rows.find((row) => row.id === legacyExecutionId);
-    const workflowSlug = task?.executions[0]?.workflow_id;
+    const workflowSlug = task?.executions[0]?.workflow_slug;
     if (!workflowSlug) {
       return;
     }
@@ -587,7 +587,7 @@ export function MainMonitorPage({
     const preferred = routeWorkflowId
       ? filteredTasks.find(
           (task) =>
-            task.executions[0]?.workflow_id === routeWorkflowId,
+            task.executions[0]?.workflow_slug === routeWorkflowId,
         )
       : undefined;
     const nextId = (preferred ?? filteredTasks[0])?.id || "";
@@ -603,7 +603,7 @@ export function MainMonitorPage({
   );
   const newTaskWorkflow =
     runnableWorkflows.find(
-      (workflow) => workflow.id === newTaskWorkflowId,
+      (workflow) => workflow.slug === newTaskWorkflowId,
     ) ??
     runnableWorkflows[0] ??
     null;
@@ -624,7 +624,7 @@ export function MainMonitorPage({
     setError("");
     try {
       const response = await startTask(
-        newTaskWorkflow.id,
+        newTaskWorkflow.slug,
         input,
         shellRoot,
         worktree,
@@ -636,7 +636,7 @@ export function MainMonitorPage({
       // Watch the new run at its canonical path.
       navigate(
         `/workflows/${encodeURIComponent(
-          newTaskWorkflow.id,
+          newTaskWorkflow.slug,
         )}/executions/${encodeURIComponent(response.execution_id)}`,
       );
     } catch (caught) {
@@ -673,7 +673,12 @@ export function MainMonitorPage({
           <button
             type="button"
             className="builder-run-button"
-            disabled={!ready}
+            disabled={!ready || runnableWorkflows.length === 0}
+            title={
+              ready && runnableWorkflows.length === 0
+                ? "Import one with: agc workflow import --file <spec.yaml>"
+                : undefined
+            }
             onClick={() => {
               // The picker opens on the workflow you are looking at —
               // the selected run's, or the one named in the path.
@@ -681,7 +686,7 @@ export function MainMonitorPage({
               if (
                 current &&
                 runnableWorkflows.some(
-                  (workflow) => workflow.id === current,
+                  (workflow) => workflow.slug === current,
                 )
               ) {
                 setNewTaskWorkflowId(current);
@@ -689,8 +694,14 @@ export function MainMonitorPage({
               setShowNewTask(true);
             }}
           >
-            <PlayIcon />{" "}
-            {view === "workflows" ? "Launch workflow" : "New task"}
+            {ready && runnableWorkflows.length === 0 ? (
+              "No workflows available"
+            ) : (
+              <>
+                <PlayIcon />{" "}
+                {view === "workflows" ? "Launch workflow" : "New task"}
+              </>
+            )}
           </button>
         }
       />
@@ -809,11 +820,11 @@ export function MainMonitorPage({
 
       {showNewTask && newTaskWorkflow && (
         <RunInputModal
-          key={newTaskWorkflow.id}
+          key={newTaskWorkflow.slug}
           title={
             view === "workflows" ? "Launch workflow" : "New task"
           }
-          workflowId={newTaskWorkflow.id}
+          workflowId={newTaskWorkflow.slug}
           inputDefinitions={newTaskWorkflow.inputs}
           headerSlot={
             <div className="builder-field-row">
@@ -823,15 +834,15 @@ export function MainMonitorPage({
               <select
                 id="new-task-workflow"
                 className="builder-select task-picker__select"
-                value={newTaskWorkflow.id}
+                value={newTaskWorkflow.slug}
                 disabled={starting}
                 onChange={(event) =>
                   setNewTaskWorkflowId(event.target.value)
                 }
               >
                 {runnableWorkflows.map((workflow) => (
-                  <option key={workflow.id} value={workflow.id}>
-                    {workflow.name || workflow.id}
+                  <option key={workflow.slug} value={workflow.slug}>
+                    {workflow.name || workflow.slug}
                   </option>
                 ))}
               </select>

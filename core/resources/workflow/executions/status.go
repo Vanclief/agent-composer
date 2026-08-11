@@ -10,7 +10,7 @@ import (
 
 type StatusResponse struct {
 	ExecutionID     string                                  `json:"execution_id"`
-	WorkflowID      string                                  `json:"workflow_id"`
+	WorkflowSlug    string                                  `json:"workflow_slug"`
 	WorkflowVersion string                                  `json:"workflow_version"`
 	Status          executionmodels.WorkflowExecutionStatus `json:"status"`
 	StartedAt       *time.Time                              `json:"started_at,omitempty"`
@@ -36,7 +36,7 @@ func (api *API) Status(ctx context.Context, requester interface{}, request *GetR
 
 	response := &StatusResponse{
 		ExecutionID:     record.ID.String(),
-		WorkflowID:      record.WorkflowID,
+		WorkflowSlug:    record.WorkflowSlug,
 		WorkflowVersion: record.WorkflowVersion,
 		Status:          record.Status,
 		StartedAt:       record.StartedAt,
@@ -50,7 +50,7 @@ func (api *API) Status(ctx context.Context, requester interface{}, request *GetR
 
 	failure, err := loadExecutionFailureDetails(ctx, api.db, ExecutionFailureDetails{
 		ExecutionID:     record.ID.String(),
-		WorkflowID:      record.WorkflowID,
+		WorkflowSlug:    record.WorkflowSlug,
 		WorkflowVersion: record.WorkflowVersion,
 	})
 	if err != nil {

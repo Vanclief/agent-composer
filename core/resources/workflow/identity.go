@@ -4,24 +4,29 @@ import (
 	"context"
 
 	"github.com/vanclief/agent-composer/models/execution"
-	workflowruntime "github.com/vanclief/agent-composer/workflow"
+	workflowmodels "github.com/vanclief/agent-composer/models/workflow"
 	"github.com/vanclief/ez"
 )
 
-// BackfillWorkflowUUIDs gives every installed workflow a permanent
-// uuid and links past runs to it. Idempotent — runs at startup so
-// history recorded before uuids existed still keys on them.
-func (api *API) BackfillWorkflowUUIDs(ctx context.Context) error {
-	identities, err := workflowruntime.EnsureInstalledWorkflowUUIDs()
+// BackfillWorkflowIDs links past runs to each installed workflow's
+// permanent id. Idempotent — runs at startup so history recorded
+// before a workflow was imported (e.g. from --file runs) still keys
+// on it.
+func (api *API) BackfillWorkflowIDs(ctx context.Context) error {
+	records, err := workflowmodels.ListWorkflows(ctx, api.db)
 	if err != nil {
 		return ez.Wrap(err)
 	}
 
-	for slug, workflowUUID := range identities {
+	for _, record := range records {
+		if record.Spec == "" {
+			continue
+		}
+
 		_, err = api.db.NewUpdate().
 			Model((*execution.WorkflowExecution)(nil)).
-			Set("workflow_uuid = ?", workflowUUID).
-			Where("workflow_id = ? AND workflow_uuid IS NULL", slug).
+			Set("workflow_id = ?", record.ID).
+			Where("workflow_slug = ? AND workflow_id IS NULL", record.Slug).
 			Exec(ctx)
 		if err != nil {
 			return ez.Wrap(err)

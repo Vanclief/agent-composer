@@ -1,5 +1,5 @@
 workflow:
-  id: binary_vote_round
+  slug: binary_vote_round
   name: "Binary Vote Round"
   version: "1"
   description: >

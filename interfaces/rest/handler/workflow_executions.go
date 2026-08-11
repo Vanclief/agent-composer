@@ -23,7 +23,7 @@ func (h *Handler) ListWorkflowExecutions(c echo.Context) error {
 			Limit:  h.GetListLimit(c, 50),
 			Cursor: c.QueryParam("cursor"),
 		},
-		WorkflowID: strings.TrimSpace(c.QueryParam("workflow_id")),
+		WorkflowSlug: strings.TrimSpace(c.QueryParam("workflow_slug")),
 	}
 
 	return h.JSONResponse(c, op, request, body)

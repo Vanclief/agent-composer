@@ -1,5 +1,5 @@
 workflow:
-  id: parallel_code_review
+  slug: parallel_code_review
   name: "Parallel Code Review"
   version: "12"
   description: >

@@ -11,8 +11,8 @@ import (
 )
 
 type UpdateNodeRequest struct {
-	WorkflowID string `json:"workflow_id"`
-	Node       string `json:"node"`
+	WorkflowSlug string `json:"workflow_slug"`
+	Node         string `json:"node"`
 	// nil fields are left unchanged.
 	Model       *string `json:"model,omitempty"`
 	Harness     *string `json:"harness,omitempty"`
@@ -22,7 +22,7 @@ type UpdateNodeRequest struct {
 }
 
 func (r *UpdateNodeRequest) Validate() error {
-	if strings.TrimSpace(r.WorkflowID) == "" || strings.TrimSpace(r.Node) == "" {
+	if strings.TrimSpace(r.WorkflowSlug) == "" || strings.TrimSpace(r.Node) == "" {
 		return ez.New(ez.EINVALID, "workflow_id and node are required", nil)
 	}
 	if r.Model == nil && r.Harness == nil && r.Instruction == nil &&
@@ -51,9 +51,9 @@ func (r *UpdateNodeRequest) Validate() error {
 }
 
 type UpdateNodeResponse struct {
-	WorkflowID string `json:"workflow_id"`
-	Node       string `json:"node"`
-	Spec       string `json:"spec"`
+	WorkflowSlug string `json:"workflow_slug"`
+	Node         string `json:"node"`
+	Spec         string `json:"spec"`
 }
 
 func (api *API) UpdateNode(ctx context.Context, requester interface{}, request *UpdateNodeRequest) (*UpdateNodeResponse, error) {
@@ -70,8 +70,9 @@ func (api *API) UpdateNode(ctx context.Context, requester interface{}, request *
 		return &trimmed
 	}
 
-	err = workflowruntime.UpdateNodeConfig(
-		strings.TrimSpace(request.WorkflowID),
+	err = api.Registry.UpdateNodeConfig(
+		ctx,
+		strings.TrimSpace(request.WorkflowSlug),
 		strings.TrimSpace(request.Node),
 		workflowruntime.NodeConfigUpdate{
 			Model:           trim(request.Model),
@@ -86,16 +87,17 @@ func (api *API) UpdateNode(ctx context.Context, requester interface{}, request *
 		return nil, ez.Wrap(err)
 	}
 
-	raw, err := workflowruntime.ReadBlueprintBytesByWorkflowID(
-		strings.TrimSpace(request.WorkflowID),
+	raw, err := api.Registry.SpecBytes(
+		ctx,
+		strings.TrimSpace(request.WorkflowSlug),
 	)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
 	return &UpdateNodeResponse{
-		WorkflowID: strings.TrimSpace(request.WorkflowID),
-		Node:       strings.TrimSpace(request.Node),
-		Spec:       string(raw),
+		WorkflowSlug: strings.TrimSpace(request.WorkflowSlug),
+		Node:         strings.TrimSpace(request.Node),
+		Spec:         string(raw),
 	}, nil
 }

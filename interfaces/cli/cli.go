@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -30,7 +29,7 @@ import (
 const version = "0.3.0"
 
 type compileResult struct {
-	ID          string            `json:"id"`
+	Slug        string            `json:"slug"`
 	Version     string            `json:"version"`
 	Description string            `json:"description,omitempty"`
 	Inputs      map[string]string `json:"inputs"`
@@ -39,20 +38,21 @@ type compileResult struct {
 }
 
 type importResult struct {
-	ID          string            `json:"id"`
-	File        string            `json:"file"`
+	Slug        string            `json:"slug"`
+	ID          string            `json:"id,omitempty"`
+	Version     string            `json:"version,omitempty"`
 	Description string            `json:"description,omitempty"`
 	Inputs      map[string]string `json:"inputs"`
 	Outputs     map[string]string `json:"outputs"`
 }
 
 type exportResult struct {
-	ID   string `json:"id"`
+	Slug string `json:"slug"`
 	File string `json:"file"`
 }
 
 type deleteResult struct {
-	ID      string `json:"id"`
+	Slug    string `json:"slug"`
 	Deleted bool   `json:"deleted"`
 }
 
@@ -120,7 +120,7 @@ func workflowCommand() *cli.Command {
 	return &cli.Command{
 		Name:    "workflow",
 		Aliases: []string{"wf", "w"},
-		Usage:   "Workflow blueprint commands",
+		Usage:   "Workflow commands",
 		Subcommands: []*cli.Command{
 			workflowRunCommand(),
 			workflowCompileCommand(),
@@ -129,6 +129,8 @@ func workflowCommand() *cli.Command {
 			workflowImportCommand(),
 			workflowExportCommand(),
 			workflowDeleteCommand(),
+			workflowVersionsCommand(),
+			workflowRestoreCommand(),
 		},
 	}
 }
@@ -136,15 +138,15 @@ func workflowCommand() *cli.Command {
 func workflowRunCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "run",
-		Usage: "Compile and run a workflow blueprint from the registry or disk",
+		Usage: "Compile and run a workflow from the registry or a spec file",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:  "id",
-				Usage: "Workflow blueprint id from the workflow registry",
+				Name:  "slug",
+				Usage: "Workflow slug from the registry",
 			},
 			&cli.StringFlag{
 				Name:  "file",
-				Usage: "Path to the workflow blueprint YAML file",
+				Usage: "Path to a workflow spec YAML file",
 				Value: "examples/article_summary.yaml",
 			},
 			&cli.StringFlag{
@@ -163,7 +165,7 @@ func workflowRunCommand() *cli.Command {
 		Action: func(c *cli.Context) error {
 			return runWorkflow(
 				c.Context,
-				c.String("id"),
+				c.String("slug"),
 				c.String("file"),
 				c.String("input-file"),
 				c.String("input-json"),
@@ -180,9 +182,9 @@ func workflowRunCommand() *cli.Command {
 func workflowListCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "list",
-		Usage: "List installed workflow blueprints",
+		Usage: "List installed workflows",
 		Action: func(c *cli.Context) error {
-			return listWorkflows()
+			return listWorkflows(c.Context)
 		},
 	}
 }
@@ -190,19 +192,19 @@ func workflowListCommand() *cli.Command {
 func workflowShowCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "show",
-		Usage: "Show the raw YAML contents of a workflow blueprint from the registry or disk",
+		Usage: "Show a workflow's YAML spec from the registry or disk",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:  "id",
-				Usage: "Workflow blueprint id from the workflow registry",
+				Name:  "slug",
+				Usage: "Workflow slug from the registry",
 			},
 			&cli.StringFlag{
 				Name:  "file",
-				Usage: "Path to the workflow blueprint YAML file",
+				Usage: "Path to a workflow spec YAML file",
 			},
 		},
 		Action: func(c *cli.Context) error {
-			return showWorkflow(c.String("id"), c.String("file"))
+			return showWorkflow(c.Context, c.String("slug"), c.String("file"))
 		},
 	}
 }
@@ -210,19 +212,19 @@ func workflowShowCommand() *cli.Command {
 func workflowCompileCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "compile",
-		Usage: "Compile a workflow blueprint from the registry or disk without running it",
+		Usage: "Compile a workflow from the registry or a spec file without running it",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:  "id",
-				Usage: "Workflow blueprint id from the workflow registry",
+				Name:  "slug",
+				Usage: "Workflow slug from the registry",
 			},
 			&cli.StringFlag{
 				Name:  "file",
-				Usage: "Path to the workflow blueprint YAML file",
+				Usage: "Path to a workflow spec YAML file",
 			},
 		},
 		Action: func(c *cli.Context) error {
-			return compileWorkflow(c.String("id"), c.String("file"))
+			return compileWorkflow(c.Context, c.String("slug"), c.String("file"))
 		},
 	}
 }
@@ -230,20 +232,20 @@ func workflowCompileCommand() *cli.Command {
 func workflowImportCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "import",
-		Usage: "Import a workflow blueprint file into the workflow registry",
+		Usage: "Import a workflow spec file into the registry",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:     "file",
-				Usage:    "Path to the workflow blueprint YAML file",
+				Usage:    "Path to a workflow spec YAML file",
 				Required: true,
 			},
 			&cli.BoolFlag{
 				Name:  "overwrite",
-				Usage: "Overwrite an existing workflow with the same id",
+				Usage: "Overwrite an existing workflow with the same slug",
 			},
 		},
 		Action: func(c *cli.Context) error {
-			return importWorkflow(c.String("file"), c.Bool("overwrite"))
+			return importWorkflow(c.Context, c.String("file"), c.Bool("overwrite"))
 		},
 	}
 }
@@ -251,16 +253,16 @@ func workflowImportCommand() *cli.Command {
 func workflowExportCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "export",
-		Usage: "Export a workflow blueprint from the registry to a file path",
+		Usage: "Export a workflow's spec to a file",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:     "id",
-				Usage:    "Workflow blueprint id from the workflow registry",
+				Name:     "slug",
+				Usage:    "Workflow slug from the registry",
 				Required: true,
 			},
 			&cli.StringFlag{
 				Name:     "file",
-				Usage:    "Output path for the exported workflow blueprint YAML file",
+				Usage:    "Output path for the exported spec YAML file",
 				Required: true,
 			},
 			&cli.BoolFlag{
@@ -269,7 +271,7 @@ func workflowExportCommand() *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
-			return exportWorkflow(c.String("id"), c.String("file"), c.Bool("overwrite"))
+			return exportWorkflow(c.Context, c.String("slug"), c.String("file"), c.Bool("overwrite"))
 		},
 	}
 }
@@ -277,16 +279,55 @@ func workflowExportCommand() *cli.Command {
 func workflowDeleteCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "delete",
-		Usage: "Delete a workflow blueprint from the workflow registry",
+		Usage: "Delete a workflow from the registry",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:     "id",
-				Usage:    "Workflow blueprint id from the workflow registry",
+				Name:     "slug",
+				Usage:    "Workflow slug from the registry",
 				Required: true,
 			},
 		},
 		Action: func(c *cli.Context) error {
-			return deleteWorkflow(c.String("id"))
+			return deleteWorkflow(c.Context, c.String("slug"))
+		},
+	}
+}
+
+func workflowVersionsCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "versions",
+		Usage: "List a workflow's version history",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "slug",
+				Usage:    "Workflow slug from the registry",
+				Required: true,
+			},
+		},
+		Action: func(c *cli.Context) error {
+			return listWorkflowVersions(c.Context, c.String("slug"))
+		},
+	}
+}
+
+func workflowRestoreCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "restore",
+		Usage: "Restore a past version of a workflow as its new head version",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "slug",
+				Usage:    "Workflow slug from the registry",
+				Required: true,
+			},
+			&cli.IntFlag{
+				Name:     "version",
+				Usage:    "Version number to restore, from the versions command",
+				Required: true,
+			},
+		},
+		Action: func(c *cli.Context) error {
+			return restoreWorkflowVersion(c.Context, c.String("slug"), c.Int("version"))
 		},
 	}
 }
@@ -344,8 +385,29 @@ func runMCPServer(ctx context.Context, shellRoot string) error {
 	return mcpserver.ServeStdio(srv)
 }
 
-func listWorkflows() error {
-	workflows, err := workflowruntime.ListBlueprints()
+// newRegistry opens the application database and returns the workflow
+// registry plus a closer for the connection.
+func newRegistry() (*workflowruntime.Registry, func(), error) {
+	ctrl, err := controller.New()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	closer := func() {
+		ctrl.DB.Close() // nolint:errcheck // Close errors are not actionable here.
+	}
+
+	return workflowruntime.NewRegistry(ctrl.DB), closer, nil
+}
+
+func listWorkflows(ctx context.Context) error {
+	registry, closeDB, err := newRegistry()
+	if err != nil {
+		return err
+	}
+	defer closeDB()
+
+	workflows, err := registry.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -353,29 +415,35 @@ func listWorkflows() error {
 	return printJSON(workflows)
 }
 
-func compileWorkflow(workflowID string, filePath string) error {
-	blueprint, err := loadWorkflowBlueprint(workflowID, filePath)
+func compileWorkflow(ctx context.Context, slug string, filePath string) error {
+	registry, closeDB, err := newRegistry()
+	if err != nil {
+		return err
+	}
+	defer closeDB()
+
+	spec, err := loadWorkflowSpec(ctx, registry, slug, filePath)
 	if err != nil {
 		return err
 	}
 
-	snapshot, err := workflowruntime.Compile(blueprint)
+	snapshot, err := registry.Compile(ctx, spec)
 	if err != nil {
 		return err
 	}
 
 	return printJSON(compileResult{
-		ID:          strings.TrimSpace(blueprint.Workflow.ID),
-		Version:     strings.TrimSpace(blueprint.Workflow.Version),
-		Description: strings.TrimSpace(blueprint.Workflow.Description),
-		Inputs:      workflowInputTypes(blueprint),
-		Outputs:     workflowOutputTypes(blueprint),
+		Slug:        strings.TrimSpace(spec.Workflow.Slug),
+		Version:     strings.TrimSpace(spec.Workflow.Version),
+		Description: strings.TrimSpace(spec.Workflow.Description),
+		Inputs:      workflowInputTypes(spec),
+		Outputs:     workflowOutputTypes(spec),
 		NodeCount:   len(snapshot.Nodes),
 	})
 }
 
-func showWorkflow(workflowID string, filePath string) error {
-	raw, err := loadWorkflowBytes(workflowID, filePath)
+func showWorkflow(ctx context.Context, slug string, filePath string) error {
+	raw, err := loadWorkflowBytes(ctx, slug, filePath)
 	if err != nil {
 		return err
 	}
@@ -388,52 +456,97 @@ func showWorkflow(workflowID string, filePath string) error {
 	return nil
 }
 
-func importWorkflow(filePath string, overwrite bool) error {
-	summary, err := workflowruntime.ImportBlueprintFile(strings.TrimSpace(filePath), overwrite)
+func importWorkflow(ctx context.Context, filePath string, overwrite bool) error {
+	registry, closeDB, err := newRegistry()
 	if err != nil {
 		return err
 	}
+	defer closeDB()
 
-	workflowDir, err := workflowruntime.ResolveWorkflowDir()
+	summary, err := registry.ImportFile(ctx, strings.TrimSpace(filePath), overwrite)
 	if err != nil {
 		return err
 	}
 
 	return printJSON(importResult{
+		Slug:        summary.Slug,
 		ID:          summary.ID,
-		File:        filepath.Join(workflowDir, summary.ID+".yaml"),
+		Version:     summary.Version,
 		Description: summary.Description,
 		Inputs:      summary.Inputs,
 		Outputs:     summary.Outputs,
 	})
 }
 
-func exportWorkflow(workflowID string, filePath string, overwrite bool) error {
-	trimmedWorkflowID := strings.TrimSpace(workflowID)
+func exportWorkflow(ctx context.Context, slug string, filePath string, overwrite bool) error {
+	trimmedSlug := strings.TrimSpace(slug)
 	trimmedFilePath := strings.TrimSpace(filePath)
 
-	err := workflowruntime.ExportBlueprintByWorkflowID(trimmedWorkflowID, trimmedFilePath, overwrite)
+	registry, closeDB, err := newRegistry()
+	if err != nil {
+		return err
+	}
+	defer closeDB()
+
+	err = registry.ExportToFile(ctx, trimmedSlug, trimmedFilePath, overwrite)
 	if err != nil {
 		return err
 	}
 
 	return printJSON(exportResult{
-		ID:   trimmedWorkflowID,
+		Slug: trimmedSlug,
 		File: trimmedFilePath,
 	})
 }
 
-func deleteWorkflow(workflowID string) error {
-	trimmedWorkflowID := strings.TrimSpace(workflowID)
-	err := workflowruntime.DeleteBlueprintByWorkflowID(trimmedWorkflowID)
+func deleteWorkflow(ctx context.Context, slug string) error {
+	trimmedSlug := strings.TrimSpace(slug)
+
+	registry, closeDB, err := newRegistry()
+	if err != nil {
+		return err
+	}
+	defer closeDB()
+
+	err = registry.Delete(ctx, trimmedSlug)
 	if err != nil {
 		return err
 	}
 
 	return printJSON(deleteResult{
-		ID:      trimmedWorkflowID,
+		Slug:    trimmedSlug,
 		Deleted: true,
 	})
+}
+
+func listWorkflowVersions(ctx context.Context, slug string) error {
+	registry, closeDB, err := newRegistry()
+	if err != nil {
+		return err
+	}
+	defer closeDB()
+
+	versions, err := registry.ListVersions(ctx, strings.TrimSpace(slug))
+	if err != nil {
+		return err
+	}
+
+	return printJSON(versions)
+}
+
+func restoreWorkflowVersion(ctx context.Context, slug string, version int) error {
+	registry, closeDB, err := newRegistry()
+	if err != nil {
+		return err
+	}
+	defer closeDB()
+
+	restored, err := registry.RestoreVersion(ctx, strings.TrimSpace(slug), version)
+	if err != nil {
+		return err
+	}
+
+	return printJSON(restored)
 }
 
 func runMigrationByName(ctx context.Context, name string) error {
@@ -512,9 +625,18 @@ func migrationMatches(target string, migration migrate.Migration) bool {
 	return false
 }
 
-func runWorkflow(ctx context.Context, workflowID string, filePath string, inputFile string, inputJSON string, inputString string, hasInputFile bool, hasInputJSON bool, hasInputString bool, shellRoot string) error {
+func runWorkflow(ctx context.Context, slug string, filePath string, inputFile string, inputJSON string, inputString string, hasInputFile bool, hasInputJSON bool, hasInputString bool, shellRoot string) error {
+	stack, err := core.NewStack(ctx, core.StackOptions{ShellRoot: shellRoot})
+	if err != nil {
+		return err
+	}
+
+	defer stack.Controller.DB.Close() // nolint:errcheck // Close errors are not actionable here.
+
 	input, err := loadWorkflowInput(
-		strings.TrimSpace(workflowID),
+		ctx,
+		stack.WorkflowAPI.Registry,
+		strings.TrimSpace(slug),
 		strings.TrimSpace(filePath),
 		strings.TrimSpace(inputFile),
 		strings.TrimSpace(inputJSON),
@@ -527,20 +649,13 @@ func runWorkflow(ctx context.Context, workflowID string, filePath string, inputF
 		return err
 	}
 
-	stack, err := core.NewStack(ctx, core.StackOptions{ShellRoot: shellRoot})
-	if err != nil {
-		return err
-	}
-
-	defer stack.Controller.DB.Close() // nolint:errcheck // Close errors are not actionable here.
-
 	// Run synchronously: a detached run would die when the CLI process
 	// exits, before the workflow finishes.
 	response, err := stack.WorkflowAPI.Executions.Run(ctx, nil, &workflowexecutions.CreateRequest{
-		WorkflowID: strings.TrimSpace(workflowID),
-		File:       strings.TrimSpace(filePath),
-		Input:      input,
-		ShellRoot:  strings.TrimSpace(shellRoot),
+		WorkflowSlug: strings.TrimSpace(slug),
+		File:         strings.TrimSpace(filePath),
+		Input:        input,
+		ShellRoot:    strings.TrimSpace(shellRoot),
 	})
 	if err != nil {
 		return err
@@ -549,7 +664,7 @@ func runWorkflow(ctx context.Context, workflowID string, filePath string, inputF
 	return printJSON(response)
 }
 
-func loadWorkflowInput(workflowID string, filePath string, inputFile string, inputJSON string, inputString string, hasInputFile bool, hasInputJSON bool, hasInputString bool) (map[string]any, error) {
+func loadWorkflowInput(ctx context.Context, registry *workflowruntime.Registry, slug string, filePath string, inputFile string, inputJSON string, inputString string, hasInputFile bool, hasInputJSON bool, hasInputString bool) (map[string]any, error) {
 	inputSourceCount := 0
 	if hasInputFile {
 		inputSourceCount++
@@ -569,7 +684,7 @@ func loadWorkflowInput(workflowID string, filePath string, inputFile string, inp
 	}
 
 	if hasInputString {
-		return loadWorkflowStringInput(workflowID, filePath, inputString)
+		return loadWorkflowStringInput(ctx, registry, slug, filePath, inputString)
 	}
 
 	var raw []byte
@@ -592,17 +707,17 @@ func loadWorkflowInput(workflowID string, filePath string, inputFile string, inp
 	return input, nil
 }
 
-func loadWorkflowStringInput(workflowID string, filePath string, inputString string) (map[string]any, error) {
-	blueprint, err := loadWorkflowBlueprint(workflowID, filePath)
+func loadWorkflowStringInput(ctx context.Context, registry *workflowruntime.Registry, slug string, filePath string, inputString string) (map[string]any, error) {
+	spec, err := loadWorkflowSpec(ctx, registry, slug, filePath)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	if len(blueprint.Workflow.Inputs) != 1 {
+	if len(spec.Workflow.Inputs) != 1 {
 		return nil, ez.New(ez.EINVALID, "--input-string requires a workflow with exactly one top-level input", nil)
 	}
 
-	for inputName, typeRef := range blueprint.Workflow.Inputs {
+	for inputName, typeRef := range spec.Workflow.Inputs {
 		if strings.TrimSpace(typeRef) != "string" {
 			return nil, ez.New(ez.EINVALID, "--input-string requires the workflow input type to be string", nil)
 		}
@@ -615,34 +730,40 @@ func loadWorkflowStringInput(workflowID string, filePath string, inputString str
 	return nil, ez.New(ez.EINTERNAL, "workflow input declaration is missing", nil)
 }
 
-func loadWorkflowBlueprint(workflowID string, filePath string) (*workflowruntime.Blueprint, error) {
-	trimmedWorkflowID := strings.TrimSpace(workflowID)
-	if trimmedWorkflowID != "" {
-		blueprint, err := workflowruntime.LoadBlueprintByWorkflowID(trimmedWorkflowID)
+func loadWorkflowSpec(ctx context.Context, registry *workflowruntime.Registry, slug string, filePath string) (*workflowruntime.Spec, error) {
+	trimmedSlug := strings.TrimSpace(slug)
+	if trimmedSlug != "" {
+		spec, err := registry.Load(ctx, trimmedSlug)
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}
 
-		return blueprint, nil
+		return spec, nil
 	}
 
 	trimmedFilePath := strings.TrimSpace(filePath)
 	if trimmedFilePath == "" {
-		return nil, ez.New(ez.EINVALID, "one of --id or --file is required", nil)
+		return nil, ez.New(ez.EINVALID, "one of --slug or --file is required", nil)
 	}
 
-	blueprint, err := workflowruntime.LoadBlueprintFile(trimmedFilePath)
+	spec, err := workflowruntime.LoadSpecFile(trimmedFilePath)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	return blueprint, nil
+	return spec, nil
 }
 
-func loadWorkflowBytes(workflowID string, filePath string) ([]byte, error) {
-	trimmedWorkflowID := strings.TrimSpace(workflowID)
-	if trimmedWorkflowID != "" {
-		raw, err := workflowruntime.ReadBlueprintBytesByWorkflowID(trimmedWorkflowID)
+func loadWorkflowBytes(ctx context.Context, slug string, filePath string) ([]byte, error) {
+	trimmedSlug := strings.TrimSpace(slug)
+	if trimmedSlug != "" {
+		registry, closeDB, err := newRegistry()
+		if err != nil {
+			return nil, ez.Wrap(err)
+		}
+		defer closeDB()
+
+		raw, err := registry.SpecBytes(ctx, trimmedSlug)
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}
@@ -652,7 +773,7 @@ func loadWorkflowBytes(workflowID string, filePath string) ([]byte, error) {
 
 	trimmedFilePath := strings.TrimSpace(filePath)
 	if trimmedFilePath == "" {
-		return nil, ez.New(ez.EINVALID, "one of --id or --file is required", nil)
+		return nil, ez.New(ez.EINVALID, "one of --slug or --file is required", nil)
 	}
 
 	raw, err := os.ReadFile(trimmedFilePath)
@@ -663,18 +784,18 @@ func loadWorkflowBytes(workflowID string, filePath string) ([]byte, error) {
 	return raw, nil
 }
 
-func workflowInputTypes(blueprint *workflowruntime.Blueprint) map[string]string {
-	inputs := make(map[string]string, len(blueprint.Workflow.Inputs))
-	for inputName, typeRef := range blueprint.Workflow.Inputs {
+func workflowInputTypes(spec *workflowruntime.Spec) map[string]string {
+	inputs := make(map[string]string, len(spec.Workflow.Inputs))
+	for inputName, typeRef := range spec.Workflow.Inputs {
 		inputs[inputName] = strings.TrimSpace(typeRef)
 	}
 
 	return inputs
 }
 
-func workflowOutputTypes(blueprint *workflowruntime.Blueprint) map[string]string {
-	outputs := make(map[string]string, len(blueprint.Workflow.Outputs))
-	for outputName, outputSpec := range blueprint.Workflow.Outputs {
+func workflowOutputTypes(spec *workflowruntime.Spec) map[string]string {
+	outputs := make(map[string]string, len(spec.Workflow.Outputs))
+	for outputName, outputSpec := range spec.Workflow.Outputs {
 		outputs[outputName] = strings.TrimSpace(outputSpec.Schema)
 	}
 

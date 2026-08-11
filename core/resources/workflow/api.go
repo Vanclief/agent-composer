@@ -12,6 +12,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/workflow/nodeexecutions"
 	"github.com/vanclief/agent-composer/core/resources/workflow/worktrees"
 	"github.com/vanclief/agent-composer/runtime"
+	workflowruntime "github.com/vanclief/agent-composer/workflow"
 	"github.com/vanclief/agent-composer/worktree"
 )
 
@@ -20,6 +21,7 @@ type API struct {
 	NodeExecutions *nodeexecutions.API
 	Conversations  *conversations.API
 	Worktrees      *worktrees.API
+	Registry       *workflowruntime.Registry
 	rt             *runtime.Runtime
 	db             bun.IDB
 }
@@ -29,8 +31,9 @@ func NewAPI(ctrl *controller.Controller, rt *runtime.Runtime) *API {
 		panic("Controller reference is nil")
 	}
 
+	registry := workflowruntime.NewRegistry(ctrl.DB)
 	manager := &worktree.Manager{Root: worktree.DefaultRoot()}
-	executionsAPI := executions.NewAPI(ctrl, rt, manager)
+	executionsAPI := executions.NewAPI(ctrl, rt, manager, registry)
 	nodeExecutionsAPI := nodeexecutions.NewAPI(ctrl)
 	conversationsAPI := conversations.NewAPI(ctrl)
 	worktreesAPI := worktrees.NewAPI(manager)
@@ -40,6 +43,7 @@ func NewAPI(ctrl *controller.Controller, rt *runtime.Runtime) *API {
 		NodeExecutions: nodeExecutionsAPI,
 		Conversations:  conversationsAPI,
 		Worktrees:      worktreesAPI,
+		Registry:       registry,
 		rt:             rt,
 		db:             ctrl.DB,
 	}

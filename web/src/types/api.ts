@@ -19,20 +19,22 @@ export interface AppSettings {
 }
 
 export interface ComposeResponse {
-  workflow_id: string;
+  workflow_slug: string;
   action: string;
   summary: string;
   harness: string;
   model: string;
-  /** The proposed blueprint, now stored as the workflow's draft. */
+  /** The proposed spec, now stored as the workflow's draft. */
   draft?: string;
 }
 
 export interface WorkflowSummary {
-  id: string;
-  /** Permanent identity — the id is a renameable slug. */
-  uuid?: string;
+  /** Human-facing handle — renameable. */
+  slug: string;
+  /** Permanent identity. */
+  id?: string;
   name: string;
+  version?: string;
   description?: string;
   /** Unsaved composer changes exist. */
   has_draft?: boolean;
@@ -47,7 +49,7 @@ export interface WorkflowListResponse {
 }
 
 export interface WorkflowSpecResponse {
-  workflow_id: string;
+  workflow_slug: string;
   spec: string;
   /** Unsaved composer changes, when a draft exists. */
   draft?: string;
@@ -145,9 +147,9 @@ export interface WorkflowSnapshot {
 
 export interface WorkflowExecution {
   id: string;
-  workflow_id: string;
-  /** Permanent workflow identity; absent on pre-uuid history. */
-  workflow_uuid?: string;
+  workflow_slug: string;
+  /** Permanent workflow identity; absent on pre-identity history. */
+  workflow_id?: string;
   workflow_version: string;
   workflow_snapshot: WorkflowSnapshot | string;
   input_snapshot?: JsonObject;
@@ -226,12 +228,12 @@ export interface WorktreeCreateResponse {
 
 export type WorkflowExecutionCreateRequest =
   | (WorkflowExecutionCreateOptions & {
-      workflow_id: string;
+      workflow_slug: string;
       file?: never;
       resume_from_execution_id?: never;
     })
   | (WorkflowExecutionCreateOptions & {
-      workflow_id?: never;
+      workflow_slug?: never;
       file: string;
       resume_from_execution_id?: never;
     })
@@ -244,13 +246,13 @@ export type WorkflowExecutionCreateRequest =
       shell_root?: string;
       worktree?: string;
       base?: string;
-      workflow_id?: never;
+      workflow_slug?: never;
       file?: never;
     };
 
 export interface WorkflowExecutionCreateResponse {
   execution_id?: string;
-  workflow_id: string;
+  workflow_slug: string;
   workflow_version: string;
   status: WorkflowExecutionStatus;
 }

@@ -9,14 +9,14 @@ import (
 
 // The canvas reserves these ids for its synthetic Inputs/Outputs
 // nodes (they live in node-selection URLs), so no flow instance may
-// claim them. Keep in sync with web/src/api/blueprints.ts.
+// claim them. Keep in sync with web/src/api/specs.ts.
 var reservedInstanceIDs = map[string]bool{
 	"workflow-inputs":  true,
 	"workflow-outputs": true,
 }
 
-func compileBlueprint(blueprint *Blueprint, namespace string, resolver *workflowResolver, inputResolver func(string) (Binding, error), stack []string) (*compiledWorkflow, error) {
-	workflowID := strings.TrimSpace(blueprint.Workflow.ID)
+func compileSpec(spec *Spec, namespace string, resolver *workflowResolver, inputResolver func(string) (Binding, error), stack []string) (*compiledWorkflow, error) {
+	workflowID := strings.TrimSpace(spec.Workflow.Slug)
 	stack, err := pushWorkflowStack(stack, workflowID)
 	if err != nil {
 		return nil, ez.Wrap(err)
@@ -30,7 +30,7 @@ func compileBlueprint(blueprint *Blueprint, namespace string, resolver *workflow
 
 	workflowAliases := make(map[string]map[string]Binding)
 
-	instanceIDs := sortedKeys(blueprint.Flow.Instances)
+	instanceIDs := sortedKeys(spec.Flow.Instances)
 
 	// The canvas adds synthetic Inputs/Outputs nodes under these ids —
 	// a real instance shadowing them would corrupt the graph and its
@@ -41,17 +41,17 @@ func compileBlueprint(blueprint *Blueprint, namespace string, resolver *workflow
 		}
 	}
 
-	err = compileWorkflowInstances(blueprint, instanceIDs, namespace, resolver, inputResolver, compiled, workflowAliases, stack)
+	err = compileWorkflowInstances(spec, instanceIDs, namespace, resolver, inputResolver, compiled, workflowAliases, stack)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	err = compileConcreteInstances(blueprint, instanceIDs, namespace, resolver, inputResolver, compiled, workflowAliases, stack)
+	err = compileConcreteInstances(spec, instanceIDs, namespace, resolver, inputResolver, compiled, workflowAliases, stack)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	for outputName, outputSpec := range blueprint.Workflow.Outputs {
+	for outputName, outputSpec := range spec.Workflow.Outputs {
 		binding, err := parseBinding(outputSpec.From)
 		if err != nil {
 			return nil, ez.Wrap(fmt.Errorf("workflow output %q: %w", outputName, err))
@@ -68,11 +68,11 @@ func compileBlueprint(blueprint *Blueprint, namespace string, resolver *workflow
 	return compiled, nil
 }
 
-func compileWorkflowInstances(blueprint *Blueprint, instanceIDs []string, namespace string, resolver *workflowResolver, inputResolver func(string) (Binding, error), compiled *compiledWorkflow, workflowAliases map[string]map[string]Binding, stack []string) error {
+func compileWorkflowInstances(spec *Spec, instanceIDs []string, namespace string, resolver *workflowResolver, inputResolver func(string) (Binding, error), compiled *compiledWorkflow, workflowAliases map[string]map[string]Binding, stack []string) error {
 	for _, instanceID := range instanceIDs {
-		instance := blueprint.Flow.Instances[instanceID]
+		instance := spec.Flow.Instances[instanceID]
 
-		nodeSpec, err := lookupInstanceNodeSpec(blueprint, instance)
+		nodeSpec, err := lookupInstanceNodeSpec(spec, instance)
 		if err != nil {
 			return err
 		}
@@ -81,12 +81,12 @@ func compileWorkflowInstances(blueprint *Blueprint, instanceIDs []string, namesp
 			continue
 		}
 
-		workflowID := strings.TrimSpace(nodeSpec.WorkflowID)
+		workflowID := strings.TrimSpace(nodeSpec.WorkflowSlug)
 		if workflowID == "" {
-			return ez.New(ez.EINVALID, "workflow node is missing workflow_id", nil)
+			return ez.New(ez.EINVALID, "workflow node is missing workflow_slug", nil)
 		}
 
-		childBlueprint, err := resolver.loadByWorkflowID(workflowID)
+		childSpec, err := resolver.loadByWorkflowID(workflowID)
 		if err != nil {
 			return err
 		}
@@ -105,7 +105,7 @@ func compileWorkflowInstances(blueprint *Blueprint, instanceIDs []string, namesp
 			return rewriteBinding(binding, namespace, workflowAliases, inputResolver)
 		}
 
-		childCompiled, err := compileBlueprint(childBlueprint, namespace+instanceID+"__", resolver, childInputResolver, stack)
+		childCompiled, err := compileSpec(childSpec, namespace+instanceID+"__", resolver, childInputResolver, stack)
 		if err != nil {
 			return err
 		}
@@ -124,11 +124,11 @@ func compileWorkflowInstances(blueprint *Blueprint, instanceIDs []string, namesp
 	return nil
 }
 
-func compileConcreteInstances(blueprint *Blueprint, instanceIDs []string, namespace string, resolver *workflowResolver, inputResolver func(string) (Binding, error), compiled *compiledWorkflow, workflowAliases map[string]map[string]Binding, stack []string) error {
+func compileConcreteInstances(spec *Spec, instanceIDs []string, namespace string, resolver *workflowResolver, inputResolver func(string) (Binding, error), compiled *compiledWorkflow, workflowAliases map[string]map[string]Binding, stack []string) error {
 	for _, instanceID := range instanceIDs {
-		instance := blueprint.Flow.Instances[instanceID]
+		instance := spec.Flow.Instances[instanceID]
 
-		nodeSpec, err := lookupInstanceNodeSpec(blueprint, instance)
+		nodeSpec, err := lookupInstanceNodeSpec(spec, instance)
 		if err != nil {
 			return err
 		}
@@ -137,7 +137,7 @@ func compileConcreteInstances(blueprint *Blueprint, instanceIDs []string, namesp
 			continue
 		}
 
-		node, dependencies, err := compileConcreteNode(blueprint, instanceID, instance, nodeSpec, namespace, resolver, inputResolver, workflowAliases, stack)
+		node, dependencies, err := compileConcreteNode(spec, instanceID, instance, nodeSpec, namespace, resolver, inputResolver, workflowAliases, stack)
 		if err != nil {
 			return err
 		}
@@ -149,8 +149,8 @@ func compileConcreteInstances(blueprint *Blueprint, instanceIDs []string, namesp
 	return nil
 }
 
-func lookupInstanceNodeSpec(blueprint *Blueprint, instance InstanceSpec) (NodeSpec, error) {
-	nodeSpec, found := blueprint.Nodes[instance.Node]
+func lookupInstanceNodeSpec(spec *Spec, instance InstanceSpec) (NodeSpec, error) {
+	nodeSpec, found := spec.Nodes[instance.Node]
 	if !found {
 		return NodeSpec{}, ez.New(ez.EINVALID, "flow instance references unknown node: "+instance.Node, nil)
 	}
@@ -158,13 +158,13 @@ func lookupInstanceNodeSpec(blueprint *Blueprint, instance InstanceSpec) (NodeSp
 	return nodeSpec, nil
 }
 
-func compileConcreteNode(blueprint *Blueprint, instanceID string, instance InstanceSpec, nodeSpec NodeSpec, namespace string, resolver *workflowResolver, inputResolver func(string) (Binding, error), workflowAliases map[string]map[string]Binding, stack []string) (NodeSnapshot, []string, error) {
+func compileConcreteNode(spec *Spec, instanceID string, instance InstanceSpec, nodeSpec NodeSpec, namespace string, resolver *workflowResolver, inputResolver func(string) (Binding, error), workflowAliases map[string]map[string]Binding, stack []string) (NodeSnapshot, []string, error) {
 	err := validateConcreteNodeSpec(nodeSpec)
 	if err != nil {
 		return NodeSnapshot{}, nil, err
 	}
 
-	shape, err := buildNodeShape(blueprint, instance.Node, nodeSpec)
+	shape, err := buildNodeShape(spec, instance.Node, nodeSpec)
 	if err != nil {
 		return NodeSnapshot{}, nil, err
 	}
@@ -176,7 +176,7 @@ func compileConcreteNode(blueprint *Blueprint, instanceID string, instance Insta
 
 	node := buildConcreteNodeSnapshot(namespace, instanceID, instance.Node, nodeSpec, shape, inputBindings)
 
-	compositeDependencies, err := attachCompositeTargets(blueprint, instance.Node, nodeSpec, resolver, &node, stack)
+	compositeDependencies, err := attachCompositeTargets(spec, instance.Node, nodeSpec, resolver, &node, stack)
 	if err != nil {
 		return NodeSnapshot{}, nil, err
 	}
@@ -233,21 +233,21 @@ func buildConcreteNodeSnapshot(namespace string, instanceID string, nodeName str
 	}
 }
 
-func attachCompositeTargets(blueprint *Blueprint, nodeName string, nodeSpec NodeSpec, resolver *workflowResolver, node *NodeSnapshot, stack []string) ([]string, error) {
+func attachCompositeTargets(spec *Spec, nodeName string, nodeSpec NodeSpec, resolver *workflowResolver, node *NodeSnapshot, stack []string) ([]string, error) {
 	switch nodeSpec.Kind {
 	case "loop":
-		return attachLoopTargets(blueprint, nodeName, nodeSpec, resolver, node, stack)
+		return attachLoopTargets(spec, nodeName, nodeSpec, resolver, node, stack)
 	case "conditional":
-		return attachConditionalTargets(blueprint, nodeName, nodeSpec, resolver, node, stack)
+		return attachConditionalTargets(spec, nodeName, nodeSpec, resolver, node, stack)
 	default:
 		return nil, nil
 	}
 }
 
-func attachLoopTargets(blueprint *Blueprint, nodeName string, nodeSpec NodeSpec, resolver *workflowResolver, node *NodeSnapshot, stack []string) ([]string, error) {
+func attachLoopTargets(spec *Spec, nodeName string, nodeSpec NodeSpec, resolver *workflowResolver, node *NodeSnapshot, stack []string) ([]string, error) {
 	switch strings.TrimSpace(nodeSpec.Operation) {
 	case "foreach":
-		targetNode, targetDependencies, err := buildForeachLoopTarget(blueprint, nodeSpec, nodeName, resolver, stack)
+		targetNode, targetDependencies, err := buildForeachLoopTarget(spec, nodeSpec, nodeName, resolver, stack)
 		if err != nil {
 			return nil, err
 		}
@@ -256,7 +256,7 @@ func attachLoopTargets(blueprint *Blueprint, nodeName string, nodeSpec NodeSpec,
 
 		return targetDependencies, nil
 	case "while":
-		targetNode, targetDependencies, err := buildWhileLoopTarget(blueprint, nodeSpec, nodeName, resolver, stack)
+		targetNode, targetDependencies, err := buildWhileLoopTarget(spec, nodeSpec, nodeName, resolver, stack)
 		if err != nil {
 			return nil, err
 		}
@@ -269,8 +269,8 @@ func attachLoopTargets(blueprint *Blueprint, nodeName string, nodeSpec NodeSpec,
 	}
 }
 
-func attachConditionalTargets(blueprint *Blueprint, nodeName string, nodeSpec NodeSpec, resolver *workflowResolver, node *NodeSnapshot, stack []string) ([]string, error) {
-	trueTarget, falseTarget, branchDependencies, err := buildConditionalTargets(blueprint, nodeSpec, nodeName, resolver, stack)
+func attachConditionalTargets(spec *Spec, nodeName string, nodeSpec NodeSpec, resolver *workflowResolver, node *NodeSnapshot, stack []string) ([]string, error) {
+	trueTarget, falseTarget, branchDependencies, err := buildConditionalTargets(spec, nodeSpec, nodeName, resolver, stack)
 	if err != nil {
 		return nil, err
 	}

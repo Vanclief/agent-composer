@@ -1,28 +1,32 @@
 package workflow
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
+
+	workflowmodels "github.com/vanclief/agent-composer/models/workflow"
+	"github.com/vanclief/ez"
 )
 
-func TestDeleteWorkflowRemovesFileAndDraft(t *testing.T) {
-	home := writeRenameFixture(t)
+func TestDeleteWorkflowRemovesSpecAndDraft(t *testing.T) {
+	registry, ctx := importRenameFixture(t)
 
 	// The embedder is embedded by nobody, so it can go. Give it a
 	// draft to confirm the draft goes with it.
-	if err := WriteDraft("embedder", []byte(renameEmbedderBlueprint)); err != nil {
+	err := registry.WriteDraft(ctx, "embedder", []byte(renameEmbedderSpec))
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := DeleteWorkflow("embedder"); err != nil {
+	err = registry.Delete(ctx, "embedder")
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := os.Stat(filepath.Join(home, "workflows", "embedder.yaml")); !os.IsNotExist(err) {
-		t.Fatal("registry file should be gone")
+	_, err = registry.Load(ctx, "embedder")
+	if ez.ErrorCode(err) != ez.ENOTFOUND {
+		t.Fatalf("the workflow should be gone, got: %v", err)
 	}
-	draft, err := ReadDraft("embedder")
+	draft, err := registry.ReadDraft(ctx, "embedder")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,39 +36,37 @@ func TestDeleteWorkflowRemovesFileAndDraft(t *testing.T) {
 }
 
 func TestDeleteWorkflowRefusesWhenEmbedded(t *testing.T) {
-	home := writeRenameFixture(t)
+	registry, ctx := importRenameFixture(t)
 
-	err := DeleteWorkflow("rename_target")
+	err := registry.Delete(ctx, "rename_target")
 	if err == nil {
 		t.Fatal("expected refusal — rename_target is embedded by embedder")
 	}
 
-	if _, err := os.Stat(filepath.Join(home, "workflows", "rename_target.yaml")); err != nil {
-		t.Fatal("registry file must remain after a refused delete")
+	_, err = registry.Load(ctx, "rename_target")
+	if err != nil {
+		t.Fatal("the workflow must remain after a refused delete")
 	}
 }
 
-func TestDeleteWorkflowKeepsVersionsArchive(t *testing.T) {
-	home := writeRenameFixture(t)
+func TestDeleteWorkflowKeepsVersionHistory(t *testing.T) {
+	registry, ctx := importRenameFixture(t)
 
-	versionsDir := filepath.Join(home, "versions", "embedder")
-	if err := os.MkdirAll(versionsDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	err := os.WriteFile(
-		filepath.Join(versionsDir, "v1.yaml"),
-		[]byte(renameEmbedderBlueprint),
-		0644,
-	)
+	record, err := workflowmodels.GetWorkflowBySlug(ctx, registry.db, "embedder")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := DeleteWorkflow("embedder"); err != nil {
+	err = registry.Delete(ctx, "embedder")
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := os.Stat(filepath.Join(versionsDir, "v1.yaml")); err != nil {
-		t.Fatal("the versions archive must survive a delete")
+	versions, err := workflowmodels.ListWorkflowVersions(ctx, registry.db, record.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) == 0 {
+		t.Fatal("the version history must survive a delete")
 	}
 }

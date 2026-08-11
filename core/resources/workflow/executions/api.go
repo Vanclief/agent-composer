@@ -12,21 +12,26 @@ type API struct {
 	db          bun.IDB
 	rt          *runtime.Runtime
 	worktrees   *worktree.Manager
+	registry    *workflowruntime.Registry
 	newRecorder func() workflowruntime.ExecutionRecorder
 }
 
-func NewAPI(ctrl *controller.Controller, rt *runtime.Runtime, worktrees *worktree.Manager) *API {
+func NewAPI(ctrl *controller.Controller, rt *runtime.Runtime, worktrees *worktree.Manager, registry *workflowruntime.Registry) *API {
 	if ctrl == nil {
 		panic("Controller reference is nil")
 	}
 	if rt == nil {
 		panic("Runtime reference is nil")
 	}
+	if registry == nil {
+		panic("Registry reference is nil")
+	}
 
 	return &API{
 		db:        ctrl.DB,
 		rt:        rt,
 		worktrees: worktrees,
+		registry:  registry,
 		newRecorder: func() workflowruntime.ExecutionRecorder {
 			return workflowruntime.NewDBRecorder(ctrl.DB)
 		},

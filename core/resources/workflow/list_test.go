@@ -1,25 +1,15 @@
 package workflow
 
 import (
-	"context"
-	"os"
-	"path/filepath"
 	"testing"
 )
 
-func TestListReturnsInstalledWorkflowBlueprints(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("AGENT_COMPOSER_HOME", homeDir)
+func TestListReturnsInstalledWorkflows(t *testing.T) {
+	api, ctx := newTestAPI(t)
 
-	workflowDir := filepath.Join(homeDir, "workflows")
-	err := os.MkdirAll(workflowDir, 0755)
-	if err != nil {
-		t.Fatalf("mkdir workflow dir: %v", err)
-	}
-
-	err = os.WriteFile(filepath.Join(workflowDir, "beta.yaml"), []byte(`
+	installSpec(t, ctx, api, "beta", `
 workflow:
-  id: beta
+  slug: beta
   version: "1"
   description: Beta workflow.
   inputs:
@@ -41,14 +31,11 @@ flow:
       node: summarize
       inputs:
         topic: workflow_input.topic
-`), 0644)
-	if err != nil {
-		t.Fatalf("write beta workflow: %v", err)
-	}
+`)
 
-	err = os.WriteFile(filepath.Join(workflowDir, "alpha.yaml"), []byte(`
+	installSpec(t, ctx, api, "alpha", `
 workflow:
-  id: alpha
+  slug: alpha
   version: "1"
   description: Alpha workflow.
   inputs:
@@ -70,13 +57,9 @@ flow:
       node: slugify
       inputs:
         title: workflow_input.title
-`), 0644)
-	if err != nil {
-		t.Fatalf("write alpha workflow: %v", err)
-	}
+`)
 
-	api := &API{}
-	response, err := api.List(context.Background(), nil, &ListRequest{})
+	response, err := api.List(ctx, nil, &ListRequest{})
 	if err != nil {
 		t.Fatalf("list workflows: %v", err)
 	}
@@ -85,12 +68,12 @@ flow:
 		t.Fatalf("expected 2 workflows, got %d", len(response.Workflows))
 	}
 
-	if response.Workflows[0].ID != "alpha" {
-		t.Fatalf("expected alpha first, got %q", response.Workflows[0].ID)
+	if response.Workflows[0].Slug != "alpha" {
+		t.Fatalf("expected alpha first, got %q", response.Workflows[0].Slug)
 	}
 
-	if response.Workflows[1].ID != "beta" {
-		t.Fatalf("expected beta second, got %q", response.Workflows[1].ID)
+	if response.Workflows[1].Slug != "beta" {
+		t.Fatalf("expected beta second, got %q", response.Workflows[1].Slug)
 	}
 
 	if response.Workflows[0].Inputs["title"] != "string" {

@@ -2,6 +2,7 @@ package executions
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,11 +10,48 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/vanclief/agent-composer/models/agent"
 	executionmodels "github.com/vanclief/agent-composer/models/execution"
+	workflowmodels "github.com/vanclief/agent-composer/models/workflow"
 	"github.com/vanclief/agent-composer/runtime"
 	workflowruntime "github.com/vanclief/agent-composer/workflow"
+	_ "modernc.org/sqlite"
 )
+
+// newTestRegistry returns a registry backed by an in-memory SQLite
+// database with the workflow tables created.
+func newTestRegistry(t *testing.T) *workflowruntime.Registry {
+	t.Helper()
+
+	sqldb, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Every pooled connection would get its own :memory: database, so
+	// the pool must stay at one connection.
+	sqldb.SetMaxOpenConns(1)
+	t.Cleanup(func() {
+		_ = sqldb.Close()
+	})
+
+	db := bun.NewDB(sqldb, sqlitedialect.New())
+	ctx := context.Background()
+
+	tables := []interface{}{
+		(*workflowmodels.Workflow)(nil),
+		(*workflowmodels.WorkflowVersion)(nil),
+	}
+	for _, table := range tables {
+		_, err = db.NewCreateTable().Model(table).Exec(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	return workflowruntime.NewRegistry(db)
+}
 
 type stubRecorder struct {
 	startedWorkflows  int
@@ -60,7 +98,7 @@ func TestCreate(t *testing.T) {
 
 	err := os.WriteFile(workflowPath, []byte(`
 workflow:
-  id: workflow_execution_api_test
+  slug: workflow_execution_api_test
   version: "1"
   inputs:
     title: string
@@ -105,7 +143,8 @@ flow:
 		workflowStatuses: make(chan executionmodels.WorkflowExecutionStatus, 1),
 	}
 	api := &API{
-		rt: &runtime.Runtime{},
+		rt:       &runtime.Runtime{},
+		registry: newTestRegistry(t),
 		newRecorder: func() workflowruntime.ExecutionRecorder {
 			return recorder
 		},
@@ -122,8 +161,8 @@ flow:
 		t.Fatalf("create workflow execution: %v", err)
 	}
 
-	if response.WorkflowID != "workflow_execution_api_test" {
-		t.Fatalf("unexpected workflow id: %q", response.WorkflowID)
+	if response.WorkflowSlug != "workflow_execution_api_test" {
+		t.Fatalf("unexpected workflow id: %q", response.WorkflowSlug)
 	}
 
 	if response.ExecutionID == "" {
@@ -154,18 +193,11 @@ flow:
 
 func TestCreateWithWorkflowID(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("AGENT_COMPOSER_HOME", tempDir)
 
-	workflowDir := filepath.Join(tempDir, "workflows")
-	err := os.MkdirAll(workflowDir, 0755)
-	if err != nil {
-		t.Fatalf("mkdir workflow dir: %v", err)
-	}
-
-	workflowPath := filepath.Join(workflowDir, "registry-pack-workflow.yaml")
-	err = os.WriteFile(workflowPath, []byte(`
+	workflowPath := filepath.Join(tempDir, "registry-pack-workflow.yaml")
+	err := os.WriteFile(workflowPath, []byte(`
 workflow:
-  id: workflow_execution_registry_test
+  slug: workflow_execution_registry_test
   version: "1"
   inputs:
     title: string
@@ -206,18 +238,25 @@ flow:
 		t.Fatalf("write workflow file: %v", err)
 	}
 
+	registry := newTestRegistry(t)
+	_, err = registry.ImportFile(context.Background(), workflowPath, false)
+	if err != nil {
+		t.Fatalf("import workflow into registry: %v", err)
+	}
+
 	recorder := &stubRecorder{
 		workflowStatuses: make(chan executionmodels.WorkflowExecutionStatus, 1),
 	}
 	api := &API{
-		rt: &runtime.Runtime{},
+		rt:       &runtime.Runtime{},
+		registry: registry,
 		newRecorder: func() workflowruntime.ExecutionRecorder {
 			return recorder
 		},
 	}
 
 	response, err := api.Create(context.Background(), nil, &CreateRequest{
-		WorkflowID: "workflow_execution_registry_test",
+		WorkflowSlug: "workflow_execution_registry_test",
 		Input: map[string]any{
 			"title":   "Registry bridge update",
 			"content": "Copied starter workflow and ran it from the registry.",
@@ -227,8 +266,8 @@ flow:
 		t.Fatalf("create workflow execution by workflow id: %v", err)
 	}
 
-	if response.WorkflowID != "workflow_execution_registry_test" {
-		t.Fatalf("unexpected workflow id: %q", response.WorkflowID)
+	if response.WorkflowSlug != "workflow_execution_registry_test" {
+		t.Fatalf("unexpected workflow id: %q", response.WorkflowSlug)
 	}
 
 	if response.Status != executionmodels.WorkflowExecutionStatusRunning {
@@ -251,7 +290,7 @@ func TestCreateRecordsFailedStatusOnRuntimeFailure(t *testing.T) {
 
 	err := os.WriteFile(workflowPath, []byte(`
 workflow:
-  id: workflow_execution_failure_test
+  slug: workflow_execution_failure_test
   version: "1"
   inputs:
     source: Draft
@@ -291,7 +330,8 @@ flow:
 		workflowStatuses: make(chan executionmodels.WorkflowExecutionStatus, 1),
 	}
 	api := &API{
-		rt: &runtime.Runtime{},
+		rt:       &runtime.Runtime{},
+		registry: newTestRegistry(t),
 		newRecorder: func() workflowruntime.ExecutionRecorder {
 			return recorder
 		},
@@ -329,7 +369,7 @@ func TestExecutionFailedErrorIncludesHarnessDetailsInErrorString(t *testing.T) {
 	err := (&ExecutionFailedError{
 		Details: ExecutionFailureDetails{
 			ExecutionID:     "workflow-123",
-			WorkflowID:      "plan-new-blueprint",
+			WorkflowSlug:    "plan-new-spec",
 			NodeID:          "initial_plan_state_builder",
 			NodeExecutionID: "node-456",
 			ConversationID:  "conversation-789",

@@ -1,5 +1,5 @@
 workflow:
-  id: review_fix_cycle
+  slug: review_fix_cycle
   name: "Review Fix Cycle"
   version: "1"
   description: >

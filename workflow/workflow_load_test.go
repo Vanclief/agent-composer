@@ -4,28 +4,51 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/vanclief/ez"
 )
 
-func TestLoadBlueprintByWorkflowID(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv(workflowHomeEnvVar, tempDir)
+func TestRegistryImportAndLoad(t *testing.T) {
+	registry, ctx := newTestRegistry(t)
 
-	workflowDir := filepath.Join(tempDir, defaultWorkflowSubdir)
-	err := os.MkdirAll(workflowDir, 0755)
-	if err != nil {
-		t.Fatalf("mkdir workflow dir: %v", err)
+	summary := importYAML(t, ctx, registry, binaryVoteWorkflowYAML("Collect binary votes from multiple agents."))
+
+	if summary.Slug != "binary_vote_round" {
+		t.Fatalf("unexpected imported workflow slug: %q", summary.Slug)
+	}
+	if summary.ID == "" {
+		t.Fatal("import should mint a permanent uuid")
+	}
+	if summary.Version != "1" {
+		t.Fatalf("first import should install version 1, got %q", summary.Version)
 	}
 
-	path := filepath.Join(workflowDir, "registry-summary.yaml")
-	err = os.WriteFile(path, []byte(`
-workflow:
-  id: registry_summary
+	spec, err := registry.Load(ctx, "binary_vote_round")
+	if err != nil {
+		t.Fatalf("load by workflow id: %v", err)
+	}
+	if spec.Workflow.Slug != "binary_vote_round" {
+		t.Fatalf("unexpected workflow id: %q", spec.Workflow.Slug)
+	}
+	if spec.Workflow.ID != summary.ID {
+		t.Fatalf("the stored spec should carry the minted uuid, got %q", spec.Workflow.ID)
+	}
+}
+
+func TestRegistryList(t *testing.T) {
+	registry, ctx := newTestRegistry(t)
+
+	importYAML(t, ctx, registry, binaryVoteWorkflowYAML("Collect binary votes from multiple agents."))
+	importYAML(t, ctx, registry, `workflow:
+  slug: article_summary
   version: "1"
+  description: Summarize an article.
   inputs:
     article_text: string
   outputs:
-    out:
+    summary:
       schema: string
       from: instance.summarize.out
 
@@ -50,404 +73,196 @@ flow:
       node: summarize
       inputs:
         article_text: workflow_input.article_text
-`), 0644)
+`)
+
+	summaries, err := registry.List(ctx)
 	if err != nil {
-		t.Fatalf("write workflow file: %v", err)
-	}
-
-	blueprint, err := LoadBlueprintByWorkflowID("registry_summary")
-	if err != nil {
-		t.Fatalf("load by workflow id: %v", err)
-	}
-
-	if blueprint.Workflow.ID != "registry_summary" {
-		t.Fatalf("unexpected workflow id: %q", blueprint.Workflow.ID)
-	}
-
-	if blueprint.SourcePath != path {
-		t.Fatalf("unexpected source path: %q", blueprint.SourcePath)
-	}
-}
-
-func TestListBlueprints(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv(workflowHomeEnvVar, tempDir)
-
-	workflowDir := filepath.Join(tempDir, defaultWorkflowSubdir)
-	err := os.MkdirAll(workflowDir, 0755)
-	if err != nil {
-		t.Fatalf("mkdir workflow dir: %v", err)
-	}
-
-	firstPath := filepath.Join(workflowDir, "binary-vote.yaml")
-	err = os.WriteFile(firstPath, []byte(`
-workflow:
-  id: binary_vote_round
-  version: "1"
-  description: Collect binary votes from multiple agents.
-  inputs:
-    question: string
-  outputs:
-    consensus:
-      schema: binary_vote
-      from: collector.consensus
-
-nodes:
-  collector:
-    kind: connector
-    operation: collect_binary_votes
-    inputs:
-      question: string
-    outputs:
-      consensus: binary_vote
-
-flow:
-  instances:
-    collector:
-      node: collector
-      inputs:
-        question: workflow_input.question
-`), 0644)
-	if err != nil {
-		t.Fatalf("write first workflow file: %v", err)
-	}
-
-	secondPath := filepath.Join(workflowDir, "summary.yaml")
-	err = os.WriteFile(secondPath, []byte(`
-workflow:
-  id: article_summary
-  version: "1"
-  description: Summarize an article.
-  inputs:
-    article_text: string
-  outputs:
-    summary:
-      schema: string
-      from: summarize.out
-
-nodes:
-  summarize:
-    kind: inference
-    inputs:
-      article_text: string
-    outputs:
-      out: string
-    config:
-      harness:
-        id: codex_cli
-        model: gpt-5.4-mini
-        reasoning_effort: medium
-      instruction: >
-        Summarize the article.
-
-flow:
-  instances:
-    summarize:
-      node: summarize
-      inputs:
-        article_text: workflow_input.article_text
-`), 0644)
-	if err != nil {
-		t.Fatalf("write second workflow file: %v", err)
-	}
-
-	summaries, err := ListBlueprints()
-	if err != nil {
-		t.Fatalf("list blueprints: %v", err)
+		t.Fatalf("list specs: %v", err)
 	}
 
 	if len(summaries) != 2 {
 		t.Fatalf("unexpected workflow count: %d", len(summaries))
 	}
 
-	if summaries[0].ID != "article_summary" {
-		t.Fatalf("unexpected first workflow id: %q", summaries[0].ID)
+	if summaries[0].Slug != "article_summary" {
+		t.Fatalf("unexpected first workflow id: %q", summaries[0].Slug)
 	}
-
 	if summaries[0].Description != "Summarize an article." {
 		t.Fatalf("unexpected first workflow description: %q", summaries[0].Description)
 	}
-
 	if summaries[0].Inputs["article_text"] != "string" {
 		t.Fatalf("unexpected first workflow input schema: %q", summaries[0].Inputs["article_text"])
 	}
-
 	if summaries[0].Outputs["summary"] != "string" {
 		t.Fatalf("unexpected first workflow output schema: %q", summaries[0].Outputs["summary"])
 	}
 
-	if summaries[1].ID != "binary_vote_round" {
-		t.Fatalf("unexpected second workflow id: %q", summaries[1].ID)
+	if summaries[1].Slug != "binary_vote_round" {
+		t.Fatalf("unexpected second workflow id: %q", summaries[1].Slug)
 	}
-
 	if summaries[1].Inputs["question"] != "string" {
 		t.Fatalf("unexpected second workflow input schema: %q", summaries[1].Inputs["question"])
 	}
-
-	if summaries[1].Outputs["consensus"] != "binary_vote" {
+	if summaries[1].Outputs["consensus"] != "TextList" {
 		t.Fatalf("unexpected second workflow output schema: %q", summaries[1].Outputs["consensus"])
 	}
 }
 
-func TestImportBlueprintFile(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv(workflowHomeEnvVar, tempDir)
+func TestRegistryImportOverwriteContinuesHistory(t *testing.T) {
+	registry, ctx := newTestRegistry(t)
 
-	sourceDir := filepath.Join(tempDir, "source")
-	err := os.MkdirAll(sourceDir, 0755)
+	first := importYAML(t, ctx, registry, binaryVoteWorkflowYAML("First description."))
+
+	path := filepath.Join(t.TempDir(), "updated.yaml")
+	err := os.WriteFile(path, []byte(binaryVoteWorkflowYAML("Second description.")), 0644)
 	if err != nil {
-		t.Fatalf("mkdir source dir: %v", err)
+		t.Fatal(err)
 	}
 
-	sourcePath := filepath.Join(sourceDir, "binary-vote.yaml")
-	content := binaryVoteWorkflowYAML("Collect binary votes from multiple agents.")
-	err = os.WriteFile(sourcePath, []byte(content), 0644)
+	_, err = registry.ImportFile(ctx, path, false)
+	if err == nil {
+		t.Fatal("importing over an installed workflow must require overwrite")
+	}
+
+	second, err := registry.ImportFile(ctx, path, true)
 	if err != nil {
-		t.Fatalf("write source workflow file: %v", err)
+		t.Fatalf("overwrite import: %v", err)
 	}
 
-	summary, err := ImportBlueprintFile(sourcePath, false)
+	if second.ID != first.ID {
+		t.Fatalf("overwrite must keep the workflow identity: %q -> %q", first.ID, second.ID)
+	}
+	if second.Version != "2" {
+		t.Fatalf("overwrite should continue the version counter, got %q", second.Version)
+	}
+
+	versions, err := registry.ListVersions(ctx, "binary_vote_round")
 	if err != nil {
-		t.Fatalf("import workflow: %v", err)
+		t.Fatal(err)
 	}
-
-	if summary.ID != "binary_vote_round" {
-		t.Fatalf("unexpected imported workflow id: %q", summary.ID)
+	if len(versions) != 2 {
+		t.Fatalf("expected 2 history entries, got %d", len(versions))
 	}
-
-	registryPath := filepath.Join(tempDir, defaultWorkflowSubdir, "binary_vote_round.yaml")
-	raw, err := os.ReadFile(registryPath)
-	if err != nil {
-		t.Fatalf("read imported workflow file: %v", err)
+	if versions[0].Version != 2 || !versions[0].Current {
+		t.Fatalf("newest history entry should be the current version 2: %+v", versions[0])
 	}
-
-	if string(raw) != content {
-		t.Fatalf("unexpected imported workflow content: %q", string(raw))
-	}
-
-	blueprint, err := LoadBlueprintByWorkflowID("binary_vote_round")
-	if err != nil {
-		t.Fatalf("load imported workflow by id: %v", err)
-	}
-
-	if blueprint.SourcePath != registryPath {
-		t.Fatalf("unexpected imported source path: %q", blueprint.SourcePath)
+	if versions[1].Version != 1 || versions[1].Current {
+		t.Fatalf("oldest history entry should be the non-current version 1: %+v", versions[1])
 	}
 }
 
-func TestImportBlueprintFileOverwriteCanonicalizesPath(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv(workflowHomeEnvVar, tempDir)
+func TestRegistryDelete(t *testing.T) {
+	registry, ctx := newTestRegistry(t)
 
-	workflowDir := filepath.Join(tempDir, defaultWorkflowSubdir)
-	err := os.MkdirAll(workflowDir, 0755)
-	if err != nil {
-		t.Fatalf("mkdir workflow dir: %v", err)
-	}
+	importYAML(t, ctx, registry, binaryVoteWorkflowYAML("Collect binary votes from multiple agents."))
 
-	legacyPath := filepath.Join(workflowDir, "legacy-name.yaml")
-	err = os.WriteFile(legacyPath, []byte(binaryVoteWorkflowYAML("Old description.")), 0644)
-	if err != nil {
-		t.Fatalf("write legacy workflow file: %v", err)
-	}
-
-	sourceDir := filepath.Join(tempDir, "source")
-	err = os.MkdirAll(sourceDir, 0755)
-	if err != nil {
-		t.Fatalf("mkdir source dir: %v", err)
-	}
-
-	sourcePath := filepath.Join(sourceDir, "binary-vote.yaml")
-	newContent := binaryVoteWorkflowYAML("New description.")
-	err = os.WriteFile(sourcePath, []byte(newContent), 0644)
-	if err != nil {
-		t.Fatalf("write new workflow file: %v", err)
-	}
-
-	_, err = ImportBlueprintFile(sourcePath, true)
-	if err != nil {
-		t.Fatalf("overwrite import workflow: %v", err)
-	}
-
-	_, err = os.Stat(legacyPath)
-	if !os.IsNotExist(err) {
-		t.Fatalf("expected legacy path to be removed, got: %v", err)
-	}
-
-	registryPath := filepath.Join(workflowDir, "binary_vote_round.yaml")
-	raw, err := os.ReadFile(registryPath)
-	if err != nil {
-		t.Fatalf("read canonical workflow file: %v", err)
-	}
-
-	if string(raw) != newContent {
-		t.Fatalf("unexpected canonical workflow content: %q", string(raw))
-	}
-
-	blueprint, err := LoadBlueprintByWorkflowID("binary_vote_round")
-	if err != nil {
-		t.Fatalf("load overwritten workflow by id: %v", err)
-	}
-
-	if blueprint.SourcePath != registryPath {
-		t.Fatalf("unexpected canonical source path: %q", blueprint.SourcePath)
-	}
-
-	if blueprint.Workflow.Description != "New description." {
-		t.Fatalf("unexpected canonical description: %q", blueprint.Workflow.Description)
-	}
-}
-
-func TestDeleteBlueprintByWorkflowID(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv(workflowHomeEnvVar, tempDir)
-
-	workflowDir := filepath.Join(tempDir, defaultWorkflowSubdir)
-	err := os.MkdirAll(workflowDir, 0755)
-	if err != nil {
-		t.Fatalf("mkdir workflow dir: %v", err)
-	}
-
-	path := filepath.Join(workflowDir, "binary_vote_round.yaml")
-	err = os.WriteFile(path, []byte(binaryVoteWorkflowYAML("Collect binary votes from multiple agents.")), 0644)
-	if err != nil {
-		t.Fatalf("write workflow file: %v", err)
-	}
-
-	err = DeleteBlueprintByWorkflowID("binary_vote_round")
+	err := registry.Delete(ctx, "binary_vote_round")
 	if err != nil {
 		t.Fatalf("delete workflow by id: %v", err)
 	}
 
-	_, err = os.Stat(path)
-	if !os.IsNotExist(err) {
-		t.Fatalf("expected workflow file to be removed, got: %v", err)
+	_, err = registry.Load(ctx, "binary_vote_round")
+	if ez.ErrorCode(err) != ez.ENOTFOUND {
+		t.Fatalf("expected the workflow to be gone, got: %v", err)
 	}
 }
 
-func TestDeleteBlueprintByWorkflowIDRemovesDuplicateEntries(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv(workflowHomeEnvVar, tempDir)
+func TestRegistryExport(t *testing.T) {
+	registry, ctx := newTestRegistry(t)
 
-	workflowDir := filepath.Join(tempDir, defaultWorkflowSubdir)
-	err := os.MkdirAll(workflowDir, 0755)
+	importYAML(t, ctx, registry, binaryVoteWorkflowYAML("Collect binary votes from multiple agents."))
+
+	targetPath := filepath.Join(t.TempDir(), "exports", "binary_vote_round.yaml")
+	err := os.MkdirAll(filepath.Dir(targetPath), 0755)
 	if err != nil {
-		t.Fatalf("mkdir workflow dir: %v", err)
+		t.Fatal(err)
 	}
 
-	firstPath := filepath.Join(workflowDir, "binary_vote_round.yaml")
-	err = os.WriteFile(firstPath, []byte(binaryVoteWorkflowYAML("First description.")), 0644)
-	if err != nil {
-		t.Fatalf("write first workflow file: %v", err)
-	}
-
-	secondPath := filepath.Join(workflowDir, "legacy-binary-vote.yaml")
-	err = os.WriteFile(secondPath, []byte(binaryVoteWorkflowYAML("Second description.")), 0644)
-	if err != nil {
-		t.Fatalf("write second workflow file: %v", err)
-	}
-
-	err = DeleteBlueprintByWorkflowID("binary_vote_round")
-	if err != nil {
-		t.Fatalf("delete duplicate workflow entries by id: %v", err)
-	}
-
-	_, err = os.Stat(firstPath)
-	if !os.IsNotExist(err) {
-		t.Fatalf("expected first duplicate workflow file to be removed, got: %v", err)
-	}
-
-	_, err = os.Stat(secondPath)
-	if !os.IsNotExist(err) {
-		t.Fatalf("expected second duplicate workflow file to be removed, got: %v", err)
-	}
-}
-
-func TestExportBlueprintByWorkflowID(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv(workflowHomeEnvVar, tempDir)
-
-	workflowDir := filepath.Join(tempDir, defaultWorkflowSubdir)
-	err := os.MkdirAll(workflowDir, 0755)
-	if err != nil {
-		t.Fatalf("mkdir workflow dir: %v", err)
-	}
-
-	content := binaryVoteWorkflowYAML("Collect binary votes from multiple agents.")
-	registryPath := filepath.Join(workflowDir, "binary_vote_round.yaml")
-	err = os.WriteFile(registryPath, []byte(content), 0644)
-	if err != nil {
-		t.Fatalf("write workflow file: %v", err)
-	}
-
-	targetPath := filepath.Join(tempDir, "exports", "binary_vote_round.yaml")
-	err = os.MkdirAll(filepath.Dir(targetPath), 0755)
-	if err != nil {
-		t.Fatalf("mkdir export dir: %v", err)
-	}
-
-	err = ExportBlueprintByWorkflowID("binary_vote_round", targetPath, false)
+	err = registry.ExportToFile(ctx, "binary_vote_round", targetPath, false)
 	if err != nil {
 		t.Fatalf("export workflow by id: %v", err)
 	}
 
 	raw, err := os.ReadFile(targetPath)
 	if err != nil {
-		t.Fatalf("read exported workflow file: %v", err)
+		t.Fatal(err)
 	}
 
-	if string(raw) != content {
-		t.Fatalf("unexpected exported workflow content: %q", string(raw))
+	stored, err := registry.SpecBytes(ctx, "binary_vote_round")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != string(stored) {
+		t.Fatalf("exported bytes should match the stored spec:\n%s", raw)
+	}
+
+	err = registry.ExportToFile(ctx, "binary_vote_round", targetPath, false)
+	if err == nil {
+		t.Fatal("exporting onto an existing file must require overwrite")
 	}
 }
 
-func TestReadBlueprintBytesByWorkflowID(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv(workflowHomeEnvVar, tempDir)
+func TestRegistryRestoreVersion(t *testing.T) {
+	registry, ctx := newTestRegistry(t)
 
-	workflowDir := filepath.Join(tempDir, defaultWorkflowSubdir)
-	err := os.MkdirAll(workflowDir, 0755)
+	importYAML(t, ctx, registry, binaryVoteWorkflowYAML("First description."))
+
+	path := filepath.Join(t.TempDir(), "updated.yaml")
+	err := os.WriteFile(path, []byte(binaryVoteWorkflowYAML("Second description.")), 0644)
 	if err != nil {
-		t.Fatalf("mkdir workflow dir: %v", err)
+		t.Fatal(err)
+	}
+	_, err = registry.ImportFile(ctx, path, true)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	content := binaryVoteWorkflowYAML("Collect binary votes from multiple agents.")
-	registryPath := filepath.Join(workflowDir, "binary_vote_round.yaml")
-	err = os.WriteFile(registryPath, []byte(content), 0644)
+	restored, err := registry.RestoreVersion(ctx, "binary_vote_round", 1)
 	if err != nil {
-		t.Fatalf("write workflow file: %v", err)
+		t.Fatalf("restore version: %v", err)
+	}
+	if restored.Version != "3" {
+		t.Fatalf("a restore should install a new head version 3, got %q", restored.Version)
+	}
+	if !strings.Contains(restored.Spec, "First description.") {
+		t.Fatal("the restored head should carry the old content")
 	}
 
-	raw, err := ReadBlueprintBytesByWorkflowID("binary_vote_round")
+	versions, err := registry.ListVersions(ctx, "binary_vote_round")
 	if err != nil {
-		t.Fatalf("read workflow bytes by id: %v", err)
+		t.Fatal(err)
 	}
-
-	if string(raw) != content {
-		t.Fatalf("unexpected workflow bytes: %q", string(raw))
+	if len(versions) != 3 {
+		t.Fatalf("a restore must extend the history, not rewrite it: %d entries", len(versions))
 	}
 }
 
 func binaryVoteWorkflowYAML(description string) string {
 	return fmt.Sprintf(`workflow:
-  id: binary_vote_round
+  slug: binary_vote_round
   version: "1"
   description: %s
   inputs:
     question: string
   outputs:
     consensus:
-      schema: binary_vote
-      from: collector.consensus
+      schema: TextList
+      from: instance.collector.out
+
+schemas:
+  TextList:
+    type: array
+    items:
+      type: string
 
 nodes:
   collector:
     kind: connector
-    operation: collect_binary_votes
+    operation: collect
     inputs:
       question: string
     outputs:
-      consensus: binary_vote
+      out: TextList
 
 flow:
   instances:

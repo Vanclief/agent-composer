@@ -192,7 +192,7 @@ export function WorkflowsMonitor() {
     });
   }, [selectedExecutionId]);
 
-  const activeWorkflowId = selectedExecution?.workflow_id ?? "";
+  const activeWorkflowId = selectedExecution?.workflow_slug ?? "";
   const executions = pageExecutions;
   const liveIndex = executions.findIndex(
     (execution) => execution.status === "running",
@@ -205,8 +205,8 @@ export function WorkflowsMonitor() {
     highlightIndex >= 0 ? executions[highlightIndex] : undefined;
   const highlightWorkflow = highlightExecution
     ? workflows.find(
-        (workflow) => workflow.id === highlightExecution.workflow_id,
-      )?.name || highlightExecution.workflow_id
+        (workflow) => workflow.slug === highlightExecution.workflow_slug,
+      )?.name || highlightExecution.workflow_slug
     : "";
   const totalStops = pageExecutions.length;
   const doneStops = pageExecutions.filter(
@@ -388,8 +388,8 @@ export function WorkflowsMonitor() {
                       {taskId && <em>{index + 1}</em>}
                       {workflows.find(
                         (workflow) =>
-                          workflow.id === execution.workflow_id,
-                      )?.name || execution.workflow_id}
+                          workflow.slug === execution.workflow_slug,
+                      )?.name || execution.workflow_slug}
                     </b>
                     <small>
                       {status}

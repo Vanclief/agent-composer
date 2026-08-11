@@ -37,9 +37,9 @@ export function createWorkflow(
   description: string,
   workflowId?: string,
 ) {
-  return postJSON<{ workflow_id: string; name: string; draft: string }>(
+  return postJSON<{ workflow_slug: string; name: string; draft: string }>(
     "/api/workflows",
-    { name, description, workflow_id: workflowId ?? "" },
+    { name, description, workflow_slug: workflowId ?? "" },
   );
 }
 
@@ -50,7 +50,7 @@ export function renameWorkflow(
   workflowId: string,
   update: { newId?: string; name?: string; description?: string },
 ) {
-  return putJSON<{ workflow_id: string; updated_refs?: string[] }>(
+  return putJSON<{ workflow_slug: string; updated_refs?: string[] }>(
     `/api/workflows/${encodeURIComponent(workflowId)}`,
     {
       new_id: update.newId ?? "",
@@ -65,7 +65,7 @@ export function renameWorkflow(
 /** One composer conversation — resolves when the edit has landed. */
 export function composeWorkflow(workflowId: string, request: string) {
   return postJSON<ComposeResponse>("/api/workflows/compose", {
-    workflow_id: workflowId,
+    workflow_slug: workflowId,
     request,
   });
 }
@@ -101,8 +101,8 @@ export async function fetchWorkflowSpecs(
   const entries = await Promise.all(
     workflows.map(async (workflow) => {
       try {
-        const body = await fetchWorkflowSpec(workflow.id, signal);
-        return [workflow.id, body] as const;
+        const body = await fetchWorkflowSpec(workflow.slug, signal);
+        return [workflow.slug, body] as const;
       } catch {
         return null;
       }
@@ -124,7 +124,7 @@ export async function fetchWorkflowSpecs(
 
 /** Promote a draft: bump the version and replace the saved file. */
 export function saveWorkflowDraft(workflowId: string) {
-  return postJSON<{ workflow_id: string; version: string; spec: string }>(
+  return postJSON<{ workflow_slug: string; version: string; spec: string }>(
     `/api/workflows/${encodeURIComponent(workflowId)}/save`,
     {},
   );
@@ -133,13 +133,13 @@ export function saveWorkflowDraft(workflowId: string) {
 /** Remove a workflow from the library. Run history and the version
  * archive stay — deleting never rewrites the past. */
 export function deleteWorkflow(workflowId: string) {
-  return deleteJSON<{ workflow_id: string; deleted: boolean }>(
+  return deleteJSON<{ workflow_slug: string; deleted: boolean }>(
     `/api/workflows/${encodeURIComponent(workflowId)}`,
   );
 }
 
 export function discardWorkflowDraft(workflowId: string) {
-  return deleteJSON<{ workflow_id: string; deleted: boolean }>(
+  return deleteJSON<{ workflow_slug: string; deleted: boolean }>(
     `/api/workflows/${encodeURIComponent(workflowId)}/draft`,
   );
 }
@@ -154,7 +154,7 @@ export function updateWorkflowNode(
     reasoning_effort?: string;
   },
 ) {
-  return putJSON<{ workflow_id: string; node: string; spec: string }>(
+  return putJSON<{ workflow_slug: string; node: string; spec: string }>(
     `/api/workflows/${encodeURIComponent(workflowId)}/nodes/${encodeURIComponent(node)}`,
     update,
   );
@@ -168,7 +168,7 @@ export async function fetchWorkflowExecutions(
   const body = await fetchJSON<WorkflowExecutionListResponse>(
     "/api/workflow/executions",
     {
-      workflow_id: workflowId,
+      workflow_slug: workflowId,
       limit,
     },
     signal,

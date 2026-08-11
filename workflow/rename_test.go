@@ -1,14 +1,15 @@
 package workflow
 
 import (
-	"os"
-	"path/filepath"
+	"context"
 	"strings"
 	"testing"
+
+	"github.com/vanclief/ez"
 )
 
-const renameTargetBlueprint = `workflow:
-  id: rename_target
+const renameTargetSpec = `workflow:
+  slug: rename_target
   name: "Rename Target"
   version: "1"
   inputs:
@@ -39,8 +40,8 @@ flow:
         text: workflow_input.text
 `
 
-const renameEmbedderBlueprint = `workflow:
-  id: embedder
+const renameEmbedderSpec = `workflow:
+  slug: embedder
   name: "Embedder"
   version: "1"
   inputs:
@@ -53,7 +54,7 @@ const renameEmbedderBlueprint = `workflow:
 nodes:
   run_child:
     kind: workflow
-    workflow_id: rename_target
+    workflow_slug: rename_target
     inputs:
       text: string
     outputs:
@@ -67,145 +68,120 @@ flow:
         text: workflow_input.text
 `
 
-func writeRenameFixture(t *testing.T) string {
+// importRenameFixture installs a target workflow plus one that embeds
+// it. The target must land first so the embedder compiles.
+func importRenameFixture(t *testing.T) (*Registry, context.Context) {
 	t.Helper()
-	home := t.TempDir()
-	t.Setenv("AGENT_COMPOSER_HOME", home)
 
-	registry := filepath.Join(home, "workflows")
-	if err := os.MkdirAll(registry, 0755); err != nil {
-		t.Fatal(err)
-	}
-	err := os.WriteFile(
-		filepath.Join(registry, "rename_target.yaml"),
-		[]byte(renameTargetBlueprint),
-		0644,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = os.WriteFile(
-		filepath.Join(registry, "embedder.yaml"),
-		[]byte(renameEmbedderBlueprint),
-		0644,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	registry, ctx := newTestRegistry(t)
+	importYAML(t, ctx, registry, renameTargetSpec)
+	importYAML(t, ctx, registry, renameEmbedderSpec)
 
-	return home
+	return registry, ctx
 }
 
 func TestRenameWorkflowIDCascades(t *testing.T) {
-	home := writeRenameFixture(t)
+	registry, ctx := importRenameFixture(t)
 
-	// A pending draft and archived version should follow the rename.
+	// A pending draft should follow the rename.
 	draft := strings.Replace(
-		renameTargetBlueprint,
+		renameTargetSpec,
 		"instruction: Echo the text.",
 		"instruction: Echo the text twice.",
 		1,
 	)
-	if err := WriteDraft("rename_target", []byte(draft)); err != nil {
-		t.Fatal(err)
-	}
-	versionsDir := filepath.Join(home, "versions", "rename_target")
-	if err := os.MkdirAll(versionsDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	err := os.WriteFile(
-		filepath.Join(versionsDir, "v1.yaml"),
-		[]byte(renameTargetBlueprint),
-		0644,
-	)
+	err := registry.WriteDraft(ctx, "rename_target", []byte(draft))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	result, err := RenameWorkflowID("rename_target", "renamed_target")
+	result, err := registry.Rename(ctx, "rename_target", "renamed_target")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.WorkflowID != "renamed_target" {
-		t.Fatalf("expected renamed_target, got %s", result.WorkflowID)
+	if result.WorkflowSlug != "renamed_target" {
+		t.Fatalf("expected renamed_target, got %s", result.WorkflowSlug)
 	}
 	if len(result.UpdatedRefs) != 1 || result.UpdatedRefs[0] != "embedder" {
 		t.Fatalf("expected embedder in updated refs, got %v", result.UpdatedRefs)
 	}
 
-	// Registry: old file gone, new file carries the new id.
-	registry := filepath.Join(home, "workflows")
-	if _, err := os.Stat(filepath.Join(registry, "rename_target.yaml")); !os.IsNotExist(err) {
-		t.Fatal("old registry file should be gone")
+	// Registry: the old id is gone, the new one carries the new id.
+	_, err = registry.Load(ctx, "rename_target")
+	if ez.ErrorCode(err) != ez.ENOTFOUND {
+		t.Fatalf("the old id should be gone, got: %v", err)
 	}
-	installed, err := os.ReadFile(filepath.Join(registry, "renamed_target.yaml"))
+	installed, err := registry.SpecBytes(ctx, "renamed_target")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(installed), "id: renamed_target") {
-		t.Fatal("renamed file should carry the new id")
+	if !strings.Contains(string(installed), "slug: renamed_target") {
+		t.Fatal("the renamed spec should carry the new id")
 	}
 
 	// The embedder now references the new id.
-	embedder, err := os.ReadFile(filepath.Join(registry, "embedder.yaml"))
+	embedder, err := registry.SpecBytes(ctx, "embedder")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(embedder), "workflow_id: renamed_target") {
+	if !strings.Contains(string(embedder), "workflow_slug: renamed_target") {
 		t.Fatal("embedder should reference the new id")
 	}
 
 	// Draft moved and rewritten.
-	oldDraft, err := ReadDraft("rename_target")
+	oldDraft, err := registry.ReadDraft(ctx, "rename_target")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if oldDraft != "" {
 		t.Fatal("old draft should be gone")
 	}
-	newDraft, err := ReadDraft("renamed_target")
+	newDraft, err := registry.ReadDraft(ctx, "renamed_target")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(newDraft, "id: renamed_target") ||
+	if !strings.Contains(newDraft, "slug: renamed_target") ||
 		!strings.Contains(newDraft, "twice") {
 		t.Fatal("draft should follow the rename with its content intact")
 	}
 
-	// Versions archive moved.
-	if _, err := os.Stat(filepath.Join(home, "versions", "renamed_target", "v1.yaml")); err != nil {
-		t.Fatal("versions archive should move to the new id")
+	// Version history stays attached to the workflow across the
+	// rename, and the rename itself is a recorded version.
+	versions, err := registry.ListVersions(ctx, "renamed_target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) != 2 {
+		t.Fatalf("expected the import and the rename in the history, got %d entries", len(versions))
 	}
 }
 
 func TestRenameWorkflowIDRejectsCollision(t *testing.T) {
-	writeRenameFixture(t)
+	registry, ctx := importRenameFixture(t)
 
-	_, err := RenameWorkflowID("rename_target", "embedder")
+	_, err := registry.Rename(ctx, "rename_target", "embedder")
 	if err == nil {
 		t.Fatal("expected a collision error")
 	}
 }
 
 func TestSetWorkflowDisplayName(t *testing.T) {
-	home := writeRenameFixture(t)
+	registry, ctx := importRenameFixture(t)
 
 	description := "A fancier description."
-	err := SetWorkflowHeader("rename_target", "Fancy New Name", &description)
+	err := registry.SetHeader(ctx, "rename_target", "Fancy New Name", &description)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	installed, err := os.ReadFile(
-		filepath.Join(home, "workflows", "rename_target.yaml"),
-	)
+	installed, err := registry.SpecBytes(ctx, "rename_target")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(installed), "Fancy New Name") {
 		t.Fatal("display name should be rewritten")
 	}
-	if !strings.Contains(string(installed), "id: rename_target") {
+	if !strings.Contains(string(installed), "slug: rename_target") {
 		t.Fatal("the id must not change on a name edit")
 	}
 	if !strings.Contains(string(installed), "A fancier description.") {
@@ -214,75 +190,69 @@ func TestSetWorkflowDisplayName(t *testing.T) {
 }
 
 func TestUUIDSurvivesSaveAndRename(t *testing.T) {
-	home := writeRenameFixture(t)
+	registry, ctx := importRenameFixture(t)
 
-	// First save mints the uuid.
-	if err := WriteDraft("rename_target", []byte(renameTargetBlueprint)); err != nil {
-		t.Fatal(err)
-	}
-	saved, err := SaveDraft("rename_target")
+	first, err := registry.Load(ctx, "rename_target")
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := LoadBlueprintByWorkflowID("rename_target")
-	if err != nil {
-		t.Fatal(err)
+	if first.Workflow.ID == "" {
+		t.Fatal("import should mint a uuid")
 	}
-	if first.Workflow.UUID == "" {
-		t.Fatal("save should mint a uuid")
-	}
-	_ = saved
 
-	// A second save keeps it, even if the draft carries a bogus one.
+	// A save keeps it, even if the draft carries a bogus one.
 	bogus := strings.Replace(
-		renameTargetBlueprint,
+		renameTargetSpec,
 		"version: \"1\"",
-		"version: \"2\"\n  uuid: 00000000-0000-0000-0000-000000000bad",
+		"version: \"2\"\n  id: 00000000-0000-0000-0000-000000000bad",
 		1,
 	)
-	if err := WriteDraft("rename_target", []byte(bogus)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := SaveDraft("rename_target"); err != nil {
-		t.Fatal(err)
-	}
-	second, err := LoadBlueprintByWorkflowID("rename_target")
+	err = registry.WriteDraft(ctx, "rename_target", []byte(bogus))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.Workflow.UUID != first.Workflow.UUID {
-		t.Fatalf("uuid changed on save: %s -> %s", first.Workflow.UUID, second.Workflow.UUID)
+	_, err = registry.SaveDraft(ctx, "rename_target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := registry.Load(ctx, "rename_target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Workflow.ID != first.Workflow.ID {
+		t.Fatalf("uuid changed on save: %s -> %s", first.Workflow.ID, second.Workflow.ID)
 	}
 
 	// A slug rename keeps it too.
-	if _, err := RenameWorkflowID("rename_target", "renamed_target"); err != nil {
-		t.Fatal(err)
-	}
-	renamed, err := LoadBlueprintByWorkflowID("renamed_target")
+	_, err = registry.Rename(ctx, "rename_target", "renamed_target")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if renamed.Workflow.UUID != first.Workflow.UUID {
-		t.Fatalf("uuid changed on rename: %s -> %s", first.Workflow.UUID, renamed.Workflow.UUID)
+	renamed, err := registry.Load(ctx, "renamed_target")
+	if err != nil {
+		t.Fatal(err)
 	}
-	_ = home
+	if renamed.Workflow.ID != first.Workflow.ID {
+		t.Fatalf("uuid changed on rename: %s -> %s", first.Workflow.ID, renamed.Workflow.ID)
+	}
 }
 
 func TestCompileRejectsReservedInstanceIDs(t *testing.T) {
-	writeRenameFixture(t)
+	registry, ctx := importRenameFixture(t)
 
 	// "step" -> "workflow-inputs" collides with the canvas's
 	// synthetic node id and must not compile.
 	bad := strings.Replace(
-		renameTargetBlueprint,
+		renameTargetSpec,
 		"    step:",
 		"    workflow-inputs:",
 		1,
 	)
-	if err := WriteDraft("rename_target", []byte(bad)); err != nil {
+	err := registry.WriteDraft(ctx, "rename_target", []byte(bad))
+	if err != nil {
 		t.Fatal(err)
 	}
-	_, err := SaveDraft("rename_target")
+	_, err = registry.SaveDraft(ctx, "rename_target")
 	if err == nil || !strings.Contains(err.Error(), "reserved") {
 		t.Fatalf("expected a reserved-id compile error, got %v", err)
 	}

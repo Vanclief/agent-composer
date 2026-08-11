@@ -19,8 +19,8 @@ const (
 )
 
 type workflowStartArgs struct {
-	ID        string         `json:"id" jsonschema_description:"Workflow blueprint id from the installed AGC workflow registry"`
-	File      string         `json:"file" jsonschema_description:"Path to a workflow blueprint YAML file on disk"`
+	Slug      string         `json:"slug" jsonschema_description:"Workflow slug from the installed AGC registry"`
+	File      string         `json:"file" jsonschema_description:"Path to a workflow spec YAML file on disk"`
 	Input     map[string]any `json:"input" jsonschema:"required" jsonschema_description:"Workflow input object keyed by workflow input name"`
 	ShellRoot string         `json:"shell_root" jsonschema_description:"Optional shell root passed through to the workflow executor"`
 }
@@ -57,7 +57,7 @@ func NewServer(rootCtx context.Context, stack *core.Stack, defaultShellRoot stri
 
 	startTool := mcpproto.NewTool(
 		toolNameWorkflowStart,
-		mcpproto.WithDescription("Start an Agent Composer workflow by workflow id or YAML file path and return immediately with an execution id"),
+		mcpproto.WithDescription("Start an Agent Composer workflow by slug or YAML file path and return immediately with an execution id"),
 		mcpproto.WithInputSchema[workflowStartArgs](),
 		mcpproto.WithOutputSchema[WorkflowStartResult](),
 	)
@@ -70,11 +70,11 @@ func NewServer(rootCtx context.Context, stack *core.Stack, defaultShellRoot stri
 	)
 
 	srv.AddTool(listTool, mcpproto.NewStructuredToolHandler(func(
-		_ context.Context,
+		toolCtx context.Context,
 		_ mcpproto.CallToolRequest,
 		_ workflowListArgs,
 	) (WorkflowListResult, error) {
-		workflows, err := workflowruntime.ListBlueprints()
+		workflows, err := stack.WorkflowAPI.Registry.List(toolCtx)
 		if err != nil {
 			return WorkflowListResult{}, ez.Wrap(err)
 		}
@@ -95,10 +95,10 @@ func NewServer(rootCtx context.Context, stack *core.Stack, defaultShellRoot stri
 		}
 
 		response, err := stack.WorkflowAPI.Executions.Create(rootCtx, nil, &workflowexecutions.CreateRequest{
-			WorkflowID: args.ID,
-			File:       args.File,
-			Input:      args.Input,
-			ShellRoot:  shellRoot,
+			WorkflowSlug: args.Slug,
+			File:         args.File,
+			Input:        args.Input,
+			ShellRoot:    shellRoot,
 		})
 		if err != nil {
 			return WorkflowStartResult{}, ez.Wrap(err)

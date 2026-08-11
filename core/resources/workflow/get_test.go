@@ -1,26 +1,16 @@
 package workflow
 
 import (
-	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestGetReturnsWorkflowBlueprintSpec(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("AGENT_COMPOSER_HOME", homeDir)
-
-	workflowDir := filepath.Join(homeDir, "workflows")
-	err := os.MkdirAll(workflowDir, 0755)
-	if err != nil {
-		t.Fatalf("mkdir workflow dir: %v", err)
-	}
+func TestGetReturnsWorkflowSpec(t *testing.T) {
+	api, ctx := newTestAPI(t)
 
 	spec := `
 workflow:
-  id: get_workflow
+  slug: get_workflow
   version: "1"
   description: Get workflow.
   inputs:
@@ -44,21 +34,17 @@ flow:
         prompt: workflow_input.prompt
 `
 
-	err = os.WriteFile(filepath.Join(workflowDir, "get-workflow.yaml"), []byte(spec), 0644)
-	if err != nil {
-		t.Fatalf("write workflow: %v", err)
-	}
+	installSpec(t, ctx, api, "get_workflow", spec)
 
-	api := &API{}
-	response, err := api.Get(context.Background(), nil, &GetRequest{
-		WorkflowID: "get_workflow",
+	response, err := api.Get(ctx, nil, &GetRequest{
+		WorkflowSlug: "get_workflow",
 	})
 	if err != nil {
 		t.Fatalf("get workflow: %v", err)
 	}
 
-	if response.WorkflowID != "get_workflow" {
-		t.Fatalf("unexpected workflow id: %q", response.WorkflowID)
+	if response.WorkflowSlug != "get_workflow" {
+		t.Fatalf("unexpected workflow id: %q", response.WorkflowSlug)
 	}
 
 	if strings.TrimSpace(response.Spec) != strings.TrimSpace(spec) {

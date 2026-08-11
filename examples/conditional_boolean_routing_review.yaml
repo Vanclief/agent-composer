@@ -1,5 +1,5 @@
 workflow:
-  id: conditional_boolean_routing_review
+  slug: conditional_boolean_routing_review
   name: "Conditional Boolean Routing Review"
   version: "1"
   description: >

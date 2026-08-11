@@ -16,18 +16,18 @@ import (
 )
 
 func TestCompilePipelineSummaryCritiqueRevise(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/article_summary.yaml")
+	spec, err := LoadSpecFile("../examples/article_summary.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
 
-	if snapshot.WorkflowID != "article_summary" {
-		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowID)
+	if snapshot.WorkflowSlug != "article_summary" {
+		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowSlug)
 	}
 
 	expectedOrder := []string{"summarize_article", "critique_summary", "revise_summary"}
@@ -43,12 +43,12 @@ func TestCompilePipelineSummaryCritiqueRevise(t *testing.T) {
 }
 
 func TestExecutePipelineSummaryCritiqueRevise(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/article_summary.yaml")
+	spec, err := LoadSpecFile("../examples/article_summary.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
@@ -85,18 +85,18 @@ func TestExecutePipelineSummaryCritiqueRevise(t *testing.T) {
 }
 
 func TestCompileConnectorCollectBinaryVotes(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/binary_vote_round.yaml")
+	spec, err := LoadSpecFile("../examples/binary_vote_round.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
 
-	if snapshot.WorkflowID != "binary_vote_round" {
-		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowID)
+	if snapshot.WorkflowSlug != "binary_vote_round" {
+		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowSlug)
 	}
 
 	if snapshot.Nodes["collect_votes"].Kind != "connector" {
@@ -109,12 +109,12 @@ func TestCompileConnectorCollectBinaryVotes(t *testing.T) {
 }
 
 func TestExecuteConnectorCollectBinaryVotes(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/binary_vote_round.yaml")
+	spec, err := LoadSpecFile("../examples/binary_vote_round.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestExecuteConnectorCollectPreservesDeclarationOrder(t *testing.T) {
 
 	err := os.WriteFile(path, []byte(`
 workflow:
-  id: collect_order
+  slug: collect_order
   version: "1"
   inputs:
     first: string
@@ -191,15 +191,15 @@ flow:
         first: workflow_input.first
 `), 0644)
 	if err != nil {
-		t.Fatalf("write blueprint: %v", err)
+		t.Fatalf("write spec: %v", err)
 	}
 
-	blueprint, err := LoadBlueprintFile(path)
+	spec, err := LoadSpecFile(path)
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
@@ -228,9 +228,9 @@ flow:
 }
 
 func TestCompileConnectorPack(t *testing.T) {
-	blueprint := &Blueprint{
-		Workflow: WorkflowSpec{
-			ID:      "connector_pack",
+	spec := &Spec{
+		Workflow: WorkflowHeader{
+			Slug:    "connector_pack",
 			Version: "1",
 			Inputs: map[string]string{
 				"title":   "string",
@@ -278,7 +278,7 @@ func TestCompileConnectorPack(t *testing.T) {
 		},
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
@@ -298,9 +298,9 @@ func TestCompileConnectorPack(t *testing.T) {
 }
 
 func TestCompileRejectsOptionalObjectFieldsInInferenceStructuredOutputs(t *testing.T) {
-	blueprint := &Blueprint{
-		Workflow: WorkflowSpec{
-			ID:      "optional_structured_output",
+	spec := &Spec{
+		Workflow: WorkflowHeader{
+			Slug:    "optional_structured_output",
 			Version: "1",
 			Inputs: map[string]string{
 				"request": "string",
@@ -361,7 +361,7 @@ func TestCompileRejectsOptionalObjectFieldsInInferenceStructuredOutputs(t *testi
 		},
 	}
 
-	_, err := Compile(blueprint)
+	_, err := Compile(spec)
 	if err == nil {
 		t.Fatal("expected compile to reject optional structured output fields")
 	}
@@ -376,9 +376,9 @@ func TestCompileRejectsOptionalObjectFieldsInInferenceStructuredOutputs(t *testi
 }
 
 func TestExecuteConnectorPack(t *testing.T) {
-	blueprint := &Blueprint{
-		Workflow: WorkflowSpec{
-			ID:      "connector_pack",
+	spec := &Spec{
+		Workflow: WorkflowHeader{
+			Slug:    "connector_pack",
 			Version: "1",
 			Inputs: map[string]string{
 				"title":   "string",
@@ -426,7 +426,7 @@ func TestExecuteConnectorPack(t *testing.T) {
 		},
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
@@ -461,7 +461,7 @@ func TestExecuteForeachWorkflowTarget(t *testing.T) {
 	childPath := filepath.Join(tempDir, "section-summary-single.yaml")
 	err := os.WriteFile(childPath, []byte(`
 workflow:
-  id: section_summary_single
+  slug: section_summary_single
   version: "1"
   inputs:
     section_text: string
@@ -502,12 +502,12 @@ flow:
         tone: workflow_input.tone
 `), 0644)
 	if err != nil {
-		t.Fatalf("write child blueprint: %v", err)
+		t.Fatalf("write child spec: %v", err)
 	}
 
-	blueprint := &Blueprint{
-		Workflow: WorkflowSpec{
-			ID:      "foreach_workflow_target",
+	spec := &Spec{
+		Workflow: WorkflowHeader{
+			Slug:    "foreach_workflow_target",
 			Version: "1",
 			Inputs: map[string]string{
 				"section_text": "SectionTextList",
@@ -542,8 +542,8 @@ flow:
 		},
 		Nodes: map[string]NodeSpec{
 			"section_summary_pipeline": {
-				Kind:       "workflow",
-				WorkflowID: "section_summary_single",
+				Kind:         "workflow",
+				WorkflowSlug: "section_summary_single",
 			},
 			"run_section_summary": {
 				Kind:      "loop",
@@ -573,7 +573,7 @@ flow:
 		SourcePath: filepath.Join(tempDir, "parent.yaml"),
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
@@ -612,7 +612,7 @@ func TestExecuteConditionalWorkflowTargets(t *testing.T) {
 	summaryPath := filepath.Join(tempDir, "summary-branch.yaml")
 	err := os.WriteFile(summaryPath, []byte(`
 workflow:
-  id: summary_branch
+  slug: summary_branch
   version: "1"
   inputs:
     text: string
@@ -652,13 +652,13 @@ flow:
         text: workflow_input.text
 `), 0644)
 	if err != nil {
-		t.Fatalf("write summary child blueprint: %v", err)
+		t.Fatalf("write summary child spec: %v", err)
 	}
 
 	disagreementPath := filepath.Join(tempDir, "disagreement-branch.yaml")
 	err = os.WriteFile(disagreementPath, []byte(`
 workflow:
-  id: disagreement_branch
+  slug: disagreement_branch
   version: "1"
   inputs:
     text: string
@@ -698,12 +698,12 @@ flow:
         text: workflow_input.text
 `), 0644)
 	if err != nil {
-		t.Fatalf("write disagreement child blueprint: %v", err)
+		t.Fatalf("write disagreement child spec: %v", err)
 	}
 
-	blueprint := &Blueprint{
-		Workflow: WorkflowSpec{
-			ID:      "conditional_workflow_targets",
+	spec := &Spec{
+		Workflow: WorkflowHeader{
+			Slug:    "conditional_workflow_targets",
 			Version: "1",
 			Inputs: map[string]string{
 				"text": "string",
@@ -742,12 +742,12 @@ flow:
 				},
 			},
 			"summary_branch_worker": {
-				Kind:       "workflow",
-				WorkflowID: "summary_branch",
+				Kind:         "workflow",
+				WorkflowSlug: "summary_branch",
 			},
 			"disagreement_branch_worker": {
-				Kind:       "workflow",
-				WorkflowID: "disagreement_branch",
+				Kind:         "workflow",
+				WorkflowSlug: "disagreement_branch",
 			},
 			"route_review": {
 				Kind:      "conditional",
@@ -784,7 +784,7 @@ flow:
 		SourcePath: filepath.Join(tempDir, "parent.yaml"),
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
@@ -842,7 +842,7 @@ func TestCompileWorkflowCompositionCycle(t *testing.T) {
 	firstPath := filepath.Join(tempDir, "first.yaml")
 	err := os.WriteFile(firstPath, []byte(`
 workflow:
-  id: first
+  slug: first
   version: "1"
   inputs: {}
   outputs:
@@ -853,7 +853,7 @@ workflow:
 nodes:
   second_worker:
     kind: workflow
-    workflow_id: second
+    workflow_slug: second
 
 flow:
   instances:
@@ -862,13 +862,13 @@ flow:
       inputs: {}
 `), 0644)
 	if err != nil {
-		t.Fatalf("write first blueprint: %v", err)
+		t.Fatalf("write first spec: %v", err)
 	}
 
 	secondPath := filepath.Join(tempDir, "second.yaml")
 	err = os.WriteFile(secondPath, []byte(`
 workflow:
-  id: second
+  slug: second
   version: "1"
   inputs: {}
   outputs:
@@ -879,7 +879,7 @@ workflow:
 nodes:
   first_worker:
     kind: workflow
-    workflow_id: first
+    workflow_slug: first
 
 flow:
   instances:
@@ -888,15 +888,15 @@ flow:
       inputs: {}
 `), 0644)
 	if err != nil {
-		t.Fatalf("write second blueprint: %v", err)
+		t.Fatalf("write second spec: %v", err)
 	}
 
-	blueprint, err := LoadBlueprintFile(firstPath)
+	spec, err := LoadSpecFile(firstPath)
 	if err != nil {
-		t.Fatalf("load first blueprint: %v", err)
+		t.Fatalf("load first spec: %v", err)
 	}
 
-	_, err = Compile(blueprint)
+	_, err = Compile(spec)
 	if err == nil {
 		t.Fatalf("expected recursive workflow composition to fail")
 	}
@@ -907,18 +907,18 @@ flow:
 }
 
 func TestCompileCompositionArticleSummaryWithBrief(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/composed_article_summary.yaml")
+	spec, err := LoadSpecFile("../examples/composed_article_summary.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
 
-	if snapshot.WorkflowID != "composed_article_summary" {
-		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowID)
+	if snapshot.WorkflowSlug != "composed_article_summary" {
+		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowSlug)
 	}
 
 	expectedNodes := []string{
@@ -950,12 +950,12 @@ func TestCompileCompositionArticleSummaryWithBrief(t *testing.T) {
 }
 
 func TestExecuteCompositionArticleSummaryWithBrief(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/composed_article_summary.yaml")
+	spec, err := LoadSpecFile("../examples/composed_article_summary.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
@@ -992,18 +992,18 @@ func TestExecuteCompositionArticleSummaryWithBrief(t *testing.T) {
 }
 
 func TestCompileLoopForeachSectionSummary(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/section_summary_batch.yaml")
+	spec, err := LoadSpecFile("../examples/section_summary_batch.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
 
-	if snapshot.WorkflowID != "section_summary_batch" {
-		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowID)
+	if snapshot.WorkflowSlug != "section_summary_batch" {
+		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowSlug)
 	}
 
 	loopNode, found := snapshot.Nodes["run_section_summary"]
@@ -1029,12 +1029,12 @@ func TestCompileLoopForeachSectionSummary(t *testing.T) {
 }
 
 func TestExecuteLoopForeachSectionSummary(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/section_summary_batch.yaml")
+	spec, err := LoadSpecFile("../examples/section_summary_batch.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
@@ -1081,18 +1081,18 @@ func TestExecuteLoopForeachSectionSummary(t *testing.T) {
 }
 
 func TestCompileConditionalBooleanRoutingReview(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/conditional_boolean_routing_review.yaml")
+	spec, err := LoadSpecFile("../examples/conditional_boolean_routing_review.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
 
-	if snapshot.WorkflowID != "conditional_boolean_routing_review" {
-		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowID)
+	if snapshot.WorkflowSlug != "conditional_boolean_routing_review" {
+		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowSlug)
 	}
 
 	conditionalNode, found := snapshot.Nodes["route_review"]
@@ -1118,12 +1118,12 @@ func TestCompileConditionalBooleanRoutingReview(t *testing.T) {
 }
 
 func TestExecuteConditionalBooleanRoutingReview(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/conditional_boolean_routing_review.yaml")
+	spec, err := LoadSpecFile("../examples/conditional_boolean_routing_review.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
@@ -1167,18 +1167,18 @@ func TestExecuteConditionalBooleanRoutingReview(t *testing.T) {
 }
 
 func TestCompileLoopAndConnectorParallelCodeReview(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/parallel_code_review.yaml")
+	spec, err := LoadSpecFile("../examples/parallel_code_review.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
 
-	if snapshot.WorkflowID != "parallel_code_review" {
-		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowID)
+	if snapshot.WorkflowSlug != "parallel_code_review" {
+		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowSlug)
 	}
 
 	aggregator, found := snapshot.Nodes["aggregate_validated_issues"]
@@ -1196,12 +1196,12 @@ func TestCompileLoopAndConnectorParallelCodeReview(t *testing.T) {
 }
 
 func TestExecuteLoopAndConnectorParallelCodeReview(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/parallel_code_review.yaml")
+	spec, err := LoadSpecFile("../examples/parallel_code_review.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
@@ -1238,18 +1238,18 @@ func TestExecuteLoopAndConnectorParallelCodeReview(t *testing.T) {
 }
 
 func TestCompileLoopWhileBinaryConsensus(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/loop_while_binary_consensus.yaml")
+	spec, err := LoadSpecFile("../examples/loop_while_binary_consensus.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
 
-	if snapshot.WorkflowID != "loop_while_binary_consensus" {
-		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowID)
+	if snapshot.WorkflowSlug != "loop_while_binary_consensus" {
+		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowSlug)
 	}
 
 	loopNode, found := snapshot.Nodes["collect_consensus"]
@@ -1283,12 +1283,12 @@ func TestCompileLoopWhileBinaryConsensus(t *testing.T) {
 }
 
 func TestExecuteLoopWhileBinaryConsensus(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/loop_while_binary_consensus.yaml")
+	spec, err := LoadSpecFile("../examples/loop_while_binary_consensus.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
@@ -1333,12 +1333,12 @@ func TestExecuteLoopWhileBinaryConsensus(t *testing.T) {
 }
 
 func TestExecuteWhileLoopStopsGracefullyAtMaxIterations(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/loop_while_binary_consensus.yaml")
+	spec, err := LoadSpecFile("../examples/loop_while_binary_consensus.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
@@ -1383,18 +1383,18 @@ func TestExecuteWhileLoopStopsGracefullyAtMaxIterations(t *testing.T) {
 }
 
 func TestCompilePipelineParallelReviewFixCycle(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/review_fix_cycle.yaml")
+	spec, err := LoadSpecFile("../examples/review_fix_cycle.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
 
-	if snapshot.WorkflowID != "review_fix_cycle" {
-		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowID)
+	if snapshot.WorkflowSlug != "review_fix_cycle" {
+		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowSlug)
 	}
 
 	triageNode, found := snapshot.Nodes["triage_review_results"]
@@ -1416,12 +1416,12 @@ func TestCompilePipelineParallelReviewFixCycle(t *testing.T) {
 }
 
 func TestExecutePipelineParallelReviewFixCycle(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/review_fix_cycle.yaml")
+	spec, err := LoadSpecFile("../examples/review_fix_cycle.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
@@ -1473,18 +1473,18 @@ func TestExecutePipelineParallelReviewFixCycle(t *testing.T) {
 }
 
 func TestCompileCompositionLoopIterativeCodeRepair(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/iterative_code_review_repair.yaml")
+	spec, err := LoadSpecFile("../examples/iterative_code_review_repair.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
 
-	if snapshot.WorkflowID != "iterative_code_review_repair" {
-		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowID)
+	if snapshot.WorkflowSlug != "iterative_code_review_repair" {
+		t.Fatalf("unexpected workflow id: %q", snapshot.WorkflowSlug)
 	}
 
 	loopNode, found := snapshot.Nodes["review_fix_loop"]
@@ -1511,12 +1511,12 @@ func TestCompileCompositionLoopIterativeCodeRepair(t *testing.T) {
 }
 
 func TestExecuteCompositionLoopIterativeCodeRepair(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/iterative_code_review_repair.yaml")
+	spec, err := LoadSpecFile("../examples/iterative_code_review_repair.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}
@@ -1757,12 +1757,12 @@ func TestSupportedExampleWorkflowsExecute(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			blueprint, err := LoadBlueprintFile(testCase.path)
+			spec, err := LoadSpecFile(testCase.path)
 			if err != nil {
-				t.Fatalf("load blueprint: %v", err)
+				t.Fatalf("load spec: %v", err)
 			}
 
-			snapshot, err := Compile(blueprint)
+			snapshot, err := Compile(spec)
 			if err != nil {
 				t.Fatalf("compile workflow: %v", err)
 			}
@@ -1789,14 +1789,14 @@ func TestExampleWorkflowCoverage(t *testing.T) {
 	supportedCompiles := map[string]bool{
 		"article_summary.yaml":                    true,
 		"binary_vote_round.yaml":                  true,
-		"blueprint-plan-cycle.yaml":               true,
+		"spec-plan-cycle.yaml":                    true,
 		"composed_article_summary.yaml":           true,
 		"section_summary_batch.yaml":              true,
 		"conditional_boolean_routing_review.yaml": true,
 		"parallel_code_review.yaml":               true,
 		"parallel_pr_review.yaml":                 true,
 		"loop_while_binary_consensus.yaml":        true,
-		"plan-new-blueprint.yaml":                 true,
+		"plan-new-spec.yaml":                      true,
 		"review_fix_cycle.yaml":                   true,
 		"iterative_code_review_repair.yaml":       true,
 	}
@@ -1815,12 +1815,12 @@ func TestExampleWorkflowCoverage(t *testing.T) {
 		seen[entry.Name()] = true
 
 		path := filepath.Join("../examples", entry.Name())
-		blueprint, err := LoadBlueprintFile(path)
+		spec, err := LoadSpecFile(path)
 		if err != nil {
 			t.Fatalf("load %s: %v", entry.Name(), err)
 		}
 
-		_, err = Compile(blueprint)
+		_, err = Compile(spec)
 		if supportedCompiles[entry.Name()] {
 			if err != nil {
 				t.Fatalf("compile %s: %v", entry.Name(), err)
@@ -1839,12 +1839,12 @@ func TestExampleWorkflowCoverage(t *testing.T) {
 }
 
 func TestExecuteParallelPRReviewRunsReviewersConcurrently(t *testing.T) {
-	blueprint, err := LoadBlueprintFile("../examples/parallel_pr_review.yaml")
+	spec, err := LoadSpecFile("../examples/parallel_pr_review.yaml")
 	if err != nil {
-		t.Fatalf("load blueprint: %v", err)
+		t.Fatalf("load spec: %v", err)
 	}
 
-	snapshot, err := Compile(blueprint)
+	snapshot, err := Compile(spec)
 	if err != nil {
 		t.Fatalf("compile workflow: %v", err)
 	}

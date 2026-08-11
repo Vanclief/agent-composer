@@ -1,19 +1,16 @@
 workflow:
-  id: parallel_pr_review
-  name: "Parallel PR Review"
-  version: "1"
+  slug: parallel_pr_review
+  name: "PR Review"
+  version: "4"
   description: >
-    Run three independent gpt-5.5 agents that each review the current changes
-    against the provided branch using the pr-review skill, merge all of their
-    issues into a single list, then deduplicate issues that the reviewers
-    reported in common.
+    Run three independent gpt-5.5 agents that each review the current changes against the provided branch using the pr-review skill, merge all of their issues into a single list, then deduplicate issues that the reviewers reported in common.
+
   inputs:
     branch: string
   outputs:
     issues:
       schema: ReviewIssueList
       from: instance.dedupe_issues.out
-
 schemas:
   ReviewIssue:
     type: object
@@ -27,12 +24,10 @@ schemas:
         enum: [low, medium, high]
       location:
         type: string
-
   ReviewIssueList:
     type: array
     items:
       schema_ref: ReviewIssue
-
 nodes:
   pr_reviewer:
     kind: inference
@@ -43,13 +38,107 @@ nodes:
     config:
       harness:
         id: codex_cli
-        model: gpt-5.5
+        model: gpt-5.6-sol
         reasoning_effort: xhigh
-      instruction: >
-        Run the pr-review skill in read-only mode to review the current changes
-        against the provided branch. Do not modify any files. Return every issue
-        you find as a structured list of review issues.
+      instruction: |-
+        You are in READ-ONLY review mode. You must create a review against the provided branch. Return a list of enumerated issues or problems you see with the PR.
 
+        ## Rules
+
+        - Do not modify any files.
+        - Do not apply patches or return a diff with patches
+        - Do not run commands that change the repo (no formatting, no installs, no commits).
+
+        These are your guidelines:
+
+        ## Correctness First
+
+        - Bugs outrank style: logic errors, unhandled failure paths, boundary conditions.
+        - Watch the diff for security issues: unsafe input handling, committed secrets.
+        - Behavior changes without tests are worth flagging.
+
+        ## 0) Prime Directive
+
+        - Optimize for **low complexity** over cleverness.
+        - Prefer the **simplest thing that works**; complexity is the main long-term risk.
+
+        ## 1) Scope & Solution Shape
+
+        - Flag **scope creep**: changes beyond the PR's stated purpose.
+        - Question additions that add moving parts for marginal value; prefer **80/20** solutions.
+
+        ## 2) Architecture & Abstractions
+
+        - Avoid **early factoring** and speculative abstractions.
+        - Let the system’s shape emerge, then refactor around **cut points**:
+          - narrow interfaces
+          - stable boundaries
+          - implementation hidden behind the boundary
+
+        ## 3) Refactoring Discipline
+
+        - Keep refactors **small** and **incremental**.
+        - Avoid mixing **behavior changes** + **structural changes** in the same refactor.
+        - Don’t introduce new abstraction layers unless payoff is obvious.
+
+        ## 4) Testing Strategy
+
+        - Bugfixes should include a **regression test** that reproduces the bug.
+        - Keep E2E tests **few and maintained**; flag flaky suites.
+
+        ## 5) Chesterton’s Fence Rule
+
+        - Before removing/replacing “ugly” code:
+          - understand what constraints it satisfies
+          - find what it’s protecting (tests often reveal this)
+
+        ## 6) Code Clarity Rules
+
+        - Prefer clarity over cleverness.
+        - Break complex boolean logic into named intermediates:
+          - improves readability
+          - improves debuggability
+
+        ## 7) DRY With Restraint
+
+        - Duplication can be cheaper than indirection.
+        - Avoid “DRY at any cost” when it creates:
+          - hard-to-follow control flow
+          - too-generic frameworks
+          - callback chains
+
+        ## 8) Locality Over Over-Separation
+
+        - Prefer putting logic “on the thing that does the thing.”
+        - Avoid scattering behavior across many files/classes when it hurts comprehension.
+
+        ## 9) Closures, Callbacks, Generics
+
+        - Use like salt: valuable, but easy to overdo.
+        - Avoid callback-heavy designs that obscure flow.
+        - Limit generics to high-value cases (often container-like abstractions), avoid “type-level meta frameworks.”
+
+        ## 10) Types
+
+        - Use types to improve tooling and safe refactors.
+        - Avoid type cleverness that increases complexity without real benefit.
+
+        ## 11) Logging & Ops Hygiene
+
+        - Logging:
+          - log major logical branches
+          - include request IDs / correlation IDs
+          - make log level adjustable (ideally dynamically, per user)
+
+        ## 12) Concurrency
+
+        - Treat concurrency as dangerous by default.
+        - Prefer simple models (stateless handlers, job queues, low coupling).
+
+        ## 13) API Design
+
+        - Design for the common case first.
+        - Layer optional complexity only when necessary; avoid forcing ceremony on callers.
   merged_issues:
     kind: connector
     operation: concat
@@ -59,7 +148,6 @@ nodes:
       issues_c: ReviewIssueList
     outputs:
       out: ReviewIssueList
-
   issue_deduplicator:
     kind: inference
     inputs:
@@ -69,39 +157,32 @@ nodes:
     config:
       harness:
         id: codex_cli
-        model: gpt-5.5
-        reasoning_effort: xhigh
-      instruction: >
-        You are given a list of review issues collected from three independent
-        reviewers. Remove duplicates: when two or more issues describe the same
-        underlying problem (same root cause and location, even if worded
-        differently), keep a single best entry and drop the rest. Do not merge
-        distinct issues and do not invent new ones. Return the deduplicated list.
+        model: gpt-5.6-sol
+        reasoning_effort: high
+      instruction: |
+        You are given a list of review issues collected from independent reviewers.
 
+        Remove duplicates: when two or more issues describe the same underlying problem (same root cause and location, even if worded differently), keep a single best entry and drop the rest. Do not merge distinct issues and do not invent new ones. Return the deduplicated list.
 flow:
   instances:
     review_a:
       node: pr_reviewer
       inputs:
         branch: workflow_input.branch
-
     review_b:
       node: pr_reviewer
       inputs:
         branch: workflow_input.branch
-
     review_c:
       node: pr_reviewer
       inputs:
         branch: workflow_input.branch
-
     merge_issues:
       node: merged_issues
       inputs:
         issues_a: instance.review_a.out
         issues_b: instance.review_b.out
         issues_c: instance.review_c.out
-
     dedupe_issues:
       node: issue_deduplicator
       inputs:

@@ -77,36 +77,36 @@ export interface ParsedWorkflow {
   order: string[];
 }
 
-export interface BlueprintWorkflow {
+export interface SpecHeader {
   id?: string;
   name?: string;
   version?: string;
   description?: string;
   inputs?: Record<string, string>;
-  outputs?: Record<string, BlueprintOutput>;
+  outputs?: Record<string, SpecOutput>;
 }
 
-export interface BlueprintOutput {
+export interface SpecOutput {
   schema?: string;
   from?: string;
 }
 
-export interface BlueprintHarness {
+export interface SpecHarness {
   id?: string;
   model?: string;
   reasoning_effort?: string;
   [key: string]: unknown;
 }
 
-export interface BlueprintNodeConfig {
-  harness?: BlueprintHarness;
+export interface SpecNodeConfig {
+  harness?: SpecHarness;
   instruction?: string;
   [key: string]: unknown;
 }
 
-export interface BlueprintNode {
+export interface SpecNode {
   kind?: string;
-  workflow_id?: string;
+  workflow_slug?: string;
   operation?: string;
   executes?: string;
   over?: string;
@@ -118,19 +118,19 @@ export interface BlueprintNode {
   when_false?: string;
   inputs?: Record<string, unknown>;
   outputs?: Record<string, unknown>;
-  config?: BlueprintNodeConfig;
+  config?: SpecNodeConfig;
 }
 
-export interface BlueprintInstance {
+export interface SpecInstance {
   node?: string;
   inputs?: Record<string, unknown>;
 }
 
-export interface BlueprintDocument {
-  workflow?: BlueprintWorkflow;
+export interface SpecDocument {
+  workflow?: SpecHeader;
   schemas?: Record<string, unknown>;
-  nodes?: Record<string, BlueprintNode>;
+  nodes?: Record<string, SpecNode>;
   flow?: {
-    instances?: Record<string, BlueprintInstance>;
+    instances?: Record<string, SpecInstance>;
   };
 }

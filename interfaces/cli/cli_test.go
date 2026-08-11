@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,7 +10,7 @@ import (
 func TestLoadWorkflowInputFromString(t *testing.T) {
 	path := writeWorkflowTestFile(t, `
 workflow:
-  id: single_string_input
+  slug: single_string_input
   version: "1"
   inputs:
     question: string
@@ -19,7 +20,7 @@ flow:
   instances: {}
 `)
 
-	input, err := loadWorkflowInput("", path, "", "", "Are cats blue?", false, false, true)
+	input, err := loadWorkflowInput(context.Background(), nil, "", path, "", "", "Are cats blue?", false, false, true)
 	if err != nil {
 		t.Fatalf("load workflow input: %v", err)
 	}
@@ -37,7 +38,7 @@ flow:
 func TestLoadWorkflowInputRejectsMultipleSources(t *testing.T) {
 	path := writeWorkflowTestFile(t, `
 workflow:
-  id: single_string_input
+  slug: single_string_input
   version: "1"
   inputs:
     question: string
@@ -47,7 +48,7 @@ flow:
   instances: {}
 `)
 
-	_, err := loadWorkflowInput("", path, "", `{"question":"json"}`, "string", false, true, true)
+	_, err := loadWorkflowInput(context.Background(), nil, "", path, "", `{"question":"json"}`, "string", false, true, true)
 	if err == nil {
 		t.Fatal("expected error for multiple input sources")
 	}
@@ -56,7 +57,7 @@ flow:
 func TestLoadWorkflowInputRejectsStringForMultipleInputs(t *testing.T) {
 	path := writeWorkflowTestFile(t, `
 workflow:
-  id: multiple_inputs
+  slug: multiple_inputs
   version: "1"
   inputs:
     question: string
@@ -67,7 +68,7 @@ flow:
   instances: {}
 `)
 
-	_, err := loadWorkflowInput("", path, "", "", "Are cats blue?", false, false, true)
+	_, err := loadWorkflowInput(context.Background(), nil, "", path, "", "", "Are cats blue?", false, false, true)
 	if err == nil {
 		t.Fatal("expected error for multiple workflow inputs")
 	}
@@ -76,7 +77,7 @@ flow:
 func TestLoadWorkflowInputRejectsStringForNonStringInput(t *testing.T) {
 	path := writeWorkflowTestFile(t, `
 workflow:
-  id: non_string_input
+  slug: non_string_input
   version: "1"
   inputs:
     retries: integer
@@ -86,7 +87,7 @@ flow:
   instances: {}
 `)
 
-	_, err := loadWorkflowInput("", path, "", "", "3", false, false, true)
+	_, err := loadWorkflowInput(context.Background(), nil, "", path, "", "", "3", false, false, true)
 	if err == nil {
 		t.Fatal("expected error for non-string workflow input")
 	}

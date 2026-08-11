@@ -12,7 +12,7 @@ import (
 type ListRequest struct {
 	pagination.CursorRequest
 
-	WorkflowID string `json:"workflow_id,omitempty"`
+	WorkflowSlug string `json:"workflow_slug,omitempty"`
 }
 
 func (r *ListRequest) Validate() error {
@@ -40,7 +40,7 @@ func (api *API) List(ctx context.Context, requester interface{}, request *ListRe
 
 	q := api.db.NewSelect().Model(&items)
 
-	workflowID := strings.TrimSpace(request.WorkflowID)
+	workflowID := strings.TrimSpace(request.WorkflowSlug)
 	if workflowID != "" {
 		q = q.Where("workflow_id = ?", workflowID)
 	}

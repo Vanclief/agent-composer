@@ -1071,7 +1071,7 @@
   white-space: nowrap;
 }
 
-/* Blueprint version beside the title — the run's or the file's. */
+/* Spec version beside the title — the run's or the file's. */
 .canvas-head__version {
   flex: none;
   border: 1px solid var(--line);

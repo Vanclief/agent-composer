@@ -23,29 +23,18 @@ func (api *API) List(ctx context.Context, requester interface{}, request *ListRe
 		return nil, ez.Wrap(err)
 	}
 
-	workflows, err := workflowruntime.ListBlueprints()
+	workflows, err := api.Registry.List(ctx)
 	if err != nil {
 		return nil, ez.Wrap(err)
-	}
-
-	for index := range workflows {
-		draft, err := workflowruntime.ReadDraft(workflows[index].ID)
-		if err == nil && draft != "" {
-			workflows[index].HasDraft = true
-		}
 	}
 
 	// Composed-but-never-saved workflows exist only as drafts; they
 	// still belong in the list so a reload cannot orphan them.
-	draftOnly, err := workflowruntime.ListDraftOnlyBlueprints()
+	draftOnly, err := api.Registry.ListDraftOnly(ctx)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
-	for _, summary := range draftOnly {
-		summary.HasDraft = true
-		summary.DraftOnly = true
-		workflows = append(workflows, summary)
-	}
+	workflows = append(workflows, draftOnly...)
 
 	return &ListResponse{
 		Workflows: workflows,

@@ -158,15 +158,15 @@ func validateStrictStructuredOutputSchema(schema map[string]any, path string) er
 	return nil
 }
 
-func buildNodeShape(blueprint *Blueprint, nodeName string, nodeSpec NodeSpec) (compiledNodeShape, error) {
-	inputOrder := orderedPortNames(blueprint.NodeInputOrder[nodeName], nodeSpec.Inputs)
-	inputPorts, err := buildInputPorts(blueprint, nodeName, nodeSpec.Inputs, inputOrder)
+func buildNodeShape(spec *Spec, nodeName string, nodeSpec NodeSpec) (compiledNodeShape, error) {
+	inputOrder := orderedPortNames(spec.NodeInputOrder[nodeName], nodeSpec.Inputs)
+	inputPorts, err := buildInputPorts(spec, nodeName, nodeSpec.Inputs, inputOrder)
 	if err != nil {
 		return compiledNodeShape{}, err
 	}
 
-	outputOrder := orderedPortNames(blueprint.NodeOutputOrder[nodeName], nodeSpec.Outputs)
-	outputs, outputName, outputSchema, structuredOutputSchema, structuredOutputSchemaRaw, wrapStructuredOutput, err := buildNodeOutputs(blueprint, nodeName, nodeSpec.Outputs, outputOrder)
+	outputOrder := orderedPortNames(spec.NodeOutputOrder[nodeName], nodeSpec.Outputs)
+	outputs, outputName, outputSchema, structuredOutputSchema, structuredOutputSchemaRaw, wrapStructuredOutput, err := buildNodeOutputs(spec, nodeName, nodeSpec.Outputs, outputOrder)
 	if err != nil {
 		return compiledNodeShape{}, err
 	}
@@ -205,12 +205,12 @@ func buildNodeShape(blueprint *Blueprint, nodeName string, nodeSpec NodeSpec) (c
 	return shape, nil
 }
 
-func buildInputPorts(blueprint *Blueprint, nodeName string, declaredInputs map[string]string, inputNames []string) (map[string]Port, error) {
+func buildInputPorts(spec *Spec, nodeName string, declaredInputs map[string]string, inputNames []string) (map[string]Port, error) {
 	inputPorts := make(map[string]Port, len(declaredInputs))
 
 	for _, inputName := range inputNames {
 		typeRef := declaredInputs[inputName]
-		schema, err := resolveTypeRef(blueprint, strings.TrimSpace(typeRef))
+		schema, err := resolveTypeRef(spec, strings.TrimSpace(typeRef))
 		if err != nil {
 			return nil, fmt.Errorf("node %q input %q: %w", nodeName, inputName, err)
 		}
@@ -225,7 +225,7 @@ func buildInputPorts(blueprint *Blueprint, nodeName string, declaredInputs map[s
 	return inputPorts, nil
 }
 
-func buildNodeOutputs(blueprint *Blueprint, nodeName string, declaredOutputs map[string]string, outputNames []string) (map[string]Port, string, map[string]any, map[string]any, json.RawMessage, bool, error) {
+func buildNodeOutputs(spec *Spec, nodeName string, declaredOutputs map[string]string, outputNames []string) (map[string]Port, string, map[string]any, map[string]any, json.RawMessage, bool, error) {
 	if len(outputNames) == 0 {
 		return nil, "", nil, nil, nil, false, fmt.Errorf("nodes must declare at least one output")
 	}
@@ -233,7 +233,7 @@ func buildNodeOutputs(blueprint *Blueprint, nodeName string, declaredOutputs map
 	outputs := make(map[string]Port, len(outputNames))
 	for _, outputName := range outputNames {
 		outputTypeRef := strings.TrimSpace(declaredOutputs[outputName])
-		outputSchema, err := resolveTypeRef(blueprint, outputTypeRef)
+		outputSchema, err := resolveTypeRef(spec, outputTypeRef)
 		if err != nil {
 			return nil, "", nil, nil, nil, false, fmt.Errorf("node %q output %q: %w", nodeName, outputName, err)
 		}
@@ -338,7 +338,7 @@ func compileInputBindings(nodeSpec NodeSpec, instance InstanceSpec, instanceID s
 	return inputBindings, dependencies, nil
 }
 
-func buildForeachLoopTarget(blueprint *Blueprint, loopSpec NodeSpec, loopNodeName string, resolver *workflowResolver, stack []string) (*NodeSnapshot, []string, error) {
+func buildForeachLoopTarget(spec *Spec, loopSpec NodeSpec, loopNodeName string, resolver *workflowResolver, stack []string) (*NodeSnapshot, []string, error) {
 	if strings.TrimSpace(loopSpec.Operation) != "foreach" {
 		return nil, nil, fmt.Errorf("only loop operation foreach is supported in the current workflow runtime")
 	}
@@ -348,7 +348,7 @@ func buildForeachLoopTarget(blueprint *Blueprint, loopSpec NodeSpec, loopNodeNam
 		return nil, nil, fmt.Errorf("loop node %q is missing executes", loopNodeName)
 	}
 
-	targetSpec, found := blueprint.Nodes[targetName]
+	targetSpec, found := spec.Nodes[targetName]
 	if !found {
 		return nil, nil, fmt.Errorf("loop node %q executes unknown node %q", loopNodeName, targetName)
 	}
@@ -358,7 +358,7 @@ func buildForeachLoopTarget(blueprint *Blueprint, loopSpec NodeSpec, loopNodeNam
 		return nil, nil, fmt.Errorf("loop node %q is missing over", loopNodeName)
 	}
 
-	loopShape, err := buildNodeShape(blueprint, loopNodeName, loopSpec)
+	loopShape, err := buildNodeShape(spec, loopNodeName, loopSpec)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -368,17 +368,17 @@ func buildForeachLoopTarget(blueprint *Blueprint, loopSpec NodeSpec, loopNodeNam
 			return nil, nil, fmt.Errorf("workflow resolver is required for workflow foreach loop targets")
 		}
 
-		workflowID := strings.TrimSpace(targetSpec.WorkflowID)
+		workflowID := strings.TrimSpace(targetSpec.WorkflowSlug)
 		if workflowID == "" {
-			return nil, nil, fmt.Errorf("workflow loop target %q is missing workflow_id", targetName)
+			return nil, nil, fmt.Errorf("workflow loop target %q is missing workflow_slug", targetName)
 		}
 
-		childBlueprint, err := resolver.loadByWorkflowID(workflowID)
+		childSpec, err := resolver.loadByWorkflowID(workflowID)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		childSnapshot, err := compileSnapshot(childBlueprint, resolver, stack)
+		childSnapshot, err := compileSnapshot(childSpec, resolver, stack)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -409,7 +409,7 @@ func buildForeachLoopTarget(blueprint *Blueprint, loopSpec NodeSpec, loopNodeNam
 		return nil, nil, fmt.Errorf("only inference and workflow loop targets are supported in the current workflow runtime")
 	}
 
-	targetShape, err := buildNodeShape(blueprint, targetName, targetSpec)
+	targetShape, err := buildNodeShape(spec, targetName, targetSpec)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -441,7 +441,7 @@ func buildForeachLoopTarget(blueprint *Blueprint, loopSpec NodeSpec, loopNodeNam
 	return targetNode, nil, nil
 }
 
-func buildWhileLoopTarget(blueprint *Blueprint, loopSpec NodeSpec, loopNodeName string, resolver *workflowResolver, stack []string) (*WhileTargetSnapshot, []string, error) {
+func buildWhileLoopTarget(spec *Spec, loopSpec NodeSpec, loopNodeName string, resolver *workflowResolver, stack []string) (*WhileTargetSnapshot, []string, error) {
 	if strings.TrimSpace(loopSpec.Operation) != "while" {
 		return nil, nil, fmt.Errorf("only loop operation while is supported in the current workflow runtime")
 	}
@@ -451,7 +451,7 @@ func buildWhileLoopTarget(blueprint *Blueprint, loopSpec NodeSpec, loopNodeName 
 		return nil, nil, fmt.Errorf("loop node %q is missing executes", loopNodeName)
 	}
 
-	targetSpec, found := blueprint.Nodes[targetName]
+	targetSpec, found := spec.Nodes[targetName]
 	if !found {
 		return nil, nil, fmt.Errorf("loop node %q executes unknown node %q", loopNodeName, targetName)
 	}
@@ -476,7 +476,7 @@ func buildWhileLoopTarget(blueprint *Blueprint, loopSpec NodeSpec, loopNodeName 
 		return nil, nil, fmt.Errorf("loop node %q max_iterations must be greater than zero", loopNodeName)
 	}
 
-	loopShape, err := buildNodeShape(blueprint, loopNodeName, loopSpec)
+	loopShape, err := buildNodeShape(spec, loopNodeName, loopSpec)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -486,17 +486,17 @@ func buildWhileLoopTarget(blueprint *Blueprint, loopSpec NodeSpec, loopNodeName 
 			return nil, nil, fmt.Errorf("workflow resolver is required for workflow while loop targets")
 		}
 
-		workflowID := strings.TrimSpace(targetSpec.WorkflowID)
+		workflowID := strings.TrimSpace(targetSpec.WorkflowSlug)
 		if workflowID == "" {
-			return nil, nil, fmt.Errorf("workflow loop target %q is missing workflow_id", targetName)
+			return nil, nil, fmt.Errorf("workflow loop target %q is missing workflow_slug", targetName)
 		}
 
-		childBlueprint, err := resolver.loadByWorkflowID(workflowID)
+		childSpec, err := resolver.loadByWorkflowID(workflowID)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		childSnapshot, err := compileSnapshot(childBlueprint, resolver, stack)
+		childSnapshot, err := compileSnapshot(childSpec, resolver, stack)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -527,12 +527,12 @@ func buildWhileLoopTarget(blueprint *Blueprint, loopSpec NodeSpec, loopNodeName 
 		}, nil, nil
 	}
 
-	targetInputs, err := buildInputPorts(blueprint, targetName, targetSpec.Inputs, orderedPortNames(blueprint.NodeInputOrder[targetName], targetSpec.Inputs))
+	targetInputs, err := buildInputPorts(spec, targetName, targetSpec.Inputs, orderedPortNames(spec.NodeInputOrder[targetName], targetSpec.Inputs))
 	if err != nil {
 		return nil, nil, err
 	}
 
-	updateSchema, breakSchema, structuredOutputSchema, structuredOutputSchemaRaw, err := buildWhileTargetOutputs(blueprint, targetName, targetSpec.Outputs, updates, breaksOn)
+	updateSchema, breakSchema, structuredOutputSchema, structuredOutputSchemaRaw, err := buildWhileTargetOutputs(spec, targetName, targetSpec.Outputs, updates, breaksOn)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -569,7 +569,7 @@ func buildWhileLoopTarget(blueprint *Blueprint, loopSpec NodeSpec, loopNodeName 
 	}, nil, nil
 }
 
-func buildWhileTargetOutputs(blueprint *Blueprint, nodeName string, declaredOutputs map[string]string, updates string, breaksOn string) (map[string]any, map[string]any, map[string]any, json.RawMessage, error) {
+func buildWhileTargetOutputs(spec *Spec, nodeName string, declaredOutputs map[string]string, updates string, breaksOn string) (map[string]any, map[string]any, map[string]any, json.RawMessage, error) {
 	if len(declaredOutputs) != 2 {
 		return nil, nil, nil, nil, fmt.Errorf("while target %q must declare exactly two outputs", nodeName)
 	}
@@ -584,12 +584,12 @@ func buildWhileTargetOutputs(blueprint *Blueprint, nodeName string, declaredOutp
 		return nil, nil, nil, nil, fmt.Errorf("while target %q is missing break output %q", nodeName, breaksOn)
 	}
 
-	updateSchema, err := resolveTypeRef(blueprint, strings.TrimSpace(updateTypeRef))
+	updateSchema, err := resolveTypeRef(spec, strings.TrimSpace(updateTypeRef))
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("node %q output %q: %w", nodeName, updates, err)
 	}
 
-	breakSchema, err := resolveTypeRef(blueprint, strings.TrimSpace(breakTypeRef))
+	breakSchema, err := resolveTypeRef(spec, strings.TrimSpace(breakTypeRef))
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("node %q output %q: %w", nodeName, breaksOn, err)
 	}
@@ -612,7 +612,7 @@ func buildWhileTargetOutputs(blueprint *Blueprint, nodeName string, declaredOutp
 	return updateSchema, breakSchema, structuredOutputSchema, structuredOutputSchemaRaw, nil
 }
 
-func buildConditionalTargets(blueprint *Blueprint, conditionalSpec NodeSpec, conditionalNodeName string, resolver *workflowResolver, stack []string) (*NodeSnapshot, *NodeSnapshot, []string, error) {
+func buildConditionalTargets(spec *Spec, conditionalSpec NodeSpec, conditionalNodeName string, resolver *workflowResolver, stack []string) (*NodeSnapshot, *NodeSnapshot, []string, error) {
 	if strings.TrimSpace(conditionalSpec.Operation) != "if" {
 		return nil, nil, nil, fmt.Errorf("only conditional operation if is supported in the current workflow runtime")
 	}
@@ -622,7 +622,7 @@ func buildConditionalTargets(blueprint *Blueprint, conditionalSpec NodeSpec, con
 		return nil, nil, nil, fmt.Errorf("conditional node %q is missing routes_on", conditionalNodeName)
 	}
 
-	conditionalShape, err := buildNodeShape(blueprint, conditionalNodeName, conditionalSpec)
+	conditionalShape, err := buildNodeShape(spec, conditionalNodeName, conditionalSpec)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -636,12 +636,12 @@ func buildConditionalTargets(blueprint *Blueprint, conditionalSpec NodeSpec, con
 		return nil, nil, nil, fmt.Errorf("conditional node %q routes_on input %q must be boolean", conditionalNodeName, routesOn)
 	}
 
-	trueTarget, err := buildConditionalTarget(blueprint, conditionalSpec.WhenTrue, conditionalNodeName, conditionalShape, resolver, stack)
+	trueTarget, err := buildConditionalTarget(spec, conditionalSpec.WhenTrue, conditionalNodeName, conditionalShape, resolver, stack)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	falseTarget, err := buildConditionalTarget(blueprint, conditionalSpec.WhenFalse, conditionalNodeName, conditionalShape, resolver, stack)
+	falseTarget, err := buildConditionalTarget(spec, conditionalSpec.WhenFalse, conditionalNodeName, conditionalShape, resolver, stack)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -654,13 +654,13 @@ func buildConditionalTargets(blueprint *Blueprint, conditionalSpec NodeSpec, con
 	return trueTarget, falseTarget, nil, nil
 }
 
-func buildConditionalTarget(blueprint *Blueprint, targetName string, conditionalNodeName string, conditionalShape compiledNodeShape, resolver *workflowResolver, stack []string) (*NodeSnapshot, error) {
+func buildConditionalTarget(spec *Spec, targetName string, conditionalNodeName string, conditionalShape compiledNodeShape, resolver *workflowResolver, stack []string) (*NodeSnapshot, error) {
 	trimmedTargetName := strings.TrimSpace(targetName)
 	if trimmedTargetName == "" {
 		return nil, fmt.Errorf("conditional node %q is missing a branch target", conditionalNodeName)
 	}
 
-	targetSpec, found := blueprint.Nodes[trimmedTargetName]
+	targetSpec, found := spec.Nodes[trimmedTargetName]
 	if !found {
 		return nil, fmt.Errorf("conditional node %q references unknown branch target %q", conditionalNodeName, trimmedTargetName)
 	}
@@ -670,17 +670,17 @@ func buildConditionalTarget(blueprint *Blueprint, targetName string, conditional
 			return nil, fmt.Errorf("workflow resolver is required for workflow conditional targets")
 		}
 
-		workflowID := strings.TrimSpace(targetSpec.WorkflowID)
+		workflowID := strings.TrimSpace(targetSpec.WorkflowSlug)
 		if workflowID == "" {
-			return nil, fmt.Errorf("workflow conditional target %q is missing workflow_id", trimmedTargetName)
+			return nil, fmt.Errorf("workflow conditional target %q is missing workflow_slug", trimmedTargetName)
 		}
 
-		childBlueprint, err := resolver.loadByWorkflowID(workflowID)
+		childSpec, err := resolver.loadByWorkflowID(workflowID)
 		if err != nil {
 			return nil, err
 		}
 
-		childSnapshot, err := compileSnapshot(childBlueprint, resolver, stack)
+		childSnapshot, err := compileSnapshot(childSpec, resolver, stack)
 		if err != nil {
 			return nil, err
 		}
@@ -717,7 +717,7 @@ func buildConditionalTarget(blueprint *Blueprint, targetName string, conditional
 		return nil, fmt.Errorf("only inference and workflow conditional targets are supported in the current workflow runtime")
 	}
 
-	targetShape, err := buildNodeShape(blueprint, trimmedTargetName, targetSpec)
+	targetShape, err := buildNodeShape(spec, trimmedTargetName, targetSpec)
 	if err != nil {
 		return nil, err
 	}
@@ -1099,47 +1099,47 @@ func parseBinding(raw string) (Binding, error) {
 	return Binding{}, fmt.Errorf("unsupported binding %q", raw)
 }
 
-func resolveTypeRef(blueprint *Blueprint, typeRef string) (map[string]any, error) {
+func resolveTypeRef(spec *Spec, typeRef string) (map[string]any, error) {
 	switch typeRef {
 	case "string", "boolean", "integer", "number":
 		return map[string]any{"type": typeRef}, nil
 	}
 
-	schema, found := blueprint.Schemas[typeRef]
+	schema, found := spec.Schemas[typeRef]
 	if !found {
 		return nil, fmt.Errorf("unknown schema %q", typeRef)
 	}
 
-	return buildSchema(blueprint, schema)
+	return buildSchema(spec, schema)
 }
 
-func buildSchema(blueprint *Blueprint, spec SchemaSpec) (map[string]any, error) {
-	if strings.TrimSpace(spec.SchemaRef) != "" {
-		return resolveTypeRef(blueprint, strings.TrimSpace(spec.SchemaRef))
+func buildSchema(spec *Spec, schemaSpec SchemaSpec) (map[string]any, error) {
+	if strings.TrimSpace(schemaSpec.SchemaRef) != "" {
+		return resolveTypeRef(spec, strings.TrimSpace(schemaSpec.SchemaRef))
 	}
 
 	schema := map[string]any{}
 
-	switch spec.Type {
+	switch schemaSpec.Type {
 	case "string", "boolean", "integer", "number":
-		schema["type"] = spec.Type
+		schema["type"] = schemaSpec.Type
 	case "array":
-		if spec.Items == nil {
+		if schemaSpec.Items == nil {
 			return nil, fmt.Errorf("array schema is missing items")
 		}
-		items, err := buildSchema(blueprint, *spec.Items)
+		items, err := buildSchema(spec, *schemaSpec.Items)
 		if err != nil {
 			return nil, err
 		}
 		schema["type"] = "array"
 		schema["items"] = items
 	case "object":
-		properties := make(map[string]any, len(spec.Properties))
-		required := make([]string, 0, len(spec.Properties))
-		propertyNames := sortedKeys(spec.Properties)
+		properties := make(map[string]any, len(schemaSpec.Properties))
+		required := make([]string, 0, len(schemaSpec.Properties))
+		propertyNames := sortedKeys(schemaSpec.Properties)
 		for _, propertyName := range propertyNames {
-			propertySpec := spec.Properties[propertyName]
-			propertySchema, err := buildSchema(blueprint, propertySpec)
+			propertySpec := schemaSpec.Properties[propertyName]
+			propertySchema, err := buildSchema(spec, propertySpec)
 			if err != nil {
 				return nil, err
 			}
@@ -1155,18 +1155,18 @@ func buildSchema(blueprint *Blueprint, spec SchemaSpec) (map[string]any, error) 
 			schema["required"] = required
 		}
 	default:
-		return nil, fmt.Errorf("unsupported schema type %q", spec.Type)
+		return nil, fmt.Errorf("unsupported schema type %q", schemaSpec.Type)
 	}
 
-	if len(spec.Enum) > 0 {
-		schema["enum"] = spec.Enum
+	if len(schemaSpec.Enum) > 0 {
+		schema["enum"] = schemaSpec.Enum
 	}
 
-	if strings.TrimSpace(spec.Description) != "" {
-		schema["description"] = strings.TrimSpace(spec.Description)
+	if strings.TrimSpace(schemaSpec.Description) != "" {
+		schema["description"] = strings.TrimSpace(schemaSpec.Description)
 	}
 
-	if spec.Nullable {
+	if schemaSpec.Nullable {
 		rawType, found := schema["type"]
 		if found {
 			switch typed := rawType.(type) {

@@ -1,31 +1,35 @@
 package workflow
 
 import (
+	"context"
 	"strings"
 
+	workflowmodels "github.com/vanclief/agent-composer/models/workflow"
 	"github.com/vanclief/ez"
 )
 
 // listEmbedders returns installed workflows that embed targetID via a
 // workflow node.
-func listEmbedders(targetID string) ([]string, error) {
-	summaries, err := ListBlueprints()
+func (r *Registry) listEmbedders(ctx context.Context, targetID string) ([]string, error) {
+	records, err := workflowmodels.ListWorkflows(ctx, r.db)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
 	embedders := []string{}
-	for _, summary := range summaries {
-		if summary.ID == targetID {
+	for _, record := range records {
+		if record.Slug == targetID || record.Spec == "" {
 			continue
 		}
-		entry, err := loadRegistryBlueprintEntryByWorkflowID(summary.ID)
+
+		spec, err := ParseSpec([]byte(record.Spec), "")
 		if err != nil {
 			continue
 		}
-		for _, node := range entry.Blueprint.Nodes {
-			if strings.TrimSpace(node.WorkflowID) == targetID {
-				embedders = append(embedders, summary.ID)
+
+		for _, node := range spec.Nodes {
+			if strings.TrimSpace(node.WorkflowSlug) == targetID {
+				embedders = append(embedders, record.Slug)
 				break
 			}
 		}
@@ -34,50 +38,37 @@ func listEmbedders(targetID string) ([]string, error) {
 	return embedders, nil
 }
 
-// DeleteWorkflow removes a workflow from the library: the registry
-// file and any pending draft. Run history and the versions archive
-// deliberately stay — deleting a workflow does not rewrite the past.
-func DeleteWorkflow(workflowID string) error {
-	workflowID = strings.TrimSpace(workflowID)
-
-	installed := true
-	_, err := loadRegistryBlueprintEntryByWorkflowID(workflowID)
+// Delete removes a workflow from the library: the installed spec and
+// any pending draft. Run history and the version history deliberately
+// stay — deleting a workflow does not rewrite the past.
+func (r *Registry) Delete(ctx context.Context, workflowID string) error {
+	trimmedID := strings.TrimSpace(workflowID)
+	record, err := workflowmodels.GetWorkflowBySlug(ctx, r.db, trimmedID)
 	if err != nil {
-		if ez.ErrorCode(err) != ez.ENOTFOUND {
-			return ez.Wrap(err)
+		if ez.ErrorCode(err) == ez.ENOTFOUND {
+			return ez.New(ez.ENOTFOUND, "Workflow "+trimmedID+" was not found", nil)
 		}
-		installed = false
-	}
-	draft, err := ReadDraft(workflowID)
-	if err != nil {
+
 		return ez.Wrap(err)
 	}
-	if !installed && draft == "" {
-		return ez.New(ez.ENOTFOUND, "Workflow "+workflowID+" was not found", nil)
-	}
 
-	if installed {
-		embedders, err := listEmbedders(workflowID)
+	if record.Spec != "" {
+		embedders, err := r.listEmbedders(ctx, trimmedID)
 		if err != nil {
 			return ez.Wrap(err)
 		}
 		if len(embedders) > 0 {
 			return ez.New(
 				ez.EINVALID,
-				"Workflow "+workflowID+" is embedded by "+
+				"Workflow "+trimmedID+" is embedded by "+
 					strings.Join(embedders, ", ")+
 					" — remove those references first",
 				nil,
 			)
 		}
-
-		err = DeleteBlueprintByWorkflowID(workflowID)
-		if err != nil {
-			return ez.Wrap(err)
-		}
 	}
 
-	err = DeleteDraft(workflowID)
+	err = record.Delete(ctx, r.db)
 	if err != nil {
 		return ez.Wrap(err)
 	}

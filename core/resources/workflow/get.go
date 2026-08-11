@@ -4,25 +4,24 @@ import (
 	"context"
 	"strings"
 
-	workflowruntime "github.com/vanclief/agent-composer/workflow"
 	"github.com/vanclief/ez"
 )
 
 type GetRequest struct {
-	WorkflowID string `json:"workflow_id"`
+	WorkflowSlug string `json:"workflow_slug"`
 }
 
 func (r *GetRequest) Validate() error {
-	if strings.TrimSpace(r.WorkflowID) == "" {
-		return ez.New(ez.EINVALID, "workflow_id is required", nil)
+	if strings.TrimSpace(r.WorkflowSlug) == "" {
+		return ez.New(ez.EINVALID, "workflow_slug is required", nil)
 	}
 
 	return nil
 }
 
 type GetResponse struct {
-	WorkflowID string `json:"workflow_id"`
-	Spec       string `json:"spec"`
+	WorkflowSlug string `json:"workflow_slug"`
+	Spec         string `json:"spec"`
 	// Draft holds unsaved composer changes; empty when none exist.
 	Draft string `json:"draft,omitempty"`
 }
@@ -33,20 +32,20 @@ func (api *API) Get(ctx context.Context, requester interface{}, request *GetRequ
 		return nil, ez.Wrap(err)
 	}
 
-	workflowID := strings.TrimSpace(request.WorkflowID)
+	workflowID := strings.TrimSpace(request.WorkflowSlug)
 
-	draft, err := workflowruntime.ReadDraft(workflowID)
+	draft, err := api.Registry.ReadDraft(ctx, workflowID)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	raw, err := workflowruntime.ReadBlueprintBytesByWorkflowID(workflowID)
+	raw, err := api.Registry.SpecBytes(ctx, workflowID)
 	if err != nil {
 		// A never-saved workflow still exists as its draft.
 		if draft != "" && ez.ErrorCode(err) == ez.ENOTFOUND {
 			return &GetResponse{
-				WorkflowID: workflowID,
-				Draft:      draft,
+				WorkflowSlug: workflowID,
+				Draft:        draft,
 			}, nil
 		}
 
@@ -54,8 +53,8 @@ func (api *API) Get(ctx context.Context, requester interface{}, request *GetRequ
 	}
 
 	return &GetResponse{
-		WorkflowID: workflowID,
-		Spec:       string(raw),
-		Draft:      draft,
+		WorkflowSlug: workflowID,
+		Spec:         string(raw),
+		Draft:        draft,
 	}, nil
 }

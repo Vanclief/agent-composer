@@ -23,7 +23,7 @@ func (h *Handler) GetWorkflow(c echo.Context) error {
 
 	request := requests.New(c.Request().Header, c.RealIP())
 	body := &workflowapi.GetRequest{
-		WorkflowID: strings.TrimSpace(c.Param("id")),
+		WorkflowSlug: strings.TrimSpace(c.Param("slug")),
 	}
 
 	return h.JSONResponse(c, op, request, body)
@@ -67,7 +67,7 @@ func (h *Handler) RenameWorkflow(c echo.Context) error {
 	if err != nil {
 		return h.ManageError(c, op, request, err)
 	}
-	body.WorkflowID = strings.TrimSpace(c.Param("id"))
+	body.WorkflowSlug = strings.TrimSpace(c.Param("slug"))
 
 	return h.JSONResponse(c, op, request, body)
 }
@@ -77,7 +77,7 @@ func (h *Handler) DeleteWorkflow(c echo.Context) error {
 
 	request := requests.New(c.Request().Header, c.RealIP())
 	body := &workflowapi.DeleteRequest{
-		WorkflowID: strings.TrimSpace(c.Param("id")),
+		WorkflowSlug: strings.TrimSpace(c.Param("slug")),
 	}
 
 	return h.JSONResponse(c, op, request, body)
@@ -88,7 +88,7 @@ func (h *Handler) SaveWorkflowDraft(c echo.Context) error {
 
 	request := requests.New(c.Request().Header, c.RealIP())
 	body := &workflowapi.SaveDraftRequest{
-		WorkflowID: strings.TrimSpace(c.Param("id")),
+		WorkflowSlug: strings.TrimSpace(c.Param("slug")),
 	}
 
 	return h.JSONResponse(c, op, request, body)
@@ -99,7 +99,7 @@ func (h *Handler) DeleteWorkflowDraft(c echo.Context) error {
 
 	request := requests.New(c.Request().Header, c.RealIP())
 	body := &workflowapi.DeleteDraftRequest{
-		WorkflowID: strings.TrimSpace(c.Param("id")),
+		WorkflowSlug: strings.TrimSpace(c.Param("slug")),
 	}
 
 	return h.JSONResponse(c, op, request, body)
@@ -115,7 +115,7 @@ func (h *Handler) UpdateWorkflowNode(c echo.Context) error {
 	if err != nil {
 		return h.ManageError(c, op, request, err)
 	}
-	body.WorkflowID = strings.TrimSpace(c.Param("id"))
+	body.WorkflowSlug = strings.TrimSpace(c.Param("slug"))
 	body.Node = strings.TrimSpace(c.Param("node"))
 
 	return h.JSONResponse(c, op, request, body)

@@ -1,5 +1,5 @@
 workflow:
-  id: loop_while_binary_consensus
+  slug: loop_while_binary_consensus
   name: "Loop While Binary Consensus"
   version: "1"
   description: >

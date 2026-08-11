@@ -76,13 +76,13 @@ export function executionToTask(
   workflowNames: Map<string, string>,
 ): Task {
   const workflowName =
-    workflowNames.get(execution.workflow_id) || execution.workflow_id;
+    workflowNames.get(execution.workflow_slug) || execution.workflow_slug;
   const startedAt = execution.started_at || execution.created_at;
   return {
     id: execution.id,
     title: workflowName,
     status: execution.status,
-    workflowIds: [execution.workflow_id],
+    workflowIds: [execution.workflow_slug],
     input: execution.input_snapshot,
     output: execution.output_snapshot,
     startedAt,
@@ -104,8 +104,8 @@ function sortTasks(tasks: Task[]) {
 function workflowNameMap(workflows: WorkflowSummary[]) {
   return new Map(
     workflows.map((workflow) => [
-      workflow.id,
-      workflow.name || workflow.id,
+      workflow.slug,
+      workflow.name || workflow.slug,
     ]),
   );
 }
@@ -205,7 +205,7 @@ export function startTask(
   worktree?: string,
 ): Promise<WorkflowExecutionCreateResponse> {
   return createWorkflowExecution({
-    workflow_id: workflowId,
+    workflow_slug: workflowId,
     input,
     shell_root: shellRoot?.trim() || undefined,
     worktree: worktree?.trim() || undefined,

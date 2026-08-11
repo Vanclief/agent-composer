@@ -4,15 +4,14 @@ import (
 	"context"
 	"strings"
 
-	workflowruntime "github.com/vanclief/agent-composer/workflow"
 	"github.com/vanclief/ez"
 )
 
 type CreateRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	// WorkflowID overrides the id derived from the name.
-	WorkflowID string `json:"workflow_id"`
+	// WorkflowSlug overrides the id derived from the name.
+	WorkflowSlug string `json:"workflow_slug"`
 }
 
 func (r *CreateRequest) Validate() error {
@@ -24,9 +23,9 @@ func (r *CreateRequest) Validate() error {
 }
 
 type CreateResponse struct {
-	WorkflowID string `json:"workflow_id"`
-	Name       string `json:"name"`
-	// Draft is the scaffolded blueprint, waiting for nodes and Save.
+	WorkflowSlug string `json:"workflow_slug"`
+	Name         string `json:"name"`
+	// Draft is the scaffolded spec, waiting for nodes and Save.
 	Draft string `json:"draft"`
 }
 
@@ -38,18 +37,19 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 		return nil, ez.Wrap(err)
 	}
 
-	created, err := workflowruntime.CreateDraft(
+	created, err := api.Registry.CreateDraft(
+		ctx,
 		request.Name,
 		request.Description,
-		request.WorkflowID,
+		request.WorkflowSlug,
 	)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
 	return &CreateResponse{
-		WorkflowID: created.WorkflowID,
-		Name:       strings.TrimSpace(request.Name),
-		Draft:      created.Spec,
+		WorkflowSlug: created.WorkflowSlug,
+		Name:         strings.TrimSpace(request.Name),
+		Draft:        created.Spec,
 	}, nil
 }

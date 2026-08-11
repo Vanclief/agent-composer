@@ -13,10 +13,10 @@ import (
 )
 
 type CreateRequest struct {
-	WorkflowID string         `json:"workflow_id,omitempty"`
-	File       string         `json:"file,omitempty"`
-	Input      map[string]any `json:"input"`
-	ShellRoot  string         `json:"shell_root,omitempty"`
+	WorkflowSlug string         `json:"workflow_slug,omitempty"`
+	File         string         `json:"file,omitempty"`
+	Input        map[string]any `json:"input"`
+	ShellRoot    string         `json:"shell_root,omitempty"`
 	// Worktree is a branch name; the run executes in that branch's
 	// worktree of the ShellRoot repository (created on demand).
 	Worktree string `json:"worktree,omitempty"`
@@ -46,7 +46,7 @@ func (r CreateRequest) Validate() error {
 		return nil
 	}
 
-	workflowID := strings.TrimSpace(r.WorkflowID)
+	workflowID := strings.TrimSpace(r.WorkflowSlug)
 	file := strings.TrimSpace(r.File)
 	if workflowID == "" && file == "" {
 		return ez.New(ez.EINVALID, "one of workflow_id or file is required", nil)
@@ -64,7 +64,7 @@ func (r CreateRequest) Validate() error {
 
 type CreateResponse struct {
 	ExecutionID     string                                  `json:"execution_id,omitempty"`
-	WorkflowID      string                                  `json:"workflow_id"`
+	WorkflowSlug    string                                  `json:"workflow_slug"`
 	WorkflowVersion string                                  `json:"workflow_version"`
 	Status          executionmodels.WorkflowExecutionStatus `json:"status"`
 }
@@ -92,7 +92,7 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 
 	return &CreateResponse{
 		ExecutionID:     executionID,
-		WorkflowID:      prepared.Snapshot.WorkflowID,
+		WorkflowSlug:    prepared.Snapshot.WorkflowSlug,
 		WorkflowVersion: prepared.Snapshot.WorkflowVersion,
 		Status:          executionmodels.WorkflowExecutionStatusRunning,
 	}, nil
@@ -101,7 +101,7 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 // RunResponse is the result of a synchronous workflow run.
 type RunResponse struct {
 	ExecutionID     string                                  `json:"execution_id,omitempty"`
-	WorkflowID      string                                  `json:"workflow_id"`
+	WorkflowSlug    string                                  `json:"workflow_slug"`
 	WorkflowVersion string                                  `json:"workflow_version"`
 	Status          executionmodels.WorkflowExecutionStatus `json:"status"`
 	Output          map[string]any                          `json:"output,omitempty"`
@@ -135,7 +135,7 @@ func (api *API) Run(ctx context.Context, requester interface{}, request *CreateR
 
 	return &RunResponse{
 		ExecutionID:     executionID,
-		WorkflowID:      prepared.Snapshot.WorkflowID,
+		WorkflowSlug:    prepared.Snapshot.WorkflowSlug,
 		WorkflowVersion: prepared.Snapshot.WorkflowVersion,
 		Status:          executionmodels.WorkflowExecutionStatusSucceeded,
 		Output:          output,
@@ -190,12 +190,12 @@ func (api *API) prepareExecution(ctx context.Context, request *CreateRequest) (*
 		return prepared, nil
 	}
 
-	blueprint, err := api.loadBlueprint(request)
+	spec, err := api.loadSpec(ctx, request)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	snapshot, err := workflowruntime.Compile(blueprint)
+	snapshot, err := api.registry.Compile(ctx, spec)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -237,21 +237,21 @@ func (api *API) prepareExecution(ctx context.Context, request *CreateRequest) (*
 	}, nil
 }
 
-func (api *API) loadBlueprint(request *CreateRequest) (*workflowruntime.Blueprint, error) {
-	workflowID := strings.TrimSpace(request.WorkflowID)
+func (api *API) loadSpec(ctx context.Context, request *CreateRequest) (*workflowruntime.Spec, error) {
+	workflowID := strings.TrimSpace(request.WorkflowSlug)
 	if workflowID != "" {
-		blueprint, err := workflowruntime.LoadBlueprintByWorkflowID(workflowID)
+		spec, err := api.registry.Load(ctx, workflowID)
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}
 
-		return blueprint, nil
+		return spec, nil
 	}
 
-	blueprint, err := workflowruntime.LoadBlueprintFile(strings.TrimSpace(request.File))
+	spec, err := workflowruntime.LoadSpecFile(strings.TrimSpace(request.File))
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	return blueprint, nil
+	return spec, nil
 }

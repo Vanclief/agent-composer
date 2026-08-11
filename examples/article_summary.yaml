@@ -1,5 +1,5 @@
 workflow:
-  id: article_summary
+  slug: article_summary
   name: "Article Summary"
   version: "7"
   description: >

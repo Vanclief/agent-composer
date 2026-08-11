@@ -1,8 +1,7 @@
 package workflow
 
 import (
-	"bytes"
-	"os"
+	"context"
 	"strings"
 
 	"github.com/vanclief/ez"
@@ -19,28 +18,23 @@ type NodeConfigUpdate struct {
 	ReasoningEffort *string
 }
 
-// UpdateNodeConfig edits one node's config in the workflow's YAML
-// file. The edit is surgical (yaml.v3 node tree), so comments and
-// formatting survive, and the result is compiled before it is
-// persisted — an edit that breaks the blueprint never lands.
-func UpdateNodeConfig(workflowID, nodeName string, update NodeConfigUpdate) error {
-	entry, err := loadRegistryBlueprintEntryByWorkflowID(workflowID)
-	if err != nil {
-		return ez.Wrap(err)
-	}
-
-	raw, err := os.ReadFile(entry.Path)
+// UpdateNodeConfig edits one node's config in the workflow's YAML.
+// The edit is surgical (yaml.v3 node tree), so comments and
+// formatting survive, and the result lands as a new compiled version
+// — an edit that breaks the spec never installs.
+func (r *Registry) UpdateNodeConfig(ctx context.Context, workflowID, nodeName string, update NodeConfigUpdate) error {
+	record, err := r.getInstalledBySlug(ctx, workflowID)
 	if err != nil {
 		return ez.Wrap(err)
 	}
 
 	var doc yaml.Node
-	err = yaml.Unmarshal(raw, &doc)
+	err = yaml.Unmarshal([]byte(record.Spec), &doc)
 	if err != nil {
 		return ez.Wrap(err)
 	}
 	if len(doc.Content) == 0 {
-		return ez.New(ez.EINVALID, "The workflow file is empty", nil)
+		return ez.New(ez.EINVALID, "The workflow spec is empty", nil)
 	}
 	root := doc.Content[0]
 
@@ -79,44 +73,12 @@ func UpdateNodeConfig(workflowID, nodeName string, update NodeConfigUpdate) erro
 		}
 	}
 
-	var buffer bytes.Buffer
-	encoder := yaml.NewEncoder(&buffer)
-	encoder.SetIndent(2)
-	err = encoder.Encode(&doc)
-	if err != nil {
-		return ez.Wrap(err)
-	}
-	err = encoder.Close()
+	edited, err := encodeYAMLDoc(&doc)
 	if err != nil {
 		return ez.Wrap(err)
 	}
 
-	// Compile the edited blueprint before touching the real file.
-	scratch, err := os.CreateTemp("", "agc-workflow-*.yaml")
-	if err != nil {
-		return ez.Wrap(err)
-	}
-	scratchPath := scratch.Name()
-	defer os.Remove(scratchPath)
-
-	_, err = scratch.Write(buffer.Bytes())
-	if closeErr := scratch.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		return ez.Wrap(err)
-	}
-
-	blueprint, err := LoadBlueprintFile(scratchPath)
-	if err != nil {
-		return ez.Wrap(err)
-	}
-	_, err = Compile(blueprint)
-	if err != nil {
-		return ez.Wrap(err)
-	}
-
-	err = os.WriteFile(entry.Path, buffer.Bytes(), 0o644)
+	_, err = r.saveHead(ctx, record, edited, record.Version+1)
 	if err != nil {
 		return ez.Wrap(err)
 	}

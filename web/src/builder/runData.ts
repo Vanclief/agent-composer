@@ -6,7 +6,7 @@ import type {
 import {
   WORKFLOW_INPUTS_NODE_ID,
   WORKFLOW_OUTPUTS_NODE_ID,
-} from "../api/blueprints";
+} from "../api/specs";
 import type { RunDisplayStatus } from "../types/workflow";
 
 export interface RunNodeSnapshot {

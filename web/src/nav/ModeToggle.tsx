@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 /**
  * Monitor | Edit — the two modes of the Workflows section, docked
  * next to the brand. Monitor is the runs console; Edit is the
- * blueprint editor for the same workflow when one is in context.
+ * spec editor for the same workflow when one is in context.
  */
 export function ModeToggle({
   mode,

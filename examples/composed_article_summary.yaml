@@ -1,5 +1,5 @@
 workflow:
-  id: composed_article_summary
+  slug: composed_article_summary
   name: "Composed Article Summary"
   version: "1"
   description: >
@@ -25,7 +25,7 @@ schemas:
 nodes:
   article_summary_pipeline:
     kind: workflow
-    workflow_id: article_summary
+    workflow_slug: article_summary
 
   brief_writer:
     kind: inference

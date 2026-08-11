@@ -1,10 +1,10 @@
 package workflow
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -13,19 +13,16 @@ import (
 )
 
 const (
-	workflowHomeEnvVar    = "AGENT_COMPOSER_HOME"
-	defaultWorkflowHome   = ".agent_composer"
-	defaultWorkflowSubdir = "workflows"
+	workflowHomeEnvVar  = "AGENT_COMPOSER_HOME"
+	defaultWorkflowHome = ".agent_composer"
 )
 
-func LoadBlueprintFile(path string) (*Blueprint, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-
-	var blueprint Blueprint
-	err = yaml.Unmarshal(raw, &blueprint)
+// ParseSpec decodes spec YAML. sourcePath is recorded so
+// compilation can resolve embedded workflows from sibling files — pass
+// "" for specs that did not come from disk.
+func ParseSpec(raw []byte, sourcePath string) (*Spec, error) {
+	var spec Spec
+	err := yaml.Unmarshal(raw, &spec)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -35,256 +32,74 @@ func LoadBlueprintFile(path string) (*Blueprint, error) {
 		return nil, ez.Wrap(err)
 	}
 
-	blueprint.SourcePath = path
-	blueprint.NodeInputOrder = nodeInputOrder
-	blueprint.NodeOutputOrder = nodeOutputOrder
+	spec.SourcePath = sourcePath
+	spec.NodeInputOrder = nodeInputOrder
+	spec.NodeOutputOrder = nodeOutputOrder
 
-	return &blueprint, nil
+	return &spec, nil
 }
 
-func LoadBlueprintByWorkflowID(workflowID string) (*Blueprint, error) {
-	entry, err := loadRegistryBlueprintEntryByWorkflowID(workflowID)
+func LoadSpecFile(path string) (*Spec, error) {
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	return entry.Blueprint, nil
-}
-
-func ListBlueprints() ([]WorkflowSummary, error) {
-	workflowDir, err := ResolveWorkflowDir()
+	spec, err := ParseSpec(raw, path)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	entries, err := os.ReadDir(workflowDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []WorkflowSummary{}, nil
-		}
-
-		return nil, ez.Wrap(err)
-	}
-
-	summaries := make([]WorkflowSummary, 0, len(entries))
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		ext := strings.ToLower(filepath.Ext(entry.Name()))
-		if ext != ".yaml" && ext != ".yml" {
-			continue
-		}
-
-		path := filepath.Join(workflowDir, entry.Name())
-		blueprint, err := LoadBlueprintFile(path)
-		if err != nil {
-			return nil, ez.Wrap(err)
-		}
-
-		summary, err := workflowSummaryFromBlueprint(blueprint)
-		if err != nil {
-			return nil, ez.Wrap(fmt.Errorf("workflow %q: %w", path, err))
-		}
-
-		summaries = append(summaries, summary)
-	}
-
-	sort.Slice(summaries, func(i int, j int) bool {
-		return summaries[i].ID < summaries[j].ID
-	})
-
-	return summaries, nil
+	return spec, nil
 }
 
-func ImportBlueprintFile(sourcePath string, overwrite bool) (WorkflowSummary, error) {
-	trimmedSourcePath := strings.TrimSpace(sourcePath)
-	if trimmedSourcePath == "" {
-		return WorkflowSummary{}, ez.New(ez.EINVALID, "source path is required", nil)
-	}
-
-	raw, err := os.ReadFile(trimmedSourcePath)
-	if err != nil {
-		return WorkflowSummary{}, ez.Wrap(err)
-	}
-
-	blueprint, err := LoadBlueprintFile(trimmedSourcePath)
-	if err != nil {
-		return WorkflowSummary{}, ez.Wrap(err)
-	}
-
-	_, err = Compile(blueprint)
-	if err != nil {
-		return WorkflowSummary{}, ez.Wrap(err)
-	}
-
-	summary, err := workflowSummaryFromBlueprint(blueprint)
-	if err != nil {
-		return WorkflowSummary{}, ez.Wrap(err)
-	}
-
-	workflowDir, err := ResolveWorkflowDir()
-	if err != nil {
-		return WorkflowSummary{}, ez.Wrap(err)
-	}
-
-	err = os.MkdirAll(workflowDir, 0755)
-	if err != nil {
-		return WorkflowSummary{}, ez.Wrap(err)
-	}
-
-	targetPath := filepath.Join(workflowDir, summary.ID+".yaml")
-
-	err = validateRegistryTargetPath(targetPath, summary.ID)
-	if err != nil {
-		return WorkflowSummary{}, ez.Wrap(err)
-	}
-
-	entries, err := listRegistryBlueprintEntriesByWorkflowID(summary.ID)
-	if err != nil && ez.ErrorCode(err) != ez.ENOTFOUND {
-		return WorkflowSummary{}, ez.Wrap(err)
-	}
-
-	if ez.ErrorCode(err) == ez.ENOTFOUND {
-		entries = nil
-	}
-
-	if len(entries) > 0 {
-		if !overwrite {
-			return WorkflowSummary{}, ez.New(ez.EINVALID, "workflow_id already exists in registry: "+summary.ID, nil)
-		}
-
-		canonicalExists := false
-		for _, entry := range entries {
-			if entry.Path == targetPath {
-				canonicalExists = true
-				break
-			}
-		}
-
-		if !canonicalExists {
-			err = os.Rename(entries[0].Path, targetPath)
-			if err != nil {
-				return WorkflowSummary{}, ez.Wrap(err)
-			}
-		}
-	}
-
-	err = writeFileAtomically(targetPath, raw)
-	if err != nil {
-		return WorkflowSummary{}, ez.Wrap(err)
-	}
-
-	if overwrite {
-		for _, entry := range entries {
-			if entry.Path == targetPath {
-				continue
-			}
-
-			err = os.Remove(entry.Path)
-			if err != nil && !os.IsNotExist(err) {
-				return WorkflowSummary{}, ez.Wrap(err)
-			}
-		}
-	}
-
-	return summary, nil
+// Compile resolves embedded workflows only from files next to the
+// spec's source. Registry.Compile also resolves installed
+// workflows — use it whenever a database is available.
+func Compile(spec *Spec) (*Snapshot, error) {
+	return compileWithRegistry(context.Background(), spec, nil)
 }
 
-func DeleteBlueprintByWorkflowID(workflowID string) error {
-	entries, err := listRegistryBlueprintEntriesByWorkflowID(workflowID)
-	if err != nil {
-		return ez.Wrap(err)
-	}
-
-	for _, entry := range entries {
-		err = os.Remove(entry.Path)
-		if err != nil {
-			return ez.Wrap(err)
-		}
-	}
-
-	return nil
+// Compile compiles a spec, resolving embedded workflows from the
+// registry first and from files next to the spec's source second.
+func (r *Registry) Compile(ctx context.Context, spec *Spec) (*Snapshot, error) {
+	return compileWithRegistry(ctx, spec, r)
 }
 
-func ExportBlueprintByWorkflowID(workflowID string, targetPath string, overwrite bool) error {
-	trimmedTargetPath := strings.TrimSpace(targetPath)
-	if trimmedTargetPath == "" {
-		return ez.New(ez.EINVALID, "target path is required", nil)
-	}
-
-	_, err := os.Stat(trimmedTargetPath)
-	if err == nil && !overwrite {
-		return ez.New(ez.EINVALID, "target file already exists: "+trimmedTargetPath, nil)
-	}
-
-	if err != nil && !os.IsNotExist(err) {
-		return ez.Wrap(err)
-	}
-
-	raw, err := ReadBlueprintBytesByWorkflowID(workflowID)
-	if err != nil {
-		return ez.Wrap(err)
-	}
-
-	err = writeFileAtomically(trimmedTargetPath, raw)
-	if err != nil {
-		return ez.Wrap(err)
-	}
-
-	return nil
-}
-
-func ReadBlueprintBytesByWorkflowID(workflowID string) ([]byte, error) {
-	entry, err := loadRegistryBlueprintEntryByWorkflowID(workflowID)
+func compileWithRegistry(ctx context.Context, spec *Spec, registry *Registry) (*Snapshot, error) {
+	resolver, err := newWorkflowResolver(ctx, spec, registry)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	raw, err := os.ReadFile(entry.Path)
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-
-	return raw, nil
+	return compileSnapshot(spec, resolver, nil)
 }
 
-func Compile(blueprint *Blueprint) (*Snapshot, error) {
-	resolver, err := newWorkflowResolver(blueprint)
-	if err != nil {
-		return nil, ez.Wrap(err)
+func compileSnapshot(spec *Spec, resolver *workflowResolver, stack []string) (*Snapshot, error) {
+	if spec == nil {
+		return nil, ez.New(ez.EINVALID, "workflow spec is nil", nil)
 	}
 
-	return compileSnapshot(blueprint, resolver, nil)
-}
-
-func compileSnapshot(blueprint *Blueprint, resolver *workflowResolver, stack []string) (*Snapshot, error) {
-	if blueprint == nil {
-		return nil, ez.New(ez.EINVALID, "workflow blueprint is nil", nil)
-	}
-
-	workflowID := strings.TrimSpace(blueprint.Workflow.ID)
+	workflowID := strings.TrimSpace(spec.Workflow.Slug)
 	if workflowID == "" {
-		return nil, ez.New(ez.EINVALID, "workflow.id is required", nil)
+		return nil, ez.New(ez.EINVALID, "workflow.slug is required", nil)
 	}
 
-	if strings.TrimSpace(blueprint.Workflow.Version) == "" {
+	if strings.TrimSpace(spec.Workflow.Version) == "" {
 		return nil, ez.New(ez.EINVALID, "workflow.version is required", nil)
 	}
 
 	snapshot := &Snapshot{
-		WorkflowID:      workflowID,
-		WorkflowUUID:    strings.TrimSpace(blueprint.Workflow.UUID),
-		WorkflowVersion: blueprint.Workflow.Version,
-		Description:     strings.TrimSpace(blueprint.Workflow.Description),
-		Inputs:          make(map[string]Port, len(blueprint.Workflow.Inputs)),
-		Outputs:         make(map[string]OutputBinding, len(blueprint.Workflow.Outputs)),
+		WorkflowSlug:    workflowID,
+		WorkflowID:      strings.TrimSpace(spec.Workflow.ID),
+		WorkflowVersion: spec.Workflow.Version,
+		Description:     strings.TrimSpace(spec.Workflow.Description),
+		Inputs:          make(map[string]Port, len(spec.Workflow.Inputs)),
+		Outputs:         make(map[string]OutputBinding, len(spec.Workflow.Outputs)),
 	}
 
-	for name, typeRef := range blueprint.Workflow.Inputs {
-		schema, err := resolveTypeRef(blueprint, strings.TrimSpace(typeRef))
+	for name, typeRef := range spec.Workflow.Inputs {
+		schema, err := resolveTypeRef(spec, strings.TrimSpace(typeRef))
 		if err != nil {
 			return nil, ez.Wrap(fmt.Errorf("workflow input %q: %w", name, err))
 		}
@@ -296,7 +111,7 @@ func compileSnapshot(blueprint *Blueprint, resolver *workflowResolver, stack []s
 		}
 	}
 
-	compiled, err := compileBlueprint(blueprint, "", resolver, nil, stack)
+	compiled, err := compileSpec(spec, "", resolver, nil, stack)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -309,8 +124,8 @@ func compileSnapshot(blueprint *Blueprint, resolver *workflowResolver, stack []s
 	}
 	snapshot.Order = order
 
-	for outputName, outputSpec := range blueprint.Workflow.Outputs {
-		schema, err := resolveTypeRef(blueprint, strings.TrimSpace(outputSpec.Schema))
+	for outputName, outputSpec := range spec.Workflow.Outputs {
+		schema, err := resolveTypeRef(spec, strings.TrimSpace(outputSpec.Schema))
 		if err != nil {
 			return nil, ez.Wrap(fmt.Errorf("workflow output %q: %w", outputName, err))
 		}
@@ -426,38 +241,47 @@ func mappingKeyOrder(node *yaml.Node) []string {
 	return order
 }
 
-func newWorkflowResolver(blueprint *Blueprint) (*workflowResolver, error) {
-	if blueprint == nil {
-		return nil, ez.New(ez.EINVALID, "workflow blueprint is nil", nil)
+func newWorkflowResolver(ctx context.Context, spec *Spec, registry *Registry) (*workflowResolver, error) {
+	if spec == nil {
+		return nil, ez.New(ez.EINVALID, "workflow spec is nil", nil)
 	}
 
 	searchDirs := []string{}
-	workflowDir, err := ResolveWorkflowDir()
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-
-	if workflowDir != "" {
-		searchDirs = append(searchDirs, workflowDir)
-	}
-
-	if strings.TrimSpace(blueprint.SourcePath) != "" {
-		sourceDir := filepath.Dir(blueprint.SourcePath)
-		if sourceDir != "" && sourceDir != workflowDir {
+	if strings.TrimSpace(spec.SourcePath) != "" {
+		sourceDir := filepath.Dir(spec.SourcePath)
+		if sourceDir != "" {
 			searchDirs = append(searchDirs, sourceDir)
 		}
 	}
 
 	return &workflowResolver{
-		byID:       map[string]*Blueprint{},
+		byID:       map[string]*Spec{},
 		searchDirs: searchDirs,
+		registry:   registry,
+		ctx:        ctx,
 	}, nil
 }
 
-func (r *workflowResolver) loadByWorkflowID(workflowID string) (*Blueprint, error) {
-	blueprint, found := r.byID[workflowID]
+func (r *workflowResolver) loadByWorkflowID(workflowID string) (*Spec, error) {
+	spec, found := r.byID[workflowID]
 	if found {
-		return blueprint, nil
+		return spec, nil
+	}
+
+	if r.registry != nil {
+		record, err := r.registry.getInstalledBySlug(r.ctx, workflowID)
+		if err == nil {
+			spec, err := ParseSpec([]byte(record.Spec), "")
+			if err != nil {
+				return nil, ez.Wrap(err)
+			}
+
+			r.byID[workflowID] = spec
+			return spec, nil
+		}
+		if ez.ErrorCode(err) != ez.ENOTFOUND {
+			return nil, ez.Wrap(err)
+		}
 	}
 
 	for _, dir := range r.searchDirs {
@@ -481,173 +305,55 @@ func (r *workflowResolver) loadByWorkflowID(workflowID string) (*Blueprint, erro
 			}
 
 			path := filepath.Join(dir, entry.Name())
-			blueprint, err := LoadBlueprintFile(path)
+			spec, err := LoadSpecFile(path)
 			if err != nil {
 				return nil, ez.Wrap(err)
 			}
 
-			if blueprint.Workflow.ID == workflowID {
-				r.byID[workflowID] = blueprint
-				return blueprint, nil
+			if spec.Workflow.Slug == workflowID {
+				r.byID[workflowID] = spec
+				return spec, nil
 			}
 		}
 	}
 
-	return nil, ez.New(ez.ENOTFOUND, fmt.Sprintf("workflow_id %q not found", workflowID), nil)
+	return nil, ez.New(ez.ENOTFOUND, fmt.Sprintf("workflow_slug %q not found", workflowID), nil)
 }
 
-type registryBlueprintEntry struct {
-	Path      string
-	Blueprint *Blueprint
-}
-
-func loadRegistryBlueprintEntryByWorkflowID(workflowID string) (*registryBlueprintEntry, error) {
-	entries, err := listRegistryBlueprintEntriesByWorkflowID(workflowID)
-	if err != nil {
-		return nil, ez.Wrap(err)
+func workflowSummaryFromSpec(spec *Spec) (WorkflowSummary, error) {
+	if spec == nil {
+		return WorkflowSummary{}, ez.New(ez.EINVALID, "workflow spec is nil", nil)
 	}
 
-	return &entries[0], nil
-}
-
-func listRegistryBlueprintEntriesByWorkflowID(workflowID string) ([]registryBlueprintEntry, error) {
-	trimmedWorkflowID := strings.TrimSpace(workflowID)
-	if trimmedWorkflowID == "" {
-		return nil, ez.New(ez.EINVALID, "workflow_id is required", nil)
-	}
-
-	workflowDir, err := ResolveWorkflowDir()
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-
-	resolver := &workflowResolver{
-		byID:       map[string]*Blueprint{},
-		searchDirs: []string{workflowDir},
-	}
-
-	blueprint, err := resolver.loadByWorkflowID(trimmedWorkflowID)
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-
-	if strings.TrimSpace(blueprint.SourcePath) == "" {
-		return nil, ez.New(ez.EINTERNAL, "registry blueprint source path is missing", nil)
-	}
-
-	entries := []registryBlueprintEntry{
-		{
-			Path:      blueprint.SourcePath,
-			Blueprint: blueprint,
-		},
-	}
-
-	entriesInDir, err := os.ReadDir(workflowDir)
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-
-	for _, entry := range entriesInDir {
-		if entry.IsDir() {
-			continue
-		}
-
-		path := filepath.Join(workflowDir, entry.Name())
-		if path == blueprint.SourcePath {
-			continue
-		}
-
-		ext := strings.ToLower(filepath.Ext(entry.Name()))
-		if ext != ".yaml" && ext != ".yml" {
-			continue
-		}
-
-		candidate, err := LoadBlueprintFile(path)
-		if err != nil {
-			return nil, ez.Wrap(err)
-		}
-
-		if strings.TrimSpace(candidate.Workflow.ID) != trimmedWorkflowID {
-			continue
-		}
-
-		if strings.TrimSpace(candidate.SourcePath) == "" {
-			return nil, ez.New(ez.EINTERNAL, "registry blueprint source path is missing", nil)
-		}
-
-		entries = append(entries, registryBlueprintEntry{
-			Path:      candidate.SourcePath,
-			Blueprint: candidate,
-		})
-	}
-
-	sort.Slice(entries, func(i int, j int) bool {
-		return entries[i].Path < entries[j].Path
-	})
-
-	return entries, nil
-}
-
-func workflowSummaryFromBlueprint(blueprint *Blueprint) (WorkflowSummary, error) {
-	if blueprint == nil {
-		return WorkflowSummary{}, ez.New(ez.EINVALID, "workflow blueprint is nil", nil)
-	}
-
-	workflowID := strings.TrimSpace(blueprint.Workflow.ID)
+	workflowID := strings.TrimSpace(spec.Workflow.Slug)
 	if workflowID == "" {
-		return WorkflowSummary{}, ez.New(ez.EINVALID, "workflow.id is required", nil)
+		return WorkflowSummary{}, ez.New(ez.EINVALID, "workflow.slug is required", nil)
 	}
 
-	inputs := make(map[string]string, len(blueprint.Workflow.Inputs))
-	for inputName, typeRef := range blueprint.Workflow.Inputs {
+	inputs := make(map[string]string, len(spec.Workflow.Inputs))
+	for inputName, typeRef := range spec.Workflow.Inputs {
 		inputs[inputName] = strings.TrimSpace(typeRef)
 	}
 
-	outputs := make(map[string]string, len(blueprint.Workflow.Outputs))
-	for outputName, outputSpec := range blueprint.Workflow.Outputs {
+	outputs := make(map[string]string, len(spec.Workflow.Outputs))
+	for outputName, outputSpec := range spec.Workflow.Outputs {
 		outputs[outputName] = strings.TrimSpace(outputSpec.Schema)
 	}
 
-	name := strings.TrimSpace(blueprint.Workflow.Name)
+	name := strings.TrimSpace(spec.Workflow.Name)
 	if name == "" {
 		name = workflowID
 	}
 
 	return WorkflowSummary{
-		ID:          workflowID,
-		UUID:        strings.TrimSpace(blueprint.Workflow.UUID),
+		Slug:        workflowID,
+		ID:          strings.TrimSpace(spec.Workflow.ID),
 		Name:        name,
-		Description: strings.TrimSpace(blueprint.Workflow.Description),
+		Version:     strings.TrimSpace(spec.Workflow.Version),
+		Description: strings.TrimSpace(spec.Workflow.Description),
 		Inputs:      inputs,
 		Outputs:     outputs,
 	}, nil
-}
-
-func validateRegistryTargetPath(path string, workflowID string) error {
-	_, err := os.Stat(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-
-		return ez.Wrap(err)
-	}
-
-	blueprint, err := LoadBlueprintFile(path)
-	if err != nil {
-		return ez.Wrap(err)
-	}
-
-	existingWorkflowID := strings.TrimSpace(blueprint.Workflow.ID)
-	if existingWorkflowID == "" {
-		return ez.New(ez.EINVALID, "registry file is missing workflow.id: "+path, nil)
-	}
-
-	if existingWorkflowID != workflowID {
-		return ez.New(ez.EINVALID, fmt.Sprintf("registry file %q already stores workflow_id %q", path, existingWorkflowID), nil)
-	}
-
-	return nil
 }
 
 func writeFileAtomically(path string, raw []byte) error {
@@ -691,18 +397,4 @@ func writeFileAtomically(path string, raw []byte) error {
 	cleanup = false
 
 	return nil
-}
-
-func ResolveWorkflowDir() (string, error) {
-	configRoot := strings.TrimSpace(os.Getenv(workflowHomeEnvVar))
-	if configRoot == "" {
-		userHome, err := os.UserHomeDir()
-		if err != nil {
-			return "", ez.Wrap(err)
-		}
-
-		configRoot = filepath.Join(userHome, defaultWorkflowHome)
-	}
-
-	return filepath.Join(configRoot, defaultWorkflowSubdir), nil
 }

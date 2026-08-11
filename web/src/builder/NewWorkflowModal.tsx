@@ -43,7 +43,7 @@ export function NewWorkflowModal({
         description.trim(),
         workflowId,
       );
-      onCreated(response.workflow_id);
+      onCreated(response.workflow_slug);
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : String(caught),

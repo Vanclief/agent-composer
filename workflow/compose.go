@@ -13,45 +13,51 @@ import (
 )
 
 // ResolveHomeDir returns the agc home directory (AGENT_COMPOSER_HOME,
-// or ~/.agent_composer) — the parent of the workflow registry.
+// or ~/.agent_composer) — where the database, config, and settings
+// live.
 func ResolveHomeDir() (string, error) {
-	workflowDir, err := ResolveWorkflowDir()
+	configRoot := strings.TrimSpace(os.Getenv(workflowHomeEnvVar))
+	if configRoot != "" {
+		return configRoot, nil
+	}
+
+	userHome, err := os.UserHomeDir()
 	if err != nil {
 		return "", ez.Wrap(err)
 	}
 
-	return filepath.Dir(workflowDir), nil
+	return filepath.Join(userHome, defaultWorkflowHome), nil
 }
 
 // composerInstruction is the built-in system prompt of the workflow
 // composer — the agent behind "Describe a change…". It ships with the
 // binary so it cannot drift or be edited away. The agent only ever
-// PROPOSES a blueprint; persistence is the server's job and nothing
+// PROPOSES a spec; persistence is the server's job and nothing
 // lands without the user pressing Save.
-const composerInstruction = `You design AGC workflow blueprints. You propose a blueprint; you never install one — the user reviews your proposal as a draft and decides whether to save it.
+const composerInstruction = `You design AGC workflow specs. You propose a spec; you never install one — the user reviews your proposal as a draft and decides whether to save it.
 
-A blueprint is one YAML file with four top-level sections.
-workflow: id, name, version, description, inputs (name: type), outputs (name: {schema, from: instance.<id>.<output>}).
+A spec is one YAML file with four top-level sections.
+workflow: slug, name, version, description, inputs (name: type), outputs (name: {schema, from: instance.<id>.<output>}).
 schemas: named types (type object/array/string/integer/number/boolean, properties, items, schema_ref, enum).
-nodes: reusable definitions — kinds are inference (typed inputs/outputs plus config.harness {id, model, reasoning_effort, permissions} and config.instruction), connector (operation: collect | concat | pack | unpack), loop (operation: foreach | while, executes: <node>, over/updates/breaks_on/max_iterations), conditional (operation: if, routes_on, when_true/when_false: <node>), and workflow (workflow_id: <id>) for composition.
+nodes: reusable definitions — kinds are inference (typed inputs/outputs plus config.harness {id, model, reasoning_effort, permissions} and config.instruction), connector (operation: collect | concat | pack | unpack), loop (operation: foreach | while, executes: <node>, over/updates/breaks_on/max_iterations), conditional (operation: if, routes_on, when_true/when_false: <node>), and workflow (workflow_slug: <slug>) for composition.
 flow.instances: instance_id: {node: <node>, inputs: {port: workflow_input.<name> | instance.<id>.<output>}}.
 
-The current_blueprint input holds the blueprint you are editing (it may already contain unsaved draft changes); it is empty when the request is to create a new workflow. The available_harnesses input lists the installed harnesses and their real model ids — config.harness.id and config.harness.model must come from that list, exactly as written; never invent or abbreviate a model name.
+The current_spec input holds the spec you are editing (it may already contain unsaved draft changes); it is empty when the request is to create a new workflow. The available_harnesses input lists the installed harnesses and their real model ids — config.harness.id and config.harness.model must come from that list, exactly as written; never invent or abbreviate a model name.
 
 Do this:
-1. If you need DSL patterns beyond the reference above, run "agc workflow list" and "agc workflow show --id <id>" to study installed blueprints. Never use "agc workflow import" or "agc workflow delete".
-2. Write the complete new or updated blueprint to a scratch file in your working directory. Never write inside the workflows directory — the registry treats every YAML file there as installed.
+1. If you need DSL patterns beyond the reference above, run "agc workflow list" and "agc workflow show --slug <slug>" to study installed specs. Never use "agc workflow import" or "agc workflow delete".
+2. Write the complete new or updated spec to a scratch file in your working directory. The registry lives in a database — a YAML file only becomes installed through an explicit import or save.
 3. Validate it with "agc workflow compile --file <scratch>". Fix and re-compile until it passes, then delete the scratch file.
-4. Return the final blueprint as the yaml field of your result.
+4. Return the final spec as the yaml field of your result.
 
-Rules: when editing, keep workflow.id and workflow.uuid unchanged and change only what the request asks for — preserve every unrelated node, prompt, and schema. For a new workflow pick a short kebab-case id that is not already installed. Prefer the fewest nodes that satisfy the request, and reuse one node definition for parallel instances. If the request is impossible or too ambiguous to act on safely, return action unchanged with an empty yaml and explain why in the summary.
+Rules: when editing, keep workflow.slug and workflow.id unchanged and change only what the request asks for — preserve every unrelated node, prompt, and schema. For a new workflow pick a short kebab-case slug that is not already installed. Prefer the fewest nodes that satisfy the request, and reuse one node definition for parallel instances. If the request is impossible or too ambiguous to act on safely, return action unchanged with an empty yaml and explain why in the summary.
 
-Return workflow_id (the final id), action (created for a new id, updated when you changed an existing workflow, unchanged when you propose nothing), yaml (the complete blueprint, or "" when unchanged), and a 1-3 sentence summary.`
+Return workflow_slug (the final slug), action (created for a new slug, updated when you changed an existing workflow, unchanged when you propose nothing), yaml (the complete spec, or "" when unchanged), and a 1-3 sentence summary.`
 
 var composeResultSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
-		"workflow_id": map[string]any{"type": "string"},
+		"workflow_slug": map[string]any{"type": "string"},
 		"action": map[string]any{
 			"type": "string",
 			"enum": []any{"created", "updated", "unchanged"},
@@ -62,9 +68,9 @@ var composeResultSchema = map[string]any{
 }
 
 type ComposeOptions struct {
-	// WorkflowID is empty when the request should create a workflow.
-	WorkflowID string
-	// BaseSpec is the blueprint being edited — the draft when one
+	// WorkflowSlug is empty when the request should create a workflow.
+	WorkflowSlug string
+	// BaseSpec is the spec being edited — the draft when one
 	// exists, else the saved file. Empty for a create.
 	BaseSpec string
 	Request  string
@@ -76,10 +82,10 @@ type ComposeOptions struct {
 }
 
 type ComposeResult struct {
-	WorkflowID string
-	Action     string
-	YAML       string
-	Summary    string
+	WorkflowSlug string
+	Action       string
+	YAML         string
+	Summary      string
 }
 
 // Compose runs one composer conversation: the agent edits the registry
@@ -122,8 +128,8 @@ func Compose(ctx context.Context, opts ComposeOptions) (*ComposeResult, error) {
 		composeResultSchema,
 		schemaRaw,
 		map[string]any{
-			"workflow_id":         strings.TrimSpace(opts.WorkflowID),
-			"current_blueprint":   opts.BaseSpec,
+			"workflow_slug":       strings.TrimSpace(opts.WorkflowSlug),
+			"current_spec":        opts.BaseSpec,
 			"request":             strings.TrimSpace(opts.Request),
 			"available_harnesses": opts.Catalog,
 		},
@@ -146,45 +152,9 @@ func Compose(ctx context.Context, opts ComposeOptions) (*ComposeResult, error) {
 	rawYAML, _ := fields["yaml"].(string)
 
 	return &ComposeResult{
-		WorkflowID: text("workflow_id"),
-		Action:     text("action"),
-		YAML:       strings.TrimSpace(rawYAML),
-		Summary:    text("summary"),
+		WorkflowSlug: text("workflow_slug"),
+		Action:       text("action"),
+		YAML:         strings.TrimSpace(rawYAML),
+		Summary:      text("summary"),
 	}, nil
-}
-
-// VerifyProposedBlueprint compiles a composer proposal and confirms
-// its workflow.id, before the proposal may become a draft.
-func VerifyProposedBlueprint(raw []byte, expectedID string) (string, error) {
-	scratch, err := os.CreateTemp("", "agc-proposal-*.yaml")
-	if err != nil {
-		return "", ez.Wrap(err)
-	}
-	scratchPath := scratch.Name()
-	defer os.Remove(scratchPath)
-
-	_, err = scratch.Write(raw)
-	if closeErr := scratch.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		return "", ez.Wrap(err)
-	}
-
-	blueprint, err := LoadBlueprintFile(scratchPath)
-	if err != nil {
-		return "", ez.Wrap(err)
-	}
-
-	_, err = Compile(blueprint)
-	if err != nil {
-		return "", ez.Wrap(err)
-	}
-
-	proposedID := strings.TrimSpace(blueprint.Workflow.ID)
-	if expectedID != "" && proposedID != expectedID {
-		return "", ez.New(ez.EINVALID, "The proposal changed workflow.id from "+expectedID+" to "+proposedID, nil)
-	}
-
-	return proposedID, nil
 }

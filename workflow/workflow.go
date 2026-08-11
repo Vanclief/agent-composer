@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 
@@ -9,8 +10,8 @@ import (
 	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 )
 
-type Blueprint struct {
-	Workflow        WorkflowSpec          `yaml:"workflow"`
+type Spec struct {
+	Workflow        WorkflowHeader        `yaml:"workflow"`
 	Schemas         map[string]SchemaSpec `yaml:"schemas"`
 	Nodes           map[string]NodeSpec   `yaml:"nodes"`
 	Flow            FlowSpec              `yaml:"flow"`
@@ -19,12 +20,13 @@ type Blueprint struct {
 	NodeOutputOrder map[string][]string   `yaml:"-"`
 }
 
-type WorkflowSpec struct {
-	ID string `yaml:"id"`
-	// UUID is the workflow's permanent identity — the id is a
-	// renameable slug for humans, files, and the CLI; the uuid is what
-	// run history keys on. Stamped automatically, never hand-edited.
-	UUID        string                        `yaml:"uuid,omitempty"`
+type WorkflowHeader struct {
+	// Slug is the human-facing handle — renameable, used in the CLI,
+	// URLs, and cross-workflow references.
+	Slug string `yaml:"slug"`
+	// ID is the workflow's permanent identity, a uuid that run history
+	// keys on. Stamped automatically, never hand-edited.
+	ID          string                        `yaml:"id,omitempty"`
 	Name        string                        `yaml:"name"`
 	Version     string                        `yaml:"version"`
 	Description string                        `yaml:"description"`
@@ -38,9 +40,10 @@ type WorkflowOutputSpec struct {
 }
 
 type WorkflowSummary struct {
-	ID          string            `json:"id"`
-	UUID        string            `json:"uuid,omitempty"`
+	Slug        string            `json:"slug"`
+	ID          string            `json:"id,omitempty"`
 	Name        string            `json:"name"`
+	Version     string            `json:"version,omitempty"`
 	Description string            `json:"description,omitempty"`
 	Inputs      map[string]string `json:"inputs"`
 	Outputs     map[string]string `json:"outputs"`
@@ -63,7 +66,7 @@ type SchemaSpec struct {
 
 type NodeSpec struct {
 	Kind          string              `yaml:"kind"`
-	WorkflowID    string              `yaml:"workflow_id"`
+	WorkflowSlug  string              `yaml:"workflow_slug"`
 	Operation     string              `yaml:"operation"`
 	Executes      string              `yaml:"executes"`
 	Over          string              `yaml:"over"`
@@ -93,8 +96,8 @@ type InstanceSpec struct {
 }
 
 type Snapshot struct {
+	WorkflowSlug    string
 	WorkflowID      string
-	WorkflowUUID    string
 	WorkflowVersion string
 	Description     string
 	Inputs          map[string]Port
@@ -191,8 +194,13 @@ type Executor struct {
 }
 
 type workflowResolver struct {
-	byID       map[string]*Blueprint
+	byID       map[string]*Spec
 	searchDirs []string
+	// registry resolves embedded workflows from the database when one
+	// is available. The resolver only lives for a single compile, so
+	// carrying the call's context in a field is safe.
+	registry *Registry
+	ctx      context.Context
 }
 
 type compiledWorkflow struct {

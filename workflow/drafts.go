@@ -2,73 +2,55 @@ package workflow
 
 import (
 	"bytes"
-	"fmt"
-	"os"
-	"path/filepath"
+	"context"
 	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
+	workflowmodels "github.com/vanclief/agent-composer/models/workflow"
 	"github.com/vanclief/ez"
 	yaml "gopkg.in/yaml.v3"
 )
 
-// Drafts are proposed blueprints awaiting an explicit save. They live
-// outside the registry (the registry only reads its own top-level
-// files), so a draft is never executable until promoted.
+// Drafts are proposed specs awaiting an explicit save. They live
+// on the workflow's registry row next to the installed spec, so a
+// draft is never executable until promoted.
 
-func resolveDraftPath(workflowID string) (string, error) {
-	home, err := ResolveHomeDir()
-	if err != nil {
-		return "", ez.Wrap(err)
-	}
-
-	return filepath.Join(home, "drafts", workflowID+".yaml"), nil
-}
-
-func resolveVersionsDir(workflowID string) (string, error) {
-	home, err := ResolveHomeDir()
-	if err != nil {
-		return "", ez.Wrap(err)
-	}
-
-	return filepath.Join(home, "versions", workflowID), nil
-}
-
-// ReadDraft returns the draft blueprint for a workflow, or "" when
+// ReadDraft returns the draft spec for a workflow, or "" when
 // none exists.
-func ReadDraft(workflowID string) (string, error) {
-	path, err := resolveDraftPath(strings.TrimSpace(workflowID))
+func (r *Registry) ReadDraft(ctx context.Context, workflowID string) (string, error) {
+	record, err := workflowmodels.GetWorkflowBySlug(ctx, r.db, strings.TrimSpace(workflowID))
 	if err != nil {
-		return "", ez.Wrap(err)
-	}
-
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
+		if ez.ErrorCode(err) == ez.ENOTFOUND {
 			return "", nil
 		}
 
 		return "", ez.Wrap(err)
 	}
 
-	return string(raw), nil
+	return record.Draft, nil
 }
 
-// WriteDraft stores a proposed blueprint. The content must already be
-// compile-checked by the caller.
-func WriteDraft(workflowID string, raw []byte) error {
-	path, err := resolveDraftPath(strings.TrimSpace(workflowID))
+// WriteDraft stores a proposed spec. The content must already be
+// compile-checked by the caller. A workflow that only exists as a
+// draft gets its registry row (and permanent identity) here.
+func (r *Registry) WriteDraft(ctx context.Context, workflowID string, raw []byte) error {
+	trimmedID := strings.TrimSpace(workflowID)
+	record, err := workflowmodels.GetWorkflowBySlug(ctx, r.db, trimmedID)
 	if err != nil {
-		return ez.Wrap(err)
+		if ez.ErrorCode(err) != ez.ENOTFOUND {
+			return ez.Wrap(err)
+		}
+
+		record, err = r.createRow(ctx, trimmedID, "")
+		if err != nil {
+			return ez.Wrap(err)
+		}
 	}
 
-	err = os.MkdirAll(filepath.Dir(path), 0755)
-	if err != nil {
-		return ez.Wrap(err)
-	}
+	record.Draft = string(raw)
 
-	err = writeFileAtomically(path, raw)
+	err = record.Update(ctx, r.db)
 	if err != nil {
 		return ez.Wrap(err)
 	}
@@ -76,15 +58,36 @@ func WriteDraft(workflowID string, raw []byte) error {
 	return nil
 }
 
-// DeleteDraft discards a draft; a missing draft is not an error.
-func DeleteDraft(workflowID string) error {
-	path, err := resolveDraftPath(strings.TrimSpace(workflowID))
+// DeleteDraft discards a draft — a missing draft is not an error. A
+// draft-only workflow disappears entirely — there is nothing else to
+// keep.
+func (r *Registry) DeleteDraft(ctx context.Context, workflowID string) error {
+	record, err := workflowmodels.GetWorkflowBySlug(ctx, r.db, strings.TrimSpace(workflowID))
 	if err != nil {
+		if ez.ErrorCode(err) == ez.ENOTFOUND {
+			return nil
+		}
+
 		return ez.Wrap(err)
 	}
 
-	err = os.Remove(path)
-	if err != nil && !os.IsNotExist(err) {
+	if record.Spec == "" {
+		err = record.Delete(ctx, r.db)
+		if err != nil {
+			return ez.Wrap(err)
+		}
+
+		return nil
+	}
+
+	if record.Draft == "" {
+		return nil
+	}
+
+	record.Draft = ""
+
+	err = record.Update(ctx, r.db)
+	if err != nil {
 		return ez.Wrap(err)
 	}
 
@@ -92,7 +95,7 @@ func DeleteDraft(workflowID string) error {
 }
 
 // slugifyWorkflowID turns a display name into a registry-style id:
-// lowercase snake_case, matching the installed files' convention.
+// lowercase snake_case, matching the installed workflows' convention.
 func slugifyWorkflowID(name string) string {
 	var builder strings.Builder
 	pendingSeparator := false
@@ -114,15 +117,15 @@ func slugifyWorkflowID(name string) string {
 }
 
 type CreatedDraft struct {
-	WorkflowID string
-	Spec       string
+	WorkflowSlug string
+	Spec         string
 }
 
 // CreateDraft scaffolds a new named workflow as a draft: just the
 // workflow header, no nodes — the composer and inspector fill in the
 // rest. The id derives from the name unless the caller picks one;
 // collisions with installed workflows or existing drafts are rejected.
-func CreateDraft(name, description, explicitID string) (*CreatedDraft, error) {
+func (r *Registry) CreateDraft(ctx context.Context, name, description, explicitID string) (*CreatedDraft, error) {
 	trimmedName := strings.TrimSpace(name)
 	if trimmedName == "" {
 		return nil, ez.New(ez.EINVALID, "A workflow name is required", nil)
@@ -141,33 +144,34 @@ func CreateDraft(name, description, explicitID string) (*CreatedDraft, error) {
 		}
 	}
 
-	_, err := loadRegistryBlueprintEntryByWorkflowID(workflowID)
-	if err == nil {
-		return nil, ez.New(ez.EINVALID, "Workflow "+workflowID+" already exists", nil)
-	}
-	if ez.ErrorCode(err) != ez.ENOTFOUND {
+	existing, err := workflowmodels.GetWorkflowBySlug(ctx, r.db, workflowID)
+	if err != nil && ez.ErrorCode(err) != ez.ENOTFOUND {
 		return nil, ez.Wrap(err)
+	}
+	if err == nil {
+		if existing.Spec != "" {
+			return nil, ez.New(ez.EINVALID, "Workflow "+workflowID+" already exists", nil)
+		}
+
+		return nil, ez.New(ez.EINVALID, "A draft for "+workflowID+" already exists", nil)
 	}
 
-	existingDraft, err := ReadDraft(workflowID)
+	id, err := uuid.NewV7()
 	if err != nil {
 		return nil, ez.Wrap(err)
-	}
-	if existingDraft != "" {
-		return nil, ez.New(ez.EINVALID, "A draft for "+workflowID+" already exists", nil)
 	}
 
 	var scaffold struct {
 		Workflow struct {
+			Slug        string `yaml:"slug"`
 			ID          string `yaml:"id"`
-			UUID        string `yaml:"uuid"`
 			Name        string `yaml:"name"`
 			Version     string `yaml:"version"`
 			Description string `yaml:"description,omitempty"`
 		} `yaml:"workflow"`
 	}
-	scaffold.Workflow.ID = workflowID
-	scaffold.Workflow.UUID = uuid.NewString()
+	scaffold.Workflow.Slug = workflowID
+	scaffold.Workflow.ID = id.String()
 	scaffold.Workflow.Name = trimmedName
 	scaffold.Workflow.Version = "1"
 	scaffold.Workflow.Description = strings.TrimSpace(description)
@@ -177,93 +181,78 @@ func CreateDraft(name, description, explicitID string) (*CreatedDraft, error) {
 		return nil, ez.Wrap(err)
 	}
 
-	err = WriteDraft(workflowID, raw)
+	record := &workflowmodels.Workflow{
+		ID:    id,
+		Slug:  workflowID,
+		Draft: string(raw),
+	}
+
+	err = record.Insert(ctx, r.db)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
 	return &CreatedDraft{
-		WorkflowID: workflowID,
-		Spec:       string(raw),
+		WorkflowSlug: workflowID,
+		Spec:         string(raw),
 	}, nil
 }
 
-// ListDraftOnlyBlueprints returns summaries for drafts whose workflow
-// is not installed in the registry — newly composed workflows that
-// have never been saved.
-func ListDraftOnlyBlueprints() ([]WorkflowSummary, error) {
-	home, err := ResolveHomeDir()
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-
-	entries, err := os.ReadDir(filepath.Join(home, "drafts"))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []WorkflowSummary{}, nil
-		}
-
-		return nil, ez.Wrap(err)
-	}
-
-	installed, err := ListBlueprints()
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-	installedIDs := make(map[string]bool, len(installed))
-	for _, summary := range installed {
-		installedIDs[summary.ID] = true
-	}
-
-	summaries := []WorkflowSummary{}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
-			continue
-		}
-
-		blueprint, err := LoadBlueprintFile(
-			filepath.Join(home, "drafts", entry.Name()),
-		)
-		if err != nil {
-			// A broken draft should not take the list down.
-			continue
-		}
-
-		if installedIDs[blueprint.Workflow.ID] {
-			continue
-		}
-
-		summary, err := workflowSummaryFromBlueprint(blueprint)
-		if err != nil {
-			continue
-		}
-
-		summaries = append(summaries, summary)
-	}
-
-	return summaries, nil
+type SavedDraft struct {
+	WorkflowSlug string `json:"workflow_slug"`
+	Version      string `json:"version"`
+	Spec         string `json:"spec"`
 }
 
-// nextVersion picks the version stamped on save: the saved file's
-// integer version plus one, 1 for a first save, 2 when the current
-// version is not an integer.
-func nextVersion(currentVersion string, installed bool) string {
-	if !installed {
-		return "1"
-	}
-
-	parsed, err := strconv.Atoi(strings.TrimSpace(currentVersion))
+// SaveDraft promotes a draft: it must compile, the next version is
+// stamped, the head is replaced, the outgoing version stays in the
+// history, and the draft is cleared.
+func (r *Registry) SaveDraft(ctx context.Context, workflowID string) (*SavedDraft, error) {
+	trimmedID := strings.TrimSpace(workflowID)
+	record, err := workflowmodels.GetWorkflowBySlug(ctx, r.db, trimmedID)
 	if err != nil {
-		return "2"
+		if ez.ErrorCode(err) == ez.ENOTFOUND {
+			return nil, ez.New(ez.ENOTFOUND, "There is no draft for "+trimmedID, nil)
+		}
+
+		return nil, ez.Wrap(err)
+	}
+	if record.Draft == "" {
+		return nil, ez.New(ez.ENOTFOUND, "There is no draft for "+trimmedID, nil)
 	}
 
-	return strconv.Itoa(parsed + 1)
+	spec, err := ParseSpec([]byte(record.Draft), "")
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+	if strings.TrimSpace(spec.Workflow.Slug) != trimmedID {
+		return nil, ez.New(ez.EINVALID, "The draft's workflow.slug does not match "+trimmedID, nil)
+	}
+
+	version := seedVersion(spec.Workflow.Version)
+	if record.Spec != "" {
+		version = record.Version + 1
+	}
+
+	draft := record.Draft
+	record.Draft = ""
+
+	_, err = r.saveHead(ctx, record, []byte(draft), version)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return &SavedDraft{
+		WorkflowSlug: record.Slug,
+		Version:      strconv.Itoa(record.Version),
+		Spec:         record.Spec,
+	}, nil
 }
 
-// stampWorkflowHeader rewrites workflow.version and workflow.uuid in
+// stampWorkflowHeader rewrites workflow.version and workflow.id in
 // place, preserving the rest of the document byte-for-byte where
 // possible. Empty values leave their field untouched.
-func stampWorkflowHeader(raw []byte, version, workflowUUID string) ([]byte, error) {
+func stampWorkflowHeader(raw []byte, version, workflowID string) ([]byte, error) {
 	var doc yaml.Node
 	err := yaml.Unmarshal(raw, &doc)
 	if err != nil {
@@ -281,8 +270,8 @@ func stampWorkflowHeader(raw []byte, version, workflowUUID string) ([]byte, erro
 	if version != "" {
 		setScalarValue(workflowMap, "version", version)
 	}
-	if workflowUUID != "" {
-		setScalarValue(workflowMap, "uuid", workflowUUID)
+	if workflowID != "" {
+		setScalarValue(workflowMap, "id", workflowID)
 	}
 
 	var buffer bytes.Buffer
@@ -300,184 +289,9 @@ func stampWorkflowHeader(raw []byte, version, workflowUUID string) ([]byte, erro
 	return buffer.Bytes(), nil
 }
 
-// StampWorkflowUUID forces workflow.uuid in a blueprint's bytes —
-// used to carry a workflow's permanent identity into a proposal that
-// dropped or fabricated it.
-func StampWorkflowUUID(raw []byte, workflowUUID string) ([]byte, error) {
-	return stampWorkflowHeader(raw, "", workflowUUID)
-}
-
-// archivePath finds a free file name for the outgoing version.
-func archivePath(dir string, version string) string {
-	base := filepath.Join(dir, "v"+version+".yaml")
-	if _, err := os.Stat(base); os.IsNotExist(err) {
-		return base
-	}
-
-	for i := 2; ; i++ {
-		candidate := filepath.Join(
-			dir,
-			fmt.Sprintf("v%s-%d.yaml", version, i),
-		)
-		if _, err := os.Stat(candidate); os.IsNotExist(err) {
-			return candidate
-		}
-	}
-}
-
-type SavedDraft struct {
-	WorkflowID string
-	Version    string
-	Spec       string
-}
-
-// SaveDraft promotes a draft: compile it, stamp the next version,
-// archive the outgoing file, replace the registry file atomically,
-// and delete the draft.
-func SaveDraft(workflowID string) (*SavedDraft, error) {
-	trimmedID := strings.TrimSpace(workflowID)
-	draft, err := ReadDraft(trimmedID)
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-	if draft == "" {
-		return nil, ez.New(ez.ENOTFOUND, "There is no draft for "+trimmedID, nil)
-	}
-
-	draftPath, err := resolveDraftPath(trimmedID)
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-
-	blueprint, err := LoadBlueprintFile(draftPath)
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-	if blueprint.Workflow.ID != trimmedID {
-		return nil, ez.New(ez.EINVALID, "The draft's workflow.id does not match "+trimmedID, nil)
-	}
-
-	// Where the registry file lives — an existing entry keeps its
-	// path, a first save lands on <id>.yaml in the registry.
-	installed := true
-	entry, err := loadRegistryBlueprintEntryByWorkflowID(trimmedID)
-	if err != nil {
-		if ez.ErrorCode(err) != ez.ENOTFOUND {
-			return nil, ez.Wrap(err)
-		}
-		installed = false
-	}
-
-	currentVersion := ""
-	targetPath := ""
-	if installed {
-		currentVersion = entry.Blueprint.Workflow.Version
-		targetPath = entry.Path
-	} else {
-		workflowDir, err := ResolveWorkflowDir()
-		if err != nil {
-			return nil, ez.Wrap(err)
-		}
-		err = os.MkdirAll(workflowDir, 0755)
-		if err != nil {
-			return nil, ez.Wrap(err)
-		}
-		targetPath = filepath.Join(workflowDir, trimmedID+".yaml")
-	}
-
-	version := nextVersion(currentVersion, installed)
-
-	// The permanent identity: the installed file's uuid always wins —
-	// a draft cannot change it. First installs mint one.
-	workflowUUID := ""
-	if installed {
-		workflowUUID = strings.TrimSpace(entry.Blueprint.Workflow.UUID)
-	}
-	if workflowUUID == "" {
-		workflowUUID = strings.TrimSpace(blueprint.Workflow.UUID)
-	}
-	if workflowUUID == "" {
-		workflowUUID = uuid.NewString()
-	}
-
-	raw, err := os.ReadFile(draftPath)
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-
-	stamped, err := stampWorkflowHeader(raw, version, workflowUUID)
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-
-	// The stamped draft must still compile before it replaces the
-	// registry file.
-	scratch, err := os.CreateTemp("", "agc-save-*.yaml")
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-	scratchPath := scratch.Name()
-	defer os.Remove(scratchPath)
-
-	_, err = scratch.Write(stamped)
-	if closeErr := scratch.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-
-	compiled, err := LoadBlueprintFile(scratchPath)
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-	_, err = Compile(compiled)
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-
-	// Archive the outgoing version before it is replaced.
-	if installed {
-		versionsDir, err := resolveVersionsDir(trimmedID)
-		if err != nil {
-			return nil, ez.Wrap(err)
-		}
-		err = os.MkdirAll(versionsDir, 0755)
-		if err != nil {
-			return nil, ez.Wrap(err)
-		}
-
-		outgoing, err := os.ReadFile(entry.Path)
-		if err != nil {
-			return nil, ez.Wrap(err)
-		}
-
-		archiveVersion := strings.TrimSpace(currentVersion)
-		if archiveVersion == "" {
-			archiveVersion = "0"
-		}
-		err = writeFileAtomically(
-			archivePath(versionsDir, archiveVersion),
-			outgoing,
-		)
-		if err != nil {
-			return nil, ez.Wrap(err)
-		}
-	}
-
-	err = writeFileAtomically(targetPath, stamped)
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-
-	err = DeleteDraft(trimmedID)
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-
-	return &SavedDraft{
-		WorkflowID: trimmedID,
-		Version:    version,
-		Spec:       string(stamped),
-	}, nil
+// StampWorkflowID forces workflow.id in a spec's bytes — used to
+// carry a workflow's permanent identity into a proposal that dropped
+// or fabricated it.
+func StampWorkflowID(raw []byte, workflowID string) ([]byte, error) {
+	return stampWorkflowHeader(raw, "", workflowID)
 }

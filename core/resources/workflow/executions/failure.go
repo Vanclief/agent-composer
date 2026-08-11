@@ -16,7 +16,7 @@ import (
 
 type ExecutionFailureDetails struct {
 	ExecutionID     string
-	WorkflowID      string
+	WorkflowSlug    string
 	WorkflowVersion string
 	NodeExecutionID string
 	NodeID          string
@@ -41,8 +41,8 @@ func (e *ExecutionFailedError) Error() string {
 	if strings.TrimSpace(e.Details.ExecutionID) != "" {
 		fields = append(fields, "execution_id="+e.Details.ExecutionID)
 	}
-	if strings.TrimSpace(e.Details.WorkflowID) != "" {
-		fields = append(fields, "workflow_id="+e.Details.WorkflowID)
+	if strings.TrimSpace(e.Details.WorkflowSlug) != "" {
+		fields = append(fields, "workflow_id="+e.Details.WorkflowSlug)
 	}
 	if strings.TrimSpace(e.Details.NodeID) != "" {
 		fields = append(fields, "node_id="+e.Details.NodeID)

@@ -22,9 +22,9 @@ import {
   updateWorkflowNode,
 } from "../api";
 import {
-  blueprintVersion,
-  parseBlueprintYAML,
-} from "../api/blueprints";
+  specVersion,
+  parseSpecYAML,
+} from "../api/specs";
 import type { WorkflowSummary } from "../types/api";
 import type { ParsedWorkflow } from "../types/workflow";
 import { ChatIcon, PlayIcon } from "./Icons";
@@ -135,7 +135,7 @@ export function BuilderPage() {
   }, [loadWorkflows]);
 
   const activeWorkflow = workflows.find(
-    (workflow) => workflow.id === activeWorkflowId,
+    (workflow) => workflow.slug === activeWorkflowId,
   );
   const activeSpec = workflowSpecs[activeWorkflowId] ?? "";
   const activeDraft = workflowDrafts[activeWorkflowId] ?? "";
@@ -146,10 +146,10 @@ export function BuilderPage() {
     if (!activeWorkflow || !shownSpec) {
       return EMPTY_WORKFLOW;
     }
-    return parseBlueprintYAML(shownSpec, workflowSpecs);
+    return parseSpecYAML(shownSpec, workflowSpecs);
   }, [shownSpec, activeWorkflow, workflowSpecs]);
   const shownVersion = useMemo(
-    () => (shownSpec ? blueprintVersion(shownSpec) : ""),
+    () => (shownSpec ? specVersion(shownSpec) : ""),
     [shownSpec],
   );
   const selectedNode =
@@ -167,7 +167,7 @@ export function BuilderPage() {
     const query = workflowSearch.trim().toLowerCase();
     return (
       !query ||
-      [workflow.id, workflow.name, workflow.description ?? ""].some(
+      [workflow.slug, workflow.name, workflow.description ?? ""].some(
         (value) => value.toLowerCase().includes(query),
       )
     );
@@ -175,7 +175,7 @@ export function BuilderPage() {
 
   useEffect(() => {
     document.title = activeWorkflow
-      ? `Build ${activeWorkflow.name || activeWorkflow.id} — AGC`
+      ? `Build ${activeWorkflow.name || activeWorkflow.slug} — AGC`
       : "AGC — Build";
   }, [activeWorkflow]);
 
@@ -183,9 +183,9 @@ export function BuilderPage() {
     // The proposal landed as a draft — re-read, then follow it to its
     // workflow (a created one shows up as draft-only in the list).
     void loadWorkflows().then(() => {
-      if (result.workflow_id && result.workflow_id !== activeWorkflowId) {
+      if (result.workflow_slug && result.workflow_slug !== activeWorkflowId) {
         navigate(
-          `/workflow/${encodeURIComponent(result.workflow_id)}/build`,
+          `/workflow/${encodeURIComponent(result.workflow_slug)}/build`,
         );
       }
     });
@@ -264,7 +264,7 @@ export function BuilderPage() {
     setError("");
     try {
       const response = await startTask(
-        activeWorkflow.id,
+        activeWorkflow.slug,
         input,
         shellRoot,
         worktree,
@@ -273,7 +273,7 @@ export function BuilderPage() {
       if (response.execution_id) {
         navigate(
           `/workflows/${encodeURIComponent(
-            activeWorkflow.id,
+            activeWorkflow.slug,
           )}/executions/${encodeURIComponent(response.execution_id)}`,
         );
       }
@@ -383,25 +383,25 @@ export function BuilderPage() {
             </div>
           )}
           {filteredWorkflows.map((workflow) => (
-            <li key={workflow.id}>
+            <li key={workflow.slug}>
               <button
                 type="button"
                 className={
-                  workflow.id === activeWorkflowId ? "active" : ""
+                  workflow.slug === activeWorkflowId ? "active" : ""
                 }
-                title={workflow.description || workflow.id}
+                title={workflow.description || workflow.slug}
                 onClick={() =>
                   navigate(
                     `/workflow/${encodeURIComponent(
-                      workflow.id,
+                      workflow.slug,
                     )}/build`,
                   )
                 }
               >
                 <b>
-                  {workflow.name || workflow.id}
+                  {workflow.name || workflow.slug}
                   {(workflow.has_draft ||
-                    workflowDrafts[workflow.id]) && (
+                    workflowDrafts[workflow.slug]) && (
                     <i className="builder-workflow-list__draft">
                       draft
                     </i>
@@ -453,7 +453,7 @@ export function BuilderPage() {
           activeWorkflow && (
             <div className="canvas-head">
               <div className="canvas-head__title">
-                <h2>{activeWorkflow.name || activeWorkflow.id}</h2>
+                <h2>{activeWorkflow.name || activeWorkflow.slug}</h2>
                 {shownVersion && (
                   <span className="canvas-head__version">
                     v{shownVersion}
@@ -574,9 +574,9 @@ export function BuilderPage() {
 
       {showRun && activeWorkflow && (
         <RunInputModal
-          key={activeWorkflow.id}
-          title={`Run ${activeWorkflow.name || activeWorkflow.id}`}
-          workflowId={activeWorkflow.id}
+          key={activeWorkflow.slug}
+          title={`Run ${activeWorkflow.name || activeWorkflow.slug}`}
+          workflowId={activeWorkflow.slug}
           inputDefinitions={activeWorkflow.inputs}
           locationSlot={locationSlot}
           onRun={(input) => void runWorkflow(input)}

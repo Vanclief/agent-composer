@@ -31,11 +31,11 @@ func (api *API) prepareResume(ctx context.Context, request *CreateRequest) (*pre
 
 	var snapshot *workflowruntime.Snapshot
 	if request.UseCurrentSpec {
-		blueprint, err := workflowruntime.LoadBlueprintByWorkflowID(source.WorkflowID)
+		spec, err := api.registry.Load(ctx, source.WorkflowSlug)
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}
-		snapshot, err = workflowruntime.Compile(blueprint)
+		snapshot, err = api.registry.Compile(ctx, spec)
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}

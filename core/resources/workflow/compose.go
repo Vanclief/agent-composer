@@ -13,9 +13,9 @@ import (
 )
 
 type ComposeRequest struct {
-	// WorkflowID is empty when the request should create a workflow.
-	WorkflowID string `json:"workflow_id"`
-	Request    string `json:"request"`
+	// WorkflowSlug is empty when the request should create a workflow.
+	WorkflowSlug string `json:"workflow_slug"`
+	Request      string `json:"request"`
 }
 
 func (r *ComposeRequest) Validate() error {
@@ -27,31 +27,31 @@ func (r *ComposeRequest) Validate() error {
 }
 
 type ComposeResponse struct {
-	WorkflowID string `json:"workflow_id"`
-	Action     string `json:"action"`
-	Summary    string `json:"summary"`
-	Harness    string `json:"harness"`
-	Model      string `json:"model"`
-	// Draft is the proposed blueprint now waiting for Save — empty
+	WorkflowSlug string `json:"workflow_slug"`
+	Action       string `json:"action"`
+	Summary      string `json:"summary"`
+	Harness      string `json:"harness"`
+	Model        string `json:"model"`
+	// Draft is the proposed spec now waiting for Save — empty
 	// when the composer proposed nothing.
 	Draft string `json:"draft,omitempty"`
 }
 
-// workflowUUIDFromSpec reads workflow.uuid out of blueprint YAML —
-// "" when absent or unparsable.
-func workflowUUIDFromSpec(spec string) string {
+// workflowIDFromSpec reads workflow.id (the permanent uuid) out of
+// spec YAML — "" when absent or unparsable.
+func workflowIDFromSpec(spec string) string {
 	if strings.TrimSpace(spec) == "" {
 		return ""
 	}
 	var doc struct {
 		Workflow struct {
-			UUID string `yaml:"uuid"`
+			ID string `yaml:"id"`
 		} `yaml:"workflow"`
 	}
 	if err := yaml.Unmarshal([]byte(spec), &doc); err != nil {
 		return ""
 	}
-	return strings.TrimSpace(doc.Workflow.UUID)
+	return strings.TrimSpace(doc.Workflow.ID)
 }
 
 // harnessCatalogText renders the installed harnesses and their model
@@ -117,18 +117,18 @@ func (api *API) Compose(ctx context.Context, requester interface{}, request *Com
 		return nil, ez.Wrap(err)
 	}
 
-	workflowID := strings.TrimSpace(request.WorkflowID)
+	workflowID := strings.TrimSpace(request.WorkflowSlug)
 
 	// The edit base: an unsaved draft when one exists, else the saved
-	// blueprint. Empty for a create.
+	// spec. Empty for a create.
 	baseSpec := ""
 	if workflowID != "" {
-		baseSpec, err = workflowruntime.ReadDraft(workflowID)
+		baseSpec, err = api.Registry.ReadDraft(ctx, workflowID)
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}
 		if baseSpec == "" {
-			raw, err := workflowruntime.ReadBlueprintBytesByWorkflowID(workflowID)
+			raw, err := api.Registry.SpecBytes(ctx, workflowID)
 			if err != nil {
 				return nil, ez.Wrap(err)
 			}
@@ -137,23 +137,23 @@ func (api *API) Compose(ctx context.Context, requester interface{}, request *Com
 	}
 
 	result, err := workflowruntime.Compose(ctx, workflowruntime.ComposeOptions{
-		WorkflowID: workflowID,
-		BaseSpec:   baseSpec,
-		Request:    request.Request,
-		Harness:    harness,
-		Model:      model,
-		Catalog:    harnessCatalogText(ctx),
+		WorkflowSlug: workflowID,
+		BaseSpec:     baseSpec,
+		Request:      request.Request,
+		Harness:      harness,
+		Model:        model,
+		Catalog:      harnessCatalogText(ctx),
 	})
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
 	response := &ComposeResponse{
-		WorkflowID: result.WorkflowID,
-		Action:     result.Action,
-		Summary:    result.Summary,
-		Harness:    string(harness),
-		Model:      model,
+		WorkflowSlug: result.WorkflowSlug,
+		Action:       result.Action,
+		Summary:      result.Summary,
+		Harness:      string(harness),
+		Model:        model,
 	}
 
 	if result.Action == "unchanged" || result.YAML == "" {
@@ -162,7 +162,8 @@ func (api *API) Compose(ctx context.Context, requester interface{}, request *Com
 
 	// Trust but verify: the proposal must compile on the server's own
 	// compiler and keep its id before it becomes the draft.
-	proposedID, err := workflowruntime.VerifyProposedBlueprint(
+	proposedID, err := api.Registry.VerifyProposedSpec(
+		ctx,
 		[]byte(result.YAML),
 		workflowID,
 	)
@@ -170,46 +171,47 @@ func (api *API) Compose(ctx context.Context, requester interface{}, request *Com
 		return nil, ez.Wrap(err)
 	}
 
-	// The permanent uuid is not the agent's to manage — carry the
+	// The permanent id is not the agent's to manage — carry the
 	// base's identity into the proposal.
 	draftBytes := []byte(result.YAML)
-	if baseUUID := workflowUUIDFromSpec(baseSpec); baseUUID != "" {
-		draftBytes, err = workflowruntime.StampWorkflowUUID(
+	baseID := workflowIDFromSpec(baseSpec)
+	if baseID != "" {
+		draftBytes, err = workflowruntime.StampWorkflowID(
 			draftBytes,
-			baseUUID,
+			baseID,
 		)
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}
 	}
 
-	err = workflowruntime.WriteDraft(proposedID, draftBytes)
+	err = api.Registry.WriteDraft(ctx, proposedID, draftBytes)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	response.WorkflowID = proposedID
+	response.WorkflowSlug = proposedID
 	response.Draft = string(draftBytes)
 
 	return response, nil
 }
 
 type SaveDraftRequest struct {
-	WorkflowID string `json:"workflow_id"`
+	WorkflowSlug string `json:"workflow_slug"`
 }
 
 func (r *SaveDraftRequest) Validate() error {
-	if strings.TrimSpace(r.WorkflowID) == "" {
-		return ez.New(ez.EINVALID, "workflow_id is required", nil)
+	if strings.TrimSpace(r.WorkflowSlug) == "" {
+		return ez.New(ez.EINVALID, "workflow_slug is required", nil)
 	}
 
 	return nil
 }
 
 type SaveDraftResponse struct {
-	WorkflowID string `json:"workflow_id"`
-	Version    string `json:"version"`
-	Spec       string `json:"spec"`
+	WorkflowSlug string `json:"workflow_slug"`
+	Version      string `json:"version"`
+	Spec         string `json:"spec"`
 }
 
 func (api *API) SaveDraft(ctx context.Context, requester interface{}, request *SaveDraftRequest) (*SaveDraftResponse, error) {
@@ -218,33 +220,33 @@ func (api *API) SaveDraft(ctx context.Context, requester interface{}, request *S
 		return nil, ez.Wrap(err)
 	}
 
-	saved, err := workflowruntime.SaveDraft(request.WorkflowID)
+	saved, err := api.Registry.SaveDraft(ctx, request.WorkflowSlug)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
 	return &SaveDraftResponse{
-		WorkflowID: saved.WorkflowID,
-		Version:    saved.Version,
-		Spec:       saved.Spec,
+		WorkflowSlug: saved.WorkflowSlug,
+		Version:      saved.Version,
+		Spec:         saved.Spec,
 	}, nil
 }
 
 type DeleteDraftRequest struct {
-	WorkflowID string `json:"workflow_id"`
+	WorkflowSlug string `json:"workflow_slug"`
 }
 
 func (r *DeleteDraftRequest) Validate() error {
-	if strings.TrimSpace(r.WorkflowID) == "" {
-		return ez.New(ez.EINVALID, "workflow_id is required", nil)
+	if strings.TrimSpace(r.WorkflowSlug) == "" {
+		return ez.New(ez.EINVALID, "workflow_slug is required", nil)
 	}
 
 	return nil
 }
 
 type DeleteDraftResponse struct {
-	WorkflowID string `json:"workflow_id"`
-	Deleted    bool   `json:"deleted"`
+	WorkflowSlug string `json:"workflow_slug"`
+	Deleted      bool   `json:"deleted"`
 }
 
 func (api *API) DeleteDraft(ctx context.Context, requester interface{}, request *DeleteDraftRequest) (*DeleteDraftResponse, error) {
@@ -253,13 +255,13 @@ func (api *API) DeleteDraft(ctx context.Context, requester interface{}, request 
 		return nil, ez.Wrap(err)
 	}
 
-	err = workflowruntime.DeleteDraft(request.WorkflowID)
+	err = api.Registry.DeleteDraft(ctx, request.WorkflowSlug)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
 	return &DeleteDraftResponse{
-		WorkflowID: strings.TrimSpace(request.WorkflowID),
-		Deleted:    true,
+		WorkflowSlug: strings.TrimSpace(request.WorkflowSlug),
+		Deleted:      true,
 	}, nil
 }

@@ -1,5 +1,5 @@
 workflow:
-  id: section_summary_batch
+  slug: section_summary_batch
   name: "Section Summary Batch"
   version: "1"
   description: >

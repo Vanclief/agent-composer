@@ -6,7 +6,7 @@ import {
 import { composeWorkflow } from "../api";
 
 export interface EditResult {
-  workflow_id?: string;
+  workflow_slug?: string;
   action?: string;
   summary?: string;
   draft?: string;
@@ -36,7 +36,7 @@ function transcriptKey(workflowId: string) {
 }
 
 /**
- * The Composer — the conversation with the blueprint-editing agent.
+ * The Composer — the conversation with the spec-editing agent.
  * Every turn is one compose call; the workflow's draft carries the
  * state between turns, and nothing lands without Save.
  */
@@ -110,10 +110,10 @@ export function ComposerPanel({
         action: response.action,
         model: response.model,
       });
-      if (startedKey === "__new__" && response.workflow_id) {
+      if (startedKey === "__new__" && response.workflow_slug) {
         const moved = transcripts.get("__new__") ?? [];
         transcripts.delete("__new__");
-        transcripts.set(response.workflow_id, moved);
+        transcripts.set(response.workflow_slug, moved);
       }
       onApplied(response);
     } catch (caught) {
@@ -148,7 +148,7 @@ export function ComposerPanel({
                 : "Describe a workflow"}
             </b>
             <span>
-              The composer agent proposes blueprint changes as a
+              The composer agent proposes spec changes as a
               draft — nothing lands until you save it.
             </span>
           </div>

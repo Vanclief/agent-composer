@@ -15,7 +15,7 @@ import {
 import {
   parseSnapshot,
   WORKFLOW_INPUTS_NODE_ID,
-} from "../api/blueprints";
+} from "../api/specs";
 import { Inspector } from "../builder/Inspector";
 import {
   buildRunEntry,
@@ -220,26 +220,27 @@ export function ExecutionCanvas({
     };
   }, [execution, selectNode]);
 
-  const workflowId = execution?.workflow_id ?? "";
-  const workflowUUID = execution?.workflow_uuid ?? "";
+  const workflowSlug = execution?.workflow_slug ?? "";
+  const workflowUUID = execution?.workflow_id ?? "";
   // Editing needs the definition to still exist — runs of deleted
   // workflows render fine from their snapshot but have nothing to
-  // edit. Identity is the permanent uuid; the slug only stands in for
-  // pre-uuid history, so a deleted-then-recreated slug never matches.
+  // edit. Identity is the permanent id; the slug only stands in for
+  // pre-identity history, so a deleted-then-recreated slug never
+  // matches.
   const activeWorkflow = useMemo<WorkflowSummary | undefined>(() => {
-    if (!workflowId) {
+    if (!workflowSlug) {
       return undefined;
     }
     return workflows.find((workflow) =>
-      workflowUUID && workflow.uuid
-        ? workflow.uuid === workflowUUID
-        : workflow.id === workflowId,
+      workflowUUID && workflow.id
+        ? workflow.id === workflowUUID
+        : workflow.slug === workflowSlug,
     );
-  }, [workflowId, workflowUUID, workflows]);
+  }, [workflowSlug, workflowUUID, workflows]);
   const installed = activeWorkflow !== undefined;
   const shownWorkflow = activeWorkflow ?? {
-    id: workflowId,
-    name: workflowId,
+    slug: workflowSlug,
+    name: workflowSlug,
     inputs: {},
     outputs: {},
   };
@@ -352,12 +353,12 @@ export function ExecutionCanvas({
           emptyTitle={emptyTitle}
           emptyDescription={emptyDescription}
           topOverlay={
-            (workflowId || topOverlay) && (
+            (workflowSlug || topOverlay) && (
               <div className="canvas-head">
-                {workflowId && (
+                {workflowSlug && (
                   <div className="canvas-head__title">
                     <h2>
-                      {shownWorkflow.name || shownWorkflow.id}
+                      {shownWorkflow.name || shownWorkflow.slug}
                     </h2>
                     {execution?.workflow_version && (
                       <span className="canvas-head__version">
@@ -374,7 +375,7 @@ export function ExecutionCanvas({
                       <Link
                         className="canvas-head__edit"
                         to={`/workflow/${encodeURIComponent(
-                          shownWorkflow.id,
+                          shownWorkflow.slug,
                         )}/build`}
                         title="Open this workflow in the editor"
                       >
@@ -401,7 +402,7 @@ export function ExecutionCanvas({
           />
         ) : (
           <WorkflowOverview
-            workflow={workflowId ? shownWorkflow : undefined}
+            workflow={workflowSlug ? shownWorkflow : undefined}
             runs={runs}
             currentRun={currentRun}
             onSelectRun={() => undefined}

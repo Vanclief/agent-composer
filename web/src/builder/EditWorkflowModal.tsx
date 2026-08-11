@@ -46,7 +46,7 @@ export function EditWorkflowModal({
           ? description.trim()
           : undefined,
       });
-      onRenamed(response.workflow_id);
+      onRenamed(response.workflow_slug);
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : String(caught),
