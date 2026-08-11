@@ -42,3 +42,4 @@ web/node_modules/
 
 # Local build outputs (dev-install.sh)
 bin/
+web/.vite/
