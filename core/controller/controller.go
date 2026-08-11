@@ -107,7 +107,7 @@ func Load(writer io.Writer) (*Controller, error) {
 			log.Info().Msg("Configuration file not found, using default configuration")
 			controller.configFileFound = false
 			c.App.Name = "Agent Composer"
-			c.App.Port = "8080"
+			c.App.Port = "1202"
 			c.App.RateLimit = 60
 			c.App.RateLimitWindow = 10
 		} else {

@@ -9,7 +9,7 @@ pip install agent-composer-sdk           # once published to PyPI
 pip install -e sdks/python/agent-composer-sdk  # from this repo
 ```
 
-The SDK currently targets the unauthenticated API exposed at `http://localhost:8080/api` (see `servers` in the OpenAPI spec). Use the plain `Client` class—`AuthenticatedClient` is present for future-secured endpoints but is not required right now.
+The SDK currently targets the unauthenticated API exposed at `http://localhost:1202/api` (see `servers` in the OpenAPI spec). Use the plain `Client` class—`AuthenticatedClient` is present for future-secured endpoints but is not required right now.
 
 ## Getting started
 
@@ -17,7 +17,7 @@ The SDK currently targets the unauthenticated API exposed at `http://localhost:8
 from agent_composer_sdk import Client
 
 client = Client(
-    base_url="http://localhost:8080/api",
+    base_url="http://localhost:1202/api",
     raise_on_unexpected_status=True,
 )
 ```
@@ -30,7 +30,7 @@ Every REST operation lives under `agent_composer_sdk.api.<tag>.<operation>`. Eac
 from agent_composer_sdk import Client
 from agent_composer_sdk.api.agent_specs import list_agent_specs
 
-client = Client(base_url="http://localhost:8080/api")
+client = Client(base_url="http://localhost:1202/api")
 
 specs = list_agent_specs.sync(client=client, limit=5)
 if specs and specs.agent_specs:
@@ -48,7 +48,7 @@ from agent_composer_sdk.api.agent_specs import list_agent_specs
 from agent_composer_sdk.api.conversations import create_conversation
 from agent_composer_sdk.models.create_conversation_request import CreateConversationRequest
 
-client = Client(base_url="http://localhost:8080/api")
+client = Client(base_url="http://localhost:1202/api")
 
 specs = list_agent_specs.sync(client=client)
 spec_id = specs.agent_specs[0].id  # pick any spec you want to run
@@ -74,7 +74,7 @@ import asyncio
 from agent_composer_sdk import Client
 from agent_composer_sdk.api.conversations import list_conversations
 
-client = Client(base_url="http://localhost:8080/api")
+client = Client(base_url="http://localhost:1202/api")
 
 async def main() -> None:
     async with client:
@@ -105,7 +105,7 @@ The underlying transport is `httpx`. Pass `cookies`, `headers`, timeouts, TLS se
 from agent_composer_sdk import Client
 
 client = Client(
-    base_url="http://localhost:8080/api",
+    base_url="http://localhost:1202/api",
     headers={"x-agent-composer-experiment": "beta"},
     httpx_args={"event_hooks": {"response": [lambda r: print(r.status_code)]}},
 )

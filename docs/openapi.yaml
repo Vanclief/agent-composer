@@ -8,7 +8,7 @@ info:
     specs, agent conversations, and runtime hooks. All responses are JSON encoded and share a
     common error envelope.
 servers:
-  - url: http://localhost:8080/api
+  - url: http://localhost:1202/api
     description: Local development server
   - url: /api
     description: Relative base path when the service is deployed behind another host

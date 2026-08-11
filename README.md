@@ -113,17 +113,17 @@ Prints which database agc uses and *why* (config file found or not, postgres opt
 agc rest
 ```
 
-Workflow monitor, canvas, and composer at `http://localhost:8080`. For live reload during Go development: `air`.
+Workflow monitor, canvas, and composer at `http://localhost:1202`. For live reload during Go development: `air`.
 
 ```bash
-curl http://localhost:8080/api/workflows
-curl http://localhost:8080/api/workflows/parallel_pr_review
+curl http://localhost:1202/api/workflows
+curl http://localhost:1202/api/workflows/parallel_pr_review
 
-curl -X POST http://localhost:8080/api/workflow/executions \
+curl -X POST http://localhost:1202/api/workflow/executions \
   -H 'Content-Type: application/json' \
   -d '{"workflow_slug":"parallel_pr_review","input":{"branch":"master"}}'
 
-curl http://localhost:8080/api/workflow/executions/<execution_id>
+curl http://localhost:1202/api/workflow/executions/<execution_id>
 ```
 
 Creating an execution through REST returns an execution id immediately; poll the get endpoint for `running`, `succeeded`, or `failed`. CLI runs and server runs share the same database, so everything shows up in the UI either way.
