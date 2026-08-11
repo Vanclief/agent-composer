@@ -1,6 +1,10 @@
-name: Verify web distribution
+name: CI
 
+# One question, two halves: is this commit shippable? The Go suite must
+# pass and the committed web/dist bundle must match web/src. Release
+# calls this workflow, so nothing ships without both.
 on:
+  workflow_call:
   pull_request:
   push:
     branches:
@@ -10,6 +14,18 @@ permissions:
   contents: read
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+
   web-dist:
     runs-on: ubuntu-latest
     steps:
