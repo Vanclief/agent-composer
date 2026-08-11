@@ -351,7 +351,7 @@ export function MainMonitorPage({
   const [showNewTask, setShowNewTask] = useState(false);
   const [newTaskWorkflowId, setNewTaskWorkflowId] = useState("");
   const [starting, setStarting] = useState(false);
-  const { shellRoot, worktree, locationSlot } =
+  const { project, worktree, locationSlot } =
     useLaunchLocation(starting);
 
   useEffect(() => {
@@ -489,9 +489,9 @@ export function MainMonitorPage({
   }, [orderedTasks, taskFilter, taskQuery, workflowNames]);
   const selectedTask =
     rows.find((task) => task.id === selectedExecutionId) || null;
-  const runShellRoot =
+  const runProject =
     view === "workflows"
-      ? selectedTask?.executions[0]?.shell_root
+      ? selectedTask?.executions[0]?.project_dir
       : undefined;
   // Edit mode opens on the workflow of the run you are looking at —
   // resolved through the library by permanent uuid (slug only for
@@ -626,7 +626,7 @@ export function MainMonitorPage({
       const response = await startTask(
         newTaskWorkflow.slug,
         input,
-        shellRoot,
+        project,
         worktree,
       );
       if (!response.execution_id) {
@@ -667,7 +667,7 @@ export function MainMonitorPage({
           ) : undefined
         }
         context={
-          runShellRoot && <RunLocation shellRoot={runShellRoot} />
+          runProject && <RunLocation project={runProject} />
         }
         actions={
           <button

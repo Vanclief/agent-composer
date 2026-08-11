@@ -186,7 +186,7 @@ const (
 type Executor struct {
 	NewHarness func(kind agent.Harness) (harnesses.Harness, error)
 	Recorder   ExecutionRecorder
-	ShellRoot  string
+	ProjectDir string
 	// SeedOutputs pre-completes top-level nodes with recorded outputs
 	// from a previous execution ("re-run from here"). Seeded nodes are
 	// never executed or recorded again.
@@ -225,9 +225,9 @@ type compiledNodeShape struct {
 	Instruction               string
 }
 
-func NewExecutor(shellRoot string) *Executor {
+func NewExecutor(project string) *Executor {
 	return &Executor{
 		NewHarness: harnesses.New,
-		ShellRoot:  strings.TrimSpace(shellRoot),
+		ProjectDir: strings.TrimSpace(project),
 	}
 }

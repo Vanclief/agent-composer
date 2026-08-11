@@ -49,13 +49,13 @@ func NewAPI(ctrl *controller.Controller, rt *runtime.Runtime) *API {
 	}
 }
 
-// DefaultShellRoot returns the effective default working directory used when a
-// run does not specify a shell_root. An empty configured value resolves to the
+// DefaultProjectDir returns the effective default working directory used when a
+// run does not specify a project. An empty configured value resolves to the
 // server's current working directory, always returned as an absolute path.
-func (api *API) DefaultShellRoot() string {
+func (api *API) DefaultProjectDir() string {
 	root := ""
 	if api.rt != nil {
-		root = api.rt.ShellRoot()
+		root = api.rt.ProjectDir()
 	}
 
 	if strings.TrimSpace(root) == "" {

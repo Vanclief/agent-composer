@@ -225,9 +225,9 @@ export function WorkflowsMonitor() {
             : "Running workflows"
         }
         context={
-          selectedExecution?.shell_root && (
+          selectedExecution?.project_dir && (
             <RunLocation
-              shellRoot={selectedExecution.shell_root}
+              project={selectedExecution.project_dir}
             />
           )
         }

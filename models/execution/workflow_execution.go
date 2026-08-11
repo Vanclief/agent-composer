@@ -32,7 +32,7 @@ type WorkflowExecution struct {
 	InputSnapshot    map[string]any          `bun:"type:jsonb,nullzero" json:"input_snapshot,omitempty"`
 	OutputSnapshot   map[string]any          `bun:"type:jsonb,nullzero" json:"output_snapshot,omitempty"`
 	Status           WorkflowExecutionStatus `json:"status"`
-	ShellRoot        string                  `json:"shell_root,omitempty"`
+	ProjectDir       string                  `json:"project_dir,omitempty"`
 	StartedAt        *time.Time              `bun:",nullzero" json:"started_at,omitempty"`
 	FinishedAt       *time.Time              `bun:",nullzero" json:"finished_at,omitempty"`
 	Metadata         map[string]any          `bun:"type:jsonb,nullzero" json:"metadata,omitempty"`

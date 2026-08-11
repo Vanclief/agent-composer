@@ -17,7 +17,7 @@ function stripSlash(path: string) {
 
 interface Location {
   /** Display name of the project (repository root). */
-  project: string;
+  projectName: string;
   /** Branch the run executes on; empty until git answers. */
   branch: string;
   /** True when the run happens in a linked worktree. */
@@ -30,8 +30,8 @@ interface Location {
  * worktrees/<repo>-<hash8>/<branch-dir>; anything else is a project
  * root running its checked-out branch.
  */
-function guessLocation(shellRoot: string): Location {
-  const managed = stripSlash(shellRoot).match(
+function guessLocation(path: string): Location {
+  const managed = stripSlash(path).match(
     /\/worktrees\/(.+)-[0-9a-f]{8}\/([^/]+)$/,
   );
   if (managed) {
@@ -40,34 +40,34 @@ function guessLocation(shellRoot: string): Location {
       (project) => projectBaseName(project.path) === repoBase,
     );
     return {
-      project: named?.name || repoBase,
+      projectName: named?.name || repoBase,
       branch: managed[2] ?? "",
       worktree: true,
     };
   }
   return {
-    project: projectNameFor(shellRoot),
+    projectName: projectNameFor(path),
     branch: "",
     worktree: false,
   };
 }
 
 /**
- * Where a run executes: project chip + workspace chip. Only shell_root
+ * Where a run executes: project chip + workspace chip. Only project
  * is persisted, so git resolves the rest — for worktree runs the
  * project is the main checkout and the workspace is the worktree's
  * branch; for root runs the workspace is whatever branch the checkout
  * is on.
  */
-export function RunLocation({ shellRoot }: { shellRoot: string }) {
+export function RunLocation({ project }: { project: string }) {
   const [location, setLocation] = useState<Location>(() =>
-    guessLocation(shellRoot),
+    guessLocation(project),
   );
 
   useEffect(() => {
-    setLocation(guessLocation(shellRoot));
+    setLocation(guessLocation(project));
     const controller = new AbortController();
-    fetchWorktrees(shellRoot, controller.signal)
+    fetchWorktrees(project, controller.signal)
       .then((response) => {
         const worktrees = response.worktrees ?? [];
         const main = worktrees.find((info) => info.is_main);
@@ -78,25 +78,25 @@ export function RunLocation({ shellRoot }: { shellRoot: string }) {
         // executes directly on the repository root.
         const current =
           worktrees.find(
-            (info) => stripSlash(info.path) === stripSlash(shellRoot),
+            (info) => stripSlash(info.path) === stripSlash(project),
           ) ?? main;
         setLocation({
-          project: projectNameFor(main.path),
+          projectName: projectNameFor(main.path),
           branch: current.branch || current.head?.slice(0, 7) || "",
           worktree: current !== main,
         });
       })
       .catch(() => undefined);
     return () => controller.abort();
-  }, [shellRoot]);
+  }, [project]);
 
   return (
-    <div className="run-location" title={shellRoot}>
+    <div className="run-location" title={project}>
       <span className="run-location__seg">
         <small>Project</small>
         <span className="run-location__value">
           <FolderIcon size={12} />
-          <b>{location.project}</b>
+          <b>{location.projectName}</b>
         </span>
       </span>
       {location.branch && (
@@ -104,7 +104,7 @@ export function RunLocation({ shellRoot }: { shellRoot: string }) {
           className="run-location__seg run-location__seg--branch"
           title={
             location.worktree
-              ? `Workspace worktree — ${shellRoot}`
+              ? `Workspace worktree — ${project}`
               : "Runs directly on the repository root"
           }
         >

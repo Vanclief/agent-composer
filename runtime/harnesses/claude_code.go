@@ -81,7 +81,7 @@ func (c *ClaudeCode) Run(ctx context.Context, conversation *agent.Conversation, 
 
 	args := c.buildArgs(conversation, cfg, prompt)
 
-	workdir := strings.TrimSpace(conversation.ShellRoot)
+	workdir := strings.TrimSpace(conversation.ProjectDir)
 	if workdir == "" {
 		workdir = "."
 	}

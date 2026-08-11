@@ -64,10 +64,9 @@ func Run(ctx context.Context, args []string) error {
 		Version: version,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:    "shell-root",
-				Usage:   "Root directory for shell tool access (defaults to current directory)",
-				Value:   "",
-				EnvVars: []string{"AGC_SHELL_ROOT"},
+				Name:  "project",
+				Usage: "Directory the workflow runs in (defaults to the current directory)",
+				Value: "",
 			},
 		},
 		Action: func(c *cli.Context) error {
@@ -79,14 +78,14 @@ func Run(ctx context.Context, args []string) error {
 				Name:  "mcp",
 				Usage: "Start the AGC MCP stdio server",
 				Action: func(c *cli.Context) error {
-					return runMCPServer(c.Context, c.String("shell-root"))
+					return runMCPServer(c.Context, c.String("project"))
 				},
 			},
 			{
 				Name:  "rest",
 				Usage: "Start the REST server",
 				Action: func(c *cli.Context) error {
-					return runServer(c.Context, c.String("shell-root"))
+					return runServer(c.Context, c.String("project"))
 				},
 			},
 			{
@@ -147,7 +146,6 @@ func workflowRunCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:  "file",
 				Usage: "Path to a workflow spec YAML file",
-				Value: "examples/article_summary.yaml",
 			},
 			&cli.StringFlag{
 				Name:  "input-file",
@@ -161,20 +159,29 @@ func workflowRunCommand() *cli.Command {
 				Name:  "input-string",
 				Usage: "Inline raw string for workflows with exactly one top-level string input",
 			},
+			&cli.StringFlag{
+				Name:  "worktree",
+				Usage: "Branch name whose git worktree the run executes in (created on demand)",
+			},
+			&cli.StringFlag{
+				Name:  "base",
+				Usage: "Start point when --worktree creates a new branch (defaults to HEAD)",
+			},
 		},
 		Action: func(c *cli.Context) error {
-			return runWorkflow(
-				c.Context,
-				c.String("slug"),
-				c.String("file"),
-				c.String("input-file"),
-				c.String("input-json"),
-				c.String("input-string"),
-				c.IsSet("input-file"),
-				c.IsSet("input-json"),
-				c.IsSet("input-string"),
-				c.String("shell-root"),
-			)
+			return runWorkflow(c.Context, runWorkflowOptions{
+				Slug:           c.String("slug"),
+				File:           c.String("file"),
+				InputFile:      c.String("input-file"),
+				InputJSON:      c.String("input-json"),
+				InputString:    c.String("input-string"),
+				HasInputFile:   c.IsSet("input-file"),
+				HasInputJSON:   c.IsSet("input-json"),
+				HasInputString: c.IsSet("input-string"),
+				ProjectDir:     c.String("project"),
+				Worktree:       c.String("worktree"),
+				Base:           c.String("base"),
+			})
 		},
 	}
 }
@@ -332,8 +339,8 @@ func workflowRestoreCommand() *cli.Command {
 	}
 }
 
-func runServer(ctx context.Context, shellRoot string) error {
-	stack, err := core.NewStack(ctx, core.StackOptions{ShellRoot: shellRoot})
+func runServer(ctx context.Context, project string) error {
+	stack, err := core.NewStack(ctx, core.StackOptions{ProjectDir: project})
 	if err != nil {
 		return err
 	}
@@ -370,17 +377,17 @@ func runServer(ctx context.Context, shellRoot string) error {
 	return nil
 }
 
-func runMCPServer(ctx context.Context, shellRoot string) error {
+func runMCPServer(ctx context.Context, project string) error {
 	stack, err := core.NewStack(ctx, core.StackOptions{
-		ShellRoot: shellRoot,
-		LogWriter: os.Stderr,
+		ProjectDir: project,
+		LogWriter:  os.Stderr,
 	})
 	if err != nil {
 		return err
 	}
 	defer stack.Controller.DB.Close() // nolint:errcheck // Close errors are not actionable here.
 
-	srv := agcmcp.NewServer(ctx, stack, shellRoot)
+	srv := agcmcp.NewServer(ctx, stack, project)
 
 	return mcpserver.ServeStdio(srv)
 }
@@ -416,6 +423,11 @@ func listWorkflows(ctx context.Context) error {
 }
 
 func compileWorkflow(ctx context.Context, slug string, filePath string) error {
+	err := requireOneSource(strings.TrimSpace(slug), strings.TrimSpace(filePath))
+	if err != nil {
+		return err
+	}
+
 	registry, closeDB, err := newRegistry()
 	if err != nil {
 		return err
@@ -443,6 +455,11 @@ func compileWorkflow(ctx context.Context, slug string, filePath string) error {
 }
 
 func showWorkflow(ctx context.Context, slug string, filePath string) error {
+	err := requireOneSource(strings.TrimSpace(slug), strings.TrimSpace(filePath))
+	if err != nil {
+		return err
+	}
+
 	raw, err := loadWorkflowBytes(ctx, slug, filePath)
 	if err != nil {
 		return err
@@ -625,8 +642,51 @@ func migrationMatches(target string, migration migrate.Migration) bool {
 	return false
 }
 
-func runWorkflow(ctx context.Context, slug string, filePath string, inputFile string, inputJSON string, inputString string, hasInputFile bool, hasInputJSON bool, hasInputString bool, shellRoot string) error {
-	stack, err := core.NewStack(ctx, core.StackOptions{ShellRoot: shellRoot})
+type runWorkflowOptions struct {
+	Slug           string
+	File           string
+	InputFile      string
+	InputJSON      string
+	InputString    string
+	HasInputFile   bool
+	HasInputJSON   bool
+	HasInputString bool
+	ProjectDir     string
+	Worktree       string
+	Base           string
+}
+
+// requireOneSource enforces exactly one of --slug or --file.
+func requireOneSource(slug, file string) error {
+	if slug == "" && file == "" {
+		return ez.New(ez.EINVALID, "one of --slug or --file is required", nil)
+	}
+	if slug != "" && file != "" {
+		return ez.New(ez.EINVALID, "pass only one of --slug or --file", nil)
+	}
+
+	return nil
+}
+
+func runWorkflow(ctx context.Context, opts runWorkflowOptions) error {
+	err := requireOneSource(strings.TrimSpace(opts.Slug), strings.TrimSpace(opts.File))
+	if err != nil {
+		return err
+	}
+
+	// No --project means the run happens where agc was invoked — made
+	// concrete here so the execution records a real directory.
+	project := strings.TrimSpace(opts.ProjectDir)
+	if project == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+
+		project = cwd
+	}
+
+	stack, err := core.NewStack(ctx, core.StackOptions{ProjectDir: project})
 	if err != nil {
 		return err
 	}
@@ -636,14 +696,14 @@ func runWorkflow(ctx context.Context, slug string, filePath string, inputFile st
 	input, err := loadWorkflowInput(
 		ctx,
 		stack.WorkflowAPI.Registry,
-		strings.TrimSpace(slug),
-		strings.TrimSpace(filePath),
-		strings.TrimSpace(inputFile),
-		strings.TrimSpace(inputJSON),
-		inputString,
-		hasInputFile,
-		hasInputJSON,
-		hasInputString,
+		strings.TrimSpace(opts.Slug),
+		strings.TrimSpace(opts.File),
+		strings.TrimSpace(opts.InputFile),
+		strings.TrimSpace(opts.InputJSON),
+		opts.InputString,
+		opts.HasInputFile,
+		opts.HasInputJSON,
+		opts.HasInputString,
 	)
 	if err != nil {
 		return err
@@ -652,10 +712,12 @@ func runWorkflow(ctx context.Context, slug string, filePath string, inputFile st
 	// Run synchronously: a detached run would die when the CLI process
 	// exits, before the workflow finishes.
 	response, err := stack.WorkflowAPI.Executions.Run(ctx, nil, &workflowexecutions.CreateRequest{
-		WorkflowSlug: strings.TrimSpace(slug),
-		File:         strings.TrimSpace(filePath),
+		WorkflowSlug: strings.TrimSpace(opts.Slug),
+		File:         strings.TrimSpace(opts.File),
 		Input:        input,
-		ShellRoot:    strings.TrimSpace(shellRoot),
+		ProjectDir:   project,
+		Worktree:     strings.TrimSpace(opts.Worktree),
+		Base:         strings.TrimSpace(opts.Base),
 	})
 	if err != nil {
 		return err

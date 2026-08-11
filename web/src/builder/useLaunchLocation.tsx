@@ -67,32 +67,36 @@ export function readStoredProjects(): Project[] {
  */
 export function useLaunchLocation(disabled = false) {
   const [projects, setProjects] = useState<Project[]>(readStoredProjects);
-  const [shellRoot, setShellRoot] = useState(
-    () => localStorage.getItem("agc.shellRoot") || "",
+  const [project, setProject] = useState(
+    () =>
+      localStorage.getItem("agc.project") ||
+      // Migrate the pre-rename selection.
+      localStorage.getItem("agc.shellRoot") ||
+      "",
   );
-  const [defaultShellRoot, setDefaultShellRoot] = useState("");
+  const [defaultProject, setDefaultProject] = useState("");
   const [worktree, setWorktreeState] = useState("");
 
   useEffect(() => {
     let active = true;
     fetchConfig()
       .then((config) => {
-        if (!active || !config.shell_root) {
+        if (!active || !config.project_dir) {
           return;
         }
-        setDefaultShellRoot(config.shell_root);
+        setDefaultProject(config.project_dir);
         setProjects((current) =>
-          current.some((project) => project.path === config.shell_root)
+          current.some((item) => item.path === config.project_dir)
             ? current
             : [
                 {
-                  name: projectBaseName(config.shell_root),
-                  path: config.shell_root,
+                  name: projectBaseName(config.project_dir),
+                  path: config.project_dir,
                 },
                 ...current,
               ],
         );
-        setShellRoot((current) => current || config.shell_root);
+        setProject((current) => current || config.project_dir);
       })
       .catch(() => undefined);
     return () => {
@@ -103,13 +107,13 @@ export function useLaunchLocation(disabled = false) {
   useEffect(() => {
     try {
       localStorage.setItem("agc.projects", JSON.stringify(projects));
-      localStorage.setItem("agc.shellRoot", shellRoot);
+      localStorage.setItem("agc.project", project);
     } catch {
       // Storage can be disabled without preventing workflow execution.
     }
-  }, [projects, shellRoot]);
+  }, [projects, project]);
 
-  const projectPath = shellRoot || defaultShellRoot;
+  const projectPath = project || defaultProject;
 
   // The chosen workspace is sticky per project: reopening the modal
   // must not silently fall back to the repository root.
@@ -142,21 +146,21 @@ export function useLaunchLocation(disabled = false) {
         <ProjectPicker
           projects={projects}
           selectedPath={projectPath}
-          defaultRoot={defaultShellRoot}
-          onSelect={setShellRoot}
-          onAdd={(project) =>
+          defaultRoot={defaultProject}
+          onSelect={setProject}
+          onAdd={(added) =>
             setProjects((current) =>
-              current.some((item) => item.path === project.path)
+              current.some((item) => item.path === added.path)
                 ? current
-                : [...current, project],
+                : [...current, added],
             )
           }
           onRemove={(path) => {
             setProjects((current) =>
               current.filter((item) => item.path !== path),
             );
-            if (shellRoot === path) {
-              setShellRoot(defaultShellRoot);
+            if (project === path) {
+              setProject(defaultProject);
             }
           }}
           disabled={disabled}
@@ -173,5 +177,5 @@ export function useLaunchLocation(disabled = false) {
     </>
   );
 
-  return { shellRoot, worktree, locationSlot };
+  return { project, worktree, locationSlot };
 }

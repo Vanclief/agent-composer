@@ -13,7 +13,7 @@ import (
 )
 
 type ExecutionRecorder interface {
-	StartWorkflow(ctx context.Context, snapshot *Snapshot, input map[string]any, shellRoot string) (WorkflowExecutionHandle, error)
+	StartWorkflow(ctx context.Context, snapshot *Snapshot, input map[string]any, project string) (WorkflowExecutionHandle, error)
 	FinishWorkflow(ctx context.Context, handle WorkflowExecutionHandle, output map[string]any, status executionmodels.WorkflowExecutionStatus) error
 	StartNode(ctx context.Context, workflow WorkflowExecutionHandle, node NodeSnapshot, input map[string]any, scope NodeExecutionScope) (NodeExecutionHandle, error)
 	FinishNode(ctx context.Context, handle NodeExecutionHandle, output map[string]any, status executionmodels.NodeExecutionStatus, trace map[string]any) error
@@ -47,7 +47,7 @@ func NewDBRecorder(db bun.IDB) *DBRecorder {
 	return &DBRecorder{db: db}
 }
 
-func (r *DBRecorder) StartWorkflow(ctx context.Context, snapshot *Snapshot, input map[string]any, shellRoot string) (WorkflowExecutionHandle, error) {
+func (r *DBRecorder) StartWorkflow(ctx context.Context, snapshot *Snapshot, input map[string]any, project string) (WorkflowExecutionHandle, error) {
 	if snapshot == nil {
 		return WorkflowExecutionHandle{}, ez.New(ez.EINVALID, "workflow snapshot is nil", nil)
 	}
@@ -65,7 +65,7 @@ func (r *DBRecorder) StartWorkflow(ctx context.Context, snapshot *Snapshot, inpu
 		WorkflowSnapshot: snapshotJSON,
 		InputSnapshot:    cloneMap(input),
 		Status:           executionmodels.WorkflowExecutionStatusRunning,
-		ShellRoot:        shellRoot,
+		ProjectDir:       project,
 		StartedAt:        &now,
 		CreatedAt:        now,
 	}

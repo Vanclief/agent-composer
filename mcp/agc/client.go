@@ -17,8 +17,8 @@ func NewClient(ctx context.Context, defaultShellRoot string) (*client.Client, er
 	}
 
 	stack, err := core.NewStack(ctx, core.StackOptions{
-		ShellRoot: defaultShellRoot,
-		LogWriter: io.Discard,
+		ProjectDir: defaultShellRoot,
+		LogWriter:  io.Discard,
 	})
 	if err != nil {
 		return nil, ez.Wrap(err)

@@ -13,12 +13,12 @@ import (
 )
 
 type recordedWorkflowExecution struct {
-	handle    WorkflowExecutionHandle
-	snapshot  *Snapshot
-	input     map[string]any
-	output    map[string]any
-	shellRoot string
-	status    executionmodels.WorkflowExecutionStatus
+	handle   WorkflowExecutionHandle
+	snapshot *Snapshot
+	input    map[string]any
+	output   map[string]any
+	project  string
+	status   executionmodels.WorkflowExecutionStatus
 }
 
 type recordedNodeExecution struct {
@@ -57,7 +57,7 @@ func newRecordingRecorder() *recordingRecorder {
 	}
 }
 
-func (r *recordingRecorder) StartWorkflow(ctx context.Context, snapshot *Snapshot, input map[string]any, shellRoot string) (WorkflowExecutionHandle, error) {
+func (r *recordingRecorder) StartWorkflow(ctx context.Context, snapshot *Snapshot, input map[string]any, project string) (WorkflowExecutionHandle, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -65,11 +65,11 @@ func (r *recordingRecorder) StartWorkflow(ctx context.Context, snapshot *Snapsho
 	index := len(r.workflows)
 	r.workflowIndexByID[handle.ID] = index
 	r.workflows = append(r.workflows, recordedWorkflowExecution{
-		handle:    handle,
-		snapshot:  snapshot,
-		input:     cloneMap(input),
-		shellRoot: shellRoot,
-		status:    executionmodels.WorkflowExecutionStatusRunning,
+		handle:   handle,
+		snapshot: snapshot,
+		input:    cloneMap(input),
+		project:  project,
+		status:   executionmodels.WorkflowExecutionStatusRunning,
 	})
 	return handle, nil
 }
@@ -187,8 +187,8 @@ func TestRunPersistsWorkflowNodeAndConversationRecords(t *testing.T) {
 	if workflowRecord.status != executionmodels.WorkflowExecutionStatusSucceeded {
 		t.Fatalf("unexpected workflow status: %q", workflowRecord.status)
 	}
-	if workflowRecord.shellRoot != "/tmp/workflow-shell" {
-		t.Fatalf("unexpected workflow shell root: %q", workflowRecord.shellRoot)
+	if workflowRecord.project != "/tmp/workflow-shell" {
+		t.Fatalf("unexpected workflow shell root: %q", workflowRecord.project)
 	}
 	if workflowRecord.output["final_summary"] == nil {
 		t.Fatalf("missing persisted workflow output: %#v", workflowRecord.output)
@@ -223,8 +223,8 @@ func TestRunPersistsWorkflowNodeAndConversationRecords(t *testing.T) {
 		if record.conversation.Status != agent.ConversationStatusSucceeded {
 			t.Fatalf("unexpected conversation status: %q", record.conversation.Status)
 		}
-		if record.conversation.ShellRoot != "/tmp/workflow-shell" {
-			t.Fatalf("unexpected conversation shell root: %q", record.conversation.ShellRoot)
+		if record.conversation.ProjectDir != "/tmp/workflow-shell" {
+			t.Fatalf("unexpected conversation shell root: %q", record.conversation.ProjectDir)
 		}
 		if len(record.conversation.Messages) != 3 {
 			t.Fatalf("unexpected conversation message count: %d", len(record.conversation.Messages))

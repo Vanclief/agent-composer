@@ -62,7 +62,7 @@ func (c *PiCLI) Run(ctx context.Context, conversation *agent.Conversation, promp
 		return nil, ez.Wrap(err)
 	}
 
-	workdir := strings.TrimSpace(conversation.ShellRoot)
+	workdir := strings.TrimSpace(conversation.ProjectDir)
 	if workdir == "" {
 		workdir = "."
 	}

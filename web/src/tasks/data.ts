@@ -201,13 +201,13 @@ export function rerunFromNode(
 export function startTask(
   workflowId: string,
   input: JsonObject,
-  shellRoot?: string,
+  projectDir?: string,
   worktree?: string,
 ): Promise<WorkflowExecutionCreateResponse> {
   return createWorkflowExecution({
     workflow_slug: workflowId,
     input,
-    shell_root: shellRoot?.trim() || undefined,
+    project_dir: projectDir?.trim() || undefined,
     worktree: worktree?.trim() || undefined,
   });
 }

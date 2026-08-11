@@ -97,7 +97,7 @@ export function BuilderPage() {
       return !open;
     });
   }
-  const { shellRoot, worktree, locationSlot } =
+  const { project, worktree, locationSlot } =
     useLaunchLocation(starting);
 
   const loadWorkflows = useCallback(async (signal?: AbortSignal) => {
@@ -266,7 +266,7 @@ export function BuilderPage() {
       const response = await startTask(
         activeWorkflow.slug,
         input,
-        shellRoot,
+        project,
         worktree,
       );
       setShowRun(false);

@@ -7,7 +7,7 @@ export interface CursorPage {
 }
 
 export interface AppConfig {
-  shell_root: string;
+  project_dir: string;
 }
 
 /** Persisted app settings (settings.json on the server). */
@@ -155,7 +155,7 @@ export interface WorkflowExecution {
   input_snapshot?: JsonObject;
   output_snapshot?: JsonObject;
   status: WorkflowExecutionStatus;
-  shell_root?: string;
+  project_dir?: string;
   started_at?: string;
   finished_at?: string;
   metadata?: JsonObject;
@@ -168,7 +168,7 @@ export interface WorkflowExecutionListResponse extends CursorPage {
 
 interface WorkflowExecutionCreateOptions {
   input: JsonObject;
-  shell_root?: string;
+  project_dir?: string;
   /** Branch name — the run executes in that branch's worktree. */
   worktree?: string;
   /** Start point when the worktree branch is new (default HEAD). */
@@ -243,7 +243,7 @@ export type WorkflowExecutionCreateRequest =
       resume_from_node: string;
       use_current_spec?: boolean;
       input?: JsonObject;
-      shell_root?: string;
+      project_dir?: string;
       worktree?: string;
       base?: string;
       workflow_slug?: never;

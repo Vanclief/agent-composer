@@ -16,9 +16,9 @@ type CreateRequest struct {
 	WorkflowSlug string         `json:"workflow_slug,omitempty"`
 	File         string         `json:"file,omitempty"`
 	Input        map[string]any `json:"input"`
-	ShellRoot    string         `json:"shell_root,omitempty"`
+	ProjectDir   string         `json:"project_dir,omitempty"`
 	// Worktree is a branch name; the run executes in that branch's
-	// worktree of the ShellRoot repository (created on demand).
+	// worktree of the ProjectDir repository (created on demand).
 	Worktree string `json:"worktree,omitempty"`
 	// Base is the start point when Worktree creates a new branch.
 	Base string `json:"base,omitempty"`
@@ -200,9 +200,9 @@ func (api *API) prepareExecution(ctx context.Context, request *CreateRequest) (*
 		return nil, ez.Wrap(err)
 	}
 
-	shellRoot := strings.TrimSpace(request.ShellRoot)
-	if shellRoot == "" && api.rt != nil {
-		shellRoot = api.rt.ShellRoot()
+	project := strings.TrimSpace(request.ProjectDir)
+	if project == "" && api.rt != nil {
+		project = api.rt.ProjectDir()
 	}
 
 	if branch := strings.TrimSpace(request.Worktree); branch != "" {
@@ -210,22 +210,22 @@ func (api *API) prepareExecution(ctx context.Context, request *CreateRequest) (*
 			return nil, ez.New(ez.EINTERNAL, "Worktree manager is unavailable", nil)
 		}
 
-		repo, isGit, err := api.worktrees.RepoRoot(ctx, shellRoot)
+		repo, isGit, err := api.worktrees.RepoRoot(ctx, project)
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}
 		if !isGit {
-			return nil, ez.New(ez.EINVALID, shellRoot+" is not a git repository", nil)
+			return nil, ez.New(ez.EINVALID, project+" is not a git repository", nil)
 		}
 
 		path, _, err := api.worktrees.Resolve(ctx, repo, branch, request.Base)
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}
-		shellRoot = path
+		project = path
 	}
 
-	executor := workflowruntime.NewExecutor(shellRoot)
+	executor := workflowruntime.NewExecutor(project)
 	if api.newRecorder != nil {
 		executor.Recorder = api.newRecorder()
 	}

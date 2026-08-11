@@ -27,8 +27,8 @@ type Stack struct {
 }
 
 type StackOptions struct {
-	ShellRoot string
-	LogWriter io.Writer
+	ProjectDir string
+	LogWriter  io.Writer
 }
 
 // New builds the application stack (controller, scheduler, runtime, APIs).
@@ -49,7 +49,7 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		return nil, err
 	}
 
-	rt, err := runtime.New(rootCtx, ctrl, sch, runtime.Options{ShellRoot: opts.ShellRoot})
+	rt, err := runtime.New(rootCtx, ctrl, sch, runtime.Options{ProjectDir: opts.ProjectDir})
 	if err != nil {
 		return nil, err
 	}

@@ -16,7 +16,7 @@ type Runtime struct {
 	rootCtx   context.Context
 	db        *relational.DB
 	scheduler *scheduler.Scheduler
-	shellRoot string
+	project   string
 }
 
 type hookSub struct {
@@ -25,7 +25,7 @@ type hookSub struct {
 }
 
 type Options struct {
-	ShellRoot string
+	ProjectDir string
 }
 
 func New(rootCtx context.Context, ctrl *controller.Controller, sch *scheduler.Scheduler, opts Options) (*Runtime, error) {
@@ -37,7 +37,7 @@ func New(rootCtx context.Context, ctrl *controller.Controller, sch *scheduler.Sc
 		rootCtx:   rootCtx,
 		db:        ctrl.DB,
 		scheduler: sch,
-		shellRoot: strings.TrimSpace(opts.ShellRoot),
+		project:   strings.TrimSpace(opts.ProjectDir),
 	}
 
 	return rt, nil
@@ -57,10 +57,10 @@ func (rt *Runtime) ValidateHarness(ctx context.Context, kind agent.Harness, mode
 	return nil
 }
 
-func (rt *Runtime) ShellRoot() string {
+func (rt *Runtime) ProjectDir() string {
 	if rt == nil {
 		return ""
 	}
 
-	return rt.shellRoot
+	return rt.project
 }

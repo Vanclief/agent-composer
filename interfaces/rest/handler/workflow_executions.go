@@ -31,7 +31,7 @@ func (h *Handler) ListWorkflowExecutions(c echo.Context) error {
 
 func (h *Handler) GetConfig(c echo.Context) error {
 	return c.JSON(200, map[string]string{
-		"shell_root": h.server.WorkflowAPI.DefaultShellRoot(),
+		"project": h.server.WorkflowAPI.DefaultProjectDir(),
 	})
 }
 

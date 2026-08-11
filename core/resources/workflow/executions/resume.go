@@ -98,43 +98,43 @@ func (api *API) prepareResume(ctx context.Context, request *CreateRequest) (*pre
 		input = source.InputSnapshot
 	}
 
-	shellRoot := strings.TrimSpace(request.ShellRoot)
-	if shellRoot == "" {
-		shellRoot = source.ShellRoot
+	project := strings.TrimSpace(request.ProjectDir)
+	if project == "" {
+		project = source.ProjectDir
 	}
-	if shellRoot == "" && api.rt != nil {
-		shellRoot = api.rt.ShellRoot()
+	if project == "" && api.rt != nil {
+		project = api.rt.ProjectDir()
 	}
 
 	if branch := strings.TrimSpace(request.Worktree); branch != "" {
 		if api.worktrees == nil {
 			return nil, ez.New(ez.EINTERNAL, "Worktree manager is unavailable", nil)
 		}
-		repo, isGit, err := api.worktrees.RepoRoot(ctx, shellRoot)
+		repo, isGit, err := api.worktrees.RepoRoot(ctx, project)
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}
 		if !isGit {
-			return nil, ez.New(ez.EINVALID, shellRoot+" is not a git repository", nil)
+			return nil, ez.New(ez.EINVALID, project+" is not a git repository", nil)
 		}
 		path, _, err := api.worktrees.Resolve(ctx, repo, branch, request.Base)
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}
-		shellRoot = path
+		project = path
 	}
 
 	// The source may have run in a worktree that was deleted since.
-	info, statErr := os.Stat(shellRoot)
+	info, statErr := os.Stat(project)
 	if statErr != nil || !info.IsDir() {
 		return nil, ez.New(
 			ez.EINVALID,
-			"The original run's directory "+shellRoot+" no longer exists (its workspace may have been deleted). Launch the workflow again with a project/workspace, or recreate the workspace first.",
+			"The original run's directory "+project+" no longer exists (its workspace may have been deleted). Launch the workflow again with a project/workspace, or recreate the workspace first.",
 			statErr,
 		)
 	}
 
-	executor := workflowruntime.NewExecutor(shellRoot)
+	executor := workflowruntime.NewExecutor(project)
 	if api.newRecorder != nil {
 		executor.Recorder = api.newRecorder()
 	}

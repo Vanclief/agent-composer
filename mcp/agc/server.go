@@ -19,10 +19,10 @@ const (
 )
 
 type workflowStartArgs struct {
-	Slug      string         `json:"slug" jsonschema_description:"Workflow slug from the installed AGC registry"`
-	File      string         `json:"file" jsonschema_description:"Path to a workflow spec YAML file on disk"`
-	Input     map[string]any `json:"input" jsonschema:"required" jsonschema_description:"Workflow input object keyed by workflow input name"`
-	ShellRoot string         `json:"shell_root" jsonschema_description:"Optional shell root passed through to the workflow executor"`
+	Slug       string         `json:"slug" jsonschema_description:"Workflow slug from the installed AGC registry"`
+	File       string         `json:"file" jsonschema_description:"Path to a workflow spec YAML file on disk"`
+	Input      map[string]any `json:"input" jsonschema:"required" jsonschema_description:"Workflow input object keyed by workflow input name"`
+	ProjectDir string         `json:"project_dir" jsonschema_description:"Optional shell root passed through to the workflow executor"`
 }
 
 type workflowGetArgs struct {
@@ -89,16 +89,16 @@ func NewServer(rootCtx context.Context, stack *core.Stack, defaultShellRoot stri
 		_ mcpproto.CallToolRequest,
 		args workflowStartArgs,
 	) (WorkflowStartResult, error) {
-		shellRoot := args.ShellRoot
-		if shellRoot == "" {
-			shellRoot = defaultShellRoot
+		project := args.ProjectDir
+		if project == "" {
+			project = defaultShellRoot
 		}
 
 		response, err := stack.WorkflowAPI.Executions.Create(rootCtx, nil, &workflowexecutions.CreateRequest{
 			WorkflowSlug: args.Slug,
 			File:         args.File,
 			Input:        args.Input,
-			ShellRoot:    shellRoot,
+			ProjectDir:   project,
 		})
 		if err != nil {
 			return WorkflowStartResult{}, ez.Wrap(err)

@@ -36,7 +36,7 @@ func (e *Executor) Start(ctx context.Context, snapshot *Snapshot, input map[stri
 		return nil, ez.New(ez.EINTERNAL, "execution recorder is nil", nil)
 	}
 
-	handle, err := e.Recorder.StartWorkflow(ctx, snapshot, input, e.ShellRoot)
+	handle, err := e.Recorder.StartWorkflow(ctx, snapshot, input, e.ProjectDir)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -57,7 +57,7 @@ func (e *Executor) RunWithHandle(ctx context.Context, snapshot *Snapshot, input 
 
 	var workflowHandle *WorkflowExecutionHandle
 	if e.Recorder != nil {
-		handle, err := e.Recorder.StartWorkflow(ctx, snapshot, input, e.ShellRoot)
+		handle, err := e.Recorder.StartWorkflow(ctx, snapshot, input, e.ProjectDir)
 		if err != nil {
 			return nil, nil, ez.Wrap(err)
 		}
@@ -374,7 +374,7 @@ func (e *Executor) runStructuredNode(ctx context.Context, agentName string, inst
 		Instructions:           instruction,
 		Status:                 agent.ConversationStatusRunning,
 		CreatedAt:              time.Now().UTC(),
-		ShellRoot:              e.ShellRoot,
+		ProjectDir:             e.ProjectDir,
 		CompactAtPercent:       90,
 		StructuredOutput:       true,
 		StructuredOutputSchema: copyRawJSON(outputSchemaRaw),

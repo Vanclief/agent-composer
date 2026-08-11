@@ -61,7 +61,7 @@ type stubRecorder struct {
 	workflowStatuses  chan executionmodels.WorkflowExecutionStatus
 }
 
-func (r *stubRecorder) StartWorkflow(ctx context.Context, snapshot *workflowruntime.Snapshot, input map[string]any, shellRoot string) (workflowruntime.WorkflowExecutionHandle, error) {
+func (r *stubRecorder) StartWorkflow(ctx context.Context, snapshot *workflowruntime.Snapshot, input map[string]any, project string) (workflowruntime.WorkflowExecutionHandle, error) {
 	r.startedWorkflows++
 	return workflowruntime.WorkflowExecutionHandle{ID: uuid.New()}, nil
 }

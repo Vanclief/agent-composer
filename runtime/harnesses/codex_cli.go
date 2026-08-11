@@ -102,7 +102,7 @@ func (c *CodexCLI) Run(ctx context.Context, conversation *agent.Conversation, pr
 		defer os.Remove(schemaPath)
 	}
 
-	workdir := strings.TrimSpace(conversation.ShellRoot)
+	workdir := strings.TrimSpace(conversation.ProjectDir)
 	if workdir == "" {
 		workdir = "."
 	}
