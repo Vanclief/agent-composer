@@ -22,6 +22,8 @@ Workflows that use a coding-agent harness need that harness installed and authen
 curl -fsSL https://raw.githubusercontent.com/vanclief/agent-composer/master/install.sh | bash
 ```
 
+The installer downloads the latest [release](https://github.com/vanclief/agent-composer/releases/latest) binary for your platform (macOS/Linux, amd64/arm64).
+
 **Step 2: Reload your shell or open a new terminal**
 
 The installer adds `~/.agent_composer/bin` to your PATH.
@@ -156,7 +158,11 @@ A `postgres` section with a host or database set selects PostgreSQL; without one
 
 ## Updating
 
-Re-run the install command from Installation.
+Re-run the install command from Installation — it always fetches the latest release. Check what you have with `agc --version`.
+
+## Releasing
+
+Maintainers cut releases from the Actions tab: run the **Release** workflow on `master` and pick `patch`, `minor`, or `major`. It runs the test suite, builds binaries for all platforms, tags the next semver version, and publishes a GitHub release that the installer picks up automatically.
 
 ## Troubleshooting
 

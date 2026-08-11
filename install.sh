@@ -16,7 +16,9 @@ echo "Installing Agent Composer..."
 
 INSTALLATION_DIR="${HOME}/.agent_composer/bin"
 INSTALLED_BIN_DIR="${INSTALLATION_DIR}/agc"
-SERVER="https://raw.githubusercontent.com/vanclief/agent-composer/master/bin"
+# Binaries are published by the Release workflow; "latest" always points
+# at the newest release.
+SERVER="https://github.com/vanclief/agent-composer/releases/latest/download"
 
 # Step 1: Check for curl
 command -v curl >/dev/null 2>&1 || {
@@ -26,11 +28,20 @@ command -v curl >/dev/null 2>&1 || {
 
 # Step 2: Pick binary by OS/arch
 case "$(uname -s)" in
-Linux) FILENAME="linux/agc" ;;
+Linux)
+    case "$(uname -m)" in
+    x86_64 | amd64) FILENAME="agc-linux-amd64" ;;
+    aarch64 | arm64) FILENAME="agc-linux-arm64" ;;
+    *)
+        echo "Unsupported Linux arch: $(uname -m)"
+        exit 1
+        ;;
+    esac
+    ;;
 Darwin)
     case "$(uname -m)" in
-    x86_64) FILENAME="darwin/agc-amd64" ;;
-    arm64) FILENAME="darwin/agc" ;;
+    x86_64) FILENAME="agc-darwin-amd64" ;;
+    arm64) FILENAME="agc-darwin-arm64" ;;
     *)
         echo "Unsupported macOS arch: $(uname -m)"
         exit 1

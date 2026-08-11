@@ -30,7 +30,9 @@ import (
 	"github.com/vanclief/ez"
 )
 
-const version = "0.3.0"
+// version is overridden at release time via
+// -ldflags "-X github.com/vanclief/agent-composer/interfaces/cli.version=vX.Y.Z"
+var version = "dev"
 
 type compileResult struct {
 	Slug        string            `json:"slug"`
