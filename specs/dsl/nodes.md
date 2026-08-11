@@ -298,13 +298,13 @@ Authoring shape:
 nodes:
   <node_name>:
     kind: workflow
-    workflow_id: string
+    workflow_slug: string
 ```
 
 Rules:
 
-- workflow nodes must declare `workflow_id`
-- `workflow_id` references another workflow by its `workflow.id`
+- workflow nodes must declare `workflow_slug`
+- `workflow_slug` references another workflow by its `workflow.slug`
 - workflow nodes infer their input ports from the referenced workflow inputs
 - workflow nodes infer their output ports from the referenced workflow outputs
 - workflow nodes must not declare `inputs`, `outputs`, `config`, `operation`, `executes`, `over`, `updates`, `breaks_on`, `routes_on`, `when_true`, `when_false`, `parallelism`, `preserve_order`, or `max_iterations`
@@ -319,5 +319,5 @@ Example:
 ```yaml
 article_summary_pipeline:
   kind: workflow
-  workflow_id: article_summary
+  workflow_slug: article_summary
 ```

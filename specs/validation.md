@@ -4,7 +4,7 @@ A valid workflow snapshot must satisfy all of the following.
 
 ## 5.1 Identity Rules
 
-- `workflow_id` must be present
+- `workflow_slug` must be present
 - `workflow_version` must be present
 - every `node_id` must be unique within the workflow snapshot
 - port names must be unique within the scope of a single node snapshot or workflow boundary object

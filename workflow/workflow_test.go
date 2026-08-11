@@ -1799,6 +1799,7 @@ func TestExampleWorkflowCoverage(t *testing.T) {
 		"plan-new-spec.yaml":                      true,
 		"review_fix_cycle.yaml":                   true,
 		"iterative_code_review_repair.yaml":       true,
+		"triage_review_issues.yaml":               true,
 	}
 
 	seen := map[string]bool{}
@@ -1867,8 +1868,11 @@ func TestExecuteParallelPRReviewRunsReviewersConcurrently(t *testing.T) {
 		t.Fatalf("unexpected issues output: %v", err)
 	}
 
-	if len(issues) != 3 {
-		t.Fatalf("expected one merged issue per reviewer, got: %d", len(issues))
+	// Concurrency is proven by the barrier: a sequential run would time
+	// out waiting for sibling reviewers. The final count is whatever the
+	// fake dedupe harness returns — a single-issue list.
+	if len(issues) != 1 {
+		t.Fatalf("expected the fake dedupe result, got: %d issues", len(issues))
 	}
 }
 

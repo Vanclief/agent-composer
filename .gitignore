@@ -39,3 +39,6 @@ go.work.sum
 
 # Web dependencies (the production build in web/dist is committed)
 web/node_modules/
+
+# Local build outputs (dev-install.sh)
+bin/

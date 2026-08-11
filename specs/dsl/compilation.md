@@ -9,8 +9,8 @@ Provider-specific request wrappers are applied only after those compilation step
 
 ## Compilation Pipeline
 
-1. Parse the workflow blueprint.
-2. Resolve any `workflow_id` references used by workflow nodes.
+1. Parse the workflow spec.
+2. Resolve any `workflow_slug` references used by workflow nodes.
 3. Validate authored `schemas`, node ports, flow instances, and bindings.
 4. Resolve port type references from built-in primitives, named entries under `schemas`, and referenced workflow boundaries.
 5. Resolve `schema_ref` within `schemas`.
@@ -45,10 +45,10 @@ If a port references a named schema, the compiler resolves that name before emit
 
 Ordinary workflow composition is compile-time only.
 
-A workflow node references another workflow by `workflow_id`. The compiler should:
+A workflow node references another workflow by `workflow_slug`. The compiler should:
 
-1. load the child workflow blueprint
-   Runtime loading should read from the workflow directory only. Starter workflows may be copied there during setup, but they are not a separate registry tier at execution time.
+1. load the child workflow spec
+   Child workflows resolve from the registry database first, then from YAML files next to the parent spec's source file when the parent was loaded from disk.
 2. validate the child workflow as a normal workflow
 3. infer the workflow node input and output ports from the child workflow boundary
 4. namespace the child node ids under the parent instance id

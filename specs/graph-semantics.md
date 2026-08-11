@@ -13,7 +13,7 @@ This allows one workflow to be connected to another workflow at system level thr
 
 ## 3.2 Authoring-Time Wiring
 
-Connections are authored declaratively in the workflow blueprint.
+Connections are authored declaratively in the workflow spec.
 
 That means:
 
@@ -29,11 +29,11 @@ Named ports are required where multiple inbound or outbound paths must be distin
 
 ## 3.3 Compiled Graph
 
-Before execution, the workflow blueprint is normalized into a workflow snapshot.
+Before execution, the workflow spec is normalized into a workflow snapshot.
 
 Compilation must:
 
-- resolve blueprint references
+- resolve spec references
 - resolve effective port shapes
 - normalize all authored connections into explicit edges
 - validate single-producer and acyclicity rules

@@ -1,6 +1,6 @@
 # Entity Model
 
-The workflow blueprint is specified under [dsl/workflow-document.md](dsl/workflow-document.md). The shapes below describe the compiled and persisted execution model derived from that blueprint.
+The workflow spec is specified under [dsl/workflow-document.md](dsl/workflow-document.md). The shapes below describe the compiled and persisted execution model derived from that spec.
 
 Shared supporting types used below:
 
@@ -36,36 +36,47 @@ const (
 
 `ConversationStatus` and `TokenUsage` are intentionally reused from the existing codebase. This spec does not redefine them.
 
-## 2.2 WorkflowBlueprint
+## 2.2 Workflow and WorkflowSpec
 
-A WorkflowBlueprint is the YAML definition of a reusable workflow stored on disk.
-
-The logical workflow is identified by `workflow.id`. The DSL defines the exact file shape. The blueprint is the source input to compilation, not a DB-backed resource.
+A workflow is a first-class registry row in the database. Its YAML definition — the spec — is stored on that row and versioned there.
 
 Fields:
 
 ```go
-type WorkflowBlueprint struct {
+type Workflow struct {
+    ID uuid.UUID      // permanent identity
+    Slug string       // human-facing handle, renameable
+    Version int       // current head version
+    Spec string       // current spec YAML
+    Draft string      // proposed spec awaiting save, "" when none
+}
+
+type WorkflowVersion struct {
+    ID uuid.UUID
+    WorkflowID uuid.UUID
+    Version int
+    Spec string
+}
+
+type WorkflowSpec struct {
     Workflow WorkflowHeader
     Schemas map[string]SchemaSpec
-    Nodes map[string]NodeBlueprint
-    Flow FlowBlueprint
+    Nodes map[string]NodeSpec
+    Flow FlowSpec
 }
 ```
 
 Notes:
 
-- `WorkflowHeader`, `SchemaSpec`, `NodeBlueprint`, and `FlowBlueprint` are authored DSL types reused from the DSL spec
+- `WorkflowHeader`, `SchemaSpec`, `NodeSpec`, and `FlowSpec` are authored DSL types reused from the DSL spec
 - this document defines the compiled and persisted model and does not redefine the full authored DSL surface
-- a workflow blueprint is file-backed
-- runtime loading reads workflow blueprints from the workflow directory on disk
-- starter workflows may be copied into that directory during setup, but runtime does not read from a second built-in registry
-- the DB does not store workflow blueprints as first-class rows
-- a workflow execution records the blueprint identity, version, and workflow snapshot that actually ran
+- the registry is the database: every install, edit, or rename of a workflow bumps its integer version and records the full spec in `WorkflowVersion` — history is append-only and survives deletes
+- a spec can also be run directly from a YAML file on disk without installing it; such runs record no registry row, only the execution
+- a workflow execution records the workflow identity (slug and permanent id), version, and the workflow snapshot that actually ran
 
 ## 2.3 WorkflowSnapshot
 
-A WorkflowSnapshot is the compiled execution snapshot derived from one workflow blueprint.
+A WorkflowSnapshot is the compiled execution snapshot derived from one workflow spec.
 
 It is the normalized graph and execution metadata that the runtime actually uses. It may exist only in memory during compilation, but each `WorkflowExecution` must embed a frozen copy of it.
 
@@ -73,6 +84,7 @@ Fields:
 
 ```go
 type WorkflowSnapshot struct {
+    WorkflowSlug string
     WorkflowID string
     WorkflowVersion string
     Description string
@@ -86,10 +98,10 @@ type WorkflowSnapshot struct {
 
 Notes:
 
-- `workflow_id` is the `workflow.id`
+- `workflow_slug` is the `workflow.slug`, `workflow_id` is the workflow's permanent identity
 - `workflow_version` is the `workflow.version`
 - a workflow snapshot is embedded into `WorkflowExecution`
-- it is not a standalone DB-backed blueprint resource
+- it is not a standalone DB-backed spec resource
 - ordinary workflow composition is flattened into the parent graph before the snapshot is finalized
 - loop and conditional nodes remain in the snapshot because they own runtime-dependent nested execution
 
@@ -273,20 +285,21 @@ Rules:
 
 ## 2.7 WorkflowExecution
 
-A WorkflowExecution is one execution of one workflow blueprint.
+A WorkflowExecution is one execution of one workflow spec.
 
 Fields:
 
 ```go
 type WorkflowExecution struct {
     ID string
-    WorkflowID string
+    WorkflowSlug string
+    WorkflowID uuid.UUID
     WorkflowVersion string
     WorkflowSnapshot WorkflowSnapshot
     InputSnapshot SnapshotValueMap
     OutputSnapshot SnapshotValueMap
     Status WorkflowExecutionStatus
-    ShellRoot string
+    ProjectDir string
     StartedAt *time.Time
     FinishedAt *time.Time
     Metadata ExecutionMetadata
@@ -296,10 +309,10 @@ type WorkflowExecution struct {
 
 Required behavior:
 
-- The execution must reference the source workflow blueprint identity and version.
+- The execution must reference the source workflow spec identity and version.
 - The execution must embed a frozen copy of the workflow snapshot that actually ran.
 - The execution stores workflow-level input and output snapshots.
-- The execution owns the workflow-level shell root used by inference nodes in that run.
+- The execution owns the workflow-level project dir used by inference nodes in that run.
 - The execution stores aggregate status and timings.
 - The execution is linked to per-node execution records by `workflow_execution_id`.
 
@@ -395,6 +408,6 @@ Minimum expectation:
 - it captures the input and output seen by the harness
 - it captures the message history or equivalent trace payload used by the harness
 - it may also capture provider session references, raw harness output, and token usage for debugging and cost analysis
-- it inherits execution context such as shell root from the owning workflow execution rather than storing that context itself
+- it inherits execution context such as project dir from the owning workflow execution rather than storing that context itself
 
 This keeps the current harness logging model intact without forcing DAG-level decisions to depend on inference specifics.

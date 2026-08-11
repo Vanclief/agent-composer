@@ -30,17 +30,17 @@ At minimum, terminal status values should include:
 
 ## 4.3 Resolved Workflow Data
 
-At execution start, the workflow engine must reference a specific workflow blueprint identity and version, and embed the workflow snapshot into the `WorkflowExecution`.
+At execution start, the workflow engine must reference a specific workflow spec identity and version, and embed the workflow snapshot into the `WorkflowExecution`.
 
 That embedded workflow snapshot should include at least:
 
-- workflow blueprint identity and version
+- workflow spec identity and version
 - node snapshots
 - resolved port definitions
 - compiled edges
 - resolved static configuration
 
-This makes the execution auditable even if blueprint drafts later change.
+This makes the execution auditable even if spec drafts later change.
 
 ## 4.4 Traceability Requirements
 
@@ -48,10 +48,10 @@ For every workflow execution, the system must record:
 
 - workflow input snapshot
 - workflow output snapshot
-- workflow shell root
+- workflow project dir
 - workflow status and timings
 - node execution records
-- the exact workflow blueprint identity, version, and workflow snapshot that were executed
+- the exact workflow spec identity, version, and workflow snapshot that were executed
 
 For every node execution, the system must record:
 

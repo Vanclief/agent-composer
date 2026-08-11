@@ -10,8 +10,8 @@ The spec is split into focused documents instead of a single large README. The D
 - [model.md](model.md): normalized internal entity model
 - [graph-semantics.md](graph-semantics.md): graph and wiring semantics
 - [execution-semantics.md](execution-semantics.md): execution behavior and traceability
-- [validation.md](validation.md): blueprint-level validation rules
-- [dsl/README.md](dsl/README.md): workflow blueprint DSL
+- [validation.md](validation.md): spec-level validation rules
+- [dsl/README.md](dsl/README.md): workflow spec DSL
 
 ## DSL Documents
 

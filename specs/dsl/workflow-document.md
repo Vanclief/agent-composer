@@ -1,6 +1,6 @@
-# Workflow Blueprint DSL
+# Workflow Spec DSL
 
-The workflow blueprint should behave more like a Docker Compose file than like a dump of the internal database model.
+The workflow spec should behave more like a Docker Compose file than like a dump of the internal database model.
 
 It is the primary authoring surface a user edits.
 
@@ -8,7 +8,7 @@ It should:
 
 - declare workflow identity, inputs, and outputs in a compact form
 - define reusable local node definitions
-- allow composing workflows by id
+- allow composing workflows by slug
 - express structured control flow through loops and conditionals
 - define concrete flow instances that compile into `NodeSnapshot` definitions
 - express wiring declaratively
@@ -20,7 +20,8 @@ Top-level shape:
 
 ```yaml
 workflow:
-  id: string
+  slug: string
+  id: string?
   version: string
   description: string?
   inputs: object
@@ -45,7 +46,8 @@ Shape:
 
 ```yaml
 workflow:
-  id: string
+  slug: string
+  id: string?
   version: string
   description: string?
   inputs:
@@ -60,7 +62,9 @@ Rules:
 
 - each workflow input declares a boundary port type
 - each workflow output declares a boundary port type
-- `workflow.id` is the stable identifier for the workflow
+- `workflow.slug` is the human-facing handle for the workflow — renameable, used by the CLI and for composition
+- `workflow.id` is the workflow's permanent identity (a uuid); it is stamped automatically on install, never hand-edited, and preserved across renames
+- `workflow.version` is stamped by the registry: every modification of an installed workflow bumps it by one
 - `from` binds the workflow output to a producer such as `instance.some_node.out`
 - `PortTypeRef` is either a built-in primitive keyword or a named reusable schema under `schemas`
 - complex object, array, and union shapes must be authored under `schemas`
@@ -75,10 +79,10 @@ Rules:
 
 ## Composition
 
-A node definition may compose another workflow by declaring `kind: workflow` and `workflow_id`.
+A node definition may compose another workflow by declaring `kind: workflow` and `workflow_slug`.
 
-The compiler resolves `workflow_id` from the workflow directory and uses the child workflow blueprint boundary as the composed node boundary. When the workflow node is used as an ordinary flow instance, the compiler expands the child workflow into the parent graph during compilation. When a loop or conditional node references that workflow node, the child workflow is retained as a nested runtime target owned by the composite node.
+The compiler resolves `workflow_slug` from the registry, or from YAML files next to the parent spec when it was loaded from disk, and uses the child workflow spec boundary as the composed node boundary. When the workflow node is used as an ordinary flow instance, the compiler expands the child workflow into the parent graph during compilation. When a loop or conditional node references that workflow node, the child workflow is retained as a nested runtime target owned by the composite node.
 
 ## Example
 
-Workflow blueprint examples live under [examples/](../../examples/README.md).
+Workflow spec examples live under [examples/](../../examples/README.md).

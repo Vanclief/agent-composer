@@ -15,7 +15,7 @@ require (
 	github.com/uptrace/bun v1.2.18
 	github.com/uptrace/bun/dialect/sqlitedialect v1.2.18
 	github.com/urfave/cli/v2 v2.27.1
-	github.com/vanclief/compose v1.6.6
+	github.com/vanclief/compose v1.10.0
 	github.com/vanclief/ez v1.5.0
 	golang.org/x/sync v0.21.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -109,5 +109,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
-
-replace github.com/vanclief/compose => /Users/vanclief/Repos/Vanclief/compose

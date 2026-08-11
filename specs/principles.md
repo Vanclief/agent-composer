@@ -4,7 +4,7 @@ The system is based on the following agreed rules.
 
 ## 1.1 Authored Workflows Are DAGs
 
-A workflow blueprint defines an acyclic directed graph.
+A workflow spec defines an acyclic directed graph.
 
 Cycles are not allowed in the authored graph.
 
@@ -145,7 +145,7 @@ Edges are structural only. They do not contain behavior.
 
 ## 1.5 Traceability Is First-Class
 
-Every workflow execution records the exact workflow blueprint identity, version, and an embedded frozen copy of the workflow snapshot that actually executed.
+Every workflow execution records the exact workflow spec identity, version, and an embedded frozen copy of the workflow snapshot that actually executed.
 
 Every node execution records input, output, status, timings, trace, and the node snapshot that actually executed.
 
@@ -155,4 +155,4 @@ Inference nodes may additionally attach a Conversation, which is the current com
 
 There is no standalone WorkflowSnapshot resource.
 
-A WorkflowExecution must reference a specific `workflow_id` and `workflow_version`, and must embed the workflow snapshot that actually executed.
+A WorkflowExecution must reference a specific `workflow_slug` and `workflow_version`, and must embed the workflow snapshot that actually executed.

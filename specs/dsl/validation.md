@@ -1,10 +1,10 @@
 # Authored DSL Validation
 
-These rules apply to the workflow blueprint before compilation into the internal model.
+These rules apply to the workflow spec before compilation into the internal model.
 
 ## Document Rules
 
-- `workflow.id` must be present
+- `workflow.slug` must be present
 - `workflow.version` must be present
 - every `nodes.<node_name>` key must be unique
 - every `flow.instances.<instance_id>` key must be unique
@@ -32,8 +32,8 @@ These rules apply to the workflow blueprint before compilation into the internal
 - inference nodes must not declare `operation`
 - non-conditional nodes must not declare `routes_on`, `when_true`, or `when_false`
 - non-loop nodes must not declare `executes`, `over`, `updates`, `breaks_on`, `parallelism`, `preserve_order`, or `max_iterations`
-- workflow nodes must declare `workflow_id`
-- non-workflow nodes must not declare `workflow_id`
+- workflow nodes must declare `workflow_slug`
+- non-workflow nodes must not declare `workflow_slug`
 - workflow nodes must not declare `inputs`, `outputs`, `config`, `operation`, `executes`, `over`, `updates`, `breaks_on`, `routes_on`, `when_true`, `when_false`, `parallelism`, `preserve_order`, or `max_iterations`
 - every referenced loop `executes` target must resolve to a valid node definition
 - every referenced conditional branch target must resolve to a valid node definition
@@ -80,8 +80,8 @@ These rules apply to the workflow blueprint before compilation into the internal
 
 ## Workflow Composition Rules
 
-- `workflow_id` must resolve to exactly one workflow blueprint in the workflow directory
-- the resolved child workflow must declare the same `workflow.id` as the referenced `workflow_id`
+- `workflow_slug` must resolve to exactly one workflow — in the registry, or among YAML files next to the parent spec's source file
+- the resolved child workflow must declare the same `workflow.slug` as the referenced `workflow_slug`
 - workflow node inputs are inferred from the child workflow inputs
 - workflow node outputs are inferred from the child workflow outputs
 - recursive or cyclic workflow references are forbidden

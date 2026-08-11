@@ -323,6 +323,8 @@ github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6Kllzaw
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
 github.com/valyala/fasttemplate v1.2.2 h1:lxLXG0uE3Qnshl9QyaK6XJxMXlQZELvChBOCmQD0Loo=
 github.com/valyala/fasttemplate v1.2.2/go.mod h1:KHLXt3tVN2HBp8eijSv/kGJopbvo7S+qRAEEKiv+SiQ=
+github.com/vanclief/compose v1.10.0 h1:CpyR9EuB86Q+DzxUG7ZT0A1zhmzUkOWxi6MGeReQmTo=
+github.com/vanclief/compose v1.10.0/go.mod h1:w/s2G0sInB1GtRCevYNUzssh5yhz4nbfLSh0+DU2Dig=
 github.com/vanclief/ez v1.5.0 h1:wKJbpuoZMklm3mWnmpPG1BuzMSY5C3UN6QtDeKiJ2Lk=
 github.com/vanclief/ez v1.5.0/go.mod h1:HdwtyF54sxF8oT2DYGxyMrgTf0HiSKZV5ohnBc+P1T4=
 github.com/vmihailenco/msgpack/v5 v5.4.1 h1:cQriyiUvjTwOHg8QZaPihLWeRAAVoCpE00IUPn0Bjt8=

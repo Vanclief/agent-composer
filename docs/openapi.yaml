@@ -20,7 +20,7 @@ tags:
   - name: Hooks
     description: Manage runtime hooks that trigger external commands.
   - name: Workflows
-    description: Inspect installed workflow blueprints.
+    description: Inspect installed workflows.
 paths:
   /agents/specs:
     get:
@@ -467,7 +467,7 @@ paths:
       tags: [Workflows]
       operationId: listWorkflows
       summary: List workflows
-      description: Returns installed workflow blueprints from the local workflow registry.
+      description: Returns installed workflows from the registry.
       responses:
         '200':
           description: Installed workflow summaries.
@@ -477,17 +477,17 @@ paths:
                 $ref: '#/components/schemas/WorkflowListResponse'
         '500':
           $ref: '#/components/responses/Error'
-  /workflows/{id}:
+  /workflows/{slug}:
     get:
       tags: [Workflows]
       operationId: getWorkflow
       summary: Retrieve a workflow spec
-      description: Returns the raw YAML blueprint spec for an installed workflow.
+      description: Returns the raw YAML spec for an installed workflow.
       parameters:
-        - $ref: '#/components/parameters/WorkflowIdParam'
+        - $ref: '#/components/parameters/WorkflowSlugParam'
       responses:
         '200':
-          description: Raw workflow blueprint spec.
+          description: Raw workflow spec.
           content:
             application/json:
               schema:
@@ -547,11 +547,11 @@ components:
       schema:
         type: string
         format: uuid
-    WorkflowIdParam:
-      name: id
+    WorkflowSlugParam:
+      name: slug
       in: path
       required: true
-      description: Workflow blueprint identifier.
+      description: Workflow slug — the human-facing handle from the registry.
       schema:
         type: string
   responses:
@@ -723,10 +723,10 @@ components:
         session_id:
           type: string
           nullable: true
-        shell_root:
+        project_dir:
           type: string
           nullable: true
-          description: Optional working root for the harness process.
+          description: Optional project directory for the harness process.
         agent_name:
           type: string
         harness:
@@ -874,10 +874,10 @@ components:
         session_id:
           type: string
           description: Optional client-provided identifier for logical sessions.
-        shell_root:
+        project_dir:
           type: string
           nullable: true
-          description: Optional working root for the harness process.
+          description: Optional project directory for the harness process.
         metadata:
           type: object
           additionalProperties: true
@@ -963,10 +963,23 @@ components:
     WorkflowSummary:
       type: object
       properties:
+        slug:
+          type: string
+          description: Human-facing handle — renameable.
         id:
+          type: string
+          format: uuid
+          description: Permanent workflow identity.
+        name:
+          type: string
+        version:
           type: string
         description:
           type: string
+        has_draft:
+          type: boolean
+        draft_only:
+          type: boolean
         inputs:
           type: object
           additionalProperties:
@@ -976,7 +989,8 @@ components:
           additionalProperties:
             type: string
       required:
-        - id
+        - slug
+        - name
         - inputs
         - outputs
     WorkflowListResponse:
@@ -991,13 +1005,16 @@ components:
     WorkflowGetResponse:
       type: object
       properties:
-        workflow_id:
+        workflow_slug:
           type: string
         spec:
           type: string
-          description: Raw workflow YAML blueprint.
+          description: Raw workflow YAML spec.
+        draft:
+          type: string
+          description: Unsaved proposed spec, when one exists.
       required:
-        - workflow_id
+        - workflow_slug
         - spec
     CreateHookRequest:
       type: object
