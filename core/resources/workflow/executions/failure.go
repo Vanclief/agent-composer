@@ -83,8 +83,6 @@ func (e *ExecutionFailedError) Unwrap() error {
 }
 
 func loadExecutionFailureDetails(ctx context.Context, db bun.IDB, details ExecutionFailureDetails) (ExecutionFailureDetails, error) {
-	const op = "workflow.executions.loadExecutionFailureDetails"
-
 	if db == nil {
 		return details, nil
 	}
@@ -96,7 +94,7 @@ func loadExecutionFailureDetails(ctx context.Context, db bun.IDB, details Execut
 
 	executionUUID, err := uuid.Parse(trimmedExecutionID)
 	if err != nil {
-		return details, ez.New(op, ez.EINVALID, "invalid execution id", err)
+		return details, ez.New(ez.EINVALID, "invalid execution id", err)
 	}
 
 	var node executionmodels.NodeExecution
@@ -112,7 +110,7 @@ func loadExecutionFailureDetails(ctx context.Context, db bun.IDB, details Execut
 			return details, nil
 		}
 
-		return details, ez.Wrap(op, err)
+		return details, ez.Wrap(err)
 	}
 
 	details.NodeExecutionID = node.ID.String()
@@ -138,7 +136,7 @@ func loadExecutionFailureDetails(ctx context.Context, db bun.IDB, details Execut
 			return details, nil
 		}
 
-		return details, ez.Wrap(op, err)
+		return details, ez.Wrap(err)
 	}
 
 	details.ConversationID = conversation.ID.String()

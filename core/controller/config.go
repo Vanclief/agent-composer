@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/vanclief/compose/drivers/databases/relational/postgres"
+	"github.com/vanclief/compose/drivers/databases/relational/sqlite"
 	"github.com/vanclief/compose/integrations/promtail"
 )
 
@@ -14,9 +15,11 @@ type AppSettings struct {
 	RateLimitWindow int // In seconds
 }
 
-// ConfigSettings contains the config.yml settings
+// Config contains the configuration file settings. The database defaults to
+// a local SQLite file, and a postgres section opts into PostgreSQL instead.
 type Config struct {
 	App      AppSettings               `mapstructure:"app"`
 	Promtail promtail.Config           `mapstructure:"promtail"`
 	Postgres postgres.ConnectionConfig `mapstructure:"postgres"`
+	SQLite   sqlite.ConnectionConfig   `mapstructure:"sqlite"`
 }

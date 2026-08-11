@@ -22,7 +22,7 @@ func (h *Handler) ListConversations(c echo.Context) error {
 	if filter != "" {
 		resourceID, err := uuid.Parse(filter)
 		if err != nil {
-			parseErr := ez.New(op, ez.EINVALID, "Could not parse query param node_execution_id to UUID", err)
+			parseErr := ez.New(ez.EINVALID, "Could not parse query param node_execution_id to UUID", err)
 			return h.ManageError(c, op, request, parseErr)
 		}
 

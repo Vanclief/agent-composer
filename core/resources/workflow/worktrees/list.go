@@ -16,10 +16,8 @@ type ListRequest struct {
 }
 
 func (r *ListRequest) Validate() error {
-	const op = "workflow.worktrees.ListRequest.Validate"
-
 	if strings.TrimSpace(r.Repo) == "" {
-		return ez.New(op, ez.EINVALID, "repo is required", nil)
+		return ez.New(ez.EINVALID, "repo is required", nil)
 	}
 
 	return nil
@@ -36,11 +34,9 @@ type ListResponse struct {
 }
 
 func (api *API) List(ctx context.Context, requester interface{}, request *ListRequest) (*ListResponse, error) {
-	const op = "workflow.worktrees.API.List"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	info, statErr := os.Stat(strings.TrimSpace(request.Repo))
@@ -48,7 +44,7 @@ func (api *API) List(ctx context.Context, requester interface{}, request *ListRe
 
 	repo, isGit, err := api.manager.RepoRoot(ctx, request.Repo)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	if !isGit {
 		// Not an error: the UI hides the workspace picker for plain dirs.
@@ -62,7 +58,7 @@ func (api *API) List(ctx context.Context, requester interface{}, request *ListRe
 		// Explicitly requested — a failure (e.g. no remote) surfaces.
 		err = api.manager.Fetch(ctx, repo)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 	}
 
@@ -71,12 +67,12 @@ func (api *API) List(ctx context.Context, requester interface{}, request *ListRe
 
 	infos, err := api.manager.List(ctx, repo)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	branches, err := api.manager.Branches(ctx, repo)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return &ListResponse{

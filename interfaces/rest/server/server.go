@@ -53,20 +53,18 @@ func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.A
 }
 
 func (s *Server) HandleRequest(request requests.Request) (interface{}, error) {
-	const op = "rest.Server.HandleRequest"
-
 	var requester *user.User
 
 	defer func() { logRequest(request, requester) }()
 
 	err := request.GetBody().Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	response, err := s.handleRequest(request)
 	if err != nil {
-		return response, ez.Wrap(op, err)
+		return response, ez.Wrap(err)
 	} else if response != nil {
 		return response, nil
 	}
@@ -139,7 +137,7 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.WorkflowAPI.Worktrees.Delete(request.GetContext(), nil, body)
 
 	default:
-		return nil, ez.New("rest.Server.handleRequest", ez.EINVALID, "Unsupported request type", nil)
+		return nil, ez.New(ez.EINVALID, "Unsupported request type", nil)
 	}
 }
 

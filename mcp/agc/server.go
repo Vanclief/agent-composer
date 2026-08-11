@@ -74,11 +74,9 @@ func NewServer(rootCtx context.Context, stack *core.Stack, defaultShellRoot stri
 		_ mcpproto.CallToolRequest,
 		_ workflowListArgs,
 	) (WorkflowListResult, error) {
-		const op = "mcp.agc.agc_workflow_list"
-
 		workflows, err := workflowruntime.ListBlueprints()
 		if err != nil {
-			return WorkflowListResult{}, ez.Wrap(op, err)
+			return WorkflowListResult{}, ez.Wrap(err)
 		}
 
 		return WorkflowListResult{
@@ -91,8 +89,6 @@ func NewServer(rootCtx context.Context, stack *core.Stack, defaultShellRoot stri
 		_ mcpproto.CallToolRequest,
 		args workflowStartArgs,
 	) (WorkflowStartResult, error) {
-		const op = "mcp.agc.agc_workflow_start"
-
 		shellRoot := args.ShellRoot
 		if shellRoot == "" {
 			shellRoot = defaultShellRoot
@@ -105,7 +101,7 @@ func NewServer(rootCtx context.Context, stack *core.Stack, defaultShellRoot stri
 			ShellRoot:  shellRoot,
 		})
 		if err != nil {
-			return WorkflowStartResult{}, ez.Wrap(op, err)
+			return WorkflowStartResult{}, ez.Wrap(err)
 		}
 
 		return *response, nil
@@ -116,18 +112,16 @@ func NewServer(rootCtx context.Context, stack *core.Stack, defaultShellRoot stri
 		_ mcpproto.CallToolRequest,
 		args workflowGetArgs,
 	) (WorkflowGetResult, error) {
-		const op = "mcp.agc.agc_workflow_get"
-
 		executionID, err := uuid.Parse(args.ExecutionID)
 		if err != nil {
-			return WorkflowGetResult{}, ez.New(op, ez.EINVALID, "invalid execution_id", err)
+			return WorkflowGetResult{}, ez.New(ez.EINVALID, "invalid execution_id", err)
 		}
 
 		response, err := stack.WorkflowAPI.Executions.Status(ctx, nil, &workflowexecutions.GetRequest{
 			WorkflowExecutionID: executionID,
 		})
 		if err != nil {
-			return WorkflowGetResult{}, ez.Wrap(op, err)
+			return WorkflowGetResult{}, ez.Wrap(err)
 		}
 
 		return *response, nil

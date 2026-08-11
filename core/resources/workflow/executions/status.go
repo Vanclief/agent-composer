@@ -29,11 +29,9 @@ type WorkflowFailureDetails struct {
 }
 
 func (api *API) Status(ctx context.Context, requester interface{}, request *GetRequest) (*StatusResponse, error) {
-	const op = "workflow.executions.API.Status"
-
 	record, err := api.Get(ctx, requester, request)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	response := &StatusResponse{
@@ -56,7 +54,7 @@ func (api *API) Status(ctx context.Context, requester interface{}, request *GetR
 		WorkflowVersion: record.WorkflowVersion,
 	})
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	response.Failure = &WorkflowFailureDetails{

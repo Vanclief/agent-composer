@@ -20,29 +20,25 @@ type UpdateRequest struct {
 }
 
 func (r UpdateRequest) Validate() error {
-	const op = "hooks.UpdateRequest.Validate"
-
 	err := validation.ValidateStruct(&r,
 		validation.Field(&r.HookID, validation.Required),
 	)
 	if err != nil {
-		return ez.New(op, ez.EINVALID, err.Error(), nil)
+		return ez.New(ez.EINVALID, err.Error(), nil)
 	}
 	return nil
 }
 
 func (api *API) Update(ctx context.Context, requester interface{}, request *UpdateRequest) (*hook.Hook, error) {
-	const op = "hooks.API.Update"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	// Get
 	h, err := hook.GetHookByID(ctx, api.db, request.HookID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	// TODO: permissions
@@ -76,18 +72,18 @@ func (api *API) Update(ctx context.Context, requester interface{}, request *Upda
 	}
 
 	if !changed {
-		return nil, ez.New(op, ez.EINVALID, "No fields to update", nil)
+		return nil, ez.New(ez.EINVALID, "No fields to update", nil)
 	}
 
 	err = h.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	// Persist
 	err = h.Update(ctx, api.db)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return h, nil

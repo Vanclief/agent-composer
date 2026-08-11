@@ -14,29 +14,25 @@ type GetRequest struct {
 }
 
 func (r GetRequest) Validate() error {
-	const op = "workflow.nodeexecutions.GetRequest.Validate"
-
 	err := validation.ValidateStruct(&r,
 		validation.Field(&r.NodeExecutionID, validation.Required),
 	)
 	if err != nil {
-		return ez.New(op, ez.EINVALID, err.Error(), nil)
+		return ez.New(ez.EINVALID, err.Error(), nil)
 	}
 
 	return nil
 }
 
 func (api *API) Get(ctx context.Context, requester interface{}, request *GetRequest) (*execution.NodeExecution, error) {
-	const op = "workflow.nodeexecutions.API.Get"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	record, err := execution.GetNodeExecutionByID(ctx, api.db, request.NodeExecutionID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return record, nil

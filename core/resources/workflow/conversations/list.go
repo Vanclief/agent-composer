@@ -15,13 +15,11 @@ type ListRequest struct {
 }
 
 func (r *ListRequest) Validate() error {
-	const op = "workflow.conversations.ListRequest.Validate"
-
 	err := validation.ValidateStruct(r,
 		validation.Field(&r.NodeExecutionID, validation.Required),
 	)
 	if err != nil {
-		return ez.New(op, ez.EINVALID, err.Error(), nil)
+		return ez.New(ez.EINVALID, err.Error(), nil)
 	}
 
 	return nil
@@ -39,16 +37,14 @@ type ListResponse struct {
 }
 
 func (api *API) List(ctx context.Context, requester interface{}, request *ListRequest) (*ListResponse, error) {
-	const op = "workflow.conversations.API.List"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	items, err := agent.GetConversationsByNodeExecutionID(ctx, api.db, request.NodeExecutionID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	conversations := make([]ConversationWithTrace, 0, len(items))

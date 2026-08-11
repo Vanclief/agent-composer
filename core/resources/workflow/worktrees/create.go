@@ -14,10 +14,8 @@ type CreateRequest struct {
 }
 
 func (r *CreateRequest) Validate() error {
-	const op = "workflow.worktrees.CreateRequest.Validate"
-
 	if strings.TrimSpace(r.Repo) == "" || strings.TrimSpace(r.Branch) == "" {
-		return ez.New(op, ez.EINVALID, "repo and branch are required", nil)
+		return ez.New(ez.EINVALID, "repo and branch are required", nil)
 	}
 
 	return nil
@@ -30,25 +28,23 @@ type CreateResponse struct {
 }
 
 func (api *API) Create(ctx context.Context, requester interface{}, request *CreateRequest) (*CreateResponse, error) {
-	const op = "workflow.worktrees.API.Create"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	repo, isGit, err := api.manager.RepoRoot(ctx, request.Repo)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	if !isGit {
-		return nil, ez.New(op, ez.EINVALID, request.Repo+" is not a git repository", nil)
+		return nil, ez.New(ez.EINVALID, request.Repo+" is not a git repository", nil)
 	}
 
 	branch := strings.TrimSpace(request.Branch)
 	path, created, err := api.manager.Resolve(ctx, repo, branch, request.Base)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return &CreateResponse{

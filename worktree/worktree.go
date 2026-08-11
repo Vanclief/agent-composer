@@ -43,8 +43,6 @@ type Info struct {
 }
 
 func runGit(ctx context.Context, dir string, args ...string) (string, error) {
-	const op = "worktree.runGit"
-
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -56,7 +54,7 @@ func runGit(ctx context.Context, dir string, args ...string) (string, error) {
 		if message == "" {
 			message = err.Error()
 		}
-		return "", ez.New(op, ez.EINTERNAL, message, err)
+		return "", ez.New(ez.EINTERNAL, message, err)
 	}
 
 	return strings.TrimSpace(stdout.String()), nil
@@ -66,11 +64,9 @@ func runGit(ctx context.Context, dir string, args ...string) (string, error) {
 // when path is not inside a git repository (not an error — callers use
 // it to decide whether to offer worktrees at all).
 func (m *Manager) RepoRoot(ctx context.Context, path string) (string, bool, error) {
-	const op = "worktree.Manager.RepoRoot"
-
 	abs, err := filepath.Abs(strings.TrimSpace(path))
 	if err != nil {
-		return "", false, ez.Wrap(op, err)
+		return "", false, ez.Wrap(err)
 	}
 
 	info, err := os.Stat(abs)
@@ -89,11 +85,9 @@ func (m *Manager) RepoRoot(ctx context.Context, path string) (string, bool, erro
 
 // List returns every worktree of the repository, main checkout first.
 func (m *Manager) List(ctx context.Context, repo string) ([]Info, error) {
-	const op = "worktree.Manager.List"
-
 	output, err := runGit(ctx, repo, "worktree", "list", "--porcelain")
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	infos := []Info{}
@@ -154,15 +148,13 @@ type Branch struct {
 
 // Branches lists local and origin branches (as of the last fetch).
 func (m *Manager) Branches(ctx context.Context, repo string) ([]Branch, error) {
-	const op = "worktree.Manager.Branches"
-
 	output, err := runGit(
 		ctx, repo,
 		"for-each-ref", "--format=%(refname)",
 		"refs/heads", "refs/remotes/origin",
 	)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	index := map[string]*Branch{}
@@ -203,11 +195,9 @@ func (m *Manager) Branches(ctx context.Context, repo string) ([]Branch, error) {
 
 // Fetch updates origin refs so remote branches are current.
 func (m *Manager) Fetch(ctx context.Context, repo string) error {
-	const op = "worktree.Manager.Fetch"
-
 	_, err := runGit(ctx, repo, "fetch", "origin", "--prune")
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	return nil
 }
@@ -236,22 +226,20 @@ func (m *Manager) worktreeDir(repo, branch string) string {
 //  2. the branch exists without a worktree   → check it out
 //  3. the branch does not exist              → create it from base (default HEAD)
 func (m *Manager) Resolve(ctx context.Context, repo, branch, base string) (string, bool, error) {
-	const op = "worktree.Manager.Resolve"
-
 	branch = strings.TrimSpace(branch)
 	if branch == "" {
-		return "", false, ez.New(op, ez.EINVALID, "A branch name is required", nil)
+		return "", false, ez.New(ez.EINVALID, "A branch name is required", nil)
 	}
 
 	existing, err := m.List(ctx, repo)
 	if err != nil {
-		return "", false, ez.Wrap(op, err)
+		return "", false, ez.Wrap(err)
 	}
 	for _, info := range existing {
 		if info.Branch == branch {
 			if info.IsMain {
 				return "", false, ez.New(
-					op, ez.EINVALID,
+					ez.EINVALID,
 					"Branch "+branch+" is checked out in the main worktree at "+info.Path+"; pick another branch",
 					nil,
 				)
@@ -263,13 +251,13 @@ func (m *Manager) Resolve(ctx context.Context, repo, branch, base string) (strin
 	dir := m.worktreeDir(repo, branch)
 	err = os.MkdirAll(filepath.Dir(dir), 0o755)
 	if err != nil {
-		return "", false, ez.Wrap(op, err)
+		return "", false, ez.Wrap(err)
 	}
 
 	if m.branchExists(ctx, repo, branch) {
 		_, err = runGit(ctx, repo, "worktree", "add", dir, branch)
 		if err != nil {
-			return "", false, ez.Wrap(op, err)
+			return "", false, ez.Wrap(err)
 		}
 		return normalizePath(dir), true, nil
 	}
@@ -291,7 +279,7 @@ func (m *Manager) Resolve(ctx context.Context, repo, branch, base string) (strin
 
 	_, err = runGit(ctx, repo, "worktree", "add", "-b", branch, dir, base)
 	if err != nil {
-		return "", false, ez.Wrap(op, err)
+		return "", false, ez.Wrap(err)
 	}
 	return normalizePath(dir), true, nil
 }
@@ -309,15 +297,13 @@ func normalizePath(path string) string {
 // Remove deletes a worktree (never its branch). Git refuses dirty
 // worktrees unless force is set — that refusal is surfaced verbatim.
 func (m *Manager) Remove(ctx context.Context, repo, path string, force bool) error {
-	const op = "worktree.Manager.Remove"
-
 	infos, err := m.List(ctx, repo)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	for _, info := range infos {
 		if info.Path == path && info.IsMain {
-			return ez.New(op, ez.EINVALID, "Refusing to remove the main worktree", nil)
+			return ez.New(ez.EINVALID, "Refusing to remove the main worktree", nil)
 		}
 	}
 
@@ -329,18 +315,16 @@ func (m *Manager) Remove(ctx context.Context, repo, path string, force bool) err
 
 	_, err = runGit(ctx, repo, args...)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	return nil
 }
 
 // Prune drops stale administrative entries for manually deleted dirs.
 func (m *Manager) Prune(ctx context.Context, repo string) error {
-	const op = "worktree.Manager.Prune"
-
 	_, err := runGit(ctx, repo, "worktree", "prune")
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	return nil
 }

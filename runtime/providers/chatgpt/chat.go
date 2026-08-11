@@ -18,8 +18,6 @@ import (
 )
 
 func (gpt *ChatGPT) Chat(ctx context.Context, model string, request *types.ChatRequest) (types.ChatResponse, error) {
-	const op = "ChatGPT.Chat"
-
 	originalMessageCount := len(request.Messages)
 
 	// Step 1) Only pass the messages delta if continuing a previous response
@@ -65,7 +63,7 @@ func (gpt *ChatGPT) Chat(ctx context.Context, model string, request *types.ChatR
 	if len(request.Tools) > 0 {
 		functionTools, err := buildFunctionTools(request.Tools)
 		if err != nil {
-			return types.ChatResponse{}, ez.New(op, ez.EINVALID, "invalid tool definition", err)
+			return types.ChatResponse{}, ez.New(ez.EINVALID, "invalid tool definition", err)
 		}
 
 		tools = append(tools, functionTools...)
@@ -82,12 +80,12 @@ func (gpt *ChatGPT) Chat(ctx context.Context, model string, request *types.ChatR
 
 	if request.StructuredOutputs {
 		if len(request.StructuredOutputSchema) == 0 || jsonutil.IsNullRawMessage(request.StructuredOutputSchema) {
-			return types.ChatResponse{}, ez.New(op, ez.EINVALID, "structured outputs enabled but schema is empty", nil)
+			return types.ChatResponse{}, ez.New(ez.EINVALID, "structured outputs enabled but schema is empty", nil)
 		}
 
 		format, err := buildStructuredOutputFormatParam(request.StructuredOutputSchema)
 		if err != nil {
-			return types.ChatResponse{}, ez.New(op, ez.EINVALID, "structured outputs enabled but schema is invalid JSON", err)
+			return types.ChatResponse{}, ez.New(ez.EINVALID, "structured outputs enabled but schema is invalid JSON", err)
 		}
 
 		params.Text = responses.ResponseTextConfigParam{
@@ -105,7 +103,7 @@ func (gpt *ChatGPT) Chat(ctx context.Context, model string, request *types.ChatR
 	log.Info().Msg("Doing LLM things...")
 	response, err := gpt.client.Responses.New(ctx, params, option.WithHeader("Idempotency-Key", uuid.NewString()))
 	if err != nil {
-		return types.ChatResponse{}, ez.New(op, ez.EINTERNAL, "Responses API call failed", err)
+		return types.ChatResponse{}, ez.New(ez.EINTERNAL, "Responses API call failed", err)
 	}
 
 	// Log token usage
@@ -180,7 +178,6 @@ func messagesToResponsesInputParam(messages []types.Message) responses.ResponseI
 
 	for _, m := range messages {
 		switch m.Role {
-
 		case types.MessageRoleSystem, types.MessageRoleUser:
 			// History is sent as input messages (role: system/user/assistant)
 			inText := responses.ResponseInputContentParamOfInputText(m.Content)
@@ -236,13 +233,11 @@ func messagesToResponsesInputParam(messages []types.Message) responses.ResponseI
 }
 
 func buildFunctionTools(toolDefs []types.ToolDefinition) ([]responses.ToolUnionParam, error) {
-	const op = "ChatGPT.buildFunctionTools"
-
 	var toolParams []responses.ToolUnionParam
 
 	for _, definition := range toolDefs {
 		if definition.Name == "" {
-			return nil, ez.New(op, ez.EINVALID, "tool name is required", nil)
+			return nil, ez.New(ez.EINVALID, "tool name is required", nil)
 		}
 
 		parameters := definition.JSONSchema

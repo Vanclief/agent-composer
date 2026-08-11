@@ -1,11 +1,10 @@
 package models
 
 import (
-	"os/user"
-
 	"github.com/vanclief/agent-composer/models/agent"
 	"github.com/vanclief/agent-composer/models/execution"
 	"github.com/vanclief/agent-composer/models/hook"
+	"github.com/vanclief/agent-composer/models/user"
 )
 
 var REGISTRABLE = []interface{}{}

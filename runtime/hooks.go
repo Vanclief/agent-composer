@@ -14,15 +14,13 @@ import (
 )
 
 func RunHook(ctx context.Context, hook hook.Hook, stdin []byte) (HookResult, error) {
-	const op = "runtime.RunHook"
-
 	result, err := executeHook(ctx, hook.Command, hook.Args, stdin)
 	if err != nil {
 		log.Error().Err(err).
 			Str("EventType", string(hook.EventType)).
 			Str("stdout", string(result.Stderr)).
 			Msg("Hook execution failed")
-		return result, ez.Wrap("RunHook", err)
+		return result, ez.Wrap(err)
 	}
 
 	log.Info().
@@ -42,10 +40,8 @@ type HookResult struct {
 // executeHook runs an external command with args, piping stdin to the process.
 // It respects ctx (cancel/timeout). Non-zero exit codes are returned in result.ExitCode and err.
 func executeHook(ctx context.Context, command string, args []string, stdin []byte) (HookResult, error) {
-	const op = "runtime.executeHook"
-
 	if command == "" {
-		return HookResult{}, ez.New(op, ez.EINVALID, "empty command", nil)
+		return HookResult{}, ez.New(ez.EINVALID, "empty command", nil)
 	}
 
 	cmd := exec.CommandContext(ctx, command, args...)
@@ -84,15 +80,13 @@ func executeHook(ctx context.Context, command string, args []string, stdin []byt
 
 	// Distinguish ctx errors vs process errors
 	if ctx.Err() != nil {
-		return result, ez.New(op, ez.EUNAVAILABLE, "hook canceled or timed out", ctx.Err())
+		return result, ez.New(ez.EUNAVAILABLE, "hook canceled or timed out", ctx.Err())
 	}
 
-	return result, ez.New(op, ez.EINTERNAL, "hook process failed", err)
+	return result, ez.New(ez.EINTERNAL, "hook process failed", err)
 }
 
 func loadInstanceHooks(ctx context.Context, db bun.IDB, agentName string) (map[hook.EventType][]hook.Hook, error) {
-	const op = "runtime.loadInstanceHooks"
-
 	var hooks []hook.Hook
 	err := db.NewSelect().
 		Model(&hooks).
@@ -100,7 +94,7 @@ func loadInstanceHooks(ctx context.Context, db bun.IDB, agentName string) (map[h
 		Where("enabled = ?", true).
 		Scan(ctx)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	hookMap := make(map[hook.EventType][]hook.Hook)

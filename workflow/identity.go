@@ -13,11 +13,9 @@ import (
 // workflows. Idempotent — files that already carry a uuid are only
 // read.
 func EnsureInstalledWorkflowUUIDs() (map[string]string, error) {
-	const op = "workflow.EnsureInstalledWorkflowUUIDs"
-
 	summaries, err := ListBlueprints()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	identities := make(map[string]string, len(summaries))
@@ -44,7 +42,7 @@ func EnsureInstalledWorkflowUUIDs() (map[string]string, error) {
 		}
 		err = writeFileAtomically(entry.Path, stamped)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		identities[summary.ID] = minted
 	}

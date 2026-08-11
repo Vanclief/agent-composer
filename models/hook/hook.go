@@ -22,11 +22,9 @@ type Hook struct {
 }
 
 func NewHook(eventType EventType, agentName, command string, args []string, enabled bool) (*Hook, error) {
-	const op = "hook.NewHook"
-
 	id, err := uuid.NewV7()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	h := &Hook{
@@ -40,7 +38,7 @@ func NewHook(eventType EventType, agentName, command string, args []string, enab
 
 	err = h.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return h, nil
@@ -81,41 +79,35 @@ func (h *Hook) Validate() error {
 
 // CRUD
 func (h *Hook) Insert(ctx context.Context, db bun.IDB) error {
-	const op = "hook.Insert"
-
 	err := h.Validate()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	_, err = db.NewInsert().Model(h).Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	return nil
 }
 
 func (h *Hook) Update(ctx context.Context, db bun.IDB) error {
-	const op = "hook.Update"
-
 	err := h.Validate()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	_, err = db.NewUpdate().Model(h).WherePK().Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	return nil
 }
 
 func (h *Hook) Delete(ctx context.Context, db bun.IDB) error {
-	const op = "hook.Delete"
-
 	_, err := db.NewDelete().Model(h).WherePK().Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	return nil
 }

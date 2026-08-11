@@ -18,16 +18,14 @@ type ListResponse struct {
 }
 
 func (api *API) List(ctx context.Context, requester interface{}, request *ListRequest) (*ListResponse, error) {
-	const op = "workflow.API.List"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	workflows, err := workflowruntime.ListBlueprints()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	for index := range workflows {
@@ -41,7 +39,7 @@ func (api *API) List(ctx context.Context, requester interface{}, request *ListRe
 	// still belong in the list so a reload cannot orphan them.
 	draftOnly, err := workflowruntime.ListDraftOnlyBlueprints()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	for _, summary := range draftOnly {
 		summary.HasDraft = true

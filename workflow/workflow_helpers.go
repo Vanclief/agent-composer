@@ -315,7 +315,7 @@ func compileInputBindings(nodeSpec NodeSpec, instance InstanceSpec, instanceID s
 	for inputName := range nodeSpec.Inputs {
 		rawBinding, found := instance.Inputs[inputName]
 		if !found {
-			return nil, nil, ez.New("workflow.compileInputBindings", ez.EINVALID, "missing binding for node input: "+instanceID+"."+inputName, nil)
+			return nil, nil, ez.New(ez.EINVALID, "missing binding for node input: "+instanceID+"."+inputName, nil)
 		}
 
 		binding, err := parseBinding(rawBinding)
@@ -1289,7 +1289,7 @@ func topoSort(nodes []string, dependencies map[string][]string) ([]string, error
 	}
 
 	if len(order) != len(nodes) {
-		return nil, ez.New("workflow.topoSort", ez.EINVALID, "workflow graph contains a cycle", nil)
+		return nil, ez.New(ez.EINVALID, "workflow graph contains a cycle", nil)
 	}
 
 	return order, nil
@@ -1342,11 +1342,9 @@ func copyRawJSON(raw json.RawMessage) json.RawMessage {
 }
 
 func extractStructuredJSON(raw string) (string, error) {
-	const op = "workflow.extractStructuredJSON"
-
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
-		return "", ez.New(op, ez.EINVALID, "assistant output is empty", nil)
+		return "", ez.New(ez.EINVALID, "assistant output is empty", nil)
 	}
 
 	if json.Valid([]byte(trimmed)) {
@@ -1380,5 +1378,5 @@ func extractStructuredJSON(raw string) (string, error) {
 		}
 	}
 
-	return "", ez.New(op, ez.EINVALID, "assistant output does not contain valid JSON", nil)
+	return "", ez.New(ez.EINVALID, "assistant output does not contain valid JSON", nil)
 }

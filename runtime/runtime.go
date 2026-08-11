@@ -29,10 +29,8 @@ type Options struct {
 }
 
 func New(rootCtx context.Context, ctrl *controller.Controller, sch *scheduler.Scheduler, opts Options) (*Runtime, error) {
-	const op = "runtime.New"
-
 	if ctrl == nil {
-		return nil, ez.Root(op, ez.EINTERNAL, "Controller reference is nil")
+		return nil, ez.Root(ez.EINTERNAL, "Controller reference is nil")
 	}
 
 	rt := &Runtime{
@@ -46,16 +44,14 @@ func New(rootCtx context.Context, ctrl *controller.Controller, sch *scheduler.Sc
 }
 
 func (rt *Runtime) ValidateHarness(ctx context.Context, kind agent.Harness, model string, config []byte) error {
-	const op = "runtime.ValidateHarness"
-
 	harness, err := harnesses.New(kind)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	err = harness.Validate(ctx, model, config)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil

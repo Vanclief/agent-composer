@@ -14,10 +14,8 @@ type DeleteRequest struct {
 }
 
 func (r *DeleteRequest) Validate() error {
-	const op = "workflow.worktrees.DeleteRequest.Validate"
-
 	if strings.TrimSpace(r.Repo) == "" || strings.TrimSpace(r.Path) == "" {
-		return ez.New(op, ez.EINVALID, "repo and path are required", nil)
+		return ez.New(ez.EINVALID, "repo and path are required", nil)
 	}
 
 	return nil
@@ -28,24 +26,22 @@ type DeleteResponse struct {
 }
 
 func (api *API) Delete(ctx context.Context, requester interface{}, request *DeleteRequest) (*DeleteResponse, error) {
-	const op = "workflow.worktrees.API.Delete"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	repo, isGit, err := api.manager.RepoRoot(ctx, request.Repo)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	if !isGit {
-		return nil, ez.New(op, ez.EINVALID, request.Repo+" is not a git repository", nil)
+		return nil, ez.New(ez.EINVALID, request.Repo+" is not a git repository", nil)
 	}
 
 	err = api.manager.Remove(ctx, repo, request.Path, request.Force)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return &DeleteResponse{Removed: request.Path}, nil

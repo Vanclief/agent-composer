@@ -56,31 +56,27 @@ type claudeCodeResult struct {
 }
 
 func (c *ClaudeCode) Validate(ctx context.Context, model string, config json.RawMessage) error {
-	const op = "harnesses.ClaudeCode.Validate"
-
 	if strings.TrimSpace(model) == "" {
-		return ez.New(op, ez.EINVALID, "model is required", nil)
+		return ez.New(ez.EINVALID, "model is required", nil)
 	}
 
 	_, err := exec.LookPath("claude")
 	if err != nil {
-		return ez.New(op, ez.EINVALID, "claude CLI is not installed or not on PATH", err)
+		return ez.New(ez.EINVALID, "claude CLI is not installed or not on PATH", err)
 	}
 
 	_, err = parseClaudeCodeConfig(config)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
 }
 
 func (c *ClaudeCode) Run(ctx context.Context, conversation *agent.Conversation, prompt string) (*RunResult, error) {
-	const op = "harnesses.ClaudeCode.Run"
-
 	cfg, err := parseClaudeCodeConfig(conversation.HarnessConfig)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	args := c.buildArgs(conversation, cfg, prompt)
@@ -140,25 +136,25 @@ func (c *ClaudeCode) Run(ctx context.Context, conversation *agent.Conversation, 
 	if parseErr != nil {
 		if runErr != nil {
 			if ctx.Err() != nil {
-				return result, ez.New(op, ez.EUNAVAILABLE, "claude run canceled", ctx.Err())
+				return result, ez.New(ez.EUNAVAILABLE, "claude run canceled", ctx.Err())
 			}
 
-			return result, ez.New(op, ez.EINTERNAL, "claude run failed", runErr)
+			return result, ez.New(ez.EINTERNAL, "claude run failed", runErr)
 		}
 
-		return result, ez.New(op, ez.EINTERNAL, "failed to parse claude output", parseErr)
+		return result, ez.New(ez.EINTERNAL, "failed to parse claude output", parseErr)
 	}
 
 	if runErr != nil {
 		if ctx.Err() != nil {
-			return result, ez.New(op, ez.EUNAVAILABLE, "claude run canceled", ctx.Err())
+			return result, ez.New(ez.EUNAVAILABLE, "claude run canceled", ctx.Err())
 		}
 
-		return result, ez.New(op, ez.EINTERNAL, "claude run failed", runErr)
+		return result, ez.New(ez.EINTERNAL, "claude run failed", runErr)
 	}
 
 	if summary.IsError {
-		return result, ez.New(op, ez.EINTERNAL, "claude run failed", nil)
+		return result, ez.New(ez.EINTERNAL, "claude run failed", nil)
 	}
 
 	return result, nil
@@ -279,8 +275,6 @@ func (c *ClaudeCode) buildArgs(conversation *agent.Conversation, cfg claudeCodeC
 }
 
 func parseClaudeCodeConfig(raw json.RawMessage) (claudeCodeConfig, error) {
-	const op = "harnesses.parseClaudeCodeConfig"
-
 	if len(raw) == 0 {
 		return claudeCodeConfig{}, nil
 	}
@@ -288,64 +282,62 @@ func parseClaudeCodeConfig(raw json.RawMessage) (claudeCodeConfig, error) {
 	var probe map[string]any
 	err := json.Unmarshal(raw, &probe)
 	if err != nil {
-		return claudeCodeConfig{}, ez.New(op, ez.EINVALID, "invalid claude harness_config", err)
+		return claudeCodeConfig{}, ez.New(ez.EINVALID, "invalid claude harness_config", err)
 	}
 
 	err = rejectLegacyPermissionKeys(probe, claudeLegacyPermissionKeys)
 	if err != nil {
-		return claudeCodeConfig{}, ez.Wrap(op, err)
+		return claudeCodeConfig{}, ez.Wrap(err)
 	}
 
 	var cfg claudeCodeConfig
 	err = json.Unmarshal(raw, &cfg)
 	if err != nil {
-		return claudeCodeConfig{}, ez.New(op, ez.EINVALID, "invalid claude harness_config", err)
+		return claudeCodeConfig{}, ez.New(ez.EINVALID, "invalid claude harness_config", err)
 	}
 
 	normalizedPermissions, err := ParsePermissions(string(cfg.Permissions))
 	if err != nil {
-		return claudeCodeConfig{}, ez.Wrap(op, err)
+		return claudeCodeConfig{}, ez.Wrap(err)
 	}
 	cfg.Permissions = normalizedPermissions
 
 	if strings.TrimSpace(cfg.Settings) == "" && cfg.Settings != "" {
-		return claudeCodeConfig{}, ez.New(op, ez.EINVALID, "settings cannot be empty", nil)
+		return claudeCodeConfig{}, ez.New(ez.EINVALID, "settings cannot be empty", nil)
 	}
 
 	err = validateStringList(cfg.AddDirs, "add_dirs")
 	if err != nil {
-		return claudeCodeConfig{}, ez.Wrap(op, err)
+		return claudeCodeConfig{}, ez.Wrap(err)
 	}
 
 	err = validateStringList(cfg.AllowedTools, "allowed_tools")
 	if err != nil {
-		return claudeCodeConfig{}, ez.Wrap(op, err)
+		return claudeCodeConfig{}, ez.Wrap(err)
 	}
 
 	err = validateStringList(cfg.DisallowedTools, "disallowed_tools")
 	if err != nil {
-		return claudeCodeConfig{}, ez.Wrap(op, err)
+		return claudeCodeConfig{}, ez.Wrap(err)
 	}
 
 	err = validateStringList(cfg.MCPConfig, "mcp_config")
 	if err != nil {
-		return claudeCodeConfig{}, ez.Wrap(op, err)
+		return claudeCodeConfig{}, ez.Wrap(err)
 	}
 
 	err = validateStringList(cfg.Tools, "tools")
 	if err != nil {
-		return claudeCodeConfig{}, ez.Wrap(op, err)
+		return claudeCodeConfig{}, ez.Wrap(err)
 	}
 
 	return cfg, nil
 }
 
 func validateStringList(values []string, field string) error {
-	const op = "harnesses.validateStringList"
-
 	for _, value := range values {
 		if strings.TrimSpace(value) == "" {
-			return ez.New(op, ez.EINVALID, field+" cannot contain empty values", nil)
+			return ez.New(ez.EINVALID, field+" cannot contain empty values", nil)
 		}
 	}
 
@@ -353,21 +345,19 @@ func validateStringList(values []string, field string) error {
 }
 
 func parseClaudeCodeResult(rawOutput string) (claudeCodeResult, error) {
-	const op = "harnesses.parseClaudeCodeResult"
-
 	trimmed := strings.TrimSpace(rawOutput)
 	if trimmed == "" {
-		return claudeCodeResult{}, ez.New(op, ez.EINVALID, "empty claude output", nil)
+		return claudeCodeResult{}, ez.New(ez.EINVALID, "empty claude output", nil)
 	}
 
 	var result claudeCodeResult
 	err := json.Unmarshal([]byte(trimmed), &result)
 	if err != nil {
-		return claudeCodeResult{}, ez.New(op, ez.EINVALID, "invalid claude output", err)
+		return claudeCodeResult{}, ez.New(ez.EINVALID, "invalid claude output", err)
 	}
 
 	if strings.TrimSpace(result.Type) == "" {
-		return claudeCodeResult{}, ez.New(op, ez.EINVALID, "claude output is missing type", nil)
+		return claudeCodeResult{}, ez.New(ez.EINVALID, "claude output is missing type", nil)
 	}
 
 	return result, nil

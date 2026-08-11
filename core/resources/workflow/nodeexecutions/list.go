@@ -16,11 +16,9 @@ type ListRequest struct {
 }
 
 func (r *ListRequest) Validate() error {
-	const op = "workflow.nodeexecutions.ListRequest.Validate"
-
 	err := r.CursorRequest.Validate()
 	if err != nil {
-		return ez.New(op, ez.EINVALID, err.Error(), nil)
+		return ez.New(ez.EINVALID, err.Error(), nil)
 	}
 
 	return nil
@@ -32,11 +30,9 @@ type ListResponse struct {
 }
 
 func (api *API) List(ctx context.Context, requester interface{}, request *ListRequest) (*ListResponse, error) {
-	const op = "workflow.nodeexecutions.API.List"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	items := []execution.NodeExecution{}
@@ -50,17 +46,17 @@ func (api *API) List(ctx context.Context, requester interface{}, request *ListRe
 
 	q, err = pagination.ApplyCursorToQuery(q, &request.CursorRequest, model, pagination.DESC)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	err = q.Scan(ctx)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	resp, err := pagination.BuildCursorResponse(items, request.Limit)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return &ListResponse{

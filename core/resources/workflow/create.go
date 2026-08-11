@@ -16,10 +16,8 @@ type CreateRequest struct {
 }
 
 func (r *CreateRequest) Validate() error {
-	const op = "workflow.CreateRequest.Validate"
-
 	if strings.TrimSpace(r.Name) == "" {
-		return ez.New(op, ez.EINVALID, "name is required", nil)
+		return ez.New(ez.EINVALID, "name is required", nil)
 	}
 
 	return nil
@@ -35,11 +33,9 @@ type CreateResponse struct {
 // Create scaffolds a new named workflow as a draft — nothing lands in
 // the registry until it is saved.
 func (api *API) Create(ctx context.Context, requester interface{}, request *CreateRequest) (*CreateResponse, error) {
-	const op = "workflow.API.Create"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	created, err := workflowruntime.CreateDraft(
@@ -48,7 +44,7 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 		request.WorkflowID,
 	)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return &CreateResponse{

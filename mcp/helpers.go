@@ -9,8 +9,6 @@ import (
 )
 
 func extractToolSchema(tool mcpproto.Tool) (map[string]any, error) {
-	const op = "mcp.extractToolSchema"
-
 	// Prefer the SDK-emitted effective schema (includes RawInputSchema when present).
 	type toolEnvelope struct {
 		InputSchema any `json:"inputSchema"`
@@ -18,13 +16,13 @@ func extractToolSchema(tool mcpproto.Tool) (map[string]any, error) {
 
 	toolJSON, err := json.Marshal(tool)
 	if err != nil {
-		return nil, ez.New(op, ez.EINTERNAL, "failed to marshal MCP tool to JSON", err)
+		return nil, ez.New(ez.EINTERNAL, "failed to marshal MCP tool to JSON", err)
 	}
 
 	var envelope toolEnvelope
 	err = json.Unmarshal(toolJSON, &envelope)
 	if err != nil {
-		return nil, ez.New(op, ez.EINTERNAL, "failed to unmarshal MCP tool JSON", err)
+		return nil, ez.New(ez.EINTERNAL, "failed to unmarshal MCP tool JSON", err)
 	}
 
 	if envelope.InputSchema != nil {
@@ -33,7 +31,7 @@ func extractToolSchema(tool mcpproto.Tool) (map[string]any, error) {
 			return envelopeSchema, nil
 		}
 		if err != nil {
-			return nil, ez.New(op, ez.EINVALID, "invalid envelope inputSchema: not a JSON object", err)
+			return nil, ez.New(ez.EINVALID, "invalid envelope inputSchema: not a JSON object", err)
 		}
 	}
 
@@ -43,23 +41,21 @@ func extractToolSchema(tool mcpproto.Tool) (map[string]any, error) {
 		return rawSchema, nil
 	}
 	if err != nil {
-		return nil, ez.New(op, ez.EINVALID, "invalid tool inputSchema: not a JSON object", err)
+		return nil, ez.New(ez.EINVALID, "invalid tool inputSchema: not a JSON object", err)
 	}
 
-	return nil, ez.New(op, ez.ENOTFOUND, "tool inputSchema is missing", nil)
+	return nil, ez.New(ez.ENOTFOUND, "tool inputSchema is missing", nil)
 }
 
 func toMap(value any) (map[string]any, error) {
-	const op = "mcp.toMap"
-
 	if value == nil {
-		return nil, ez.New(op, ez.EINVALID, "nil value", nil)
+		return nil, ez.New(ez.EINVALID, "nil value", nil)
 	}
 
 	existingMap, isMapStringAny := value.(map[string]any)
 	if isMapStringAny {
 		if len(existingMap) == 0 {
-			return nil, ez.New(op, ez.EINVALID, "value is an empty JSON object", nil)
+			return nil, ez.New(ez.EINVALID, "value is an empty JSON object", nil)
 		}
 		return existingMap, nil
 	}
@@ -69,10 +65,10 @@ func toMap(value any) (map[string]any, error) {
 		var schema map[string]any
 		err := json.Unmarshal(rawMessage, &schema)
 		if err != nil {
-			return nil, ez.New(op, ez.EINVALID, "failed to decode json.RawMessage into object", err)
+			return nil, ez.New(ez.EINVALID, "failed to decode json.RawMessage into object", err)
 		}
 		if len(schema) == 0 {
-			return nil, ez.New(op, ez.EINVALID, "value is an empty JSON object", nil)
+			return nil, ez.New(ez.EINVALID, "value is an empty JSON object", nil)
 		}
 		return schema, nil
 	}
@@ -80,16 +76,16 @@ func toMap(value any) (map[string]any, error) {
 	// Generic: marshal then unmarshal into a map
 	jsonBytes, err := json.Marshal(value)
 	if err != nil {
-		return nil, ez.New(op, ez.EINTERNAL, "failed to marshal value to JSON", err)
+		return nil, ez.New(ez.EINTERNAL, "failed to marshal value to JSON", err)
 	}
 
 	var schema map[string]any
 	err = json.Unmarshal(jsonBytes, &schema)
 	if err != nil {
-		return nil, ez.New(op, ez.EINVALID, "failed to unmarshal value JSON into object", err)
+		return nil, ez.New(ez.EINVALID, "failed to unmarshal value JSON into object", err)
 	}
 	if len(schema) == 0 {
-		return nil, ez.New(op, ez.EINVALID, "value is an empty JSON object", nil)
+		return nil, ez.New(ez.EINVALID, "value is an empty JSON object", nil)
 	}
 
 	return schema, nil

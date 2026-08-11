@@ -34,6 +34,6 @@ func New(kind agent.Harness) (Harness, error) {
 	case agent.HarnessPi:
 		return &PiCLI{}, nil
 	default:
-		return nil, ez.New("harnesses.New", ez.EINVALID, "unsupported harness: "+string(kind), nil)
+		return nil, ez.New(ez.EINVALID, "unsupported harness: "+string(kind), nil)
 	}
 }

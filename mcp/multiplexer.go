@@ -19,10 +19,8 @@ type Mux struct {
 
 // NewMux starts initialized clients list (already started/initialized) and builds an index.
 func NewMux(ctx context.Context, clients ...*client.Client) (*Mux, error) {
-	const op = "mcp.NewMux"
-
 	if len(clients) == 0 {
-		return nil, ez.New(op, ez.EINVALID, "no MCP clients provided", nil)
+		return nil, ez.New(ez.EINVALID, "no MCP clients provided", nil)
 	}
 
 	mux := &Mux{
@@ -32,32 +30,30 @@ func NewMux(ctx context.Context, clients ...*client.Client) (*Mux, error) {
 
 	err := mux.refreshTools(ctx)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	return mux, nil
 }
 
 func (m *Mux) refreshTools(ctx context.Context) error {
-	const op = "mcp.Mux.refreshTools"
-
 	merged := make([]runtimetypes.ToolDefinition, 0, 16)
 	toolToClient := make(map[string]int)
 
 	for clientIndex, mc := range m.clients {
 		result, err := mc.ListTools(ctx, mcpproto.ListToolsRequest{})
 		if err != nil {
-			return ez.Wrap(op, err)
+			return ez.Wrap(err)
 		}
 		for _, tool := range result.Tools {
 			// Convert mcp.Tool -> ToolDefinition
 			var schemaMap map[string]any
 			schemaBytes, marshalErr := json.Marshal(tool.InputSchema)
 			if marshalErr != nil {
-				return ez.Wrap(op, marshalErr)
+				return ez.Wrap(marshalErr)
 			}
 			unmarshalErr := json.Unmarshal(schemaBytes, &schemaMap)
 			if unmarshalErr != nil {
-				return ez.Wrap(op, unmarshalErr)
+				return ez.Wrap(unmarshalErr)
 			}
 
 			converted := runtimetypes.ToolDefinition{
@@ -87,22 +83,20 @@ func (m *Mux) ListTools(_ context.Context) ([]runtimetypes.ToolDefinition, error
 
 // CallTool routes a call by tool name to the owning MCP client and returns a text payload for your LLM transcript.
 func (m *Mux) CallTool(ctx context.Context, call *runtimetypes.ToolCall) (string, error) {
-	const op = "mcp.Mux.CallTool"
-
 	if call == nil {
-		return "", ez.New(op, ez.EINVALID, "nil tool call", nil)
+		return "", ez.New(ez.EINVALID, "nil tool call", nil)
 	}
 
 	clientIndex, exists := m.toolToClient[call.Name]
 	if !exists {
-		return "", ez.New(op, ez.ENOTFOUND, fmt.Sprintf("unknown tool: %s", call.Name), nil)
+		return "", ez.New(ez.ENOTFOUND, fmt.Sprintf("unknown tool: %s", call.Name), nil)
 	}
 
 	var argsMap map[string]any
 	if len(call.Arguments) > 0 {
 		unmarshalErr := json.Unmarshal([]byte(call.Arguments), &argsMap)
 		if unmarshalErr != nil {
-			return "", ez.Wrap(op, unmarshalErr)
+			return "", ez.Wrap(unmarshalErr)
 		}
 	}
 
@@ -115,7 +109,7 @@ func (m *Mux) CallTool(ctx context.Context, call *runtimetypes.ToolCall) (string
 
 	result, err := m.clients[clientIndex].CallTool(ctx, request)
 	if err != nil {
-		return "", ez.Wrap(op, err)
+		return "", ez.Wrap(err)
 	}
 
 	// Prefer text content; fall back to structured.
@@ -136,7 +130,7 @@ func (m *Mux) CallTool(ctx context.Context, call *runtimetypes.ToolCall) (string
 	if result.StructuredContent != nil {
 		bytesOut, marshalErr := json.Marshal(result.StructuredContent)
 		if marshalErr != nil {
-			return "", ez.Wrap(op, marshalErr)
+			return "", ez.Wrap(marshalErr)
 		}
 		return string(bytesOut), nil
 	}

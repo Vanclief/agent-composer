@@ -12,7 +12,7 @@ func (gpt *ChatGPT) CheckContextWindow(model string, totalInputTokens, compactAt
 
 	if ok && totalInputTokens > (maxTokens*compactAtPercent/100) {
 		errMsg := fmt.Sprintf("Input tokens %d exceed context window %d for model %s", totalInputTokens, maxTokens, model)
-		return ez.New("ChatGPT.CheckContextWindow", ez.EINVALID, errMsg, nil)
+		return ez.New(ez.EINVALID, errMsg, nil)
 	}
 
 	return nil

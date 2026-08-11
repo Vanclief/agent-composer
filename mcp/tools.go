@@ -9,18 +9,16 @@ import (
 )
 
 func (client *Client) ListTools(ctx context.Context) ([]runtimetypes.ToolDefinition, error) {
-	const op = "mcp.ListTools"
-
 	listToolsResult, err := client.c.ListTools(ctx, mcpproto.ListToolsRequest{})
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	toolDefinitions := make([]runtimetypes.ToolDefinition, 0, len(listToolsResult.Tools))
 	for _, tool := range listToolsResult.Tools {
 		jsonSchema, err := extractToolSchema(tool)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 
 		toolDefinitions = append(toolDefinitions, runtimetypes.ToolDefinition{
@@ -33,8 +31,6 @@ func (client *Client) ListTools(ctx context.Context) ([]runtimetypes.ToolDefinit
 }
 
 func (client *Client) CallTool(ctx context.Context, toolCall *runtimetypes.ToolCall) (string, error) {
-	const op = "mcp.CallTool"
-
 	request := mcpproto.CallToolRequest{
 		Params: mcpproto.CallToolParams{
 			Name:      toolCall.Name,
@@ -44,7 +40,7 @@ func (client *Client) CallTool(ctx context.Context, toolCall *runtimetypes.ToolC
 
 	res, err := client.c.CallTool(ctx, request)
 	if err != nil {
-		return "", ez.Wrap(op, err)
+		return "", ez.Wrap(err)
 	}
 
 	result := stringifyResult(res)

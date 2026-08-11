@@ -48,8 +48,6 @@ const defaultPermissions = PermissionsReadOnly
 // ParsePermissions normalizes and validates a raw permissions string. An empty
 // value resolves to the safe default (read_only).
 func ParsePermissions(raw string) (Permissions, error) {
-	const op = "harnesses.ParsePermissions"
-
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return defaultPermissions, nil
@@ -60,7 +58,7 @@ func ParsePermissions(raw string) (Permissions, error) {
 	case PermissionsReadOnly, PermissionsExec, PermissionsDangerouslyExec:
 		return p, nil
 	default:
-		return "", ez.New(op, ez.EINVALID, "invalid permissions: must be one of read_only, exec, dangerously-exec", nil)
+		return "", ez.New(ez.EINVALID, "invalid permissions: must be one of read_only, exec, dangerously-exec", nil)
 	}
 }
 
@@ -116,12 +114,10 @@ func resolveCodexPermissions(p Permissions) codexPermissionFlags {
 // carries one of the pre-`permissions` raw permission fields, so old workflows
 // fail loud instead of silently ignoring the setting.
 func rejectLegacyPermissionKeys(raw map[string]any, legacyKeys []string) error {
-	const op = "harnesses.rejectLegacyPermissionKeys"
-
 	for _, key := range legacyKeys {
 		_, found := raw[key]
 		if found {
-			return ez.New(op, ez.EINVALID, "'"+key+"' is no longer supported; use config.harness.permissions (read_only, exec, dangerously-exec)", nil)
+			return ez.New(ez.EINVALID, "'"+key+"' is no longer supported; use config.harness.permissions (read_only, exec, dangerously-exec)", nil)
 		}
 	}
 

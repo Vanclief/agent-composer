@@ -27,20 +27,18 @@ func (e *Executor) Run(ctx context.Context, snapshot *Snapshot, input map[string
 }
 
 func (e *Executor) Start(ctx context.Context, snapshot *Snapshot, input map[string]any) (*WorkflowExecutionHandle, error) {
-	const op = "workflow.Executor.Start"
-
 	err := e.validateRunnableSnapshot(snapshot)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	if e.Recorder == nil {
-		return nil, ez.New(op, ez.EINTERNAL, "execution recorder is nil", nil)
+		return nil, ez.New(ez.EINTERNAL, "execution recorder is nil", nil)
 	}
 
 	handle, err := e.Recorder.StartWorkflow(ctx, snapshot, input, e.ShellRoot)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	workflowHandle := handle
@@ -52,18 +50,16 @@ func (e *Executor) Start(ctx context.Context, snapshot *Snapshot, input map[stri
 }
 
 func (e *Executor) RunWithHandle(ctx context.Context, snapshot *Snapshot, input map[string]any) (map[string]any, *WorkflowExecutionHandle, error) {
-	const op = "workflow.Executor.Run"
-
 	err := e.validateRunnableSnapshot(snapshot)
 	if err != nil {
-		return nil, nil, ez.Wrap(op, err)
+		return nil, nil, ez.Wrap(err)
 	}
 
 	var workflowHandle *WorkflowExecutionHandle
 	if e.Recorder != nil {
 		handle, err := e.Recorder.StartWorkflow(ctx, snapshot, input, e.ShellRoot)
 		if err != nil {
-			return nil, nil, ez.Wrap(op, err)
+			return nil, nil, ez.Wrap(err)
 		}
 
 		workflowHandle = &handle
@@ -74,28 +70,26 @@ func (e *Executor) RunWithHandle(ctx context.Context, snapshot *Snapshot, input 
 	finishErr := e.finishWorkflow(ctx, workflowHandle, output, err)
 	if finishErr != nil {
 		if err != nil {
-			return nil, workflowHandle, ez.New(op, ez.EINTERNAL, "workflow execution failed and finish workflow also failed", finishErr)
+			return nil, workflowHandle, ez.New(ez.EINTERNAL, "workflow execution failed and finish workflow also failed", finishErr)
 		}
 
-		return nil, workflowHandle, ez.Wrap(op, finishErr)
+		return nil, workflowHandle, ez.Wrap(finishErr)
 	}
 
 	if err != nil {
-		return nil, workflowHandle, ez.Wrap(op, err)
+		return nil, workflowHandle, ez.Wrap(err)
 	}
 
 	return output, workflowHandle, nil
 }
 
 func (e *Executor) validateRunnableSnapshot(snapshot *Snapshot) error {
-	const op = "workflow.Executor.validateRunnableSnapshot"
-
 	if snapshot == nil {
-		return ez.New(op, ez.EINVALID, "workflow snapshot is nil", nil)
+		return ez.New(ez.EINVALID, "workflow snapshot is nil", nil)
 	}
 
 	if e.NewHarness == nil {
-		return ez.New(op, ez.EINTERNAL, "harness factory is nil", nil)
+		return ez.New(ez.EINTERNAL, "harness factory is nil", nil)
 	}
 
 	return nil
@@ -107,8 +101,6 @@ func (e *Executor) runDetached(ctx context.Context, snapshot *Snapshot, input ma
 }
 
 func (e *Executor) finishWorkflow(ctx context.Context, workflowHandle *WorkflowExecutionHandle, output map[string]any, runErr error) error {
-	const op = "workflow.Executor.finishWorkflow"
-
 	if workflowHandle == nil || e.Recorder == nil {
 		return nil
 	}
@@ -120,15 +112,13 @@ func (e *Executor) finishWorkflow(ctx context.Context, workflowHandle *WorkflowE
 
 	err := e.Recorder.FinishWorkflow(ctx, *workflowHandle, output, status)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
 }
 
 func (e *Executor) runSnapshot(ctx context.Context, snapshot *Snapshot, input map[string]any, workflowHandle *WorkflowExecutionHandle, scope NodeExecutionScope) (map[string]any, error) {
-	const op = "workflow.Executor.runSnapshot"
-
 	instanceOutputs := make(map[string]map[string]any, len(snapshot.Nodes))
 	completed := make(map[string]bool, len(snapshot.Order))
 
@@ -163,7 +153,7 @@ func (e *Executor) runSnapshot(ctx context.Context, snapshot *Snapshot, input ma
 		}
 
 		if len(ready) == 0 {
-			return nil, ez.New(op, ez.EINTERNAL, "workflow has unsatisfiable node dependencies", nil)
+			return nil, ez.New(ez.EINTERNAL, "workflow has unsatisfiable node dependencies", nil)
 		}
 
 		type nodeResult struct {
@@ -204,12 +194,12 @@ func (e *Executor) runSnapshot(ctx context.Context, snapshot *Snapshot, input ma
 	for outputName, binding := range snapshot.Outputs {
 		nodeValues, found := instanceOutputs[binding.From.InstanceID]
 		if !found {
-			return nil, ez.New(op, ez.EINTERNAL, "missing output for instance: "+binding.From.InstanceID, nil)
+			return nil, ez.New(ez.EINTERNAL, "missing output for instance: "+binding.From.InstanceID, nil)
 		}
 
 		value, found := nodeValues[binding.From.OutputName]
 		if !found {
-			return nil, ez.New(op, ez.EINTERNAL, "missing output value: "+binding.From.InstanceID+"."+binding.From.OutputName, nil)
+			return nil, ez.New(ez.EINTERNAL, "missing output value: "+binding.From.InstanceID+"."+binding.From.OutputName, nil)
 		}
 
 		outputs[outputName] = value
@@ -243,19 +233,17 @@ func dependenciesSatisfied(deps map[string]bool, completed map[string]bool) bool
 }
 
 func (e *Executor) runNode(ctx context.Context, snapshot *Snapshot, instanceID string, input map[string]any, instanceOutputs map[string]map[string]any, workflowHandle *WorkflowExecutionHandle, scope NodeExecutionScope) (map[string]any, error) {
-	const op = "workflow.Executor.runNode"
-
 	node := snapshot.Nodes[instanceID]
 	values, err := resolveNodeInputs(node, input, instanceOutputs)
 	if err != nil {
-		return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("node %q: %v", instanceID, err), err)
+		return nil, ez.New(ez.EINVALID, fmt.Sprintf("node %q: %v", instanceID, err), err)
 	}
 
 	var nodeHandle *NodeExecutionHandle
 	if workflowHandle != nil && e.Recorder != nil {
 		handle, startErr := e.Recorder.StartNode(ctx, *workflowHandle, node, values, scope)
 		if startErr != nil {
-			return nil, ez.Wrap(op, startErr)
+			return nil, ez.Wrap(startErr)
 		}
 
 		nodeHandle = &handle
@@ -276,14 +264,14 @@ func (e *Executor) runNode(ctx context.Context, snapshot *Snapshot, instanceID s
 	case "conditional":
 		value, trace, err = e.runConditional(ctx, node, values, workflowHandle, nodeHandle)
 	default:
-		err = ez.New(op, ez.EINVALID, "unsupported node kind: "+node.Kind, nil)
+		err = ez.New(ez.EINVALID, "unsupported node kind: "+node.Kind, nil)
 	}
 	if err != nil {
 		if nodeHandle != nil && e.Recorder != nil {
 			_ = e.Recorder.FinishNode(ctx, *nodeHandle, nil, executionmodels.NodeExecutionStatusFailed, makeErrorTrace(err))
 		}
 
-		return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("node %q failed", instanceID), err)
+		return nil, ez.New(ez.EINVALID, fmt.Sprintf("node %q failed", instanceID), err)
 	}
 
 	nodeOutputs, err := materializeNodeOutputs(node, value)
@@ -292,13 +280,13 @@ func (e *Executor) runNode(ctx context.Context, snapshot *Snapshot, instanceID s
 			_ = e.Recorder.FinishNode(ctx, *nodeHandle, nil, executionmodels.NodeExecutionStatusFailed, makeErrorTrace(err))
 		}
 
-		return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("node %q returned invalid outputs", instanceID), err)
+		return nil, ez.New(ez.EINVALID, fmt.Sprintf("node %q returned invalid outputs", instanceID), err)
 	}
 
 	if nodeHandle != nil && e.Recorder != nil {
 		err = e.Recorder.FinishNode(ctx, *nodeHandle, nodeOutputs, executionmodels.NodeExecutionStatusSucceeded, trace)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 	}
 
@@ -306,8 +294,6 @@ func (e *Executor) runNode(ctx context.Context, snapshot *Snapshot, instanceID s
 }
 
 func materializeNodeOutputs(node NodeSnapshot, value any) (map[string]any, error) {
-	const op = "workflow.materializeNodeOutputs"
-
 	if len(node.Outputs) == 1 {
 		return map[string]any{
 			node.OutputName: value,
@@ -316,12 +302,12 @@ func materializeNodeOutputs(node NodeSnapshot, value any) (map[string]any, error
 
 	outputs, ok := value.(map[string]any)
 	if !ok {
-		return nil, ez.New(op, ez.EINVALID, "node returned invalid multi-output value", nil)
+		return nil, ez.New(ez.EINVALID, "node returned invalid multi-output value", nil)
 	}
 
 	for outputName := range node.Outputs {
 		if _, found := outputs[outputName]; !found {
-			return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("node output %q is missing", outputName), nil)
+			return nil, ez.New(ez.EINVALID, fmt.Sprintf("node output %q is missing", outputName), nil)
 		}
 	}
 
@@ -329,8 +315,6 @@ func materializeNodeOutputs(node NodeSnapshot, value any) (map[string]any, error
 }
 
 func (e *Executor) runInference(ctx context.Context, node NodeSnapshot, input map[string]any, nodeHandle *NodeExecutionHandle) (any, error) {
-	const op = "workflow.Executor.runInference"
-
 	value, err := e.runStructuredNode(
 		ctx,
 		node.InstanceID,
@@ -345,18 +329,18 @@ func (e *Executor) runInference(ctx context.Context, node NodeSnapshot, input ma
 		nodeHandle,
 	)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	if node.WrapStructuredOutput {
 		wrappedValue, ok := value.(map[string]any)
 		if !ok {
-			return nil, ez.New(op, ez.EINVALID, "harness returned invalid wrapped structured output", nil)
+			return nil, ez.New(ez.EINVALID, "harness returned invalid wrapped structured output", nil)
 		}
 
 		unwrapped, found := wrappedValue["value"]
 		if !found {
-			return nil, ez.New(op, ez.EINVALID, "harness returned wrapped structured output without value", nil)
+			return nil, ez.New(ez.EINVALID, "harness returned wrapped structured output without value", nil)
 		}
 
 		value = unwrapped
@@ -366,21 +350,19 @@ func (e *Executor) runInference(ctx context.Context, node NodeSnapshot, input ma
 }
 
 func (e *Executor) runStructuredNode(ctx context.Context, agentName string, instruction string, harnessID agent.Harness, model string, effort runtimetypes.ReasoningEffort, harnessConfig json.RawMessage, outputSchema map[string]any, outputSchemaRaw json.RawMessage, input map[string]any, nodeHandle *NodeExecutionHandle) (any, error) {
-	const op = "workflow.Executor.runStructuredNode"
-
 	harness, err := e.NewHarness(harnessID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	err = harness.Validate(ctx, model, harnessConfig)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	prompt, err := buildPrompt(input, outputSchema)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	conversation := &agent.Conversation{
@@ -405,7 +387,7 @@ func (e *Executor) runStructuredNode(ctx context.Context, agentName string, inst
 	if e.Recorder != nil && nodeHandle != nil {
 		err = e.Recorder.StartConversation(ctx, *nodeHandle, conversation, input)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 	}
 
@@ -442,10 +424,10 @@ func (e *Executor) runStructuredNode(ctx context.Context, agentName string, inst
 		}
 
 		if result != nil {
-			return nil, ez.New(op, ez.EINTERNAL, "harness run failed: "+strings.TrimSpace(conversation.HarnessError), runErr)
+			return nil, ez.New(ez.EINTERNAL, "harness run failed: "+strings.TrimSpace(conversation.HarnessError), runErr)
 		}
 
-		return nil, ez.Wrap(op, runErr)
+		return nil, ez.Wrap(runErr)
 	}
 
 	if raw == "" {
@@ -455,7 +437,7 @@ func (e *Executor) runStructuredNode(ctx context.Context, agentName string, inst
 			_ = e.Recorder.FinishConversation(ctx, conversation, nil)
 		}
 
-		return nil, ez.New(op, ez.EINTERNAL, "harness returned an empty final message", nil)
+		return nil, ez.New(ez.EINTERNAL, "harness returned an empty final message", nil)
 	}
 
 	raw, err = extractStructuredJSON(raw)
@@ -466,7 +448,7 @@ func (e *Executor) runStructuredNode(ctx context.Context, agentName string, inst
 			_ = e.Recorder.FinishConversation(ctx, conversation, nil)
 		}
 
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	var value any
@@ -478,14 +460,14 @@ func (e *Executor) runStructuredNode(ctx context.Context, agentName string, inst
 			_ = e.Recorder.FinishConversation(ctx, conversation, nil)
 		}
 
-		return nil, ez.New(op, ez.EINVALID, "harness returned invalid JSON for structured output: "+raw, err)
+		return nil, ez.New(ez.EINVALID, "harness returned invalid JSON for structured output: "+raw, err)
 	}
 
 	conversation.Status = agent.ConversationStatusSucceeded
 	if e.Recorder != nil && nodeHandle != nil {
 		err = e.Recorder.FinishConversation(ctx, conversation, value)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 	}
 
@@ -493,16 +475,14 @@ func (e *Executor) runStructuredNode(ctx context.Context, agentName string, inst
 }
 
 func buildPrompt(input map[string]any, outputSchema map[string]any) (string, error) {
-	const op = "workflow.buildPrompt"
-
 	payload, err := json.MarshalIndent(input, "", "  ")
 	if err != nil {
-		return "", ez.Wrap(op, err)
+		return "", ez.Wrap(err)
 	}
 
 	schemaJSON, err := json.MarshalIndent(outputSchema, "", "  ")
 	if err != nil {
-		return "", ez.Wrap(op, err)
+		return "", ez.Wrap(err)
 	}
 
 	var builder strings.Builder
@@ -523,8 +503,6 @@ func buildPrompt(input map[string]any, outputSchema map[string]any) (string, err
 }
 
 func resolveNodeInputs(node NodeSnapshot, workflowInput map[string]any, instanceOutputs map[string]map[string]any) (map[string]any, error) {
-	const op = "workflow.resolveNodeInputs"
-
 	values := make(map[string]any, len(node.InputBindings))
 
 	for inputName, binding := range node.InputBindings {
@@ -532,21 +510,21 @@ func resolveNodeInputs(node NodeSnapshot, workflowInput map[string]any, instance
 		case BindingKindWorkflowInput:
 			value, found := workflowInput[binding.WorkflowInput]
 			if !found {
-				return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("missing workflow input %q", binding.WorkflowInput), nil)
+				return nil, ez.New(ez.EINVALID, fmt.Sprintf("missing workflow input %q", binding.WorkflowInput), nil)
 			}
 			values[inputName] = value
 		case BindingKindInstance:
 			nodeValues, found := instanceOutputs[binding.InstanceID]
 			if !found {
-				return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("missing upstream instance output %q", binding.InstanceID), nil)
+				return nil, ez.New(ez.EINVALID, fmt.Sprintf("missing upstream instance output %q", binding.InstanceID), nil)
 			}
 			value, found := nodeValues[binding.OutputName]
 			if !found {
-				return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("missing upstream output %q.%q", binding.InstanceID, binding.OutputName), nil)
+				return nil, ez.New(ez.EINVALID, fmt.Sprintf("missing upstream output %q.%q", binding.InstanceID, binding.OutputName), nil)
 			}
 			values[inputName] = value
 		default:
-			return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("unsupported binding kind %q", binding.Kind), nil)
+			return nil, ez.New(ez.EINVALID, fmt.Sprintf("unsupported binding kind %q", binding.Kind), nil)
 		}
 	}
 
@@ -554,15 +532,13 @@ func resolveNodeInputs(node NodeSnapshot, workflowInput map[string]any, instance
 }
 
 func runConnector(node NodeSnapshot, input map[string]any) (any, error) {
-	const op = "workflow.runConnector"
-
 	switch node.Operation {
 	case "collect":
 		values := make([]any, 0, len(node.InputBindings))
 		for _, inputName := range orderedPortNames(node.InputOrder, node.InputBindings) {
 			value, found := input[inputName]
 			if !found {
-				return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("missing connector input %q", inputName), nil)
+				return nil, ez.New(ez.EINVALID, fmt.Sprintf("missing connector input %q", inputName), nil)
 			}
 			values = append(values, value)
 		}
@@ -572,12 +548,12 @@ func runConnector(node NodeSnapshot, input map[string]any) (any, error) {
 		for _, inputName := range orderedPortNames(node.InputOrder, node.InputBindings) {
 			value, found := input[inputName]
 			if !found {
-				return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("missing connector input %q", inputName), nil)
+				return nil, ez.New(ez.EINVALID, fmt.Sprintf("missing connector input %q", inputName), nil)
 			}
 
 			items, err := toAnySlice(value)
 			if err != nil {
-				return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("connector input %q is not an array", inputName), err)
+				return nil, ez.New(ez.EINVALID, fmt.Sprintf("connector input %q is not an array", inputName), err)
 			}
 
 			values = append(values, items...)
@@ -585,14 +561,14 @@ func runConnector(node NodeSnapshot, input map[string]any) (any, error) {
 		return values, nil
 	case "pack":
 		if len(node.Outputs) != 1 {
-			return nil, ez.New(op, ez.EINVALID, "pack connector requires exactly one output", nil)
+			return nil, ez.New(ez.EINVALID, "pack connector requires exactly one output", nil)
 		}
 
 		values := make(map[string]any, len(node.InputBindings))
 		for _, inputName := range orderedPortNames(node.InputOrder, node.InputBindings) {
 			value, found := input[inputName]
 			if !found {
-				return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("missing connector input %q", inputName), nil)
+				return nil, ez.New(ez.EINVALID, fmt.Sprintf("missing connector input %q", inputName), nil)
 			}
 
 			values[inputName] = value
@@ -601,25 +577,25 @@ func runConnector(node NodeSnapshot, input map[string]any) (any, error) {
 		return values, nil
 	case "unpack":
 		if len(node.InputBindings) != 1 {
-			return nil, ez.New(op, ez.EINVALID, "unpack connector requires exactly one input", nil)
+			return nil, ez.New(ez.EINVALID, "unpack connector requires exactly one input", nil)
 		}
 
 		sourceName := sortedKeys(node.InputBindings)[0]
 		sourceValue, found := input[sourceName]
 		if !found {
-			return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("missing connector input %q", sourceName), nil)
+			return nil, ez.New(ez.EINVALID, fmt.Sprintf("missing connector input %q", sourceName), nil)
 		}
 
 		sourceObject, ok := sourceValue.(map[string]any)
 		if !ok {
-			return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("connector input %q is not an object", sourceName), nil)
+			return nil, ez.New(ez.EINVALID, fmt.Sprintf("connector input %q is not an object", sourceName), nil)
 		}
 
 		values := make(map[string]any, len(node.Outputs))
 		for outputName := range node.Outputs {
 			value, found := sourceObject[outputName]
 			if !found {
-				return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("connector unpack output %q is missing in source object", outputName), nil)
+				return nil, ez.New(ez.EINVALID, fmt.Sprintf("connector unpack output %q is missing in source object", outputName), nil)
 			}
 
 			values[outputName] = value
@@ -627,38 +603,34 @@ func runConnector(node NodeSnapshot, input map[string]any) (any, error) {
 
 		return values, nil
 	default:
-		return nil, ez.New(op, ez.EINVALID, fmt.Sprintf("unsupported connector operation %q", node.Operation), nil)
+		return nil, ez.New(ez.EINVALID, fmt.Sprintf("unsupported connector operation %q", node.Operation), nil)
 	}
 }
 
 func (e *Executor) runLoop(ctx context.Context, node NodeSnapshot, input map[string]any, workflowHandle *WorkflowExecutionHandle, nodeHandle *NodeExecutionHandle) (any, map[string]any, error) {
-	const op = "workflow.Executor.runLoop"
-
 	switch node.Operation {
 	case "foreach":
 		return e.runForeachLoop(ctx, node, input, workflowHandle, nodeHandle)
 	case "while":
 		return e.runWhileLoop(ctx, node, input, workflowHandle, nodeHandle)
 	default:
-		return nil, nil, ez.New(op, ez.EINVALID, fmt.Sprintf("unsupported loop operation %q", node.Operation), nil)
+		return nil, nil, ez.New(ez.EINVALID, fmt.Sprintf("unsupported loop operation %q", node.Operation), nil)
 	}
 }
 
 func (e *Executor) runConditional(ctx context.Context, node NodeSnapshot, input map[string]any, workflowHandle *WorkflowExecutionHandle, nodeHandle *NodeExecutionHandle) (any, map[string]any, error) {
-	const op = "workflow.Executor.runConditional"
-
 	if strings.TrimSpace(node.Operation) != "if" {
-		return nil, nil, ez.New(op, ez.EINVALID, fmt.Sprintf("unsupported conditional operation %q", node.Operation), nil)
+		return nil, nil, ez.New(ez.EINVALID, fmt.Sprintf("unsupported conditional operation %q", node.Operation), nil)
 	}
 
 	rawDecision, found := input[node.RoutesOn]
 	if !found {
-		return nil, nil, ez.New(op, ez.EINVALID, fmt.Sprintf("conditional is missing input %q", node.RoutesOn), nil)
+		return nil, nil, ez.New(ez.EINVALID, fmt.Sprintf("conditional is missing input %q", node.RoutesOn), nil)
 	}
 
 	decision, ok := rawDecision.(bool)
 	if !ok {
-		return nil, nil, ez.New(op, ez.EINVALID, fmt.Sprintf("conditional input %q must be a boolean", node.RoutesOn), nil)
+		return nil, nil, ez.New(ez.EINVALID, fmt.Sprintf("conditional input %q must be a boolean", node.RoutesOn), nil)
 	}
 
 	target := node.FalseTarget
@@ -669,12 +641,12 @@ func (e *Executor) runConditional(ctx context.Context, node NodeSnapshot, input 
 	}
 
 	if target == nil {
-		return nil, nil, ez.New(op, ez.EINVALID, "conditional target is missing", nil)
+		return nil, nil, ez.New(ez.EINVALID, "conditional target is missing", nil)
 	}
 
 	targetInput, err := selectTargetInput(*target, input)
 	if err != nil {
-		return nil, nil, ez.Wrap(op, err)
+		return nil, nil, ez.Wrap(err)
 	}
 
 	scope := NodeExecutionScope{
@@ -686,7 +658,7 @@ func (e *Executor) runConditional(ctx context.Context, node NodeSnapshot, input 
 
 	value, err := e.runTarget(ctx, *target, targetInput, workflowHandle, scope)
 	if err != nil {
-		return nil, nil, ez.Wrap(op, err)
+		return nil, nil, ez.Wrap(err)
 	}
 
 	trace := map[string]any{
@@ -698,20 +670,18 @@ func (e *Executor) runConditional(ctx context.Context, node NodeSnapshot, input 
 }
 
 func (e *Executor) runForeachLoop(ctx context.Context, node NodeSnapshot, input map[string]any, workflowHandle *WorkflowExecutionHandle, nodeHandle *NodeExecutionHandle) (any, map[string]any, error) {
-	const op = "workflow.Executor.runForeachLoop"
-
 	if node.LoopTarget == nil {
-		return nil, nil, ez.New(op, ez.EINVALID, "foreach loop is missing target", nil)
+		return nil, nil, ez.New(ez.EINVALID, "foreach loop is missing target", nil)
 	}
 
 	items, found := input[node.Over]
 	if !found {
-		return nil, nil, ez.New(op, ez.EINVALID, fmt.Sprintf("foreach loop is missing input %q", node.Over), nil)
+		return nil, nil, ez.New(ez.EINVALID, fmt.Sprintf("foreach loop is missing input %q", node.Over), nil)
 	}
 
 	iterationItems, err := toAnySlice(items)
 	if err != nil {
-		return nil, nil, ez.New(op, ez.EINVALID, fmt.Sprintf("foreach loop input %q is invalid", node.Over), err)
+		return nil, nil, ez.New(ez.EINVALID, fmt.Sprintf("foreach loop input %q is invalid", node.Over), err)
 	}
 
 	results := make([]any, 0, len(iterationItems))
@@ -725,7 +695,7 @@ func (e *Executor) runForeachLoop(ctx context.Context, node NodeSnapshot, input 
 
 		iterationInput, err := selectTargetInput(*node.LoopTarget, iterationValues)
 		if err != nil {
-			return nil, nil, ez.Wrap(op, err)
+			return nil, nil, ez.Wrap(err)
 		}
 
 		iterationIndex := index
@@ -738,7 +708,7 @@ func (e *Executor) runForeachLoop(ctx context.Context, node NodeSnapshot, input 
 
 		value, err := e.runTarget(ctx, *node.LoopTarget, iterationInput, workflowHandle, scope)
 		if err != nil {
-			return nil, nil, ez.Wrap(op, err)
+			return nil, nil, ez.Wrap(err)
 		}
 
 		results = append(results, value)
@@ -753,18 +723,16 @@ func (e *Executor) runForeachLoop(ctx context.Context, node NodeSnapshot, input 
 }
 
 func (e *Executor) runTarget(ctx context.Context, target NodeSnapshot, input map[string]any, workflowHandle *WorkflowExecutionHandle, scope NodeExecutionScope) (any, error) {
-	const op = "workflow.Executor.runTarget"
-
 	if target.Workflow != nil {
 		outputs, err := e.runSnapshot(ctx, target.Workflow, input, workflowHandle, scope)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 
 		if len(target.Outputs) == 1 {
 			value, found := outputs[target.OutputName]
 			if !found {
-				return nil, ez.New(op, ez.EINTERNAL, fmt.Sprintf("workflow target output %q is missing", target.OutputName), nil)
+				return nil, ez.New(ez.EINTERNAL, fmt.Sprintf("workflow target output %q is missing", target.OutputName), nil)
 			}
 
 			return value, nil
@@ -777,7 +745,7 @@ func (e *Executor) runTarget(ctx context.Context, target NodeSnapshot, input map
 	if workflowHandle != nil && e.Recorder != nil {
 		handle, err := e.Recorder.StartNode(ctx, *workflowHandle, target, input, scope)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 
 		nodeHandle = &handle
@@ -804,7 +772,7 @@ func (e *Executor) runTarget(ctx context.Context, target NodeSnapshot, input map
 	if nodeHandle != nil && e.Recorder != nil {
 		err = e.Recorder.FinishNode(ctx, *nodeHandle, nodeOutputs, executionmodels.NodeExecutionStatusSucceeded, nil)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 	}
 
@@ -812,14 +780,12 @@ func (e *Executor) runTarget(ctx context.Context, target NodeSnapshot, input map
 }
 
 func (e *Executor) runWhileLoop(ctx context.Context, node NodeSnapshot, input map[string]any, workflowHandle *WorkflowExecutionHandle, nodeHandle *NodeExecutionHandle) (any, map[string]any, error) {
-	const op = "workflow.Executor.runWhileLoop"
-
 	if node.WhileTarget == nil {
-		return nil, nil, ez.New(op, ez.EINVALID, "while loop is missing target", nil)
+		return nil, nil, ez.New(ez.EINVALID, "while loop is missing target", nil)
 	}
 
 	if node.MaxIterations <= 0 {
-		return nil, nil, ez.New(op, ez.EINVALID, "while loop max_iterations must be greater than zero", nil)
+		return nil, nil, ez.New(ez.EINVALID, "while loop max_iterations must be greater than zero", nil)
 	}
 
 	currentInput := make(map[string]any, len(input))
@@ -832,7 +798,7 @@ func (e *Executor) runWhileLoop(ctx context.Context, node NodeSnapshot, input ma
 	for iteration := 0; iteration < node.MaxIterations; iteration++ {
 		iterationInput, err := selectWhileTargetInput(*node.WhileTarget, currentInput)
 		if err != nil {
-			return nil, nil, ez.Wrap(op, err)
+			return nil, nil, ez.Wrap(err)
 		}
 
 		iterationIndex := iteration
@@ -845,7 +811,7 @@ func (e *Executor) runWhileLoop(ctx context.Context, node NodeSnapshot, input ma
 
 		nextState, shouldStop, err := e.runWhileTarget(ctx, *node.WhileTarget, iterationInput, workflowHandle, scope)
 		if err != nil {
-			return nil, nil, ez.Wrap(op, err)
+			return nil, nil, ez.Wrap(err)
 		}
 
 		currentInput[node.Updates] = nextState
@@ -871,27 +837,25 @@ func (e *Executor) runWhileLoop(ctx context.Context, node NodeSnapshot, input ma
 }
 
 func (e *Executor) runWhileTarget(ctx context.Context, target WhileTargetSnapshot, input map[string]any, workflowHandle *WorkflowExecutionHandle, scope NodeExecutionScope) (any, bool, error) {
-	const op = "workflow.Executor.runWhileTarget"
-
 	if target.Workflow != nil {
 		outputs, err := e.runSnapshot(ctx, target.Workflow, input, workflowHandle, scope)
 		if err != nil {
-			return nil, false, ez.Wrap(op, err)
+			return nil, false, ez.Wrap(err)
 		}
 
 		nextState, found := outputs[target.UpdateOutputName]
 		if !found {
-			return nil, false, ez.New(op, ez.EINTERNAL, fmt.Sprintf("while target output %q is missing", target.UpdateOutputName), nil)
+			return nil, false, ez.New(ez.EINTERNAL, fmt.Sprintf("while target output %q is missing", target.UpdateOutputName), nil)
 		}
 
 		rawShouldStop, found := outputs[target.BreakOutputName]
 		if !found {
-			return nil, false, ez.New(op, ez.EINTERNAL, fmt.Sprintf("while target output %q is missing", target.BreakOutputName), nil)
+			return nil, false, ez.New(ez.EINTERNAL, fmt.Sprintf("while target output %q is missing", target.BreakOutputName), nil)
 		}
 
 		shouldStop, ok := rawShouldStop.(bool)
 		if !ok {
-			return nil, false, ez.New(op, ez.EINVALID, fmt.Sprintf("while target output %q must be a boolean", target.BreakOutputName), nil)
+			return nil, false, ez.New(ez.EINVALID, fmt.Sprintf("while target output %q must be a boolean", target.BreakOutputName), nil)
 		}
 
 		return nextState, shouldStop, nil
@@ -902,7 +866,7 @@ func (e *Executor) runWhileTarget(ctx context.Context, target WhileTargetSnapsho
 		persistedTarget := whileTargetSnapshotNode(target)
 		handle, err := e.Recorder.StartNode(ctx, *workflowHandle, persistedTarget, input, scope)
 		if err != nil {
-			return nil, false, ez.Wrap(op, err)
+			return nil, false, ez.Wrap(err)
 		}
 
 		nodeHandle = &handle
@@ -931,7 +895,7 @@ func (e *Executor) runWhileTarget(ctx context.Context, target WhileTargetSnapsho
 
 	outputs, ok := value.(map[string]any)
 	if !ok {
-		err = ez.New(op, ez.EINVALID, "while target returned invalid structured output", nil)
+		err = ez.New(ez.EINVALID, "while target returned invalid structured output", nil)
 		if nodeHandle != nil && e.Recorder != nil {
 			_ = e.Recorder.FinishNode(ctx, *nodeHandle, nil, executionmodels.NodeExecutionStatusFailed, makeErrorTrace(err))
 		}
@@ -941,7 +905,7 @@ func (e *Executor) runWhileTarget(ctx context.Context, target WhileTargetSnapsho
 
 	nextState, found := outputs[target.UpdateOutputName]
 	if !found {
-		err = ez.New(op, ez.EINTERNAL, fmt.Sprintf("while target output %q is missing", target.UpdateOutputName), nil)
+		err = ez.New(ez.EINTERNAL, fmt.Sprintf("while target output %q is missing", target.UpdateOutputName), nil)
 		if nodeHandle != nil && e.Recorder != nil {
 			_ = e.Recorder.FinishNode(ctx, *nodeHandle, nil, executionmodels.NodeExecutionStatusFailed, makeErrorTrace(err))
 		}
@@ -951,7 +915,7 @@ func (e *Executor) runWhileTarget(ctx context.Context, target WhileTargetSnapsho
 
 	rawShouldStop, found := outputs[target.BreakOutputName]
 	if !found {
-		err = ez.New(op, ez.EINTERNAL, fmt.Sprintf("while target output %q is missing", target.BreakOutputName), nil)
+		err = ez.New(ez.EINTERNAL, fmt.Sprintf("while target output %q is missing", target.BreakOutputName), nil)
 		if nodeHandle != nil && e.Recorder != nil {
 			_ = e.Recorder.FinishNode(ctx, *nodeHandle, nil, executionmodels.NodeExecutionStatusFailed, makeErrorTrace(err))
 		}
@@ -961,7 +925,7 @@ func (e *Executor) runWhileTarget(ctx context.Context, target WhileTargetSnapsho
 
 	shouldStop, ok := rawShouldStop.(bool)
 	if !ok {
-		err = ez.New(op, ez.EINVALID, fmt.Sprintf("while target output %q must be a boolean", target.BreakOutputName), nil)
+		err = ez.New(ez.EINVALID, fmt.Sprintf("while target output %q must be a boolean", target.BreakOutputName), nil)
 		if nodeHandle != nil && e.Recorder != nil {
 			_ = e.Recorder.FinishNode(ctx, *nodeHandle, nil, executionmodels.NodeExecutionStatusFailed, makeErrorTrace(err))
 		}
@@ -972,7 +936,7 @@ func (e *Executor) runWhileTarget(ctx context.Context, target WhileTargetSnapsho
 	if nodeHandle != nil && e.Recorder != nil {
 		err = e.Recorder.FinishNode(ctx, *nodeHandle, outputs, executionmodels.NodeExecutionStatusSucceeded, nil)
 		if err != nil {
-			return nil, false, ez.Wrap(op, err)
+			return nil, false, ez.Wrap(err)
 		}
 	}
 

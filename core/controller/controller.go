@@ -18,10 +18,9 @@ import (
 
 const DEFAULT_CONFIG_DIR = ".agent_composer/config"
 
-const (
-	hardcodedEnvironment      = "LOCAL"
-	hardcodedPostgresPassword = "postgres"
-)
+const DEFAULT_DATA_DIR = ".agent_composer"
+
+const defaultEnvironment = "LOCAL"
 
 type Controller struct {
 	ctrl.BaseController
@@ -35,19 +34,13 @@ func New() (*Controller, error) {
 }
 
 func NewWithLogWriter(writer io.Writer) (*Controller, error) {
-	const op = "Controller.New"
-
-	// TODO: Remove these hardcoded local defaults when Agent Composer switches
-	// from Postgres to SQLite. Startup should not depend on Postgres-specific
-	// environment values once SQLite is the default runtime store.
-	err := os.Setenv("ENVIRONMENT", hardcodedEnvironment)
-	if err != nil {
-		return nil, ez.Wrap(op, err)
-	}
-
-	err = os.Setenv("POSTGRES_PASSWORD", hardcodedPostgresPassword)
-	if err != nil {
-		return nil, ez.Wrap(op, err)
+	// The configurator requires ENVIRONMENT, but a CLI tool should boot with
+	// zero setup, so an unset environment defaults to LOCAL
+	if os.Getenv("ENVIRONMENT") == "" {
+		err := os.Setenv("ENVIRONMENT", defaultEnvironment)
+		if err != nil {
+			return nil, ez.Wrap(err)
+		}
 	}
 
 	// Create a new instance
@@ -74,22 +67,22 @@ func NewWithLogWriter(writer io.Writer) (*Controller, error) {
 
 	configDir, err := resolveConfigDir()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	opts := []configurator.Option{}
 	opts = append(opts, configurator.WithRequiredEnv("ENVIRONMENT"))
-	opts = append(opts, configurator.WithRequiredEnv("POSTGRES_PASSWORD"))
+	opts = append(opts, configurator.WithOptionalEnv("POSTGRES_PASSWORD"))
 	opts = append(opts, configurator.WithConfigPath(configDir))
 
 	cfg, err := configurator.New(opts...)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	err = cfg.LoadEnvVars(&e)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	controller.Environment = cfg.Environment
@@ -102,11 +95,8 @@ func NewWithLogWriter(writer io.Writer) (*Controller, error) {
 			c.App.Port = "8080"
 			c.App.RateLimit = 60
 			c.App.RateLimitWindow = 10
-			c.Postgres.Host = "localhost:5432"
-			c.Postgres.Username = "agent_composer"
-			c.Postgres.Database = "agent_composer"
 		} else {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 	}
 
@@ -117,32 +107,69 @@ func NewWithLogWriter(writer io.Writer) (*Controller, error) {
 
 	err = controller.Setup()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return controller, nil
 }
 
 func (controller *Controller) Setup() error {
-	const op = "Controller.Setup"
-
-	// Connect to the database
-	psqlConfig := &controller.Config.Postgres
-	psqlConfig.Password = controller.EnvVars.PostgresPassword
-
 	opts := []relational.Option{
 		relational.WithRegistrableModels(models.REGISTRABLE),
-		relational.WithExtensions([]string{"uuid-ossp", "unaccent"}),
 	}
 
-	db, err := controller.WithPostgres(psqlConfig, models.ALL, opts...)
+	// A postgres section in the configuration opts into PostgreSQL. The
+	// default is a local SQLite file so the CLI runs without any external
+	// database dependency.
+	if controller.usesPostgres() {
+		psqlConfig := &controller.Config.Postgres
+		if controller.EnvVars.PostgresPassword != "" {
+			psqlConfig.Password = controller.EnvVars.PostgresPassword
+		}
+
+		opts = append(opts, relational.WithExtensions([]string{"uuid-ossp", "unaccent"}))
+
+		db, err := controller.WithPostgres(psqlConfig, models.ALL, opts...)
+		if err != nil {
+			return ez.Wrap(err)
+		}
+
+		controller.DB = db
+
+		return nil
+	}
+
+	sqliteConfig := &controller.Config.SQLite
+	if sqliteConfig.Path == "" {
+		path, err := defaultSQLitePath()
+		if err != nil {
+			return ez.Wrap(err)
+		}
+
+		sqliteConfig.Path = path
+	}
+
+	db, err := controller.WithSQLite(sqliteConfig, models.ALL, opts...)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	controller.DB = db
 
 	return nil
+}
+
+func (controller *Controller) usesPostgres() bool {
+	return controller.Config.Postgres.Host != "" || controller.Config.Postgres.Database != ""
+}
+
+func defaultSQLitePath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(home, DEFAULT_DATA_DIR, "agc.db"), nil
 }
 
 func resolveConfigDir() (string, error) {

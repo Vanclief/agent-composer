@@ -11,6 +11,7 @@ import (
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/rs/zerolog/log"
+	"github.com/uptrace/bun/dialect"
 	"github.com/uptrace/bun/migrate"
 	cli "github.com/urfave/cli/v2"
 	"golang.org/x/sync/errgroup"
@@ -442,6 +443,13 @@ func runMigrationByName(ctx context.Context, name string) error {
 	}
 	defer ctrl.DB.Close() // nolint:errcheck // Close errors are not actionable here.
 
+	// Registered migrations contain PostgreSQL-specific SQL. A SQLite
+	// database is always created from the current model schema, so it has
+	// nothing to migrate.
+	if ctrl.DB.Dialect().Name() != dialect.PG {
+		return ez.New(ez.EINVALID, "Migrations only apply to PostgreSQL. SQLite databases are created with the current schema and never need them", nil)
+	}
+
 	fullMigrator := migrate.NewMigrator(ctrl.DB.DB, appmigrations.Migrations)
 	err = fullMigrator.Init(ctx)
 	if err != nil {
@@ -526,7 +534,9 @@ func runWorkflow(ctx context.Context, workflowID string, filePath string, inputF
 
 	defer stack.Controller.DB.Close() // nolint:errcheck // Close errors are not actionable here.
 
-	response, err := stack.WorkflowAPI.Executions.Create(ctx, nil, &workflowexecutions.CreateRequest{
+	// Run synchronously: a detached run would die when the CLI process
+	// exits, before the workflow finishes.
+	response, err := stack.WorkflowAPI.Executions.Run(ctx, nil, &workflowexecutions.CreateRequest{
 		WorkflowID: strings.TrimSpace(workflowID),
 		File:       strings.TrimSpace(filePath),
 		Input:      input,
@@ -540,8 +550,6 @@ func runWorkflow(ctx context.Context, workflowID string, filePath string, inputF
 }
 
 func loadWorkflowInput(workflowID string, filePath string, inputFile string, inputJSON string, inputString string, hasInputFile bool, hasInputJSON bool, hasInputString bool) (map[string]any, error) {
-	const op = "cli.loadWorkflowInput"
-
 	inputSourceCount := 0
 	if hasInputFile {
 		inputSourceCount++
@@ -554,10 +562,10 @@ func loadWorkflowInput(workflowID string, filePath string, inputFile string, inp
 	}
 
 	if inputSourceCount == 0 {
-		return nil, ez.New(op, ez.EINVALID, "one of --input-file, --input-json, or --input-string is required", nil)
+		return nil, ez.New(ez.EINVALID, "one of --input-file, --input-json, or --input-string is required", nil)
 	}
 	if inputSourceCount > 1 {
-		return nil, ez.New(op, ez.EINVALID, "only one of --input-file, --input-json, or --input-string may be used", nil)
+		return nil, ez.New(ez.EINVALID, "only one of --input-file, --input-json, or --input-string may be used", nil)
 	}
 
 	if hasInputString {
@@ -568,7 +576,7 @@ func loadWorkflowInput(workflowID string, filePath string, inputFile string, inp
 	if inputFile != "" {
 		content, err := os.ReadFile(inputFile)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		raw = content
 	} else {
@@ -578,27 +586,25 @@ func loadWorkflowInput(workflowID string, filePath string, inputFile string, inp
 	var input map[string]any
 	err := json.Unmarshal(raw, &input)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return input, nil
 }
 
 func loadWorkflowStringInput(workflowID string, filePath string, inputString string) (map[string]any, error) {
-	const op = "cli.loadWorkflowStringInput"
-
 	blueprint, err := loadWorkflowBlueprint(workflowID, filePath)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	if len(blueprint.Workflow.Inputs) != 1 {
-		return nil, ez.New(op, ez.EINVALID, "--input-string requires a workflow with exactly one top-level input", nil)
+		return nil, ez.New(ez.EINVALID, "--input-string requires a workflow with exactly one top-level input", nil)
 	}
 
 	for inputName, typeRef := range blueprint.Workflow.Inputs {
 		if strings.TrimSpace(typeRef) != "string" {
-			return nil, ez.New(op, ez.EINVALID, "--input-string requires the workflow input type to be string", nil)
+			return nil, ez.New(ez.EINVALID, "--input-string requires the workflow input type to be string", nil)
 		}
 
 		return map[string]any{
@@ -606,17 +612,15 @@ func loadWorkflowStringInput(workflowID string, filePath string, inputString str
 		}, nil
 	}
 
-	return nil, ez.New(op, ez.EINTERNAL, "workflow input declaration is missing", nil)
+	return nil, ez.New(ez.EINTERNAL, "workflow input declaration is missing", nil)
 }
 
 func loadWorkflowBlueprint(workflowID string, filePath string) (*workflowruntime.Blueprint, error) {
-	const op = "cli.loadWorkflowBlueprint"
-
 	trimmedWorkflowID := strings.TrimSpace(workflowID)
 	if trimmedWorkflowID != "" {
 		blueprint, err := workflowruntime.LoadBlueprintByWorkflowID(trimmedWorkflowID)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 
 		return blueprint, nil
@@ -624,25 +628,23 @@ func loadWorkflowBlueprint(workflowID string, filePath string) (*workflowruntime
 
 	trimmedFilePath := strings.TrimSpace(filePath)
 	if trimmedFilePath == "" {
-		return nil, ez.New(op, ez.EINVALID, "one of --id or --file is required", nil)
+		return nil, ez.New(ez.EINVALID, "one of --id or --file is required", nil)
 	}
 
 	blueprint, err := workflowruntime.LoadBlueprintFile(trimmedFilePath)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return blueprint, nil
 }
 
 func loadWorkflowBytes(workflowID string, filePath string) ([]byte, error) {
-	const op = "cli.loadWorkflowBytes"
-
 	trimmedWorkflowID := strings.TrimSpace(workflowID)
 	if trimmedWorkflowID != "" {
 		raw, err := workflowruntime.ReadBlueprintBytesByWorkflowID(trimmedWorkflowID)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 
 		return raw, nil
@@ -650,12 +652,12 @@ func loadWorkflowBytes(workflowID string, filePath string) ([]byte, error) {
 
 	trimmedFilePath := strings.TrimSpace(filePath)
 	if trimmedFilePath == "" {
-		return nil, ez.New(op, ez.EINVALID, "one of --id or --file is required", nil)
+		return nil, ez.New(ez.EINVALID, "one of --id or --file is required", nil)
 	}
 
 	raw, err := os.ReadFile(trimmedFilePath)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return raw, nil

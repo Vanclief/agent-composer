@@ -27,7 +27,7 @@ type Data struct {
 func settingsPath() (string, error) {
 	home, err := workflowruntime.ResolveHomeDir()
 	if err != nil {
-		return "", ez.Wrap("settings.settingsPath", err)
+		return "", ez.Wrap(err)
 	}
 
 	return filepath.Join(home, "config", "settings.json"), nil
@@ -35,11 +35,9 @@ func settingsPath() (string, error) {
 
 // Load reads settings.json; a missing file is just defaults.
 func Load() (Data, error) {
-	const op = "settings.Load"
-
 	path, err := settingsPath()
 	if err != nil {
-		return Data{}, ez.Wrap(op, err)
+		return Data{}, ez.Wrap(err)
 	}
 
 	raw, err := os.ReadFile(path)
@@ -48,13 +46,13 @@ func Load() (Data, error) {
 			return Data{}, nil
 		}
 
-		return Data{}, ez.Wrap(op, err)
+		return Data{}, ez.Wrap(err)
 	}
 
 	var data Data
 	err = json.Unmarshal(raw, &data)
 	if err != nil {
-		return Data{}, ez.Wrap(op, err)
+		return Data{}, ez.Wrap(err)
 	}
 
 	return data, nil
@@ -62,26 +60,24 @@ func Load() (Data, error) {
 
 // Save writes settings.json atomically.
 func Save(data Data) error {
-	const op = "settings.Save"
-
 	path, err := settingsPath()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	err = os.MkdirAll(filepath.Dir(path), 0755)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	raw, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	tempFile, err := os.CreateTemp(filepath.Dir(path), "settings.*.tmp")
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	tempPath := tempFile.Name()
 
@@ -91,13 +87,13 @@ func Save(data Data) error {
 	}
 	if err != nil {
 		_ = os.Remove(tempPath)
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	err = os.Rename(tempPath, path)
 	if err != nil {
 		_ = os.Remove(tempPath)
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
@@ -116,11 +112,9 @@ func (r *GetRequest) Validate() error {
 }
 
 func (api *API) Get(ctx context.Context, requester interface{}, request *GetRequest) (*Data, error) {
-	const op = "settings.API.Get"
-
 	data, err := Load()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return &data, nil
@@ -131,34 +125,30 @@ type UpdateRequest struct {
 }
 
 func (r *UpdateRequest) Validate() error {
-	const op = "settings.UpdateRequest.Validate"
-
 	harness := strings.TrimSpace(r.Composer.Harness)
 	if harness != "" {
 		err := agent.Harness(harness).Validate()
 		if err != nil {
-			return ez.New(op, ez.EINVALID, "Unknown harness "+harness, err)
+			return ez.New(ez.EINVALID, "Unknown harness "+harness, err)
 		}
 	}
 
 	if harness != "" && strings.TrimSpace(r.Composer.Model) == "" {
-		return ez.New(op, ez.EINVALID, "model is required when a harness is set", nil)
+		return ez.New(ez.EINVALID, "model is required when a harness is set", nil)
 	}
 
 	return nil
 }
 
 func (api *API) Update(ctx context.Context, requester interface{}, request *UpdateRequest) (*Data, error) {
-	const op = "settings.API.Update"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	data, err := Load()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	data.Composer = ComposerSettings{
@@ -168,7 +158,7 @@ func (api *API) Update(ctx context.Context, requester interface{}, request *Upda
 
 	err = Save(data)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return &data, nil

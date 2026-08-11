@@ -19,11 +19,9 @@ type ListRequest struct {
 }
 
 func (r *ListRequest) Validate() error {
-	const op = "hooks.ListRequest.Validate"
-
 	err := r.CursorRequest.Validate()
 	if err != nil {
-		return ez.New(op, ez.EINVALID, err.Error(), nil)
+		return ez.New(ez.EINVALID, err.Error(), nil)
 	}
 	return nil
 }
@@ -34,11 +32,9 @@ type ListResponse struct {
 }
 
 func (api *API) List(ctx context.Context, requester interface{}, request *ListRequest) (*ListResponse, error) {
-	const op = "hooks.API.List"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	// TODO: permissions
@@ -57,23 +53,25 @@ func (api *API) List(ctx context.Context, requester interface{}, request *ListRe
 	}
 	if strings.TrimSpace(request.Search) != "" {
 		search := "%" + strings.TrimSpace(request.Search) + "%"
-		q = q.Where("(agent_name ILIKE ? OR command ILIKE ?)", search, search)
+		// LOWER + LIKE instead of ILIKE so the query works on both
+		// PostgreSQL and SQLite
+		q = q.Where("(LOWER(agent_name) LIKE LOWER(?) OR LOWER(command) LIKE LOWER(?))", search, search)
 	}
 
 	// Newest-first by cursor (UUIDv7 or your model's rules)
 	q, err = pagination.ApplyCursorToQuery(q, &request.CursorRequest, model, pagination.DESC)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	err = q.Scan(ctx)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	resp, err := pagination.BuildCursorResponse(items, request.Limit)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return &ListResponse{

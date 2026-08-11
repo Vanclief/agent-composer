@@ -23,10 +23,8 @@ var workflowIDPattern = regexp.MustCompile(`^[a-z0-9]+([_-][a-z0-9]+)*$`)
 // ValidateWorkflowID accepts lowercase slug ids: letters and digits
 // separated by single underscores or hyphens.
 func ValidateWorkflowID(id string) error {
-	const op = "workflow.ValidateWorkflowID"
-
 	if !workflowIDPattern.MatchString(id) {
-		return ez.New(op, ez.EINVALID, "Workflow ids are lowercase slugs like parallel_pr_review", nil)
+		return ez.New(ez.EINVALID, "Workflow ids are lowercase slugs like parallel_pr_review", nil)
 	}
 
 	return nil
@@ -41,18 +39,16 @@ type RenameResult struct {
 
 // encodeYAMLDoc renders an edited yaml.v3 document back to bytes.
 func encodeYAMLDoc(doc *yaml.Node) ([]byte, error) {
-	const op = "workflow.encodeYAMLDoc"
-
 	var buffer bytes.Buffer
 	encoder := yaml.NewEncoder(&buffer)
 	encoder.SetIndent(2)
 	err := encoder.Encode(doc)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	err = encoder.Close()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return buffer.Bytes(), nil
@@ -63,20 +59,18 @@ func encodeYAMLDoc(doc *yaml.Node) ([]byte, error) {
 // leave the field unchanged; a nil description does too, while ""
 // removes it.
 func rewriteWorkflowHeader(raw []byte, id, name string, description *string) ([]byte, error) {
-	const op = "workflow.rewriteWorkflowHeader"
-
 	var doc yaml.Node
 	err := yaml.Unmarshal(raw, &doc)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	if len(doc.Content) == 0 {
-		return nil, ez.New(op, ez.EINVALID, "The workflow file is empty", nil)
+		return nil, ez.New(ez.EINVALID, "The workflow file is empty", nil)
 	}
 
 	workflowMap := findMapValue(doc.Content[0], "workflow")
 	if workflowMap == nil {
-		return nil, ez.New(op, ez.EINVALID, "The file has no workflow section", nil)
+		return nil, ez.New(ez.EINVALID, "The file has no workflow section", nil)
 	}
 
 	if id != "" {
@@ -99,12 +93,10 @@ func rewriteWorkflowHeader(raw []byte, id, name string, description *string) ([]
 // rewriteWorkflowReferences rewrites nodes.*.workflow_id values from
 // oldID to newID. Returns nil bytes when nothing referenced oldID.
 func rewriteWorkflowReferences(raw []byte, oldID, newID string) ([]byte, error) {
-	const op = "workflow.rewriteWorkflowReferences"
-
 	var doc yaml.Node
 	err := yaml.Unmarshal(raw, &doc)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	if len(doc.Content) == 0 {
 		return nil, nil
@@ -132,11 +124,9 @@ func rewriteWorkflowReferences(raw []byte, oldID, newID string) ([]byte, error) 
 
 // compileBlueprintBytes verifies that blueprint bytes still compile.
 func compileBlueprintBytes(raw []byte) error {
-	const op = "workflow.compileBlueprintBytes"
-
 	scratch, err := os.CreateTemp("", "agc-rename-*.yaml")
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	scratchPath := scratch.Name()
 	defer os.Remove(scratchPath)
@@ -146,16 +136,16 @@ func compileBlueprintBytes(raw []byte) error {
 		err = closeErr
 	}
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	blueprint, err := LoadBlueprintFile(scratchPath)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	_, err = Compile(blueprint)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
@@ -164,8 +154,6 @@ func compileBlueprintBytes(raw []byte) error {
 // RenameWorkflowID moves a workflow (installed, drafted, or both) to a
 // new id and updates every blueprint that embeds it.
 func RenameWorkflowID(oldID, newID string) (*RenameResult, error) {
-	const op = "workflow.RenameWorkflowID"
-
 	oldID = strings.TrimSpace(oldID)
 	newID = strings.TrimSpace(newID)
 	if oldID == newID {
@@ -173,39 +161,39 @@ func RenameWorkflowID(oldID, newID string) (*RenameResult, error) {
 	}
 	err := ValidateWorkflowID(newID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	// The new id must be free — installed or drafted.
 	_, err = loadRegistryBlueprintEntryByWorkflowID(newID)
 	if err == nil {
-		return nil, ez.New(op, ez.EINVALID, "Workflow "+newID+" already exists", nil)
+		return nil, ez.New(ez.EINVALID, "Workflow "+newID+" already exists", nil)
 	}
 	if ez.ErrorCode(err) != ez.ENOTFOUND {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	collidingDraft, err := ReadDraft(newID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	if collidingDraft != "" {
-		return nil, ez.New(op, ez.EINVALID, "A draft for "+newID+" already exists", nil)
+		return nil, ez.New(ez.EINVALID, "A draft for "+newID+" already exists", nil)
 	}
 
 	installed := true
 	entry, err := loadRegistryBlueprintEntryByWorkflowID(oldID)
 	if err != nil {
 		if ez.ErrorCode(err) != ez.ENOTFOUND {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		installed = false
 	}
 	draft, err := ReadDraft(oldID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	if !installed && draft == "" {
-		return nil, ez.New(op, ez.ENOTFOUND, "Workflow "+oldID+" was not found", nil)
+		return nil, ez.New(ez.ENOTFOUND, "Workflow "+oldID+" was not found", nil)
 	}
 
 	// 1. The registry file moves first, so reference rewrites compile
@@ -213,31 +201,31 @@ func RenameWorkflowID(oldID, newID string) (*RenameResult, error) {
 	if installed {
 		raw, err := os.ReadFile(entry.Path)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		renamed, err := rewriteWorkflowHeader(raw, newID, "", nil)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		err = compileBlueprintBytes(renamed)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 
 		workflowDir, err := ResolveWorkflowDir()
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		err = writeFileAtomically(
 			filepath.Join(workflowDir, newID+".yaml"),
 			renamed,
 		)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		err = os.Remove(entry.Path)
 		if err != nil && !os.IsNotExist(err) {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 	}
 
@@ -245,30 +233,30 @@ func RenameWorkflowID(oldID, newID string) (*RenameResult, error) {
 	if draft != "" {
 		renamedDraft, err := rewriteWorkflowHeader([]byte(draft), newID, "", nil)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		err = WriteDraft(newID, renamedDraft)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		err = DeleteDraft(oldID)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 	}
 
 	// 3. The versions archive keeps its history under the new id.
 	oldVersionsDir, err := resolveVersionsDir(oldID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	newVersionsDir, err := resolveVersionsDir(newID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	err = os.Rename(oldVersionsDir, newVersionsDir)
 	if err != nil && !os.IsNotExist(err) {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	// 4. Blueprints embedding the old id follow it — installed files
@@ -277,7 +265,7 @@ func RenameWorkflowID(oldID, newID string) (*RenameResult, error) {
 	if installed {
 		summaries, err := ListBlueprints()
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		for _, summary := range summaries {
 			if summary.ID == newID {
@@ -297,11 +285,11 @@ func RenameWorkflowID(oldID, newID string) (*RenameResult, error) {
 			}
 			err = compileBlueprintBytes(rewritten)
 			if err != nil {
-				return nil, ez.Wrap(op, err)
+				return nil, ez.Wrap(err)
 			}
 			err = writeFileAtomically(refEntry.Path, rewritten)
 			if err != nil {
-				return nil, ez.Wrap(op, err)
+				return nil, ez.Wrap(err)
 			}
 			updatedRefs = append(updatedRefs, summary.ID)
 		}
@@ -309,11 +297,11 @@ func RenameWorkflowID(oldID, newID string) (*RenameResult, error) {
 
 	home, err := ResolveHomeDir()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	draftEntries, err := os.ReadDir(filepath.Join(home, "drafts"))
 	if err != nil && !os.IsNotExist(err) {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	for _, draftEntry := range draftEntries {
 		if draftEntry.IsDir() ||
@@ -331,7 +319,7 @@ func RenameWorkflowID(oldID, newID string) (*RenameResult, error) {
 		}
 		err = writeFileAtomically(path, rewritten)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 	}
 
@@ -346,57 +334,55 @@ func RenameWorkflowID(oldID, newID string) (*RenameResult, error) {
 // file and/or the pending draft. An empty name is unchanged; a nil
 // description is unchanged, "" clears it.
 func SetWorkflowHeader(workflowID, name string, description *string) error {
-	const op = "workflow.SetWorkflowHeader"
-
 	workflowID = strings.TrimSpace(workflowID)
 	name = strings.TrimSpace(name)
 	if name == "" && description == nil {
-		return ez.New(op, ez.EINVALID, "Nothing to update", nil)
+		return ez.New(ez.EINVALID, "Nothing to update", nil)
 	}
 
 	installed := true
 	entry, err := loadRegistryBlueprintEntryByWorkflowID(workflowID)
 	if err != nil {
 		if ez.ErrorCode(err) != ez.ENOTFOUND {
-			return ez.Wrap(op, err)
+			return ez.Wrap(err)
 		}
 		installed = false
 	}
 	draft, err := ReadDraft(workflowID)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	if !installed && draft == "" {
-		return ez.New(op, ez.ENOTFOUND, "Workflow "+workflowID+" was not found", nil)
+		return ez.New(ez.ENOTFOUND, "Workflow "+workflowID+" was not found", nil)
 	}
 
 	if installed {
 		raw, err := os.ReadFile(entry.Path)
 		if err != nil {
-			return ez.Wrap(op, err)
+			return ez.Wrap(err)
 		}
 		renamed, err := rewriteWorkflowHeader(raw, "", name, description)
 		if err != nil {
-			return ez.Wrap(op, err)
+			return ez.Wrap(err)
 		}
 		err = compileBlueprintBytes(renamed)
 		if err != nil {
-			return ez.Wrap(op, err)
+			return ez.Wrap(err)
 		}
 		err = writeFileAtomically(entry.Path, renamed)
 		if err != nil {
-			return ez.Wrap(op, err)
+			return ez.Wrap(err)
 		}
 	}
 
 	if draft != "" {
 		renamedDraft, err := rewriteWorkflowHeader([]byte(draft), "", name, description)
 		if err != nil {
-			return ez.Wrap(op, err)
+			return ez.Wrap(err)
 		}
 		err = WriteDraft(workflowID, renamedDraft)
 		if err != nil {
-			return ez.Wrap(op, err)
+			return ez.Wrap(err)
 		}
 	}
 

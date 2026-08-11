@@ -21,14 +21,12 @@ type RenameRequest struct {
 }
 
 func (r *RenameRequest) Validate() error {
-	const op = "workflow.RenameRequest.Validate"
-
 	if strings.TrimSpace(r.WorkflowID) == "" {
-		return ez.New(op, ez.EINVALID, "workflow_id is required", nil)
+		return ez.New(ez.EINVALID, "workflow_id is required", nil)
 	}
 	if strings.TrimSpace(r.NewID) == "" && strings.TrimSpace(r.Name) == "" &&
 		r.Description == nil {
-		return ez.New(op, ez.EINVALID, "Nothing to update", nil)
+		return ez.New(ez.EINVALID, "Nothing to update", nil)
 	}
 
 	return nil
@@ -46,11 +44,9 @@ type RenameResponse struct {
 // cascades: registry file, draft, versions archive, embedding
 // blueprints, and the run history rows that key Monitor's views.
 func (api *API) Rename(ctx context.Context, requester interface{}, request *RenameRequest) (*RenameResponse, error) {
-	const op = "workflow.API.Rename"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	oldID := strings.TrimSpace(request.WorkflowID)
@@ -61,7 +57,7 @@ func (api *API) Rename(ctx context.Context, requester interface{}, request *Rena
 	if newID != "" && newID != oldID {
 		result, err := workflowruntime.RenameWorkflowID(oldID, newID)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		effectiveID = result.WorkflowID
 		updatedRefs = result.UpdatedRefs
@@ -74,7 +70,7 @@ func (api *API) Rename(ctx context.Context, requester interface{}, request *Rena
 			Where("workflow_id = ?", oldID).
 			Exec(ctx)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 	}
 
@@ -85,7 +81,7 @@ func (api *API) Rename(ctx context.Context, requester interface{}, request *Rena
 			request.Description,
 		)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 	}
 

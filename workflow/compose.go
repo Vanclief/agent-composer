@@ -17,7 +17,7 @@ import (
 func ResolveHomeDir() (string, error) {
 	workflowDir, err := ResolveWorkflowDir()
 	if err != nil {
-		return "", ez.Wrap("workflow.ResolveHomeDir", err)
+		return "", ez.Wrap(err)
 	}
 
 	return filepath.Dir(workflowDir), nil
@@ -87,29 +87,27 @@ type ComposeResult struct {
 // is the agc home, so a workspace-scoped harness sandbox still reaches
 // the registry.
 func Compose(ctx context.Context, opts ComposeOptions) (*ComposeResult, error) {
-	const op = "workflow.Compose"
-
 	if strings.TrimSpace(opts.Request) == "" {
-		return nil, ez.New(op, ez.EINVALID, "request is required", nil)
+		return nil, ez.New(ez.EINVALID, "request is required", nil)
 	}
 
 	err := opts.Harness.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	if strings.TrimSpace(opts.Model) == "" {
-		return nil, ez.New(op, ez.EINVALID, "model is required", nil)
+		return nil, ez.New(ez.EINVALID, "model is required", nil)
 	}
 
 	home, err := ResolveHomeDir()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	schemaRaw, err := json.Marshal(composeResultSchema)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	executor := NewExecutor(home)
@@ -132,12 +130,12 @@ func Compose(ctx context.Context, opts ComposeOptions) (*ComposeResult, error) {
 		nil,
 	)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	fields, ok := value.(map[string]any)
 	if !ok {
-		return nil, ez.New(op, ez.EINTERNAL, "composer returned an unexpected result shape", nil)
+		return nil, ez.New(ez.EINTERNAL, "composer returned an unexpected result shape", nil)
 	}
 
 	text := func(key string) string {
@@ -158,11 +156,9 @@ func Compose(ctx context.Context, opts ComposeOptions) (*ComposeResult, error) {
 // VerifyProposedBlueprint compiles a composer proposal and confirms
 // its workflow.id, before the proposal may become a draft.
 func VerifyProposedBlueprint(raw []byte, expectedID string) (string, error) {
-	const op = "workflow.VerifyProposedBlueprint"
-
 	scratch, err := os.CreateTemp("", "agc-proposal-*.yaml")
 	if err != nil {
-		return "", ez.Wrap(op, err)
+		return "", ez.Wrap(err)
 	}
 	scratchPath := scratch.Name()
 	defer os.Remove(scratchPath)
@@ -172,22 +168,22 @@ func VerifyProposedBlueprint(raw []byte, expectedID string) (string, error) {
 		err = closeErr
 	}
 	if err != nil {
-		return "", ez.Wrap(op, err)
+		return "", ez.Wrap(err)
 	}
 
 	blueprint, err := LoadBlueprintFile(scratchPath)
 	if err != nil {
-		return "", ez.Wrap(op, err)
+		return "", ez.Wrap(err)
 	}
 
 	_, err = Compile(blueprint)
 	if err != nil {
-		return "", ez.Wrap(op, err)
+		return "", ez.Wrap(err)
 	}
 
 	proposedID := strings.TrimSpace(blueprint.Workflow.ID)
 	if expectedID != "" && proposedID != expectedID {
-		return "", ez.New(op, ez.EINVALID, "The proposal changed workflow.id from "+expectedID+" to "+proposedID, nil)
+		return "", ez.New(ez.EINVALID, "The proposal changed workflow.id from "+expectedID+" to "+proposedID, nil)
 	}
 
 	return proposedID, nil

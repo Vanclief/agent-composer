@@ -30,8 +30,6 @@ type ShellRunResult struct {
 
 // NewServer constructs an in process MCP server exposing a single shell_run tool
 func NewServer(rootDir string, allowedWorkdirs []string, defaultWorkdir string, maxTimeout time.Duration) (*server.MCPServer, error) {
-	const op = "mcp.shell.NewServer"
-
 	if maxTimeout <= 0 {
 		maxTimeout = 3 * time.Minute
 	}
@@ -39,19 +37,19 @@ func NewServer(rootDir string, allowedWorkdirs []string, defaultWorkdir string, 
 	if rootDir == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		rootDir = cwd
 	}
 
 	absoluteRoot, err := filepath.Abs(rootDir)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	resolver, err := newWorkdirResolver(absoluteRoot, allowedWorkdirs, defaultWorkdir)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	srv := server.NewMCPServer("Shell MCP", "0.1.0")
@@ -71,7 +69,7 @@ func NewServer(rootDir string, allowedWorkdirs []string, defaultWorkdir string, 
 		// 1) Resolve workdir (this defines `workdir`)
 		workdir, err := resolver.resolve(args.Workdir)
 		if err != nil {
-			return ShellRunResult{}, ez.Wrap(op, err)
+			return ShellRunResult{}, ez.Wrap(err)
 		}
 
 		// 2) Compute effective timeout (this defines `effectiveTimeout`)
@@ -94,7 +92,7 @@ func NewServer(rootDir string, allowedWorkdirs []string, defaultWorkdir string, 
 
 		switch {
 		case outcome.TimedOut:
-			return result, ez.New(op, ez.ERESOURCEEXHAUSTED, "command timed out", err)
+			return result, ez.New(ez.ERESOURCEEXHAUSTED, "command timed out", err)
 
 		case err != nil:
 			return result, err
@@ -115,8 +113,6 @@ type workdirResolver struct {
 }
 
 func newWorkdirResolver(rootDir string, allowed []string, defaultWorkdir string) (*workdirResolver, error) {
-	const op = "mcp.shell.newWorkdirResolver"
-
 	resolver := &workdirResolver{rootDir: rootDir}
 
 	if len(allowed) == 0 {
@@ -133,11 +129,11 @@ func newWorkdirResolver(rootDir string, allowed []string, defaultWorkdir string)
 			joined := filepath.Join(rootDir, clean)
 			abs, err := filepath.Abs(joined)
 			if err != nil {
-				return nil, ez.Wrap(op, err)
+				return nil, ez.Wrap(err)
 			}
 			rel, err := filepath.Rel(rootDir, abs)
 			if err != nil || strings.HasPrefix(rel, "..") {
-				return nil, ez.New(op, ez.ENOTAUTHORIZED, "allowed workdir escapes rootDir", nil)
+				return nil, ez.New(ez.ENOTAUTHORIZED, "allowed workdir escapes rootDir", nil)
 			}
 			resolver.allowedAbs = append(resolver.allowedAbs, abs)
 		}
@@ -145,7 +141,7 @@ func newWorkdirResolver(rootDir string, allowed []string, defaultWorkdir string)
 
 	defaultAbs, err := resolver.normalize(defaultWorkdir)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	if !resolver.allowAllUnder {
 		allowed := false
@@ -156,25 +152,23 @@ func newWorkdirResolver(rootDir string, allowed []string, defaultWorkdir string)
 			}
 		}
 		if !allowed {
-			return nil, ez.New(op, ez.ENOTAUTHORIZED, "default workdir not allowed", nil)
+			return nil, ez.New(ez.ENOTAUTHORIZED, "default workdir not allowed", nil)
 		}
 	}
 	checked, err := ensureDir(defaultAbs)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	resolver.defaultAbs = checked
 	return resolver, nil
 }
 
 func (r *workdirResolver) resolve(requested string) (string, error) {
-	const op = "mcp.shell.workdirResolver.resolve"
-
 	target := r.defaultAbs
 	if strings.TrimSpace(requested) != "" {
 		abs, err := r.normalize(requested)
 		if err != nil {
-			return "", ez.Wrap(op, err)
+			return "", ez.Wrap(err)
 		}
 		target = abs
 	}
@@ -187,15 +181,13 @@ func (r *workdirResolver) resolve(requested string) (string, error) {
 				return ensureDir(abs)
 			}
 		}
-		return "", ez.New(op, ez.ENOTAUTHORIZED, "workdir not allowed", nil)
+		return "", ez.New(ez.ENOTAUTHORIZED, "workdir not allowed", nil)
 	}
 
 	return ensureDir(abs)
 }
 
 func (r *workdirResolver) normalize(path string) (string, error) {
-	const op = "mcp.shell.workdirResolver.normalize"
-
 	if strings.TrimSpace(path) == "" {
 		return r.rootDir, nil
 	}
@@ -210,29 +202,27 @@ func (r *workdirResolver) normalize(path string) (string, error) {
 
 	abs, err := filepath.Abs(candidate)
 	if err != nil {
-		return "", ez.Wrap(op, err)
+		return "", ez.Wrap(err)
 	}
 
 	rel, err := filepath.Rel(r.rootDir, abs)
 	if err != nil || strings.HasPrefix(rel, "..") {
-		return "", ez.New(op, ez.ENOTAUTHORIZED, "workdir escapes rootDir", nil)
+		return "", ez.New(ez.ENOTAUTHORIZED, "workdir escapes rootDir", nil)
 	}
 
 	return abs, nil
 }
 
 func ensureDir(path string) (string, error) {
-	const op = "mcp.shell.ensureDir"
-
 	info, err := os.Stat(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "", ez.New(op, ez.ENOTFOUND, "workdir does not exist", err)
+			return "", ez.New(ez.ENOTFOUND, "workdir does not exist", err)
 		}
-		return "", ez.Wrap(op, err)
+		return "", ez.Wrap(err)
 	}
 	if !info.IsDir() {
-		return "", ez.New(op, ez.EINVALID, "workdir must be a directory", nil)
+		return "", ez.New(ez.EINVALID, "workdir must be a directory", nil)
 	}
 	return path, nil
 }

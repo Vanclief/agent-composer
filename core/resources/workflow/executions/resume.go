@@ -17,16 +17,14 @@ import (
 // seeded in memory and referenced (never copied) in the new
 // execution's metadata: resumed_from + reused_nodes.
 func (api *API) prepareResume(ctx context.Context, request *CreateRequest) (*preparedExecution, error) {
-	const op = "workflow.executions.API.prepareResume"
-
 	sourceID, err := uuid.Parse(strings.TrimSpace(request.ResumeFromExecutionID))
 	if err != nil {
-		return nil, ez.New(op, ez.EINVALID, "resume_from_execution_id must be a UUID", err)
+		return nil, ez.New(ez.EINVALID, "resume_from_execution_id must be a UUID", err)
 	}
 
 	source, err := executionmodels.GetWorkflowExecutionByID(ctx, api.db, sourceID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	target := strings.TrimSpace(request.ResumeFromNode)
@@ -35,23 +33,23 @@ func (api *API) prepareResume(ctx context.Context, request *CreateRequest) (*pre
 	if request.UseCurrentSpec {
 		blueprint, err := workflowruntime.LoadBlueprintByWorkflowID(source.WorkflowID)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		snapshot, err = workflowruntime.Compile(blueprint)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 	} else {
 		snapshot = &workflowruntime.Snapshot{}
 		err = json.Unmarshal(source.WorkflowSnapshot, snapshot)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 	}
 
 	if _, exists := snapshot.Nodes[target]; !exists {
 		return nil, ez.New(
-			op, ez.EINVALID,
+			ez.EINVALID,
 			"Node "+target+" does not exist in the workflow snapshot",
 			nil,
 		)
@@ -66,7 +64,7 @@ func (api *API) prepareResume(ctx context.Context, request *CreateRequest) (*pre
 		Order("created_at ASC").
 		Scan(ctx)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	latest := map[string]executionmodels.NodeExecution{}
 	for _, row := range rows {
@@ -110,18 +108,18 @@ func (api *API) prepareResume(ctx context.Context, request *CreateRequest) (*pre
 
 	if branch := strings.TrimSpace(request.Worktree); branch != "" {
 		if api.worktrees == nil {
-			return nil, ez.New(op, ez.EINTERNAL, "Worktree manager is unavailable", nil)
+			return nil, ez.New(ez.EINTERNAL, "Worktree manager is unavailable", nil)
 		}
 		repo, isGit, err := api.worktrees.RepoRoot(ctx, shellRoot)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		if !isGit {
-			return nil, ez.New(op, ez.EINVALID, shellRoot+" is not a git repository", nil)
+			return nil, ez.New(ez.EINVALID, shellRoot+" is not a git repository", nil)
 		}
 		path, _, err := api.worktrees.Resolve(ctx, repo, branch, request.Base)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		shellRoot = path
 	}
@@ -130,7 +128,7 @@ func (api *API) prepareResume(ctx context.Context, request *CreateRequest) (*pre
 	info, statErr := os.Stat(shellRoot)
 	if statErr != nil || !info.IsDir() {
 		return nil, ez.New(
-			op, ez.EINVALID,
+			ez.EINVALID,
 			"The original run's directory "+shellRoot+" no longer exists (its workspace may have been deleted). Launch the workflow again with a project/workspace, or recreate the workspace first.",
 			statErr,
 		)

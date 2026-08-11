@@ -18,8 +18,6 @@ type CreateRequest struct {
 }
 
 func (r CreateRequest) Validate() error {
-	const op = "hooks.CreateRequest.Validate"
-
 	err := validation.ValidateStruct(&r,
 		validation.Field(&r.EventType, validation.Required),
 		validation.Field(&r.Command, validation.Required),
@@ -27,29 +25,27 @@ func (r CreateRequest) Validate() error {
 		// AgentName optional, Args optional
 	)
 	if err != nil {
-		return ez.New(op, ez.EINVALID, err.Error(), nil)
+		return ez.New(ez.EINVALID, err.Error(), nil)
 	}
 	return nil
 }
 
 func (api *API) Create(ctx context.Context, requester interface{}, request *CreateRequest) (*hook.Hook, error) {
-	const op = "hooks.API.Create"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	// TODO: Permissions check
 
 	h, err := hook.NewHook(request.EventType, strings.TrimSpace(request.AgentName), strings.TrimSpace(request.Command), request.Args, request.Enabled)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	err = h.Insert(ctx, api.db)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return h, nil

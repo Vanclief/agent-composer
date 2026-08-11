@@ -9,11 +9,9 @@ import (
 // listEmbedders returns installed workflows that embed targetID via a
 // workflow node.
 func listEmbedders(targetID string) ([]string, error) {
-	const op = "workflow.listEmbedders"
-
 	summaries, err := ListBlueprints()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	embedders := []string{}
@@ -40,34 +38,31 @@ func listEmbedders(targetID string) ([]string, error) {
 // file and any pending draft. Run history and the versions archive
 // deliberately stay — deleting a workflow does not rewrite the past.
 func DeleteWorkflow(workflowID string) error {
-	const op = "workflow.DeleteWorkflow"
-
 	workflowID = strings.TrimSpace(workflowID)
 
 	installed := true
 	_, err := loadRegistryBlueprintEntryByWorkflowID(workflowID)
 	if err != nil {
 		if ez.ErrorCode(err) != ez.ENOTFOUND {
-			return ez.Wrap(op, err)
+			return ez.Wrap(err)
 		}
 		installed = false
 	}
 	draft, err := ReadDraft(workflowID)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	if !installed && draft == "" {
-		return ez.New(op, ez.ENOTFOUND, "Workflow "+workflowID+" was not found", nil)
+		return ez.New(ez.ENOTFOUND, "Workflow "+workflowID+" was not found", nil)
 	}
 
 	if installed {
 		embedders, err := listEmbedders(workflowID)
 		if err != nil {
-			return ez.Wrap(op, err)
+			return ez.Wrap(err)
 		}
 		if len(embedders) > 0 {
 			return ez.New(
-				op,
 				ez.EINVALID,
 				"Workflow "+workflowID+" is embedded by "+
 					strings.Join(embedders, ", ")+
@@ -78,13 +73,13 @@ func DeleteWorkflow(workflowID string) error {
 
 		err = DeleteBlueprintByWorkflowID(workflowID)
 		if err != nil {
-			return ez.Wrap(op, err)
+			return ez.Wrap(err)
 		}
 	}
 
 	err = DeleteDraft(workflowID)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil

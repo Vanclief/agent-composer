@@ -40,39 +40,35 @@ type WorkflowExecution struct {
 }
 
 func (w *WorkflowExecution) Validate() error {
-	const op = "execution.WorkflowExecution.Validate"
-
 	if w == nil {
-		return ez.New(op, ez.EINVALID, "workflow execution is nil", nil)
+		return ez.New(ez.EINVALID, "workflow execution is nil", nil)
 	}
 
 	if w.WorkflowID == "" {
-		return ez.New(op, ez.EINVALID, "workflow_id is required", nil)
+		return ez.New(ez.EINVALID, "workflow_id is required", nil)
 	}
 
 	if w.WorkflowVersion == "" {
-		return ez.New(op, ez.EINVALID, "workflow_version is required", nil)
+		return ez.New(ez.EINVALID, "workflow_version is required", nil)
 	}
 
 	if len(w.WorkflowSnapshot) == 0 {
-		return ez.New(op, ez.EINVALID, "workflow_snapshot is required", nil)
+		return ez.New(ez.EINVALID, "workflow_snapshot is required", nil)
 	}
 
 	err := w.Status.Validate()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
 }
 
 func (w *WorkflowExecution) Insert(ctx context.Context, db bun.IDB) error {
-	const op = "execution.WorkflowExecution.Insert"
-
 	if w.ID == uuid.Nil {
 		id, err := uuid.NewV7()
 		if err != nil {
-			return ez.Wrap(op, err)
+			return ez.Wrap(err)
 		}
 
 		w.ID = id
@@ -84,55 +80,49 @@ func (w *WorkflowExecution) Insert(ctx context.Context, db bun.IDB) error {
 
 	err := w.Validate()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	_, err = db.NewInsert().Model(w).Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
 }
 
 func (w *WorkflowExecution) Update(ctx context.Context, db bun.IDB) error {
-	const op = "execution.WorkflowExecution.Update"
-
 	if w.ID == uuid.Nil {
-		return ez.New(op, ez.EINVALID, "id is required", nil)
+		return ez.New(ez.EINVALID, "id is required", nil)
 	}
 
 	err := w.Validate()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	_, err = db.NewUpdate().Model(w).WherePK().Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
 }
 
 func (w *WorkflowExecution) Delete(ctx context.Context, db bun.IDB) error {
-	const op = "execution.WorkflowExecution.Delete"
-
 	if w.ID == uuid.Nil {
-		return ez.New(op, ez.EINVALID, "id is required", errors.New("nil uuid"))
+		return ez.New(ez.EINVALID, "id is required", errors.New("nil uuid"))
 	}
 
 	_, err := db.NewDelete().Model(w).WherePK().Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
 }
 
 func GetWorkflowExecutionByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*WorkflowExecution, error) {
-	const op = "execution.GetWorkflowExecutionByID"
-
 	record := new(WorkflowExecution)
 	err := db.NewSelect().
 		Model(record).
@@ -140,10 +130,10 @@ func GetWorkflowExecutionByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*W
 		Scan(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ez.New(op, ez.ENOTFOUND, fmt.Sprintf("workflow execution with ID %s not found", id), err)
+			return nil, ez.New(ez.ENOTFOUND, fmt.Sprintf("workflow execution with ID %s not found", id), err)
 		}
 
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return record, nil

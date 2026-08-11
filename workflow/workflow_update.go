@@ -24,35 +24,33 @@ type NodeConfigUpdate struct {
 // formatting survive, and the result is compiled before it is
 // persisted — an edit that breaks the blueprint never lands.
 func UpdateNodeConfig(workflowID, nodeName string, update NodeConfigUpdate) error {
-	const op = "workflow.UpdateNodeConfig"
-
 	entry, err := loadRegistryBlueprintEntryByWorkflowID(workflowID)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	raw, err := os.ReadFile(entry.Path)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	var doc yaml.Node
 	err = yaml.Unmarshal(raw, &doc)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	if len(doc.Content) == 0 {
-		return ez.New(op, ez.EINVALID, "The workflow file is empty", nil)
+		return ez.New(ez.EINVALID, "The workflow file is empty", nil)
 	}
 	root := doc.Content[0]
 
 	nodesMap := findMapValue(root, "nodes")
 	if nodesMap == nil {
-		return ez.New(op, ez.EINVALID, "The workflow has no nodes section", nil)
+		return ez.New(ez.EINVALID, "The workflow has no nodes section", nil)
 	}
 	nodeMap := findMapValue(nodesMap, nodeName)
 	if nodeMap == nil {
-		return ez.New(op, ez.ENOTFOUND, "Node "+nodeName+" was not found in "+workflowID, nil)
+		return ez.New(ez.ENOTFOUND, "Node "+nodeName+" was not found in "+workflowID, nil)
 	}
 
 	configMap := ensureMapValue(nodeMap, "config")
@@ -86,17 +84,17 @@ func UpdateNodeConfig(workflowID, nodeName string, update NodeConfigUpdate) erro
 	encoder.SetIndent(2)
 	err = encoder.Encode(&doc)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	err = encoder.Close()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	// Compile the edited blueprint before touching the real file.
 	scratch, err := os.CreateTemp("", "agc-workflow-*.yaml")
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	scratchPath := scratch.Name()
 	defer os.Remove(scratchPath)
@@ -106,21 +104,21 @@ func UpdateNodeConfig(workflowID, nodeName string, update NodeConfigUpdate) erro
 		err = closeErr
 	}
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	blueprint, err := LoadBlueprintFile(scratchPath)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	_, err = Compile(blueprint)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	err = os.WriteFile(entry.Path, buffer.Bytes(), 0o644)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil

@@ -12,8 +12,6 @@ import (
 
 // NewClient returns an initialized MCP client backed by the in-process AGC server.
 func NewClient(ctx context.Context, defaultShellRoot string) (*client.Client, error) {
-	const op = "mcp.agc.NewClient"
-
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -23,7 +21,7 @@ func NewClient(ctx context.Context, defaultShellRoot string) (*client.Client, er
 		LogWriter: io.Discard,
 	})
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	go func() {
@@ -36,7 +34,7 @@ func NewClient(ctx context.Context, defaultShellRoot string) (*client.Client, er
 	agcClient, err := mcp.NewInProcessClient(ctx, srv)
 	if err != nil {
 		_ = stack.Controller.DB.Close()
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return agcClient, nil

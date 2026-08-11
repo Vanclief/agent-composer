@@ -16,12 +16,10 @@ var reservedInstanceIDs = map[string]bool{
 }
 
 func compileBlueprint(blueprint *Blueprint, namespace string, resolver *workflowResolver, inputResolver func(string) (Binding, error), stack []string) (*compiledWorkflow, error) {
-	const op = "workflow.compileBlueprint"
-
 	workflowID := strings.TrimSpace(blueprint.Workflow.ID)
 	stack, err := pushWorkflowStack(stack, workflowID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	compiled := &compiledWorkflow{
@@ -39,29 +37,29 @@ func compileBlueprint(blueprint *Blueprint, namespace string, resolver *workflow
 	// URLs.
 	for _, instanceID := range instanceIDs {
 		if reservedInstanceIDs[instanceID] {
-			return nil, ez.New(op, ez.EINVALID, "instance id "+instanceID+" is reserved for the workflow inputs/outputs nodes", nil)
+			return nil, ez.New(ez.EINVALID, "instance id "+instanceID+" is reserved for the workflow inputs/outputs nodes", nil)
 		}
 	}
 
 	err = compileWorkflowInstances(blueprint, instanceIDs, namespace, resolver, inputResolver, compiled, workflowAliases, stack)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	err = compileConcreteInstances(blueprint, instanceIDs, namespace, resolver, inputResolver, compiled, workflowAliases, stack)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	for outputName, outputSpec := range blueprint.Workflow.Outputs {
 		binding, err := parseBinding(outputSpec.From)
 		if err != nil {
-			return nil, ez.Wrap(op, fmt.Errorf("workflow output %q: %w", outputName, err))
+			return nil, ez.Wrap(fmt.Errorf("workflow output %q: %w", outputName, err))
 		}
 
 		binding, err = rewriteBinding(binding, namespace, workflowAliases, inputResolver)
 		if err != nil {
-			return nil, ez.Wrap(op, fmt.Errorf("workflow output %q: %w", outputName, err))
+			return nil, ez.Wrap(fmt.Errorf("workflow output %q: %w", outputName, err))
 		}
 
 		compiled.Outputs[outputName] = binding
@@ -85,7 +83,7 @@ func compileWorkflowInstances(blueprint *Blueprint, instanceIDs []string, namesp
 
 		workflowID := strings.TrimSpace(nodeSpec.WorkflowID)
 		if workflowID == "" {
-			return ez.New("workflow.compileWorkflowInstances", ez.EINVALID, "workflow node is missing workflow_id", nil)
+			return ez.New(ez.EINVALID, "workflow node is missing workflow_id", nil)
 		}
 
 		childBlueprint, err := resolver.loadByWorkflowID(workflowID)
@@ -154,7 +152,7 @@ func compileConcreteInstances(blueprint *Blueprint, instanceIDs []string, namesp
 func lookupInstanceNodeSpec(blueprint *Blueprint, instance InstanceSpec) (NodeSpec, error) {
 	nodeSpec, found := blueprint.Nodes[instance.Node]
 	if !found {
-		return NodeSpec{}, ez.New("workflow.lookupInstanceNodeSpec", ez.EINVALID, "flow instance references unknown node: "+instance.Node, nil)
+		return NodeSpec{}, ez.New(ez.EINVALID, "flow instance references unknown node: "+instance.Node, nil)
 	}
 
 	return nodeSpec, nil
@@ -198,9 +196,9 @@ func validateConcreteNodeSpec(nodeSpec NodeSpec) error {
 			return nil
 		}
 
-		return ez.New("workflow.validateConcreteNodeSpec", ez.EINVALID, "only connector operations collect, concat, pack, and unpack are supported in the current workflow runtime", nil)
+		return ez.New(ez.EINVALID, "only connector operations collect, concat, pack, and unpack are supported in the current workflow runtime", nil)
 	default:
-		return ez.New("workflow.validateConcreteNodeSpec", ez.EINVALID, "only inference nodes, connector nodes, loop nodes, conditional nodes, and workflow nodes are supported in the current workflow runtime", nil)
+		return ez.New(ez.EINVALID, "only inference nodes, connector nodes, loop nodes, conditional nodes, and workflow nodes are supported in the current workflow runtime", nil)
 	}
 }
 
@@ -267,7 +265,7 @@ func attachLoopTargets(blueprint *Blueprint, nodeName string, nodeSpec NodeSpec,
 
 		return targetDependencies, nil
 	default:
-		return nil, ez.New("workflow.attachLoopTargets", ez.EINVALID, "only loop operations foreach and while are supported in the current workflow runtime", nil)
+		return nil, ez.New(ez.EINVALID, "only loop operations foreach and while are supported in the current workflow runtime", nil)
 	}
 }
 

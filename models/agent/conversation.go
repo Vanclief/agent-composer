@@ -76,48 +76,44 @@ func (c *Conversation) AfterScanRow(ctx context.Context) error {
 // ---- Validation ----
 
 func (c *Conversation) Validate() error {
-	const op = "Conversation.Validate"
-
 	if c.NodeExecutionID == uuid.Nil {
-		return ez.New(op, ez.EINVALID, "node_execution_id is required", nil)
+		return ez.New(ez.EINVALID, "node_execution_id is required", nil)
 	}
 
 	if c.AgentName == "" {
-		return ez.New(op, ez.EINVALID, "name is required", nil)
+		return ez.New(ez.EINVALID, "name is required", nil)
 	}
 
 	if c.Instructions == "" {
-		return ez.New(op, ez.EINVALID, "instructions are required", nil)
+		return ez.New(ez.EINVALID, "instructions are required", nil)
 	}
 
 	err := c.Harness.Validate()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	if strings.TrimSpace(c.Model) == "" {
-		return ez.New(op, ez.EINVALID, "model is required", nil)
+		return ez.New(ez.EINVALID, "model is required", nil)
 	}
 
 	err = validateHarnessConfig(c.HarnessConfig)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	if c.CompactAtPercent <= 0 || c.CompactAtPercent > 100 {
-		return ez.New(op, ez.EINVALID, "compact_at_percent must be between 1 and 100", nil)
+		return ez.New(ez.EINVALID, "compact_at_percent must be between 1 and 100", nil)
 	}
 
 	return nil
 }
 
 func (c *Conversation) Insert(ctx context.Context, db bun.IDB) error {
-	const op = "Conversation.Insert"
-
 	if c.ID == uuid.Nil {
 		id, err := uuid.NewV7()
 		if err != nil {
-			return ez.Wrap(op, err)
+			return ez.Wrap(err)
 		}
 		c.ID = id
 	}
@@ -128,48 +124,44 @@ func (c *Conversation) Insert(ctx context.Context, db bun.IDB) error {
 
 	err := c.Validate()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	_, err = db.NewInsert().Model(c).Exec(ctx)
 	if err != nil {
 		log.Debug().Err(err).Msg("Failed to insert conversation")
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
 }
 
 func (c *Conversation) Update(ctx context.Context, db bun.IDB) error {
-	const op = "Conversation.Update"
-
 	if c.ID == uuid.Nil {
-		return ez.New(op, ez.EINVALID, "id is required", nil)
+		return ez.New(ez.EINVALID, "id is required", nil)
 	}
 
 	err := c.Validate()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	_, err = db.NewUpdate().Model(c).WherePK().Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
 }
 
 func (c *Conversation) Delete(ctx context.Context, db bun.IDB) error {
-	const op = "Conversation.Delete"
-
 	if c.ID == uuid.Nil {
-		return ez.New(op, ez.EINVALID, "id is required", errors.New("nil uuid"))
+		return ez.New(ez.EINVALID, "id is required", errors.New("nil uuid"))
 	}
 
 	_, err := db.NewDelete().Model(c).WherePK().Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	return nil
 }
@@ -177,8 +169,6 @@ func (c *Conversation) Delete(ctx context.Context, db bun.IDB) error {
 // ---- Queries ----
 
 func GetConversationByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*Conversation, error) {
-	const op = "agent.GetConversationByID"
-
 	conversation := new(Conversation)
 	err := db.NewSelect().
 		Model(conversation).
@@ -187,23 +177,21 @@ func GetConversationByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*Conver
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			errMsg := fmt.Sprintf("conversation with ID %s not found", id)
-			return nil, ez.New(op, ez.ENOTFOUND, errMsg, err)
+			return nil, ez.New(ez.ENOTFOUND, errMsg, err)
 		}
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	return conversation, nil
 }
 
 func GetConversationsByNodeExecutionID(ctx context.Context, db bun.IDB, nodeExecutionID uuid.UUID) ([]*Conversation, error) {
-	const op = "agent.GetConversationsByNodeExecutionID"
-
 	var conversations []*Conversation
 	err := db.NewSelect().
 		Model(&conversations).
 		Where("conversation.node_execution_id = ?", nodeExecutionID).
 		Scan(ctx)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return conversations, nil

@@ -31,7 +31,6 @@ type User struct {
 }
 
 func NewUser(name, lastName, email, phoneNumber, countryCode string) (*User, error) {
-	const op = "user.NewUser"
 	var locale types.Locale
 
 	// Calculate locale
@@ -74,11 +73,9 @@ func (user *User) HasPhoneNumber() bool {
 }
 
 func (user *User) UpdateLocale(locale string) error {
-	const op = "User.UpdateLocale"
-
 	newLocale, err := types.NewLocaleString(locale)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	user.Locale = newLocale
@@ -120,19 +117,17 @@ func (u *User) Validate() error {
 }
 
 func (u *User) Insert(ctx context.Context, db bun.IDB) error {
-	const op = "user.Insert"
-
 	// Validate before inserting
 	err := u.Validate()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	_, err = db.NewInsert().
 		Model(u).
 		Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
@@ -140,12 +135,10 @@ func (u *User) Insert(ctx context.Context, db bun.IDB) error {
 
 // Update updates an existing user
 func (u *User) Update(ctx context.Context, db bun.IDB) error {
-	const op = "user.Update"
-
 	// Validate before updating
 	err := u.Validate()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	_, err = db.NewUpdate().
@@ -153,7 +146,7 @@ func (u *User) Update(ctx context.Context, db bun.IDB) error {
 		WherePK().
 		Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
@@ -161,14 +154,12 @@ func (u *User) Update(ctx context.Context, db bun.IDB) error {
 
 // Delete removes a user from the database
 func (u *User) Delete(ctx context.Context, db bun.IDB) error {
-	const op = "user.Delete"
-
 	_, err := db.NewDelete().
 		Model(u).
 		WherePK().
 		Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil

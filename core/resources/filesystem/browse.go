@@ -42,30 +42,28 @@ type BrowseResponse struct {
 }
 
 func (api *API) Browse(ctx context.Context, requester interface{}, request *BrowseRequest) (*BrowseResponse, error) {
-	const op = "filesystem.API.Browse"
-
 	path := strings.TrimSpace(request.Path)
 	if path == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		path = home
 	}
 
 	path, err := filepath.Abs(path)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	info, err := os.Stat(path)
 	if err != nil || !info.IsDir() {
-		return nil, ez.New(op, ez.ENOTFOUND, path+" is not a directory", err)
+		return nil, ez.New(ez.ENOTFOUND, path+" is not a directory", err)
 	}
 
 	entries, err := os.ReadDir(path)
 	if err != nil {
-		return nil, ez.New(op, ez.EINVALID, "Cannot read "+path, err)
+		return nil, ez.New(ez.EINVALID, "Cannot read "+path, err)
 	}
 
 	directories := []DirectoryEntry{}

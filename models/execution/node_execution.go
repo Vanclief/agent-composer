@@ -41,43 +41,39 @@ type NodeExecution struct {
 }
 
 func (n *NodeExecution) Validate() error {
-	const op = "execution.NodeExecution.Validate"
-
 	if n == nil {
-		return ez.New(op, ez.EINVALID, "node execution is nil", nil)
+		return ez.New(ez.EINVALID, "node execution is nil", nil)
 	}
 
 	if n.WorkflowExecutionID == uuid.Nil {
-		return ez.New(op, ez.EINVALID, "workflow_execution_id is required", nil)
+		return ez.New(ez.EINVALID, "workflow_execution_id is required", nil)
 	}
 
 	if n.NodeID == "" {
-		return ez.New(op, ez.EINVALID, "node_id is required", nil)
+		return ez.New(ez.EINVALID, "node_id is required", nil)
 	}
 
 	if n.Kind == "" {
-		return ez.New(op, ez.EINVALID, "kind is required", nil)
+		return ez.New(ez.EINVALID, "kind is required", nil)
 	}
 
 	if len(n.NodeSnapshot) == 0 {
-		return ez.New(op, ez.EINVALID, "node_snapshot is required", nil)
+		return ez.New(ez.EINVALID, "node_snapshot is required", nil)
 	}
 
 	err := n.Status.Validate()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
 }
 
 func (n *NodeExecution) Insert(ctx context.Context, db bun.IDB) error {
-	const op = "execution.NodeExecution.Insert"
-
 	if n.ID == uuid.Nil {
 		id, err := uuid.NewV7()
 		if err != nil {
-			return ez.Wrap(op, err)
+			return ez.Wrap(err)
 		}
 
 		n.ID = id
@@ -89,55 +85,49 @@ func (n *NodeExecution) Insert(ctx context.Context, db bun.IDB) error {
 
 	err := n.Validate()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	_, err = db.NewInsert().Model(n).Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
 }
 
 func (n *NodeExecution) Update(ctx context.Context, db bun.IDB) error {
-	const op = "execution.NodeExecution.Update"
-
 	if n.ID == uuid.Nil {
-		return ez.New(op, ez.EINVALID, "id is required", nil)
+		return ez.New(ez.EINVALID, "id is required", nil)
 	}
 
 	err := n.Validate()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	_, err = db.NewUpdate().Model(n).WherePK().Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
 }
 
 func (n *NodeExecution) Delete(ctx context.Context, db bun.IDB) error {
-	const op = "execution.NodeExecution.Delete"
-
 	if n.ID == uuid.Nil {
-		return ez.New(op, ez.EINVALID, "id is required", errors.New("nil uuid"))
+		return ez.New(ez.EINVALID, "id is required", errors.New("nil uuid"))
 	}
 
 	_, err := db.NewDelete().Model(n).WherePK().Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
 }
 
 func GetNodeExecutionByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*NodeExecution, error) {
-	const op = "execution.GetNodeExecutionByID"
-
 	record := new(NodeExecution)
 	err := db.NewSelect().
 		Model(record).
@@ -145,10 +135,10 @@ func GetNodeExecutionByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*NodeE
 		Scan(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ez.New(op, ez.ENOTFOUND, fmt.Sprintf("node execution with ID %s not found", id), err)
+			return nil, ez.New(ez.ENOTFOUND, fmt.Sprintf("node execution with ID %s not found", id), err)
 		}
 
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return record, nil

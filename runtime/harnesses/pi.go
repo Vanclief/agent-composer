@@ -26,8 +26,6 @@ type piConfig struct {
 }
 
 func parsePiConfig(raw json.RawMessage) (piConfig, error) {
-	const op = "harnesses.parsePiConfig"
-
 	if len(raw) == 0 {
 		return piConfig{}, nil
 	}
@@ -35,11 +33,11 @@ func parsePiConfig(raw json.RawMessage) (piConfig, error) {
 	var cfg piConfig
 	err := json.Unmarshal(raw, &cfg)
 	if err != nil {
-		return piConfig{}, ez.New(op, ez.EINVALID, "invalid pi harness_config", err)
+		return piConfig{}, ez.New(ez.EINVALID, "invalid pi harness_config", err)
 	}
 	for _, arg := range cfg.ExtraArgs {
 		if strings.TrimSpace(arg) == "" {
-			return piConfig{}, ez.New(op, ez.EINVALID, "extra_args cannot contain empty values", nil)
+			return piConfig{}, ez.New(ez.EINVALID, "extra_args cannot contain empty values", nil)
 		}
 	}
 
@@ -47,25 +45,21 @@ func parsePiConfig(raw json.RawMessage) (piConfig, error) {
 }
 
 func (c *PiCLI) Validate(ctx context.Context, model string, config json.RawMessage) error {
-	const op = "harnesses.PiCLI.Validate"
-
 	if strings.TrimSpace(model) == "" {
-		return ez.New(op, ez.EINVALID, "model is required", nil)
+		return ez.New(ez.EINVALID, "model is required", nil)
 	}
 	_, err := parsePiConfig(config)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
 }
 
 func (c *PiCLI) Run(ctx context.Context, conversation *agent.Conversation, prompt string) (*RunResult, error) {
-	const op = "harnesses.PiCLI.Run"
-
 	cfg, err := parsePiConfig(conversation.HarnessConfig)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	workdir := strings.TrimSpace(conversation.ShellRoot)
@@ -144,13 +138,13 @@ func (c *PiCLI) Run(ctx context.Context, conversation *agent.Conversation, promp
 
 	if runErr != nil {
 		if ctx.Err() != nil {
-			return result, ez.New(op, ez.EUNAVAILABLE, "pi run canceled", ctx.Err())
+			return result, ez.New(ez.EUNAVAILABLE, "pi run canceled", ctx.Err())
 		}
 		message := "pi run failed"
 		if strings.TrimSpace(harnessError) != "" {
 			message = message + ": " + strings.TrimSpace(harnessError)
 		}
-		return result, ez.New(op, ez.EINTERNAL, message, runErr)
+		return result, ez.New(ez.EINTERNAL, message, runErr)
 	}
 
 	return result, nil

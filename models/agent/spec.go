@@ -55,11 +55,9 @@ func (pt *Spec) AfterScanRow(ctx context.Context) error {
 }
 
 func NewAgentSpec(name string, harness Harness, model string, harnessConfig json.RawMessage, instructions string, reasoningEffort runtimetypes.ReasoningEffort, version int) (*Spec, error) {
-	const op = "agent.NewAgentSpec"
-
 	id, err := uuid.NewV7()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	pt := &Spec{
@@ -82,7 +80,7 @@ func NewAgentSpec(name string, harness Harness, model string, harnessConfig json
 
 	err = pt.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return pt, nil
@@ -91,36 +89,34 @@ func NewAgentSpec(name string, harness Harness, model string, harnessConfig json
 // ---- Validation ----
 
 func (pt *Spec) Validate() error {
-	const op = "Spec.Validate"
-
 	if pt.Name == "" {
-		return ez.New(op, ez.EINVALID, "name is required", nil)
+		return ez.New(ez.EINVALID, "name is required", nil)
 	}
 
 	if pt.Instructions == "" {
-		return ez.New(op, ez.EINVALID, "instructions are required", nil)
+		return ez.New(ez.EINVALID, "instructions are required", nil)
 	}
 
 	if pt.Version <= 0 {
-		return ez.New(op, ez.EINVALID, "version must be > 0", nil)
+		return ez.New(ez.EINVALID, "version must be > 0", nil)
 	}
 
 	err := pt.Harness.Validate()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	if strings.TrimSpace(pt.Model) == "" {
-		return ez.New(op, ez.EINVALID, "model is required", nil)
+		return ez.New(ez.EINVALID, "model is required", nil)
 	}
 
 	err = validateHarnessConfig(pt.HarnessConfig)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	if pt.CompactAtPercent <= 0 || pt.CompactAtPercent > 100 {
-		return ez.New(op, ez.EINVALID, "compact_at_percent must be between 1 and 100", nil)
+		return ez.New(ez.EINVALID, "compact_at_percent must be between 1 and 100", nil)
 	}
 
 	return nil
@@ -129,57 +125,51 @@ func (pt *Spec) Validate() error {
 // ---- CRUD ----
 
 func (pt *Spec) Insert(ctx context.Context, db bun.IDB) error {
-	const op = "Spec.Insert"
-
 	if pt.ID == uuid.Nil {
 		id, err := uuid.NewV7()
 		if err != nil {
-			return ez.Wrap(op, err)
+			return ez.Wrap(err)
 		}
 		pt.ID = id
 	}
 
 	err := pt.Validate()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	_, err = db.NewInsert().Model(pt).Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	return nil
 }
 
 func (pt *Spec) Update(ctx context.Context, db bun.IDB) error {
-	const op = "Spec.Update"
-
 	if pt.ID == uuid.Nil {
-		return ez.New(op, ez.EINVALID, "id is required", nil)
+		return ez.New(ez.EINVALID, "id is required", nil)
 	}
 
 	err := pt.Validate()
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	_, err = db.NewUpdate().Model(pt).WherePK().Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	return nil
 }
 
 func (pt *Spec) Delete(ctx context.Context, db bun.IDB) error {
-	const op = "Spec.Delete"
-
 	if pt.ID == uuid.Nil {
-		return ez.New(op, ez.EINVALID, "id is required", errors.New("nil uuid"))
+		return ez.New(ez.EINVALID, "id is required", errors.New("nil uuid"))
 	}
 
 	_, err := db.NewDelete().Model(pt).WherePK().Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 	return nil
 }
@@ -187,8 +177,6 @@ func (pt *Spec) Delete(ctx context.Context, db bun.IDB) error {
 // ---- Queries ----
 
 func GetAgentSpecByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*Spec, error) {
-	const op = "agent.GetAgentSpecByID"
-
 	pt := new(Spec)
 	err := db.NewSelect().
 		Model(pt).
@@ -197,9 +185,9 @@ func GetAgentSpecByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*Spec, err
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			errMsg := fmt.Sprintf("agent spec with ID %s not found", id)
-			return nil, ez.New(op, ez.ENOTFOUND, errMsg, err)
+			return nil, ez.New(ez.ENOTFOUND, errMsg, err)
 		}
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	return pt, nil
 }
@@ -227,8 +215,6 @@ func (pt Spec) GetUniqueValue() interface{} {
 }
 
 func validateHarnessConfig(raw json.RawMessage) error {
-	const op = "agent.validateHarnessConfig"
-
 	if len(raw) == 0 {
 		return nil
 	}
@@ -236,7 +222,7 @@ func validateHarnessConfig(raw json.RawMessage) error {
 	var payload map[string]any
 	err := json.Unmarshal(raw, &payload)
 	if err != nil {
-		return ez.New(op, ez.EINVALID, "harness_config must be a valid JSON object", err)
+		return ez.New(ez.EINVALID, "harness_config must be a valid JSON object", err)
 	}
 
 	return nil

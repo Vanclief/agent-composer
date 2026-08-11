@@ -14,29 +14,25 @@ type DeleteRequest struct {
 }
 
 func (r DeleteRequest) Validate() error {
-	const op = "hooks.DeleteRequest.Validate"
-
 	err := validation.ValidateStruct(&r,
 		validation.Field(&r.HookID, validation.Required),
 	)
 	if err != nil {
-		return ez.New(op, ez.EINVALID, err.Error(), nil)
+		return ez.New(ez.EINVALID, err.Error(), nil)
 	}
 	return nil
 }
 
 func (api *API) Delete(ctx context.Context, requester interface{}, request *DeleteRequest) (uuid.UUID, error) {
-	const op = "hooks.API.Delete"
-
 	err := request.Validate()
 	if err != nil {
-		return uuid.Nil, ez.Wrap(op, err)
+		return uuid.Nil, ez.Wrap(err)
 	}
 
 	// Get
 	h, err := hook.GetHookByID(ctx, api.db, request.HookID)
 	if err != nil {
-		return uuid.Nil, ez.Wrap(op, err)
+		return uuid.Nil, ez.Wrap(err)
 	}
 
 	// TODO: permissions
@@ -44,7 +40,7 @@ func (api *API) Delete(ctx context.Context, requester interface{}, request *Dele
 	// Delete
 	err = h.Delete(ctx, api.db)
 	if err != nil {
-		return uuid.Nil, ez.Wrap(op, err)
+		return uuid.Nil, ez.Wrap(err)
 	}
 
 	return h.ID, nil

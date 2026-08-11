@@ -19,10 +19,8 @@ type ComposeRequest struct {
 }
 
 func (r *ComposeRequest) Validate() error {
-	const op = "workflow.ComposeRequest.Validate"
-
 	if strings.TrimSpace(r.Request) == "" {
-		return ez.New(op, ez.EINVALID, "request is required", nil)
+		return ez.New(ez.EINVALID, "request is required", nil)
 	}
 
 	return nil
@@ -83,11 +81,9 @@ func harnessCatalogText(ctx context.Context) string {
 // composerAgent resolves which harness/model the composer runs on:
 // the settings choice, or the first installed harness in the catalog.
 func composerAgent(ctx context.Context) (agent.Harness, string, error) {
-	const op = "workflow.composerAgent"
-
 	data, err := settings.Load()
 	if err != nil {
-		return "", "", ez.Wrap(op, err)
+		return "", "", ez.Wrap(err)
 	}
 
 	harness := strings.TrimSpace(data.Composer.Harness)
@@ -107,20 +103,18 @@ func composerAgent(ctx context.Context) (agent.Harness, string, error) {
 		return info.ID, info.Models[0], nil
 	}
 
-	return "", "", ez.New(op, ez.EINVALID, "No harness is available for the composer — pick one in Settings", nil)
+	return "", "", ez.New(ez.EINVALID, "No harness is available for the composer — pick one in Settings", nil)
 }
 
 func (api *API) Compose(ctx context.Context, requester interface{}, request *ComposeRequest) (*ComposeResponse, error) {
-	const op = "workflow.API.Compose"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	harness, model, err := composerAgent(ctx)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	workflowID := strings.TrimSpace(request.WorkflowID)
@@ -131,12 +125,12 @@ func (api *API) Compose(ctx context.Context, requester interface{}, request *Com
 	if workflowID != "" {
 		baseSpec, err = workflowruntime.ReadDraft(workflowID)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		if baseSpec == "" {
 			raw, err := workflowruntime.ReadBlueprintBytesByWorkflowID(workflowID)
 			if err != nil {
-				return nil, ez.Wrap(op, err)
+				return nil, ez.Wrap(err)
 			}
 			baseSpec = string(raw)
 		}
@@ -151,7 +145,7 @@ func (api *API) Compose(ctx context.Context, requester interface{}, request *Com
 		Catalog:    harnessCatalogText(ctx),
 	})
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	response := &ComposeResponse{
@@ -173,7 +167,7 @@ func (api *API) Compose(ctx context.Context, requester interface{}, request *Com
 		workflowID,
 	)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	// The permanent uuid is not the agent's to manage — carry the
@@ -185,13 +179,13 @@ func (api *API) Compose(ctx context.Context, requester interface{}, request *Com
 			baseUUID,
 		)
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 	}
 
 	err = workflowruntime.WriteDraft(proposedID, draftBytes)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	response.WorkflowID = proposedID
@@ -205,10 +199,8 @@ type SaveDraftRequest struct {
 }
 
 func (r *SaveDraftRequest) Validate() error {
-	const op = "workflow.SaveDraftRequest.Validate"
-
 	if strings.TrimSpace(r.WorkflowID) == "" {
-		return ez.New(op, ez.EINVALID, "workflow_id is required", nil)
+		return ez.New(ez.EINVALID, "workflow_id is required", nil)
 	}
 
 	return nil
@@ -221,16 +213,14 @@ type SaveDraftResponse struct {
 }
 
 func (api *API) SaveDraft(ctx context.Context, requester interface{}, request *SaveDraftRequest) (*SaveDraftResponse, error) {
-	const op = "workflow.API.SaveDraft"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	saved, err := workflowruntime.SaveDraft(request.WorkflowID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return &SaveDraftResponse{
@@ -245,10 +235,8 @@ type DeleteDraftRequest struct {
 }
 
 func (r *DeleteDraftRequest) Validate() error {
-	const op = "workflow.DeleteDraftRequest.Validate"
-
 	if strings.TrimSpace(r.WorkflowID) == "" {
-		return ez.New(op, ez.EINVALID, "workflow_id is required", nil)
+		return ez.New(ez.EINVALID, "workflow_id is required", nil)
 	}
 
 	return nil
@@ -260,16 +248,14 @@ type DeleteDraftResponse struct {
 }
 
 func (api *API) DeleteDraft(ctx context.Context, requester interface{}, request *DeleteDraftRequest) (*DeleteDraftResponse, error) {
-	const op = "workflow.API.DeleteDraft"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	err = workflowruntime.DeleteDraft(request.WorkflowID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return &DeleteDraftResponse{

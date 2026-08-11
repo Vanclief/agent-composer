@@ -14,21 +14,17 @@ type I18n struct {
 }
 
 func (t *I18n) String(locale Locale, key string) (string, error) {
-	const op = "I18n.String"
-
 	localizer := i18n.NewLocalizer(t.Bundle, strings.ToLower(locale.String()))
 
 	str, err := localizer.Localize(&i18n.LocalizeConfig{MessageID: key})
 	if err != nil {
-		return "", ez.Wrap(op, err)
+		return "", ez.Wrap(err)
 	}
 
 	return str, nil
 }
 
 func (t *I18n) Template(locale Locale, key string, data map[string]interface{}) (string, error) {
-	const op = "I18n.Template"
-
 	localizer := i18n.NewLocalizer(t.Bundle, locale.String())
 
 	str, err := localizer.Localize(&i18n.LocalizeConfig{
@@ -37,7 +33,7 @@ func (t *I18n) Template(locale Locale, key string, data map[string]interface{}) 
 		PluralCount:  2,
 	})
 	if err != nil {
-		return "", ez.Wrap(op, err)
+		return "", ez.Wrap(err)
 	}
 
 	return str, nil
@@ -67,8 +63,6 @@ type Locale string
 
 // NewLocaleString creates a validated locale string
 func NewLocaleString(locale string) (Locale, error) {
-	const op = "NewLocaleString"
-
 	locale = strings.TrimSpace(locale)
 	if locale == "" {
 		return Locale(DEFAULT_LOCALE), nil
@@ -131,17 +125,15 @@ func (l Locale) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements json.Unmarshaler
 func (l *Locale) UnmarshalJSON(data []byte) error {
-	const op = "Locale.UnmarshalJSON"
-
 	var str string
 	err := json.Unmarshal(data, &str)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	validated, err := NewLocaleString(str)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	*l = validated

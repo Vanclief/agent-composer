@@ -24,15 +24,13 @@ const protocolVersion = "2025-06-18" // MCP spec revision (client will negotiate
 
 // NewInProcessClient connects an in-process MCP server directly to a stdio subprocess.
 func NewInProcessClient(ctx context.Context, srv *server.MCPServer) (*client.Client, error) {
-	const op = "mcp.NewInProcessClient"
-
 	if srv == nil {
-		return nil, ez.New(op, ez.EINVALID, "nil MCP server", nil)
+		return nil, ez.New(ez.EINVALID, "nil MCP server", nil)
 	}
 
 	mcpClient, err := client.NewInProcessClient(srv)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	initReq := mcpproto.InitializeRequest{
@@ -47,22 +45,20 @@ func NewInProcessClient(ctx context.Context, srv *server.MCPServer) (*client.Cli
 	}
 	_, err = mcpClient.Initialize(ctx, initReq)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	return mcpClient, nil
 }
 
 func StartStdioClient(ctx context.Context, command string, env []string, args ...string) (*client.Client, error) {
-	const op = "mcp.StartStdioClient"
-
 	mcpClient, err := client.NewStdioMCPClient(command, env, args...)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	err = mcpClient.Start(ctx)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	initReq := mcpproto.InitializeRequest{
@@ -78,7 +74,7 @@ func StartStdioClient(ctx context.Context, command string, env []string, args ..
 
 	_, err = mcpClient.Initialize(ctx, initReq)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return mcpClient, nil

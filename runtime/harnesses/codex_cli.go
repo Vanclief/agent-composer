@@ -44,42 +44,38 @@ type codexRunSummary struct {
 }
 
 func (c *CodexCLI) Validate(ctx context.Context, model string, config json.RawMessage) error {
-	const op = "harnesses.CodexCLI.Validate"
-
 	if strings.TrimSpace(model) == "" {
-		return ez.New(op, ez.EINVALID, "model is required", nil)
+		return ez.New(ez.EINVALID, "model is required", nil)
 	}
 
 	_, err := exec.LookPath("codex")
 	if err != nil {
-		return ez.New(op, ez.EINVALID, "codex CLI is not installed or not on PATH", err)
+		return ez.New(ez.EINVALID, "codex CLI is not installed or not on PATH", err)
 	}
 
 	_, err = parseCodexCLIConfig(config)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
 }
 
 func (c *CodexCLI) Run(ctx context.Context, conversation *agent.Conversation, prompt string) (*RunResult, error) {
-	const op = "harnesses.CodexCLI.Run"
-
 	cfg, err := parseCodexCLIConfig(conversation.HarnessConfig)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	lastMessageFile, err := os.CreateTemp("", "agent-composer-codex-last-message-*.txt")
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 	lastMessagePath := lastMessageFile.Name()
 
 	err = lastMessageFile.Close()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	defer os.Remove(lastMessagePath)
@@ -88,19 +84,19 @@ func (c *CodexCLI) Run(ctx context.Context, conversation *agent.Conversation, pr
 	if hasStructuredOutputSchema(conversation.StructuredOutputSchema) {
 		schemaFile, err := os.CreateTemp("", "agent-composer-codex-output-schema-*.json")
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 		schemaPath = schemaFile.Name()
 
 		_, err = schemaFile.Write(conversation.StructuredOutputSchema)
 		if err != nil {
 			schemaFile.Close()
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 
 		err = schemaFile.Close()
 		if err != nil {
-			return nil, ez.Wrap(op, err)
+			return nil, ez.Wrap(err)
 		}
 
 		defer os.Remove(schemaPath)
@@ -160,7 +156,7 @@ func (c *CodexCLI) Run(ctx context.Context, conversation *agent.Conversation, pr
 
 	if runErr != nil {
 		if ctx.Err() != nil {
-			return result, ez.New(op, ez.EUNAVAILABLE, "codex run canceled", ctx.Err())
+			return result, ez.New(ez.EUNAVAILABLE, "codex run canceled", ctx.Err())
 		}
 
 		message := "codex run failed"
@@ -168,7 +164,7 @@ func (c *CodexCLI) Run(ctx context.Context, conversation *agent.Conversation, pr
 			message = message + ": " + strings.TrimSpace(harnessError)
 		}
 
-		return result, ez.New(op, ez.EINTERNAL, message, runErr)
+		return result, ez.New(ez.EINTERNAL, message, runErr)
 	}
 
 	return result, nil
@@ -282,8 +278,6 @@ func hasStructuredOutputSchema(raw json.RawMessage) bool {
 }
 
 func parseCodexCLIConfig(raw json.RawMessage) (codexCLIConfig, error) {
-	const op = "harnesses.parseCodexCLIConfig"
-
 	if len(raw) == 0 {
 		return codexCLIConfig{}, nil
 	}
@@ -291,29 +285,29 @@ func parseCodexCLIConfig(raw json.RawMessage) (codexCLIConfig, error) {
 	var probe map[string]any
 	err := json.Unmarshal(raw, &probe)
 	if err != nil {
-		return codexCLIConfig{}, ez.New(op, ez.EINVALID, "invalid codex harness_config", err)
+		return codexCLIConfig{}, ez.New(ez.EINVALID, "invalid codex harness_config", err)
 	}
 
 	err = rejectLegacyPermissionKeys(probe, codexLegacyPermissionKeys)
 	if err != nil {
-		return codexCLIConfig{}, ez.Wrap(op, err)
+		return codexCLIConfig{}, ez.Wrap(err)
 	}
 
 	var cfg codexCLIConfig
 	err = json.Unmarshal(raw, &cfg)
 	if err != nil {
-		return codexCLIConfig{}, ez.New(op, ez.EINVALID, "invalid codex harness_config", err)
+		return codexCLIConfig{}, ez.New(ez.EINVALID, "invalid codex harness_config", err)
 	}
 
 	normalizedPermissions, err := ParsePermissions(string(cfg.Permissions))
 	if err != nil {
-		return codexCLIConfig{}, ez.Wrap(op, err)
+		return codexCLIConfig{}, ez.Wrap(err)
 	}
 	cfg.Permissions = normalizedPermissions
 
 	for _, override := range cfg.ConfigOverrides {
 		if strings.TrimSpace(override) == "" {
-			return codexCLIConfig{}, ez.New(op, ez.EINVALID, "config_overrides cannot contain empty values", nil)
+			return codexCLIConfig{}, ez.New(ez.EINVALID, "config_overrides cannot contain empty values", nil)
 		}
 	}
 

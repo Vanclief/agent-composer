@@ -13,10 +13,8 @@ type GetRequest struct {
 }
 
 func (r *GetRequest) Validate() error {
-	const op = "workflow.GetRequest.Validate"
-
 	if strings.TrimSpace(r.WorkflowID) == "" {
-		return ez.New(op, ez.EINVALID, "workflow_id is required", nil)
+		return ez.New(ez.EINVALID, "workflow_id is required", nil)
 	}
 
 	return nil
@@ -30,18 +28,16 @@ type GetResponse struct {
 }
 
 func (api *API) Get(ctx context.Context, requester interface{}, request *GetRequest) (*GetResponse, error) {
-	const op = "workflow.API.Get"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	workflowID := strings.TrimSpace(request.WorkflowID)
 
 	draft, err := workflowruntime.ReadDraft(workflowID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	raw, err := workflowruntime.ReadBlueprintBytesByWorkflowID(workflowID)
@@ -54,7 +50,7 @@ func (api *API) Get(ctx context.Context, requester interface{}, request *GetRequ
 			}, nil
 		}
 
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return &GetResponse{

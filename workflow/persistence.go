@@ -48,15 +48,13 @@ func NewDBRecorder(db bun.IDB) *DBRecorder {
 }
 
 func (r *DBRecorder) StartWorkflow(ctx context.Context, snapshot *Snapshot, input map[string]any, shellRoot string) (WorkflowExecutionHandle, error) {
-	const op = "workflow.DBRecorder.StartWorkflow"
-
 	if snapshot == nil {
-		return WorkflowExecutionHandle{}, ez.New(op, ez.EINVALID, "workflow snapshot is nil", nil)
+		return WorkflowExecutionHandle{}, ez.New(ez.EINVALID, "workflow snapshot is nil", nil)
 	}
 
 	snapshotJSON, err := json.Marshal(snapshot)
 	if err != nil {
-		return WorkflowExecutionHandle{}, ez.Wrap(op, err)
+		return WorkflowExecutionHandle{}, ez.Wrap(err)
 	}
 
 	now := time.Now().UTC()
@@ -74,15 +72,13 @@ func (r *DBRecorder) StartWorkflow(ctx context.Context, snapshot *Snapshot, inpu
 
 	err = record.Insert(ctx, r.db)
 	if err != nil {
-		return WorkflowExecutionHandle{}, ez.Wrap(op, err)
+		return WorkflowExecutionHandle{}, ez.Wrap(err)
 	}
 
 	return WorkflowExecutionHandle{ID: record.ID}, nil
 }
 
 func (r *DBRecorder) FinishWorkflow(ctx context.Context, handle WorkflowExecutionHandle, output map[string]any, status executionmodels.WorkflowExecutionStatus) error {
-	const op = "workflow.DBRecorder.FinishWorkflow"
-
 	record := &executionmodels.WorkflowExecution{
 		ID:             handle.ID,
 		OutputSnapshot: cloneMap(output),
@@ -97,18 +93,16 @@ func (r *DBRecorder) FinishWorkflow(ctx context.Context, handle WorkflowExecutio
 		Where("id = ?", handle.ID).
 		Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
 }
 
 func (r *DBRecorder) StartNode(ctx context.Context, workflow WorkflowExecutionHandle, node NodeSnapshot, input map[string]any, scope NodeExecutionScope) (NodeExecutionHandle, error) {
-	const op = "workflow.DBRecorder.StartNode"
-
 	snapshotJSON, err := json.Marshal(node)
 	if err != nil {
-		return NodeExecutionHandle{}, ez.Wrap(op, err)
+		return NodeExecutionHandle{}, ez.Wrap(err)
 	}
 
 	now := time.Now().UTC()
@@ -128,15 +122,13 @@ func (r *DBRecorder) StartNode(ctx context.Context, workflow WorkflowExecutionHa
 
 	err = record.Insert(ctx, r.db)
 	if err != nil {
-		return NodeExecutionHandle{}, ez.Wrap(op, err)
+		return NodeExecutionHandle{}, ez.Wrap(err)
 	}
 
 	return NodeExecutionHandle{ID: record.ID}, nil
 }
 
 func (r *DBRecorder) FinishNode(ctx context.Context, handle NodeExecutionHandle, output map[string]any, status executionmodels.NodeExecutionStatus, trace map[string]any) error {
-	const op = "workflow.DBRecorder.FinishNode"
-
 	record := &executionmodels.NodeExecution{
 		ID:             handle.ID,
 		OutputSnapshot: cloneMap(output),
@@ -152,17 +144,15 @@ func (r *DBRecorder) FinishNode(ctx context.Context, handle NodeExecutionHandle,
 		Where("id = ?", handle.ID).
 		Exec(ctx)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
 }
 
 func (r *DBRecorder) StartConversation(ctx context.Context, handle NodeExecutionHandle, conversation *agent.Conversation, input map[string]any) error {
-	const op = "workflow.DBRecorder.StartConversation"
-
 	if conversation == nil {
-		return ez.New(op, ez.EINVALID, "conversation is nil", nil)
+		return ez.New(ez.EINVALID, "conversation is nil", nil)
 	}
 
 	conversation.NodeExecutionID = handle.ID
@@ -170,24 +160,22 @@ func (r *DBRecorder) StartConversation(ctx context.Context, handle NodeExecution
 
 	err := conversation.Insert(ctx, r.db)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil
 }
 
 func (r *DBRecorder) FinishConversation(ctx context.Context, conversation *agent.Conversation, output any) error {
-	const op = "workflow.DBRecorder.FinishConversation"
-
 	if conversation == nil {
-		return ez.New(op, ez.EINVALID, "conversation is nil", nil)
+		return ez.New(ez.EINVALID, "conversation is nil", nil)
 	}
 
 	conversation.OutputSnapshot = normalizeConversationOutput(output)
 
 	err := conversation.Update(ctx, r.db)
 	if err != nil {
-		return ez.Wrap(op, err)
+		return ez.Wrap(err)
 	}
 
 	return nil

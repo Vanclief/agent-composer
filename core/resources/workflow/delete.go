@@ -13,10 +13,8 @@ type DeleteRequest struct {
 }
 
 func (r *DeleteRequest) Validate() error {
-	const op = "workflow.DeleteRequest.Validate"
-
 	if strings.TrimSpace(r.WorkflowID) == "" {
-		return ez.New(op, ez.EINVALID, "workflow_id is required", nil)
+		return ez.New(ez.EINVALID, "workflow_id is required", nil)
 	}
 
 	return nil
@@ -30,16 +28,14 @@ type DeleteResponse struct {
 // Delete removes a workflow from the library only — its run history
 // and version archive stay untouched.
 func (api *API) Delete(ctx context.Context, requester interface{}, request *DeleteRequest) (*DeleteResponse, error) {
-	const op = "workflow.API.Delete"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	err = workflowruntime.DeleteWorkflow(request.WorkflowID)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return &DeleteResponse{

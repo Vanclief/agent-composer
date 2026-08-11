@@ -22,22 +22,20 @@ type UpdateNodeRequest struct {
 }
 
 func (r *UpdateNodeRequest) Validate() error {
-	const op = "workflow.UpdateNodeRequest.Validate"
-
 	if strings.TrimSpace(r.WorkflowID) == "" || strings.TrimSpace(r.Node) == "" {
-		return ez.New(op, ez.EINVALID, "workflow_id and node are required", nil)
+		return ez.New(ez.EINVALID, "workflow_id and node are required", nil)
 	}
 	if r.Model == nil && r.Harness == nil && r.Instruction == nil &&
 		r.ReasoningEffort == nil {
-		return ez.New(op, ez.EINVALID, "Nothing to update", nil)
+		return ez.New(ez.EINVALID, "Nothing to update", nil)
 	}
 	if r.Model != nil && strings.TrimSpace(*r.Model) == "" {
-		return ez.New(op, ez.EINVALID, "model cannot be blank", nil)
+		return ez.New(ez.EINVALID, "model cannot be blank", nil)
 	}
 	if r.Harness != nil {
 		err := agent.Harness(strings.TrimSpace(*r.Harness)).Validate()
 		if err != nil {
-			return ez.New(op, ez.EINVALID, "Unknown harness "+*r.Harness, err)
+			return ez.New(ez.EINVALID, "Unknown harness "+*r.Harness, err)
 		}
 	}
 	if r.ReasoningEffort != nil && strings.TrimSpace(*r.ReasoningEffort) != "" {
@@ -45,7 +43,7 @@ func (r *UpdateNodeRequest) Validate() error {
 			strings.TrimSpace(*r.ReasoningEffort),
 		).Validate()
 		if err != nil {
-			return ez.New(op, ez.EINVALID, "Unknown reasoning effort "+*r.ReasoningEffort, err)
+			return ez.New(ez.EINVALID, "Unknown reasoning effort "+*r.ReasoningEffort, err)
 		}
 	}
 
@@ -59,11 +57,9 @@ type UpdateNodeResponse struct {
 }
 
 func (api *API) UpdateNode(ctx context.Context, requester interface{}, request *UpdateNodeRequest) (*UpdateNodeResponse, error) {
-	const op = "workflow.API.UpdateNode"
-
 	err := request.Validate()
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	trim := func(value *string) *string {
@@ -87,14 +83,14 @@ func (api *API) UpdateNode(ctx context.Context, requester interface{}, request *
 		},
 	)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	raw, err := workflowruntime.ReadBlueprintBytesByWorkflowID(
 		strings.TrimSpace(request.WorkflowID),
 	)
 	if err != nil {
-		return nil, ez.Wrap(op, err)
+		return nil, ez.Wrap(err)
 	}
 
 	return &UpdateNodeResponse{
