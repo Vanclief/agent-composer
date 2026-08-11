@@ -394,8 +394,8 @@ func (r *Registry) RestoreVersion(ctx context.Context, workflowID string, versio
 
 	return &SavedDraft{
 		WorkflowSlug: record.Slug,
-		Version:    strconv.Itoa(record.Version),
-		Spec:       record.Spec,
+		Version:      strconv.Itoa(record.Version),
+		Spec:         record.Spec,
 	}, nil
 }
 

@@ -14,6 +14,10 @@ type API struct {
 	worktrees   *worktree.Manager
 	registry    *workflowruntime.Registry
 	newRecorder func() workflowruntime.ExecutionRecorder
+
+	// Observer receives per-node progress for synchronous runs — the
+	// CLI sets it; servers leave it nil.
+	Observer workflowruntime.RunObserver
 }
 
 func NewAPI(ctrl *controller.Controller, rt *runtime.Runtime, worktrees *worktree.Manager, registry *workflowruntime.Registry) *API {

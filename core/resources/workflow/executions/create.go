@@ -117,6 +117,13 @@ func (api *API) Run(ctx context.Context, requester interface{}, request *CreateR
 		return nil, ez.Wrap(err)
 	}
 
+	if api.Observer != nil && prepared.Executor.Recorder != nil {
+		prepared.Executor.Recorder = &workflowruntime.ObservedRecorder{
+			Inner:    prepared.Executor.Recorder,
+			Observer: api.Observer,
+		}
+	}
+
 	output, handle, runErr := prepared.Executor.RunWithHandle(ctx, prepared.Snapshot, prepared.Input)
 
 	executionID := ""

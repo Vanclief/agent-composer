@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/rs/zerolog"
@@ -22,6 +24,7 @@ import (
 	"github.com/vanclief/agent-composer/interfaces/rest"
 	restserver "github.com/vanclief/agent-composer/interfaces/rest/server"
 	agcmcp "github.com/vanclief/agent-composer/mcp/agc"
+	executionmodels "github.com/vanclief/agent-composer/models/execution"
 	appmigrations "github.com/vanclief/agent-composer/models/migrations"
 	workflowruntime "github.com/vanclief/agent-composer/workflow"
 	"github.com/vanclief/ez"
@@ -697,6 +700,48 @@ func showConfig() error {
 	return printJSON(report)
 }
 
+// runProgress prints one line per top-level node to stderr, so a long
+// run is never a silent terminal.
+type runProgress struct {
+	mu      sync.Mutex
+	started map[string]time.Time
+}
+
+func (p *runProgress) NodeStarted(instanceID string) {
+	p.mu.Lock()
+	if p.started == nil {
+		p.started = map[string]time.Time{}
+	}
+	p.started[instanceID] = time.Now()
+	p.mu.Unlock()
+
+	fmt.Fprintf(os.Stderr, "  ⏵ %s…\n", instanceID)
+}
+
+func (p *runProgress) NodeFinished(instanceID string, status executionmodels.NodeExecutionStatus) {
+	p.mu.Lock()
+	startedAt, found := p.started[instanceID]
+	if found {
+		delete(p.started, instanceID)
+	}
+	p.mu.Unlock()
+
+	elapsed := ""
+	if found {
+		elapsed = " (" + time.Since(startedAt).Round(time.Second).String() + ")"
+	}
+
+	mark := string(status)
+	switch status {
+	case executionmodels.NodeExecutionStatusSucceeded:
+		mark = "✓"
+	case executionmodels.NodeExecutionStatusFailed:
+		mark = "✗"
+	}
+
+	fmt.Fprintf(os.Stderr, "  %s %s%s\n", mark, instanceID, elapsed)
+}
+
 // requireOneSource enforces exactly one of --slug or --file.
 func requireOneSource(slug, file string) error {
 	if slug == "" && file == "" {
@@ -745,6 +790,8 @@ func runWorkflow(ctx context.Context, opts runWorkflowOptions) error {
 	}
 
 	defer stack.Controller.DB.Close() // nolint:errcheck // Close errors are not actionable here.
+
+	stack.WorkflowAPI.Executions.Observer = &runProgress{}
 
 	input, err := loadWorkflowInput(
 		ctx,
