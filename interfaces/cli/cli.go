@@ -89,6 +89,13 @@ func Run(ctx context.Context, args []string) error {
 				},
 			},
 			{
+				Name:  "config",
+				Usage: "Show the effective configuration and where it comes from",
+				Action: func(c *cli.Context) error {
+					return showConfig()
+				},
+			},
+			{
 				Name:  "migrate",
 				Usage: "Run database migrations",
 				Subcommands: []*cli.Command{
@@ -654,6 +661,20 @@ type runWorkflowOptions struct {
 	ProjectDir     string
 	Worktree       string
 	Base           string
+}
+
+func showConfig() error {
+	ctrl, err := controller.Load(nil)
+	if err != nil {
+		return err
+	}
+
+	report, err := ctrl.ConfigReport()
+	if err != nil {
+		return err
+	}
+
+	return printJSON(report)
 }
 
 // requireOneSource enforces exactly one of --slug or --file.

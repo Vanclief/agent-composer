@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -27,13 +28,21 @@ type Controller struct {
 	Config  Config
 	EnvVars EnvVars
 	DB      *relational.DB
+
+	// configFile is the path the configuration was looked up at, and
+	// configFileFound records whether it existed — kept for the config
+	// report so provenance never has to be re-derived.
+	configFile      string
+	configFileFound bool
 }
 
 func New() (*Controller, error) {
 	return NewWithLogWriter(nil)
 }
 
-func NewWithLogWriter(writer io.Writer) (*Controller, error) {
+// Load resolves the configuration without connecting to any database —
+// for commands that only inspect settings.
+func Load(writer io.Writer) (*Controller, error) {
 	// The configurator requires ENVIRONMENT, but a CLI tool should boot with
 	// zero setup, so an unset environment defaults to LOCAL
 	if os.Getenv("ENVIRONMENT") == "" {
@@ -86,11 +95,17 @@ func NewWithLogWriter(writer io.Writer) (*Controller, error) {
 	}
 
 	controller.Environment = cfg.Environment
+	controller.configFile = filepath.Join(
+		configDir,
+		strings.ToLower(cfg.Environment)+".config.json",
+	)
+	controller.configFileFound = true
 
 	err = cfg.LoadConfiguration(&c)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) || ez.ErrorCode(err) == ez.ENOTFOUND {
 			log.Info().Msg("Configuration file not found, using default configuration")
+			controller.configFileFound = false
 			c.App.Name = "Agent Composer"
 			c.App.Port = "8080"
 			c.App.RateLimit = 60
@@ -102,6 +117,15 @@ func NewWithLogWriter(writer io.Writer) (*Controller, error) {
 
 	controller.EnvVars = e
 	controller.Config = c
+
+	return controller, nil
+}
+
+func NewWithLogWriter(writer io.Writer) (*Controller, error) {
+	controller, err := Load(writer)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
 
 	log.Info().Str("Env", controller.Environment).Msg("Starting Agent Composer")
 
