@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/uptrace/bun/dialect"
 	"github.com/uptrace/bun/migrate"
@@ -68,6 +69,10 @@ func Run(ctx context.Context, args []string) error {
 				Usage: "Directory the workflow runs in (defaults to the current directory)",
 				Value: "",
 			},
+			&cli.BoolFlag{
+				Name:  "verbose",
+				Usage: "Show info-level logs that one-shot commands normally suppress",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			return cli.ShowAppHelp(c)
@@ -89,8 +94,9 @@ func Run(ctx context.Context, args []string) error {
 				},
 			},
 			{
-				Name:  "config",
-				Usage: "Show the effective configuration and where it comes from",
+				Name:   "config",
+				Usage:  "Show the effective configuration and where it comes from",
+				Before: quietLogs,
 				Action: func(c *cli.Context) error {
 					return showConfig()
 				},
@@ -122,11 +128,25 @@ func Run(ctx context.Context, args []string) error {
 	return app.RunContext(ctx, args)
 }
 
+// quietLogs drops info-level logging for one-shot commands — their
+// stdout result is the interface, not the boot chatter. Servers keep
+// full logs, and --verbose restores them everywhere.
+func quietLogs(c *cli.Context) error {
+	if c.Bool("verbose") {
+		return nil
+	}
+
+	zerolog.SetGlobalLevel(zerolog.WarnLevel)
+
+	return nil
+}
+
 func workflowCommand() *cli.Command {
 	return &cli.Command{
 		Name:    "workflow",
 		Aliases: []string{"wf", "w"},
 		Usage:   "Workflow commands",
+		Before:  quietLogs,
 		Subcommands: []*cli.Command{
 			workflowRunCommand(),
 			workflowCompileCommand(),
@@ -705,6 +725,18 @@ func runWorkflow(ctx context.Context, opts runWorkflowOptions) error {
 		}
 
 		project = cwd
+	}
+
+	// One line that says the run is underway — the harness can take
+	// minutes and prints nothing until the result JSON.
+	target := strings.TrimSpace(opts.Slug)
+	if target == "" {
+		target = strings.TrimSpace(opts.File)
+	}
+	if strings.TrimSpace(opts.Worktree) != "" {
+		fmt.Fprintf(os.Stderr, "Running %s in worktree %s…\n", target, strings.TrimSpace(opts.Worktree))
+	} else {
+		fmt.Fprintf(os.Stderr, "Running %s…\n", target)
 	}
 
 	stack, err := core.NewStack(ctx, core.StackOptions{ProjectDir: project})
