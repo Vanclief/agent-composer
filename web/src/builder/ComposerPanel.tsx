@@ -3,7 +3,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { composeWorkflow } from "../api";
+import {
+  composeWorkflow,
+  fetchHarnesses,
+  fetchSettings,
+} from "../api";
+import type { HarnessInfo } from "../types/api";
+import { ModelPicker } from "./ModelPicker";
 
 export interface EditResult {
   workflow_slug?: string;
@@ -29,6 +35,14 @@ interface Turn {
  */
 const transcripts = new Map<string, Turn[]>();
 let turnCounter = 0;
+
+/**
+ * The session's harness/model choice. Module state for the same
+ * reason as transcripts: it survives panel toggles and workflow
+ * switches. Null until the user picks — then every compose call
+ * carries it; the settings default applies otherwise.
+ */
+let chosenAgent: { harness: string; model: string } | null = null;
 
 /** Transcript key — creations start under a placeholder key. */
 function transcriptKey(workflowId: string) {
@@ -56,6 +70,11 @@ export function ComposerPanel({
     () => transcripts.get(key) ?? [],
   );
   const [request, setRequest] = useState("");
+  const [harnesses, setHarnesses] = useState<HarnessInfo[]>([]);
+  const [harness, setHarness] = useState(
+    () => chosenAgent?.harness ?? "",
+  );
+  const [model, setModel] = useState(() => chosenAgent?.model ?? "");
   const keyRef = useRef(key);
   keyRef.current = key;
   const listRef = useRef<HTMLDivElement>(null);
@@ -64,6 +83,45 @@ export function ComposerPanel({
   useEffect(() => {
     setTurns(transcripts.get(key) ?? []);
   }, [key]);
+
+  // The picker shows the agent that will actually run: the session's
+  // earlier choice, else the settings default, else the first
+  // installed harness — the same order the server resolves.
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.all([
+      fetchSettings(controller.signal),
+      fetchHarnesses(controller.signal),
+    ])
+      .then(([settings, harnessList]) => {
+        const installed = (harnessList?.harnesses ?? []).filter(
+          (info) => info.available,
+        );
+        setHarnesses(installed);
+        if (chosenAgent) {
+          return;
+        }
+        const nextHarness =
+          settings?.composer?.harness || installed[0]?.id || "";
+        setHarness(nextHarness);
+        setModel(
+          settings?.composer?.model ||
+            installed.find((info) => info.id === nextHarness)
+              ?.models?.[0] ||
+            "",
+        );
+      })
+      .catch(() => {
+        // The server resolves the default when the picker stays empty.
+      });
+    return () => controller.abort();
+  }, []);
+
+  function pickAgent(nextHarness: string, nextModel: string) {
+    setHarness(nextHarness);
+    setModel(nextModel);
+    chosenAgent = { harness: nextHarness, model: nextModel };
+  }
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -103,7 +161,11 @@ export function ComposerPanel({
     };
 
     try {
-      const response = await composeWorkflow(workflowId, trimmed);
+      const response = await composeWorkflow(
+        workflowId,
+        trimmed,
+        harness && model ? { harness, model } : undefined,
+      );
       finish({
         status: "succeeded",
         summary: response.summary || "Done.",
@@ -180,6 +242,54 @@ export function ComposerPanel({
             )}
           </div>
         ))}
+      </div>
+
+      <div className="composer-panel__agent">
+        {harnesses.length === 0 ? (
+          <select
+            className="builder-select mono"
+            aria-label="Composer harness"
+            disabled
+          >
+            <option>No harnesses installed</option>
+          </select>
+        ) : (
+          <select
+            className="builder-select mono"
+            aria-label="Composer harness"
+            value={harness}
+            disabled={busy}
+            onChange={(event) => {
+              const next = event.target.value;
+              pickAgent(
+                next,
+                harnesses.find((info) => info.id === next)
+                  ?.models?.[0] ?? "",
+              );
+            }}
+          >
+            {harness &&
+              !harnesses.some((info) => info.id === harness) && (
+                <option value={harness}>
+                  {harness} (not installed)
+                </option>
+              )}
+            {harnesses.map((info) => (
+              <option key={info.id} value={info.id}>
+                {info.id}
+              </option>
+            ))}
+          </select>
+        )}
+        <ModelPicker
+          value={model}
+          models={
+            harnesses.find((info) => info.id === harness)?.models ??
+            []
+          }
+          disabled={busy || harnesses.length === 0}
+          onChange={(next) => pickAgent(harness, next)}
+        />
       </div>
 
       <div className="composer-panel__input">

@@ -1743,12 +1743,36 @@ a.builder-brand {
   color: var(--st-err);
 }
 
+/* Which agent answers the next request — harness plus model. */
+.composer-panel__agent {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding: 10px 12px 0;
+}
+
+.composer-panel__agent .builder-select {
+  width: auto;
+  flex: 0 1 42%;
+  min-width: 0;
+}
+
+.composer-panel__agent .model-picker {
+  flex: 1;
+}
+
+/* The row sits at the panel's bottom — the menu must open upward. */
+.composer-panel__agent .model-picker__menu {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
 .composer-panel__input {
   flex: 0 0 auto;
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  border-top: 1px solid var(--line);
   padding: 10px 12px;
 }
 

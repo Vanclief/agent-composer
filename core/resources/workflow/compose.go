@@ -16,11 +16,27 @@ type ComposeRequest struct {
 	// WorkflowSlug is empty when the request should create a workflow.
 	WorkflowSlug string `json:"workflow_slug"`
 	Request      string `json:"request"`
+	// Harness and Model override the settings choice for this call
+	// only — empty means "use the configured default".
+	Harness string `json:"harness"`
+	Model   string `json:"model"`
 }
 
 func (r *ComposeRequest) Validate() error {
 	if strings.TrimSpace(r.Request) == "" {
 		return ez.New(ez.EINVALID, "request is required", nil)
+	}
+
+	harness := strings.TrimSpace(r.Harness)
+	if harness != "" {
+		err := agent.Harness(harness).Validate()
+		if err != nil {
+			return ez.New(ez.EINVALID, "Unknown harness "+harness, err)
+		}
+	}
+
+	if harness == "" && strings.TrimSpace(r.Model) != "" {
+		return ez.New(ez.EINVALID, "harness is required when a model is set", nil)
 	}
 
 	return nil
@@ -79,15 +95,23 @@ func harnessCatalogText(ctx context.Context) string {
 }
 
 // composerAgent resolves which harness/model the composer runs on:
-// the settings choice, or the first installed harness in the catalog.
-func composerAgent(ctx context.Context) (agent.Harness, string, error) {
-	data, err := settings.Load()
-	if err != nil {
-		return "", "", ez.Wrap(err)
+// the request's override, the settings choice, or the first installed
+// harness in the catalog. An override harness without a model gets
+// that harness's first catalog model.
+func composerAgent(ctx context.Context, overrideHarness, overrideModel string) (agent.Harness, string, error) {
+	harness := strings.TrimSpace(overrideHarness)
+	model := strings.TrimSpace(overrideModel)
+
+	if harness == "" {
+		data, err := settings.Load()
+		if err != nil {
+			return "", "", ez.Wrap(err)
+		}
+
+		harness = strings.TrimSpace(data.Composer.Harness)
+		model = strings.TrimSpace(data.Composer.Model)
 	}
 
-	harness := strings.TrimSpace(data.Composer.Harness)
-	model := strings.TrimSpace(data.Composer.Model)
 	if harness != "" && model != "" {
 		return agent.Harness(harness), model, nil
 	}
@@ -112,7 +136,7 @@ func (api *API) Compose(ctx context.Context, requester interface{}, request *Com
 		return nil, ez.Wrap(err)
 	}
 
-	harness, model, err := composerAgent(ctx)
+	harness, model, err := composerAgent(ctx, request.Harness, request.Model)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
