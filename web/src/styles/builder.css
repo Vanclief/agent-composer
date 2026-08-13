@@ -751,23 +751,9 @@
 .builder-group-box {
   width: 100%;
   height: 100%;
-  position: relative;
   border: 2px dashed var(--line-2);
   border-radius: 14px;
   background: color-mix(in oklch, var(--paper-2) 55%, transparent);
-}
-
-.builder-group-box > span {
-  position: absolute;
-  top: -11px;
-  left: 16px;
-  border-radius: 5px;
-  background: var(--paper-2);
-  color: var(--ink-2);
-  padding: 2px 10px;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 10.5px;
-  font-weight: 600;
 }
 
 .builder-error {
@@ -1754,12 +1740,16 @@ a.builder-brand {
 
 .composer-panel__agent .builder-select {
   width: auto;
-  flex: 0 1 42%;
+  flex: 0 1 34%;
   min-width: 0;
 }
 
 .composer-panel__agent .model-picker {
   flex: 1;
+}
+
+.composer-panel__agent .composer-panel__agent-effort {
+  flex: 0 0 auto;
 }
 
 /* The row sits at the panel's bottom — the menu must open upward. */

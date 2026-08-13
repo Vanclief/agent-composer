@@ -63,17 +63,18 @@ export function renameWorkflow(
 }
 
 /** One composer conversation — resolves when the edit has landed.
- * A harness/model pair overrides the settings default for this call. */
+ * The agent choice overrides the settings default for this call. */
 export function composeWorkflow(
   workflowId: string,
   request: string,
-  agent?: { harness: string; model: string },
+  agent?: { harness: string; model: string; effort: string },
 ) {
   return postJSON<ComposeResponse>("/api/workflows/compose", {
     workflow_slug: workflowId,
     request,
     harness: agent?.harness ?? "",
     model: agent?.model ?? "",
+    reasoning_effort: agent?.effort ?? "",
   });
 }
 

@@ -7,6 +7,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/settings"
 	"github.com/vanclief/agent-composer/models/agent"
 	"github.com/vanclief/agent-composer/runtime/harnesses"
+	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 	workflowruntime "github.com/vanclief/agent-composer/workflow"
 	"github.com/vanclief/ez"
 	yaml "gopkg.in/yaml.v3"
@@ -16,10 +17,12 @@ type ComposeRequest struct {
 	// WorkflowSlug is empty when the request should create a workflow.
 	WorkflowSlug string `json:"workflow_slug"`
 	Request      string `json:"request"`
-	// Harness and Model override the settings choice for this call
-	// only — empty means "use the configured default".
-	Harness string `json:"harness"`
-	Model   string `json:"model"`
+	// Harness, Model, and ReasoningEffort override the settings
+	// choice for this call only — empty means "use the configured
+	// default" (medium, for the effort).
+	Harness         string `json:"harness"`
+	Model           string `json:"model"`
+	ReasoningEffort string `json:"reasoning_effort"`
 }
 
 func (r *ComposeRequest) Validate() error {
@@ -39,15 +42,24 @@ func (r *ComposeRequest) Validate() error {
 		return ez.New(ez.EINVALID, "harness is required when a model is set", nil)
 	}
 
+	effort := strings.TrimSpace(r.ReasoningEffort)
+	if effort != "" {
+		err := runtimetypes.ReasoningEffort(effort).Validate()
+		if err != nil {
+			return ez.New(ez.EINVALID, "Unknown reasoning effort "+effort, err)
+		}
+	}
+
 	return nil
 }
 
 type ComposeResponse struct {
-	WorkflowSlug string `json:"workflow_slug"`
-	Action       string `json:"action"`
-	Summary      string `json:"summary"`
-	Harness      string `json:"harness"`
-	Model        string `json:"model"`
+	WorkflowSlug    string `json:"workflow_slug"`
+	Action          string `json:"action"`
+	Summary         string `json:"summary"`
+	Harness         string `json:"harness"`
+	Model           string `json:"model"`
+	ReasoningEffort string `json:"reasoning_effort"`
 	// Draft is the proposed spec now waiting for Save — empty
 	// when the composer proposed nothing.
 	Draft string `json:"draft,omitempty"`
@@ -141,6 +153,11 @@ func (api *API) Compose(ctx context.Context, requester interface{}, request *Com
 		return nil, ez.Wrap(err)
 	}
 
+	effort := strings.TrimSpace(request.ReasoningEffort)
+	if effort == "" {
+		effort = string(runtimetypes.ReasoningEffortMedium)
+	}
+
 	workflowID := strings.TrimSpace(request.WorkflowSlug)
 
 	// The edit base: an unsaved draft when one exists, else the saved
@@ -164,20 +181,22 @@ func (api *API) Compose(ctx context.Context, requester interface{}, request *Com
 		WorkflowSlug: workflowID,
 		BaseSpec:     baseSpec,
 		Request:      request.Request,
-		Harness:      harness,
-		Model:        model,
-		Catalog:      harnessCatalogText(ctx),
+		Harness:         harness,
+		Model:           model,
+		ReasoningEffort: runtimetypes.ReasoningEffort(effort),
+		Catalog:         harnessCatalogText(ctx),
 	})
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
 	response := &ComposeResponse{
-		WorkflowSlug: result.WorkflowSlug,
-		Action:       result.Action,
-		Summary:      result.Summary,
-		Harness:      string(harness),
-		Model:        model,
+		WorkflowSlug:    result.WorkflowSlug,
+		Action:          result.Action,
+		Summary:         result.Summary,
+		Harness:         string(harness),
+		Model:           model,
+		ReasoningEffort: effort,
 	}
 
 	if result.Action == "unchanged" || result.YAML == "" {

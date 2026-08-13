@@ -83,18 +83,21 @@ function buildGroupBoxes(
       continue;
     }
 
+    // One container: the box wraps the group's card (which carries
+    // the connectors) together with the children nested inside it.
+    const members = [group, ...children];
     const padding = 24;
     const minimumX =
-      Math.min(...children.map((node) => node.position.x)) - padding;
+      Math.min(...members.map((node) => node.position.x)) - padding;
     const minimumY =
-      Math.min(...children.map((node) => node.position.y)) - padding;
+      Math.min(...members.map((node) => node.position.y)) - padding;
     const maximumX =
       Math.max(
-        ...children.map((node) => node.position.x + NODE_WIDTH),
+        ...members.map((node) => node.position.x + NODE_WIDTH),
       ) + padding;
     const maximumY =
       Math.max(
-        ...children.map(
+        ...members.map(
           (node) =>
             node.position.y + estimateNodeHeight(node.data.canvas),
         ),
@@ -104,7 +107,7 @@ function buildGroupBoxes(
       id: `group-box:${group.id}`,
       type: "groupBox",
       position: { x: minimumX, y: minimumY },
-      data: { label: canvas.name },
+      data: {},
       style: {
         width: maximumX - minimumX,
         height: maximumY - minimumY,

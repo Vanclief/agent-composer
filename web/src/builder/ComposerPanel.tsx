@@ -9,6 +9,7 @@ import {
   fetchSettings,
 } from "../api";
 import type { HarnessInfo } from "../types/api";
+import { REASONING_EFFORTS } from "./Inspector";
 import { ModelPicker } from "./ModelPicker";
 
 export interface EditResult {
@@ -25,6 +26,7 @@ interface Turn {
   summary?: string;
   action?: string;
   model?: string;
+  effort?: string;
   error?: string;
 }
 
@@ -42,7 +44,11 @@ let turnCounter = 0;
  * switches. Null until the user picks — then every compose call
  * carries it; the settings default applies otherwise.
  */
-let chosenAgent: { harness: string; model: string } | null = null;
+let chosenAgent: {
+  harness: string;
+  model: string;
+  effort: string;
+} | null = null;
 
 /** Transcript key — creations start under a placeholder key. */
 function transcriptKey(workflowId: string) {
@@ -75,6 +81,9 @@ export function ComposerPanel({
     () => chosenAgent?.harness ?? "",
   );
   const [model, setModel] = useState(() => chosenAgent?.model ?? "");
+  const [effort, setEffort] = useState(
+    () => chosenAgent?.effort ?? "medium",
+  );
   const keyRef = useRef(key);
   keyRef.current = key;
   const listRef = useRef<HTMLDivElement>(null);
@@ -117,10 +126,19 @@ export function ComposerPanel({
     return () => controller.abort();
   }, []);
 
-  function pickAgent(nextHarness: string, nextModel: string) {
+  function pickAgent(
+    nextHarness: string,
+    nextModel: string,
+    nextEffort: string,
+  ) {
     setHarness(nextHarness);
     setModel(nextModel);
-    chosenAgent = { harness: nextHarness, model: nextModel };
+    setEffort(nextEffort);
+    chosenAgent = {
+      harness: nextHarness,
+      model: nextModel,
+      effort: nextEffort,
+    };
   }
 
   useEffect(() => {
@@ -164,13 +182,14 @@ export function ComposerPanel({
       const response = await composeWorkflow(
         workflowId,
         trimmed,
-        harness && model ? { harness, model } : undefined,
+        harness && model ? { harness, model, effort } : undefined,
       );
       finish({
         status: "succeeded",
         summary: response.summary || "Done.",
         action: response.action,
         model: response.model,
+        effort: response.reasoning_effort,
       });
       if (startedKey === "__new__" && response.workflow_slug) {
         const moved = transcripts.get("__new__") ?? [];
@@ -237,6 +256,7 @@ export function ComposerPanel({
                     ? "no changes"
                     : `draft ${turn.action ?? "updated"}`}
                   {turn.model ? ` · ${turn.model}` : ""}
+                  {turn.effort ? ` · ${turn.effort}` : ""}
                 </small>
               </div>
             )}
@@ -265,6 +285,7 @@ export function ComposerPanel({
                 next,
                 harnesses.find((info) => info.id === next)
                   ?.models?.[0] ?? "",
+                effort,
               );
             }}
           >
@@ -288,8 +309,23 @@ export function ComposerPanel({
             []
           }
           disabled={busy || harnesses.length === 0}
-          onChange={(next) => pickAgent(harness, next)}
+          onChange={(next) => pickAgent(harness, next, effort)}
         />
+        <select
+          className="builder-select mono composer-panel__agent-effort"
+          aria-label="Reasoning effort"
+          value={effort}
+          disabled={busy || harnesses.length === 0}
+          onChange={(event) =>
+            pickAgent(harness, model, event.target.value)
+          }
+        >
+          {REASONING_EFFORTS.map((level) => (
+            <option key={level} value={level}>
+              {level}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="composer-panel__input">

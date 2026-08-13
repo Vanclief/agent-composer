@@ -54,6 +54,9 @@ Rules: when editing, keep workflow.slug and workflow.id unchanged and change onl
 
 Return workflow_slug (the final slug), action (created for a new slug, updated when you changed an existing workflow, unchanged when you propose nothing), yaml (the complete spec, or "" when unchanged), and a 1-3 sentence summary.`
 
+// composeResultSchema must stay strict (every property required,
+// additionalProperties false) — OpenAI structured outputs rejects
+// anything looser.
 var composeResultSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
@@ -65,6 +68,8 @@ var composeResultSchema = map[string]any{
 		"yaml":    map[string]any{"type": "string"},
 		"summary": map[string]any{"type": "string"},
 	},
+	"required":             []any{"workflow_slug", "action", "yaml", "summary"},
+	"additionalProperties": false,
 }
 
 type ComposeOptions struct {
@@ -76,6 +81,8 @@ type ComposeOptions struct {
 	Request  string
 	Harness  agent.Harness
 	Model    string
+	// ReasoningEffort is medium when empty.
+	ReasoningEffort runtimetypes.ReasoningEffort
 	// Catalog lists installed harnesses and their real model ids, so
 	// the agent never invents a model name.
 	Catalog string
@@ -106,6 +113,15 @@ func Compose(ctx context.Context, opts ComposeOptions) (*ComposeResult, error) {
 		return nil, ez.New(ez.EINVALID, "model is required", nil)
 	}
 
+	effort := opts.ReasoningEffort
+	if strings.TrimSpace(string(effort)) == "" {
+		effort = runtimetypes.ReasoningEffortMedium
+	}
+	err = effort.Validate()
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
 	home, err := ResolveHomeDir()
 	if err != nil {
 		return nil, ez.Wrap(err)
@@ -123,8 +139,10 @@ func Compose(ctx context.Context, opts ComposeOptions) (*ComposeResult, error) {
 		composerInstruction,
 		opts.Harness,
 		strings.TrimSpace(opts.Model),
-		runtimetypes.ReasoningEffortMedium,
-		json.RawMessage(`{"permissions":"exec"}`),
+		effort,
+		// The agc home is not a git repository — codex refuses to run
+		// in untrusted directories unless the check is skipped.
+		json.RawMessage(`{"permissions":"exec","skip_git_repo_check":true}`),
 		composeResultSchema,
 		schemaRaw,
 		map[string]any{

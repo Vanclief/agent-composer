@@ -26,7 +26,7 @@ export type NodeConfigSave = (
   },
 ) => Promise<void>;
 
-const REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
+export const REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
 
 export function formatValue(value: unknown) {
   if (value === null || value === undefined) {

@@ -7,9 +7,7 @@ export type WorkflowNodeData = Record<string, unknown> & {
   canvas: CanvasNode;
 };
 
-export type GroupBoxNodeData = Record<string, unknown> & {
-  label: string;
-};
+export type GroupBoxNodeData = Record<string, unknown>;
 
 export type WorkflowFlowNode = Node<WorkflowNodeData, "workflow">;
 export type GroupBoxFlowNode = Node<GroupBoxNodeData, "groupBox">;

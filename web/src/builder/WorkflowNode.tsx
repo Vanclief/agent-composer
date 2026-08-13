@@ -5,10 +5,7 @@ import {
 } from "@xyflow/react";
 import { KIND_VISUAL } from "./constants";
 import { useBuilderRuntime } from "./BuilderContext";
-import type {
-  GroupBoxFlowNode,
-  WorkflowFlowNode,
-} from "./flowTypes";
+import type { WorkflowFlowNode } from "./flowTypes";
 import { KindIcon } from "./Icons";
 import { RunMenuDropdown, StatusPill } from "./RunMenu";
 
@@ -303,10 +300,8 @@ export function WorkflowNode({
   );
 }
 
-export function GroupBoxNode({ data }: NodeProps<GroupBoxFlowNode>) {
-  return (
-    <div className="builder-group-box">
-      <span>{data.label}</span>
-    </div>
-  );
+/** The container behind an expanded group — the group's card names
+ * it and carries its connectors, so the box itself stays quiet. */
+export function GroupBoxNode() {
+  return <div className="builder-group-box" />;
 }

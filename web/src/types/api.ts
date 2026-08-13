@@ -24,6 +24,7 @@ export interface ComposeResponse {
   summary: string;
   harness: string;
   model: string;
+  reasoning_effort: string;
   /** The proposed spec, now stored as the workflow's draft. */
   draft?: string;
 }
