@@ -430,6 +430,11 @@ export function parseSpecYAML(
           config: {
             kind: nodeSpec.kind,
             operation: nodeSpec.operation ?? "",
+            // The loop/conditional contract, shown when drilled in.
+            updates: nodeSpec.updates ?? "",
+            breaksOn: nodeSpec.breaks_on ?? "",
+            routesOn: nodeSpec.routes_on ?? "",
+            maxIterations: nodeSpec.max_iterations,
           },
           inputs: specPorts(nodeSpec.inputs),
           outputs: specPorts(nodeSpec.outputs),
@@ -439,7 +444,6 @@ export function parseSpecYAML(
           isGroup: true,
           groupLabel: targetNames,
           foreign,
-          defaultExpanded: true,
         });
 
         for (const { name, spec } of targets) {
@@ -746,7 +750,11 @@ export function parseSnapshot(
           .map((target) => target.NodeName ?? "target")
           .join(" / ");
         parent.childCount = targets.length;
-        parent.defaultExpanded = true;
+        // The loop/conditional contract, shown when drilled in.
+        parent.config.updates = nodeSpec.Updates ?? "";
+        parent.config.breaksOn = nodeSpec.BreaksOn ?? "";
+        parent.config.routesOn = nodeSpec.RoutesOn ?? "";
+        parent.config.maxIterations = nodeSpec.MaxIterations;
       }
       for (const target of targets) {
         const targetKind =

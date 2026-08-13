@@ -104,17 +104,8 @@ function ConversationBlock({
           </div>
         )}
 
-      {conversation.instructions && (
-        <div className="conversation-message conversation-message--system">
-          <span className="conversation-message__role">
-            instructions
-          </span>
-          <div className="conversation-message__body">
-            <pre>{conversation.instructions}</pre>
-          </div>
-        </div>
-      )}
-
+      {/* Only the transcript renders — it is exactly what the model
+          receives; instructions already appear as its system message. */}
       {messages.length === 0 && trace.length === 0 && (
         <div className="conversation-empty">
           No messages recorded for this conversation.

@@ -59,8 +59,6 @@ export interface CanvasNode {
   childCount?: number;
   /** Defined in another workflow's YAML — not editable from here. */
   foreign?: boolean;
-  /** Group starts expanded (local loop/conditional targets). */
-  defaultExpanded?: boolean;
 }
 
 export interface CanvasEdge {

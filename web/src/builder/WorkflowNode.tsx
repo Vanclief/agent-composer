@@ -68,9 +68,8 @@ export function WorkflowNode({
 }: NodeProps<WorkflowFlowNode>) {
   const {
     currentRun,
-    expandedGroups,
+    onEnterGroup,
     onSelectRun,
-    onToggleGroup,
     runs,
     showRunStatus,
   } = useBuilderRuntime();
@@ -220,21 +219,13 @@ export function WorkflowNode({
             <button
               type="button"
               className="builder-group-toggle nodrag nopan"
+              title="Open what runs inside — double-clicking the card works too"
               onClick={(event) => {
                 event.stopPropagation();
-                onToggleGroup(node.id);
+                onEnterGroup(node.id);
               }}
             >
-              <span
-                className={
-                  expandedGroups.has(node.id)
-                    ? "builder-group-toggle__arrow expanded"
-                    : "builder-group-toggle__arrow"
-                }
-              >
-                ▶
-              </span>
-              {node.groupLabel}
+              ⤢ {node.groupLabel}
               {node.childCount
                 ? ` (${node.childCount} node${
                     node.childCount === 1 ? "" : "s"
@@ -298,10 +289,4 @@ export function WorkflowNode({
       )}
     </div>
   );
-}
-
-/** The container behind an expanded group — the group's card names
- * it and carries its connectors, so the box itself stays quiet. */
-export function GroupBoxNode() {
-  return <div className="builder-group-box" />;
 }

@@ -13,30 +13,25 @@ const ROW_GAP = 48;
 const HEAD_HEIGHT = 58;
 const FIELD_HEIGHT = 26;
 const PORT_HEIGHT = 32;
-const GROUP_TOGGLE_HEIGHT = 30;
-
-// A group renders as one container: the card on top (it carries the
-// connectors), the children nested beneath it inside the dashed box.
-export const GROUP_CHILD_INSET = 20;
-export const GROUP_CHILD_GAP = 32;
-const GROUP_BOTTOM_PADDING = 24;
+const GROUP_ENTER_HEIGHT = 30;
 
 /** Rough rendered height of a node card, so stacks never overlap. */
 export function estimateNodeHeight(node: CanvasNode) {
-  const body = node.body.length * FIELD_HEIGHT + 16;
-  const toggle =
-    node.isGroup && node.groupLabel ? GROUP_TOGGLE_HEIGHT : 0;
+  // "kind" renders as the header subtitle, not a body row.
+  const bodyRows = node.body.filter(
+    (field) => field.k !== "kind",
+  ).length;
+  const enterRow =
+    node.isGroup && node.groupLabel ? GROUP_ENTER_HEIGHT : 0;
+  const body =
+    bodyRows > 0 || enterRow > 0 ? bodyRows * FIELD_HEIGHT + 16 : 0;
   const ports =
     Math.max(node.inputs.length, node.outputs.length) * PORT_HEIGHT +
     22;
-  return HEAD_HEIGHT + body + toggle + ports;
+  return HEAD_HEIGHT + body + enterRow + ports;
 }
 
-export function autoLayout(
-  nodes: CanvasNode[],
-  edges: CanvasEdge[],
-  heightOf: (node: CanvasNode) => number = estimateNodeHeight,
-) {
+export function autoLayout(nodes: CanvasNode[], edges: CanvasEdge[]) {
   const dependencies = new Map(
     nodes.map((node) => [node.id, new Set<string>()]),
   );
@@ -82,7 +77,7 @@ export function autoLayout(
   const columnHeights = new Map<number, number>();
   for (const [depth, column] of columns) {
     const total = column.reduce(
-      (sum, node) => sum + heightOf(node) + ROW_GAP,
+      (sum, node) => sum + estimateNodeHeight(node) + ROW_GAP,
       -ROW_GAP,
     );
     columnHeights.set(depth, total);
@@ -96,82 +91,16 @@ export function autoLayout(
     for (const node of column) {
       node.x = x;
       node.y = y;
-      y += heightOf(node) + ROW_GAP;
+      y += estimateNodeHeight(node) + ROW_GAP;
     }
   }
 }
 
 export function layoutWorkflow(parsed: ParsedWorkflow) {
+  // Every canvas view is a single level — groups render as cards
+  // here and open as their own view — so one pass places it all.
   const nodes = parsed.nodes.map((node) => ({ ...node }));
-  const groups = nodes.filter((node) => node.isGroup);
-
-  // Pass 1 — each group's children in local coordinates, recording
-  // the extent its open body needs. Reverse order so nested groups
-  // are measured before the group that contains them.
-  const bodyExtents = new Map<string, number>();
-  const heightOf = (node: CanvasNode) => {
-    const bodyExtent = node.defaultExpanded
-      ? bodyExtents.get(node.id)
-      : undefined;
-    if (bodyExtent === undefined) {
-      return estimateNodeHeight(node);
-    }
-    return (
-      estimateNodeHeight(node) +
-      GROUP_CHILD_GAP +
-      bodyExtent +
-      GROUP_BOTTOM_PADDING
-    );
-  };
-
-  for (const group of [...groups].reverse()) {
-    const children = nodes.filter(
-      (node) => node.parentGroup === group.id,
-    );
-    if (children.length === 0) {
-      continue;
-    }
-    const childIds = new Set(children.map((node) => node.id));
-    const childEdges = parsed.edges.filter(
-      (edge) => childIds.has(edge.from) && childIds.has(edge.to),
-    );
-    autoLayout(children, childEdges, heightOf);
-
-    const minimumX = Math.min(...children.map((node) => node.x));
-    const minimumY = Math.min(...children.map((node) => node.y));
-    for (const child of children) {
-      child.x -= minimumX;
-      child.y -= minimumY;
-    }
-    bodyExtents.set(
-      group.id,
-      Math.max(...children.map((node) => node.y + heightOf(node))),
-    );
-  }
-
-  // Pass 2 — the top level, with open groups sized as containers so
-  // nothing lands on top of their bodies.
-  const topLevel = nodes.filter((node) => !node.parentGroup);
-  const topLevelIds = new Set(topLevel.map((node) => node.id));
-  const topLevelEdges = parsed.edges.filter(
-    (edge) => topLevelIds.has(edge.from) && topLevelIds.has(edge.to),
-  );
-  autoLayout(topLevel, topLevelEdges, heightOf);
-
-  // Pass 3 — nest each group's children beneath its card. Parse
-  // order puts containers before the groups they contain, so a
-  // nested group is already placed when its own children move.
-  for (const group of groups) {
-    const children = nodes.filter(
-      (node) => node.parentGroup === group.id,
-    );
-    for (const child of children) {
-      child.x += group.x + GROUP_CHILD_INSET;
-      child.y +=
-        group.y + estimateNodeHeight(group) + GROUP_CHILD_GAP;
-    }
-  }
-
+  autoLayout(nodes, parsed.edges);
   return {
     nodes,
     edges: parsed.edges.map((edge) => ({ ...edge })),

@@ -82,6 +82,25 @@ export function BuilderPage() {
       { replace: true },
     );
   };
+  // So does the drilled-open group (?in=<id>) — deep links land
+  // inside the loop they pointed at.
+  const focusGroupId = searchParams.get("in");
+  const setFocusGroupId = (groupId: string | null) => {
+    setSearchParams(
+      (params) => {
+        if (groupId) {
+          params.set("in", groupId);
+        } else {
+          params.delete("in");
+        }
+        // Inside and outside are different views — a selection from
+        // one would pin the inspector to a node the other can't show.
+        params.delete("node");
+        return params;
+      },
+      { replace: true },
+    );
+  };
   const [showRun, setShowRun] = useState(false);
   const [showNewWorkflow, setShowNewWorkflow] = useState(false);
   const [showRename, setShowRename] = useState(false);
@@ -424,6 +443,13 @@ export function BuilderPage() {
         runs={[]}
         readOnly={false}
         showRunStatus={false}
+        focusGroupId={focusGroupId}
+        onFocusGroup={setFocusGroupId}
+        rootCrumb={
+          activeWorkflow
+            ? activeWorkflow.name || activeWorkflow.slug
+            : ""
+        }
         onSelectNode={setSelectedNodeId}
         onSelectRun={() => undefined}
         onOpenWorkflow={(linkedWorkflowId) =>

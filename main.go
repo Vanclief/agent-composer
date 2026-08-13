@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/rs/zerolog/log"
+	"github.com/vanclief/ez"
 
 	appcli "github.com/vanclief/agent-composer/interfaces/cli"
 )
@@ -18,7 +19,15 @@ func main() {
 
 	err := appcli.Run(rootCtx, os.Args)
 	if err != nil && !errors.Is(err, context.Canceled) {
-		log.Error().Err(err).Msg("agc exited with error")
+		// Lead with the human-readable message ("Workflow x was not
+		// found") — the raw chain ends in driver noise like
+		// "sql: no rows in result set" and stays in the error field.
+		message := err.Error()
+		var ezError *ez.Error
+		if errors.As(err, &ezError) {
+			message = ez.ErrorMessage(ezError)
+		}
+		log.Error().Err(err).Msg(message)
 		os.Exit(1)
 	}
 }

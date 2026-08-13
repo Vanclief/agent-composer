@@ -11,6 +11,7 @@ import {
   useLocation,
   useNavigate,
   useParams,
+  useSearchParams,
 } from "react-router-dom";
 import {
   parseSnapshot,
@@ -114,6 +115,34 @@ export function ExecutionCanvas({
       goTo(nodeId ? `/node/${encodeURIComponent(nodeId)}` : "");
     },
     [goTo],
+  );
+  // The drilled-open group lives in the query (?in=<id>), preserved
+  // by goTo's navigations. Drilling drops the node selection — it
+  // belongs to the view being left.
+  const [searchParams] = useSearchParams();
+  const focusGroupId = searchParams.get("in");
+  const focusGroup = useCallback(
+    (groupId: string | null) => {
+      if (!routeWorkflowId || !routeExecutionId) {
+        return;
+      }
+      const params = new URLSearchParams(location.search);
+      if (groupId) {
+        params.set("in", groupId);
+      } else {
+        params.delete("in");
+      }
+      navigate(
+        {
+          pathname:
+            `/workflows/${encodeURIComponent(routeWorkflowId)}` +
+            `/executions/${encodeURIComponent(routeExecutionId)}`,
+          search: params.toString(),
+        },
+        { replace: true },
+      );
+    },
+    [location.search, navigate, routeExecutionId, routeWorkflowId],
   );
   // The execution whose snapshot is currently parsed. Polling hands us
   // a fresh object every few seconds; only a different id may re-parse
@@ -347,6 +376,9 @@ export function ExecutionCanvas({
           runs={runs}
           readOnly
           showRunStatus
+          focusGroupId={focusGroupId}
+          onFocusGroup={focusGroup}
+          rootCrumb={shownWorkflow.name || shownWorkflow.slug}
           onSelectNode={selectNode}
           onSelectRun={() => undefined}
           onOpenNode={openConversation}

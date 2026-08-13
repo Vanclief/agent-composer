@@ -27,24 +27,19 @@ import type {
 import { BuilderRuntimeProvider } from "./BuilderContext";
 import type {
   BuilderFlowNode,
-  GroupBoxFlowNode,
   WireStyle,
   WorkflowFlowEdge,
   WorkflowFlowNode,
 } from "./flowTypes";
 import { StackIcon } from "./Icons";
-import {
-  estimateNodeHeight,
-  layoutWorkflow,
-  NODE_WIDTH,
-} from "./layout";
+import { estimateNodeHeight, layoutWorkflow } from "./layout";
 import type { RunEntry } from "./runData";
+import { RETURN_PORT_ID, scopeWorkflow } from "./scope";
 import { WorkflowEdge } from "./WorkflowEdge";
-import { GroupBoxNode, WorkflowNode } from "./WorkflowNode";
+import { WorkflowNode } from "./WorkflowNode";
 
 const nodeTypes = {
   workflow: WorkflowNode,
-  groupBox: GroupBoxNode,
 } satisfies NodeTypes;
 
 const edgeTypes = {
@@ -65,79 +60,42 @@ function toFlowNodes(nodes: CanvasNode[], readOnly: boolean) {
   }));
 }
 
-function buildGroupBoxes(
-  nodes: WorkflowFlowNode[],
-  expandedGroups: Set<string>,
-) {
-  const boxes: GroupBoxFlowNode[] = [];
-
-  for (const group of nodes) {
-    const canvas = group.data.canvas;
-    if (!canvas.isGroup || !expandedGroups.has(group.id)) {
-      continue;
-    }
-    const children = nodes.filter(
-      (node) => node.data.canvas.parentGroup === group.id,
-    );
-    if (children.length === 0) {
-      continue;
-    }
-
-    // One container: the box wraps the group's card (which carries
-    // the connectors) together with the children nested inside it.
-    const members = [group, ...children];
-    const padding = 24;
-    const minimumX =
-      Math.min(...members.map((node) => node.position.x)) - padding;
-    const minimumY =
-      Math.min(...members.map((node) => node.position.y)) - padding;
-    const maximumX =
-      Math.max(
-        ...members.map((node) => node.position.x + NODE_WIDTH),
-      ) + padding;
-    const maximumY =
-      Math.max(
-        ...members.map(
-          (node) =>
-            node.position.y + estimateNodeHeight(node.data.canvas),
-        ),
-      ) + padding;
-
-    boxes.push({
-      id: `group-box:${group.id}`,
-      type: "groupBox",
-      position: { x: minimumX, y: minimumY },
-      data: {},
-      style: {
-        width: maximumX - minimumX,
-        height: maximumY - minimumY,
-      },
-      draggable: false,
-      selectable: false,
-      connectable: false,
-      focusable: false,
-      zIndex: -1,
-    });
+/** The caption on a loop's feedback wire, from the group's spec. */
+function returnWireLabel(focus: CanvasNode) {
+  const breaksOn =
+    typeof focus.config.breaksOn === "string" ? focus.config.breaksOn : "";
+  const updates =
+    typeof focus.config.updates === "string" ? focus.config.updates : "";
+  const maxIterations =
+    typeof focus.config.maxIterations === "number"
+      ? focus.config.maxIterations
+      : 0;
+  const parts = [breaksOn ? `↻ until ${breaksOn}` : "↻ repeats"];
+  if (updates) {
+    parts.push(`updates ${updates}`);
   }
-
-  return boxes;
+  if (maxIterations) {
+    parts.push(`max ${maxIterations}`);
+  }
+  return parts.join(" · ");
 }
 
-function isVisibleNode(
-  node: WorkflowFlowNode,
-  nodesById: Map<string, WorkflowFlowNode>,
-  expandedGroups: Set<string>,
-) {
-  let parentId = node.data.canvas.parentGroup;
-  const visited = new Set<string>();
-  while (parentId) {
-    if (visited.has(parentId) || !expandedGroups.has(parentId)) {
-      return false;
-    }
-    visited.add(parentId);
-    parentId = nodesById.get(parentId)?.data.canvas.parentGroup;
+/** The contract shown beside the breadcrumb (kind + loop bounds). */
+function crumbMeta(focus: CanvasNode) {
+  const parts: string[] = [];
+  if (typeof focus.config.kind === "string" && focus.config.kind) {
+    parts.push(focus.config.kind);
   }
-  return true;
+  if (typeof focus.config.breaksOn === "string" && focus.config.breaksOn) {
+    parts.push(`until ${focus.config.breaksOn}`);
+  }
+  if (typeof focus.config.routesOn === "string" && focus.config.routesOn) {
+    parts.push(`routes on ${focus.config.routesOn}`);
+  }
+  if (typeof focus.config.maxIterations === "number" && focus.config.maxIterations) {
+    parts.push(`max ${focus.config.maxIterations}`);
+  }
+  return parts.join(" · ");
 }
 
 export function WorkflowCanvas({
@@ -148,6 +106,9 @@ export function WorkflowCanvas({
   runs,
   readOnly,
   showRunStatus,
+  focusGroupId = null,
+  onFocusGroup,
+  rootCrumb,
   onSelectNode,
   onSelectRun,
   onOpenWorkflow,
@@ -164,6 +125,12 @@ export function WorkflowCanvas({
   runs: RunEntry[];
   readOnly: boolean;
   showRunStatus: boolean;
+  /** Group whose body the canvas shows; null for the top level. */
+  focusGroupId?: string | null;
+  /** Drill into a group (or back out with null). */
+  onFocusGroup?: (groupId: string | null) => void;
+  /** Label of the breadcrumb's top-level crumb (workflow name). */
+  rootCrumb?: string;
   onSelectNode: (nodeId: string | null) => void;
   onSelectRun: (fullId: string) => void;
   onOpenWorkflow?: (workflowId: string) => void;
@@ -176,29 +143,24 @@ export function WorkflowCanvas({
 }) {
   const [flowNodes, setFlowNodes] = useState<WorkflowFlowNode[]>([]);
   const [canvasEdges, setCanvasEdges] = useState<CanvasEdge[]>([]);
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    new Set(),
-  );
   const flowInstance = useRef<
     ReactFlowInstance<BuilderFlowNode, WorkflowFlowEdge> | undefined
   >(undefined);
 
+  // A stale focus id (edited spec, old link) falls back to the top
+  // level inside scopeWorkflow, so there is nothing to guard here.
+  const scoped = useMemo(
+    () => scopeWorkflow(parsed, focusGroupId),
+    [parsed, focusGroupId],
+  );
+
   useEffect(() => {
-    const laidOut = layoutWorkflow(parsed);
+    const laidOut = layoutWorkflow(scoped.view);
     setFlowNodes(toFlowNodes(laidOut.nodes, readOnly));
     setCanvasEdges(laidOut.edges);
-    // Loop/conditional targets start open — they are the workflow's
-    // actual work; composed sub-workflows start collapsed.
-    setExpandedGroups(
-      new Set(
-        laidOut.nodes
-          .filter((node) => node.isGroup && node.defaultExpanded)
-          .map((node) => node.id),
-      ),
-    );
     // Selection is the parent's (often the URL's); a stale id simply
     // matches nothing, so there is nothing to clear here.
-  }, [parsed, readOnly]);
+  }, [scoped, readOnly]);
 
   useEffect(() => {
     if (flowNodes.length === 0) {
@@ -213,74 +175,68 @@ export function WorkflowCanvas({
       });
     });
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [flowNodes.length, parsed]);
+  }, [flowNodes.length, scoped]);
 
   const nodesById = useMemo(
     () => new Map(flowNodes.map((node) => [node.id, node])),
     [flowNodes],
   );
-  const visibleWorkflowNodes = useMemo(
-    () =>
-      flowNodes.filter((node) =>
-        isVisibleNode(node, nodesById, expandedGroups),
-      ),
-    [expandedGroups, flowNodes, nodesById],
-  );
-  const renderedNodes = useMemo<BuilderFlowNode[]>(() => {
-    const boxes = buildGroupBoxes(
-      visibleWorkflowNodes,
-      expandedGroups,
-    );
-    return [...boxes, ...visibleWorkflowNodes];
-  }, [expandedGroups, visibleWorkflowNodes]);
   const renderedEdges = useMemo<WorkflowFlowEdge[]>(() => {
-    const visibleIds = new Set(
-      visibleWorkflowNodes.map((node) => node.id),
+    // The loop's feedback wire runs underneath the whole graph.
+    const graphBottom = Math.max(
+      0,
+      ...flowNodes.map(
+        (node) =>
+          node.position.y + estimateNodeHeight(node.data.canvas),
+      ),
     );
-    return canvasEdges
-      .filter(
-        (edge) =>
-          visibleIds.has(edge.from) && visibleIds.has(edge.to),
-      )
-      .map((edge) => {
-        const sourceNode = nodesById.get(edge.from)?.data.canvas;
-        const portType =
-          sourceNode?.outputs.find(
-            (port) => port.id === edge.fromPort,
-          )?.type ?? "any";
-        const sourceStatus = showRunStatus
-          ? currentRun?.nodes[edge.from]?.status
-          : undefined;
-        const targetStatus = showRunStatus
-          ? currentRun?.nodes[edge.to]?.status
-          : undefined;
-        const active =
-          sourceStatus === "run" || targetStatus === "run";
-        return {
-          id: edge.id,
-          type: "workflow",
-          source: edge.from,
-          sourceHandle: edge.fromPort,
-          target: edge.to,
-          targetHandle: edge.toPort,
-          animated: active,
-          selectable: false,
-          deletable: false,
-          focusable: false,
-          data: {
-            active,
-            color: `var(--t-${portType})`,
-            portType,
-            wireStyle: "bezier" as WireStyle,
-          },
-        };
-      });
+    return canvasEdges.map((edge) => {
+      const sourceNode = nodesById.get(edge.from)?.data.canvas;
+      const portType =
+        sourceNode?.outputs.find(
+          (port) => port.id === edge.fromPort,
+        )?.type ?? "any";
+      const sourceStatus = showRunStatus
+        ? currentRun?.nodes[edge.from]?.status
+        : undefined;
+      const targetStatus = showRunStatus
+        ? currentRun?.nodes[edge.to]?.status
+        : undefined;
+      const active = sourceStatus === "run" || targetStatus === "run";
+      const isReturn = edge.fromPort === RETURN_PORT_ID;
+      return {
+        id: edge.id,
+        type: "workflow",
+        source: edge.from,
+        sourceHandle: edge.fromPort,
+        target: edge.to,
+        targetHandle: edge.toPort,
+        animated: active,
+        selectable: false,
+        deletable: false,
+        focusable: false,
+        data: {
+          active,
+          color: `var(--t-${portType})`,
+          portType,
+          wireStyle: (isReturn ? "return" : "bezier") as WireStyle,
+          ...(isReturn && scoped.focus
+            ? {
+                implicit: true,
+                label: returnWireLabel(scoped.focus),
+                dropY: graphBottom + 56,
+              }
+            : {}),
+        },
+      };
+    });
   }, [
     canvasEdges,
     currentRun,
+    flowNodes,
     nodesById,
+    scoped,
     showRunStatus,
-    visibleWorkflowNodes,
   ]);
 
   const onNodesChange = useCallback(
@@ -295,33 +251,42 @@ export function WorkflowCanvas({
     },
     [],
   );
-  const toggleGroup = useCallback((nodeId: string) => {
-    setExpandedGroups((current) => {
-      const next = new Set(current);
-      if (next.has(nodeId)) {
-        next.delete(nodeId);
-      } else {
-        next.add(nodeId);
+  // Composed workflows open on their own page — they are edited
+  // there; local loop/conditional bodies drill in place.
+  const enterGroup = useCallback(
+    (nodeId: string) => {
+      const canvas = nodesById.get(nodeId)?.data.canvas;
+      if (!canvas) {
+        return;
       }
-      return next;
-    });
-  }, []);
+      const workflowId = canvas.body.find(
+        (field) => field.k === "workflow",
+      )?.v;
+      if (workflowId && onOpenWorkflow) {
+        onOpenWorkflow(workflowId);
+        return;
+      }
+      if (onFocusGroup) {
+        onFocusGroup(nodeId);
+      }
+    },
+    [nodesById, onFocusGroup, onOpenWorkflow],
+  );
   const onNodeClick: NodeMouseHandler<BuilderFlowNode> = (
     _event,
     node,
   ) => {
-    if (node.type === "workflow") {
-      onSelectNode(node.id);
-    }
+    onSelectNode(node.id);
   };
   const onNodeDoubleClick: NodeMouseHandler<BuilderFlowNode> = (
     _event,
     node,
   ) => {
-    if (node.type !== "workflow") {
+    const canvas = node.data.canvas;
+    if (canvas.isGroup) {
+      enterGroup(canvas.id);
       return;
     }
-    const canvas = node.data.canvas;
     const workflowId = canvas.body.find(
       (field) => field.k === "workflow",
     )?.v;
@@ -329,37 +294,87 @@ export function WorkflowCanvas({
       onOpenWorkflow(workflowId);
       return;
     }
-    if (!canvas.isGroup && onOpenNode) {
+    if (onOpenNode) {
       onOpenNode(canvas.id);
     }
   };
+
+  // Esc climbs one level out of the drilled group.
+  useEffect(() => {
+    if (!scoped.focus || !onFocusGroup) {
+      return;
+    }
+    const parentId = scoped.focus.parentGroup ?? null;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        event.key !== "Escape" ||
+        target?.closest("input, textarea, select, [contenteditable]")
+      ) {
+        return;
+      }
+      onFocusGroup(parentId);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [scoped, onFocusGroup]);
+
   const runtime = useMemo(
     () => ({
       currentRun,
-      expandedGroups,
       runs,
       showRunStatus,
       onSelectRun,
-      onToggleGroup: toggleGroup,
+      onEnterGroup: enterGroup,
       onOpenNode,
     }),
     [
       currentRun,
-      expandedGroups,
+      enterGroup,
       onOpenNode,
       onSelectRun,
       runs,
       showRunStatus,
-      toggleGroup,
     ],
   );
+
+  const meta = scoped.focus ? crumbMeta(scoped.focus) : "";
 
   return (
     <BuilderRuntimeProvider value={runtime}>
       <main className="builder-canvas" data-component="WorkflowCanvas">
         {topOverlay}
+        {scoped.focus && onFocusGroup && (
+          <nav className="builder-crumbs" aria-label="Group breadcrumb">
+            <button
+              type="button"
+              title="Back to the whole workflow (Esc)"
+              onClick={() => onFocusGroup(null)}
+            >
+              {rootCrumb || "workflow"}
+            </button>
+            {scoped.trail.map((group) => (
+              <span key={group.id} className="builder-crumbs__step">
+                <span className="builder-crumbs__sep">/</span>
+                <button
+                  type="button"
+                  onClick={() => onFocusGroup(group.id)}
+                >
+                  {group.name}
+                </button>
+              </span>
+            ))}
+            <span className="builder-crumbs__sep">/</span>
+            <span className="builder-crumbs__current">
+              {scoped.focus.name}
+            </span>
+            {meta && (
+              <span className="builder-crumbs__meta">{meta}</span>
+            )}
+          </nav>
+        )}
         {error && <div className="builder-error">{error}</div>}
-        {!loading && renderedNodes.length === 0 && (
+        {!loading && flowNodes.length === 0 && (
           <div className="builder-canvas__empty">
             <StackIcon size={40} />
             <b>{emptyTitle}</b>
@@ -372,7 +387,7 @@ export function WorkflowCanvas({
           </div>
         )}
         <ReactFlow<BuilderFlowNode, WorkflowFlowEdge>
-          nodes={renderedNodes}
+          nodes={flowNodes}
           edges={renderedEdges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}

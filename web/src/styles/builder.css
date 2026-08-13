@@ -626,14 +626,76 @@
   filter: brightness(1.12);
 }
 
-.builder-group-toggle__arrow {
-  display: inline-block;
-  font-size: 8px;
-  transition: transform 0.15s;
+/* Breadcrumb pill shown while the canvas is inside a group — the
+   way back out, plus the group's contract. */
+.builder-crumbs {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  transform: translateX(-50%);
+  max-width: min(72%, 640px);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  box-shadow: var(--shadow-2);
+  padding: 6px 12px;
+  font-size: 12.5px;
+  white-space: nowrap;
 }
 
-.builder-group-toggle__arrow.expanded {
-  transform: rotate(90deg);
+.builder-crumbs button {
+  border: 0;
+  background: none;
+  color: var(--accent-ink);
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.builder-crumbs button:hover {
+  text-decoration: underline;
+}
+
+.builder-crumbs__step {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.builder-crumbs__sep {
+  color: var(--ink-2);
+}
+
+.builder-crumbs__current {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.builder-crumbs__meta {
+  overflow: hidden;
+  margin-left: 4px;
+  color: var(--ink-2);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+
+/* Caption riding a wire (the loop's feedback contract). */
+.builder-wire-label {
+  position: absolute;
+  z-index: 5;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink-2);
+  padding: 2px 8px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10.5px;
+  pointer-events: none;
 }
 
 /* A dedicated connections zone: input rows on the left edge, output
@@ -742,18 +804,6 @@
 .react-flow__edge.animated .builder-wire {
   stroke-dasharray: 6 6;
   animation: builder-wire-flow 0.8s linear infinite;
-}
-
-.builder-canvas .react-flow__node-groupBox {
-  pointer-events: none;
-}
-
-.builder-group-box {
-  width: 100%;
-  height: 100%;
-  border: 2px dashed var(--line-2);
-  border-radius: 14px;
-  background: color-mix(in oklch, var(--paper-2) 55%, transparent);
 }
 
 .builder-error {
