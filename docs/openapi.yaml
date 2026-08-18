@@ -684,7 +684,9 @@ components:
             `skip_git_repo_check`, `ephemeral`, `add_dirs`, and `config_overrides`. For
             `claude_code` other fields may include `allowed_tools`, `disallowed_tools`,
             `add_dirs`, `mcp_config`, `tools`, `settings`, `system_prompt`,
-            `append_system_prompt`, `bare`, `verbose`, and `strict_mcp_config`.
+            `append_system_prompt`, `verbose`, and `strict_mcp_config`. Claude Code workflow
+            agents always run with `--bare`; this behavior cannot be disabled through harness
+            configuration.
         instructions:
           type: string
       description: >

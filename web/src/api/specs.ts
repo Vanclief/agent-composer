@@ -154,6 +154,21 @@ function inferenceOutputSchema(
   return JSON.stringify(resolved, null, 2);
 }
 
+/**
+ * The effective permissions tier for a harness config — the compiler
+ * applies read_only when the spec does not say otherwise, so the
+ * canvas shows that default rather than nothing.
+ */
+function harnessPermissions(config: unknown): string {
+  if (config && typeof config === "object") {
+    const value = (config as Record<string, unknown>).permissions;
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "read_only";
+}
+
 function specBody(node: SpecNode): CanvasField[] {
   const fields: CanvasField[] = [];
   if (node.kind) {
@@ -177,6 +192,11 @@ function specBody(node: SpecNode): CanvasField[] {
     fields.push({
       k: "effort",
       v: node.config?.harness?.reasoning_effort || "medium",
+      mono: true,
+    });
+    fields.push({
+      k: "permissions",
+      v: harnessPermissions(node.config?.harness),
       mono: true,
     });
   }
@@ -462,6 +482,10 @@ export function parseSpecYAML(
                 spec.kind === "inference"
                   ? spec.config?.harness?.reasoning_effort || "medium"
                   : "",
+              permissions:
+                spec.kind === "inference"
+                  ? harnessPermissions(spec.config?.harness)
+                  : "",
               outputSchema: inferenceOutputSchema(spec, schemas),
               kind: spec.kind ?? "",
               operation: spec.operation ?? "",
@@ -497,6 +521,10 @@ export function parseSpecYAML(
           reasoningEffort:
             nodeSpec.kind === "inference"
               ? nodeSpec.config?.harness?.reasoning_effort || "medium"
+              : "",
+          permissions:
+            nodeSpec.kind === "inference"
+              ? harnessPermissions(nodeSpec.config?.harness)
               : "",
           outputSchema: inferenceOutputSchema(nodeSpec, schemas),
           kind: nodeSpec.kind ?? "",
@@ -694,6 +722,13 @@ export function parseSnapshot(
         mono: true,
       });
     }
+    if (nodeSpec.Kind === "inference") {
+      body.push({
+        k: "permissions",
+        v: harnessPermissions(nodeSpec.HarnessConfig),
+        mono: true,
+      });
+    }
     // The model gets its own tag row in the card body.
     const sub = nodeSpec.Kind ?? "";
 
@@ -709,6 +744,10 @@ export function parseSnapshot(
         instruction: nodeSpec.Instruction ?? "",
         harnessId: nodeSpec.Harness ?? "",
         reasoningEffort: nodeSpec.ReasoningEffort ?? "",
+        permissions:
+          nodeSpec.Kind === "inference"
+            ? harnessPermissions(nodeSpec.HarnessConfig)
+            : "",
         outputSchema:
           nodeSpec.Kind === "inference" && nodeSpec.Outputs
             ? JSON.stringify(
@@ -781,6 +820,11 @@ export function parseSnapshot(
             v: target.ReasoningEffort || "medium",
             mono: true,
           });
+          childBody.push({
+            k: "permissions",
+            v: harnessPermissions(target.HarnessConfig),
+            mono: true,
+          });
         }
         const targetOutputs =
           "Outputs" in target ? target.Outputs : undefined;
@@ -796,6 +840,10 @@ export function parseSnapshot(
             instruction: target.Instruction ?? "",
             harnessId: target.Harness ?? "",
             reasoningEffort: target.ReasoningEffort ?? "",
+            permissions:
+              targetKind === "inference"
+                ? harnessPermissions(target.HarnessConfig)
+                : "",
             outputSchema:
               targetKind === "inference" && targetOutputs
                 ? JSON.stringify(

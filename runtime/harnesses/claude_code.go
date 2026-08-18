@@ -26,7 +26,6 @@ type claudeCodeConfig struct {
 	Settings           string      `json:"settings,omitempty"`
 	SystemPrompt       string      `json:"system_prompt,omitempty"`
 	AppendSystemPrompt string      `json:"append_system_prompt,omitempty"`
-	Bare               bool        `json:"bare,omitempty"`
 	Verbose            bool        `json:"verbose,omitempty"`
 	StrictMCPConfig    bool        `json:"strict_mcp_config,omitempty"`
 }
@@ -161,8 +160,13 @@ func (c *ClaudeCode) Run(ctx context.Context, conversation *agent.Conversation, 
 }
 
 func (c *ClaudeCode) buildArgs(conversation *agent.Conversation, cfg claudeCodeConfig, prompt string) []string {
+	// Always bare: workflow agents must be hermetic. Without it Claude
+	// loads the user's per-project auto-memory, CLAUDE.md, and hooks —
+	// reviewers were reading (and steering by) memory from interactive
+	// sessions on the same repo.
 	args := []string{
 		"-p",
+		"--bare",
 		"--output-format",
 		"json",
 	}
@@ -184,10 +188,6 @@ func (c *ClaudeCode) buildArgs(conversation *agent.Conversation, cfg claudeCodeC
 
 		if perms.DangerouslySkip {
 			args = append(args, "--dangerously-skip-permissions")
-		}
-
-		if cfg.Bare {
-			args = append(args, "--bare")
 		}
 
 		if cfg.Verbose {

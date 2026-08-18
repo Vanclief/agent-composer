@@ -16,6 +16,8 @@ type NodeConfigUpdate struct {
 	Instruction *string
 	// "" removes the field — the harness default takes over.
 	ReasoningEffort *string
+	// "" removes the field — the compiler defaults to read_only.
+	Permissions *string
 }
 
 // UpdateNodeConfig edits one node's config in the workflow's YAML.
@@ -52,7 +54,7 @@ func (r *Registry) UpdateNodeConfig(ctx context.Context, workflowID, nodeName st
 		setScalarValue(configMap, "instruction", *update.Instruction)
 	}
 	if update.Model != nil || update.Harness != nil ||
-		update.ReasoningEffort != nil {
+		update.ReasoningEffort != nil || update.Permissions != nil {
 		harnessMap := ensureMapValue(configMap, "harness")
 		if update.Harness != nil {
 			setScalarValue(harnessMap, "id", *update.Harness)
@@ -68,6 +70,17 @@ func (r *Registry) UpdateNodeConfig(ctx context.Context, workflowID, nodeName st
 					harnessMap,
 					"reasoning_effort",
 					*update.ReasoningEffort,
+				)
+			}
+		}
+		if update.Permissions != nil {
+			if *update.Permissions == "" {
+				removeMapKey(harnessMap, "permissions")
+			} else {
+				setScalarValue(
+					harnessMap,
+					"permissions",
+					*update.Permissions,
 				)
 			}
 		}

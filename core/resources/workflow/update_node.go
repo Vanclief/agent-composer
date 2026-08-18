@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/vanclief/agent-composer/models/agent"
+	"github.com/vanclief/agent-composer/runtime/harnesses"
 	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 	workflowruntime "github.com/vanclief/agent-composer/workflow"
 	"github.com/vanclief/ez"
@@ -19,6 +20,8 @@ type UpdateNodeRequest struct {
 	Instruction *string `json:"instruction,omitempty"`
 	// "" resets to the harness default.
 	ReasoningEffort *string `json:"reasoning_effort,omitempty"`
+	// "" resets to the compiler default (read_only).
+	Permissions *string `json:"permissions,omitempty"`
 }
 
 func (r *UpdateNodeRequest) Validate() error {
@@ -26,7 +29,7 @@ func (r *UpdateNodeRequest) Validate() error {
 		return ez.New(ez.EINVALID, "workflow_id and node are required", nil)
 	}
 	if r.Model == nil && r.Harness == nil && r.Instruction == nil &&
-		r.ReasoningEffort == nil {
+		r.ReasoningEffort == nil && r.Permissions == nil {
 		return ez.New(ez.EINVALID, "Nothing to update", nil)
 	}
 	if r.Model != nil && strings.TrimSpace(*r.Model) == "" {
@@ -44,6 +47,12 @@ func (r *UpdateNodeRequest) Validate() error {
 		).Validate()
 		if err != nil {
 			return ez.New(ez.EINVALID, "Unknown reasoning effort "+*r.ReasoningEffort, err)
+		}
+	}
+	if r.Permissions != nil && strings.TrimSpace(*r.Permissions) != "" {
+		_, err := harnesses.ParsePermissions(*r.Permissions)
+		if err != nil {
+			return ez.Wrap(err)
 		}
 	}
 
@@ -78,6 +87,7 @@ func (api *API) UpdateNode(ctx context.Context, requester interface{}, request *
 			Model:           trim(request.Model),
 			Harness:         trim(request.Harness),
 			ReasoningEffort: trim(request.ReasoningEffort),
+			Permissions:     trim(request.Permissions),
 			// Instruction keeps its exact text — only the caller knows
 			// whether whitespace matters.
 			Instruction: request.Instruction,

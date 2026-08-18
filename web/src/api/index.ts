@@ -160,6 +160,7 @@ export function updateWorkflowNode(
     harness?: string;
     instruction?: string;
     reasoning_effort?: string;
+    permissions?: string;
   },
 ) {
   return putJSON<{ workflow_slug: string; node: string; spec: string }>(

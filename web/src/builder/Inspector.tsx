@@ -23,10 +23,12 @@ export type NodeConfigSave = (
     harness?: string;
     instruction?: string;
     reasoning_effort?: string;
+    permissions?: string;
   },
 ) => Promise<void>;
 
 export const REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
+const PERMISSION_TIERS = ["read_only", "exec", "dangerously-exec"];
 
 export function formatValue(value: unknown) {
   if (value === null || value === undefined) {
@@ -270,6 +272,9 @@ function EditableLLMConfig({
   const [instruction, setInstruction] = useState(
     String(config.instruction || ""),
   );
+  const [permissions, setPermissions] = useState(
+    String(config.permissions || "read_only"),
+  );
   const [harnesses, setHarnesses] = useState<HarnessInfo[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -280,6 +285,7 @@ function EditableLLMConfig({
     setHarness(String(node.config.harnessId || ""));
     setEffort(String(node.config.reasoningEffort || ""));
     setInstruction(String(node.config.instruction || ""));
+    setPermissions(String(node.config.permissions || "read_only"));
     setError("");
   }, [
     node.id,
@@ -287,6 +293,7 @@ function EditableLLMConfig({
     node.config.harnessId,
     node.config.reasoningEffort,
     node.config.instruction,
+    node.config.permissions,
   ]);
 
   useEffect(() => {
@@ -301,7 +308,8 @@ function EditableLLMConfig({
     model !== String(config.model || "") ||
     harness !== String(config.harnessId || "") ||
     effort !== String(config.reasoningEffort || "") ||
-    instruction !== String(config.instruction || "");
+    instruction !== String(config.instruction || "") ||
+    permissions !== String(config.permissions || "read_only");
   const knownModels =
     harnesses.find((info) => info.id === harness)?.models ?? [];
 
@@ -325,6 +333,10 @@ function EditableLLMConfig({
         instruction:
           instruction !== String(config.instruction || "")
             ? instruction
+            : undefined,
+        permissions:
+          permissions !== String(config.permissions || "read_only")
+            ? permissions
             : undefined,
       });
     } catch (caught) {
@@ -399,6 +411,24 @@ function EditableLLMConfig({
           {REASONING_EFFORTS.map((level) => (
             <option key={level} value={level}>
               {level}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="builder-field-row">
+        <label>Permissions</label>
+        <select
+          className="builder-select mono"
+          value={permissions}
+          title="Access tier: read_only inspects but cannot modify (on Claude Code it cannot run shell at all); exec can modify the workspace and run commands; dangerously-exec removes all guardrails"
+          onChange={(event) => setPermissions(event.target.value)}
+        >
+          {!PERMISSION_TIERS.includes(permissions) && (
+            <option value={permissions}>{permissions}</option>
+          )}
+          {PERMISSION_TIERS.map((tier) => (
+            <option key={tier} value={tier}>
+              {tier}
             </option>
           ))}
         </select>

@@ -34,6 +34,8 @@ export interface CanvasNodeConfig {
   instruction?: string;
   harnessId?: string;
   reasoningEffort?: string;
+  /** Access tier (read_only | exec | dangerously-exec). */
+  permissions?: string;
   /** Pretty-printed resolved output schema, keyed by output name. */
   outputSchema?: string;
   kind?: string;

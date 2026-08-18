@@ -260,7 +260,13 @@ export function BuilderPage() {
 
   async function saveNodeConfig(
     nodeName: string,
-    update: { model?: string; harness?: string; instruction?: string },
+    update: {
+      model?: string;
+      harness?: string;
+      instruction?: string;
+      reasoning_effort?: string;
+      permissions?: string;
+    },
   ) {
     const response = await updateWorkflowNode(
       activeWorkflowId,
