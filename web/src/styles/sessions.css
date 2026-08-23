@@ -1,0 +1,340 @@
+/*
+ * Sessions — one tmux window per project or worktree.
+ *
+ * The page reuses the app grid (rail + main) and adds the status line
+ * along the bottom, where tmux puts it: the strip is the session list,
+ * so this page carries no LeftPanel. Colours come from tokens only.
+ */
+
+/* ── page grid ──────────────────────────────────────────────────── */
+.sessions-page__workspace {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--rail) minmax(0, 1fr) var(--right-panel);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+/* The rail runs the full height; the strip starts where content does. */
+.sessions-page__workspace > .left-rail {
+  grid-row: 1 / span 2;
+  grid-column: 1;
+}
+
+.sessions-page__workspace > .tab-strip {
+  grid-row: 2;
+  grid-column: 2 / -1;
+}
+
+/* ── top bar ────────────────────────────────────────────────────── */
+
+/* The stored worktree branch, beside the one git resolved. */
+.sessions-page__branch {
+  flex: 0 0 auto;
+  max-width: 180px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper-2);
+  color: var(--ink-2);
+  padding: 4px 8px;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The title doubles as its own rename field — click it to edit. */
+.session-title {
+  max-width: 320px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: none;
+  padding: 3px 7px;
+  cursor: text;
+  font: inherit;
+  letter-spacing: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-title:hover {
+  border-color: var(--line);
+  background: var(--hover);
+}
+
+.session-title__input {
+  width: 260px;
+  max-width: 40vw;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  outline: none;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 3px 7px;
+  font: inherit;
+  letter-spacing: inherit;
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* ── empty state ────────────────────────────────────────────────── */
+.sessions-page__empty {
+  grid-row: 1;
+  grid-column: 2;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.sessions-page__empty-card {
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+  padding: 24px 26px;
+  text-align: center;
+  box-shadow: var(--shadow-1);
+}
+
+.sessions-page__empty-card h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.sessions-page__empty-card p {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.sessions-page__eyebrow {
+  color: var(--accent-ink) !important;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10.5px !important;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sessions-page__empty-card button {
+  margin-top: 8px;
+}
+
+/* ── tab strip ──────────────────────────────────────────────────── */
+.tab-strip {
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 30px;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+  padding: 0 8px;
+  user-select: none;
+}
+
+.tab-strip__brand {
+  flex: none;
+  color: var(--ink-4);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+/* The prefix is armed and waiting for its next key. */
+.tab-strip__prefix {
+  flex: none;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 2px 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  animation: tab-strip-pulse 1s ease-in-out infinite;
+}
+
+.tab-strip__tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  height: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab-strip__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab-strip__tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 180px;
+  height: 22px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-3);
+  padding: 0 8px;
+  cursor: pointer;
+  font-size: 11.5px;
+  line-height: 1;
+}
+
+.tab-strip__tab:hover {
+  background: var(--hover);
+  color: var(--ink-2);
+}
+
+.tab-strip__tab.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.tab-strip__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── activity flags (tmux's window flags) ───────────────────────── */
+.tab-strip__flag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.tab-strip__flag--running {
+  color: var(--st-run);
+}
+
+.tab-strip__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: tab-strip-pulse 1.4s ease-in-out infinite;
+}
+
+.tab-strip__flag--failed {
+  color: var(--st-err);
+  font-size: 12px;
+}
+
+.tab-strip__flag--unread {
+  color: var(--accent);
+}
+
+.tab-strip__ring {
+  width: 6px;
+  height: 6px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+
+.tab-strip__flag--thinking {
+  gap: 2px;
+  color: var(--ink-3);
+}
+
+.tab-strip__flag--thinking i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: tab-strip-pulse 1.2s ease-in-out infinite;
+}
+
+.tab-strip__flag--thinking i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.tab-strip__flag--thinking i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/* ── trailing controls ──────────────────────────────────────────── */
+.tab-strip__new {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-4);
+  padding: 0;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.tab-strip__new:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.tab-strip__spacer {
+  flex: 1;
+}
+
+.tab-strip__hint {
+  flex: none;
+  color: var(--ink-4);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.tab-strip__tab:focus-visible,
+.tab-strip__new:focus-visible,
+.session-title:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* The bindings still work; only the reminder gives up its room. */
+@media (max-width: 1100px) {
+  .tab-strip__hint {
+    display: none;
+  }
+}
+
+@keyframes tab-strip-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-strip__prefix,
+  .tab-strip__dot,
+  .tab-strip__flag--thinking i {
+    animation: none;
+  }
+}

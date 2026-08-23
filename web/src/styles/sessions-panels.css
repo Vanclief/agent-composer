@@ -1,0 +1,492 @@
+/*
+ * The two panels inside a session tab: the main-agent chat and the
+ * processes beside it. Both fill their grid cell and scroll inside
+ * themselves — the tab strip, the input row and the log header must
+ * stay put, so the page itself never scrolls.
+ *
+ * The chat is deliberately the same family as the Composer without
+ * sharing its class names: same quoted request, same reply beneath.
+ */
+
+@keyframes session-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* ── chat ──────────────────────────────────────────────────────────── */
+
+.session-chat {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+.session-chat__head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 12px 10px 14px;
+}
+
+.session-chat__head h3 {
+  flex: none;
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+/* The resumable harness session — dim, because you rarely need it. */
+.session-chat__ref {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--ink-4);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-chat__clear {
+  flex: none;
+  height: 26px;
+  min-height: 26px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.session-chat__turns {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
+
+.session-chat__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-3);
+  padding: 26px 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.session-chat__empty b {
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+
+.session-chat__examples {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.session-chat__example {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper-2);
+  color: var(--ink-2);
+  padding: 3px 8px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.session-chat__example:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.session-chat__turn + .session-chat__turn {
+  margin-top: 16px;
+}
+
+/* Your message — a quiet quoted block above the agent's answer. */
+.session-chat__request {
+  border-left: 2px solid var(--line-2);
+  color: var(--ink-2);
+  padding: 1px 0 1px 9px;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+/* What the agent did before answering — evidence, not conversation. */
+.session-chat__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.session-chat__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--paper-2);
+  color: var(--ink-3);
+  padding: 2px 6px;
+  font-size: 10.5px;
+}
+
+.session-chat__action svg {
+  flex: none;
+  opacity: 0.7;
+}
+
+.session-chat__reply {
+  margin-top: 7px;
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.session-chat__reply code {
+  border-radius: 4px;
+  background: var(--code-bg);
+  color: var(--ink-2);
+  padding: 1px 4px;
+  font-size: 11.5px;
+}
+
+.session-chat__reply--failed {
+  color: var(--st-err);
+}
+
+.session-chat__thinking {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.session-chat__dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--st-run);
+  animation: session-pulse 1.1s ease-in-out infinite;
+}
+
+.session-chat__input {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding: 10px 12px;
+}
+
+.session-chat__input textarea {
+  min-width: 0;
+  flex: 1;
+  max-height: 124px;
+  overflow-y: auto;
+  resize: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: 0;
+  background: var(--bg);
+  color: var(--ink);
+  padding: 7px 9px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.session-chat__input textarea:focus {
+  border-color: var(--accent);
+}
+
+.session-chat__input textarea::placeholder {
+  color: var(--ink-3);
+}
+
+.session-chat__send {
+  flex: none;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 0 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.session-chat__send:disabled {
+  background: var(--hover);
+  color: var(--ink-3);
+  cursor: not-allowed;
+  font-weight: 500;
+}
+
+/* ── processes ─────────────────────────────────────────────────────── */
+
+.session-processes {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.session-processes__head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 8px 14px;
+}
+
+.session-processes__head h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.session-processes__count {
+  border-radius: 999px;
+  background: var(--st-run-soft);
+  color: var(--st-run-ink);
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.session-processes__run {
+  flex: 0 0 auto;
+  padding: 0 12px 10px;
+}
+
+.session-processes__run .builder-input {
+  font-size: 11.5px;
+}
+
+/* Natural height, but never more than the panel's top half. */
+.session-processes__list {
+  min-height: 0;
+  flex: 0 1 auto;
+  max-height: 45%;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0 6px 8px;
+  list-style: none;
+}
+
+.session-processes__row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 7px;
+  padding-right: 6px;
+}
+
+.session-processes__row:hover {
+  background: var(--hover);
+}
+
+.session-processes__row--selected,
+.session-processes__row--selected:hover {
+  background: var(--accent-soft);
+}
+
+.session-processes__select {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  padding: 7px 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.session-processes__select b {
+  flex: none;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.session-processes__dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--st-idle);
+}
+
+.session-processes__dot--running {
+  background: var(--st-run);
+  animation: session-pulse 1.1s ease-in-out infinite;
+}
+
+.session-processes__dot--ok {
+  background: var(--st-ok);
+}
+
+.session-processes__dot--err {
+  background: var(--st-err);
+}
+
+.session-processes__adhoc {
+  flex: none;
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  color: var(--ink-4);
+  padding: 0 4px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.session-processes__command {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-processes__actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Row-sized controls — the 30px builder default swamps a list row. */
+.session-processes__actions .builder-icon-button {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  font-size: 14px;
+}
+
+.session-processes__port {
+  border-radius: 5px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  padding: 1px 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.session-processes__exit {
+  color: var(--ink-3);
+  font-size: 10.5px;
+}
+
+.session-processes__exit--failed {
+  color: var(--st-err-ink);
+  font-weight: 600;
+}
+
+/* ── logs ──────────────────────────────────────────────────────────── */
+
+.session-logs {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-top: 1px solid var(--line);
+}
+
+.session-logs__head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  padding: 7px 10px 7px 14px;
+}
+
+.session-logs__name {
+  flex: none;
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.session-logs__meta {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-logs__follow {
+  flex: none;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.session-logs__body {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  margin: 0;
+  background: var(--code-bg);
+  color: var(--ink-2);
+  padding: 8px 12px;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.session-logs__line--stderr {
+  color: var(--st-err-ink);
+}
+
+.session-logs__note {
+  margin-top: 6px;
+  color: var(--ink-4);
+}
+
+.session-logs__placeholder {
+  color: var(--ink-4);
+  padding: 12px 0;
+}

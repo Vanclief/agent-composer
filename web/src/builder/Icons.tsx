@@ -313,3 +313,24 @@ export function KindIcon({
   }
   return <TransformIcon size={size} />;
 }
+
+export function TerminalIcon({ size = 16 }: IconProps) {
+  // A `>_` prompt in a window — a session is a shell you talk to.
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="1.8" y="2.8" width="12.4" height="10.4" rx="2" />
+      <path d="M4.8 6.4 L7 8.6 L4.8 10.8" />
+      <path d="M8.4 10.9 H11.4" />
+    </svg>
+  );
+}

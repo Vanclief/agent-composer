@@ -13,6 +13,8 @@ import "./styles/builder.css";
 import "./styles/layout.css";
 import "./styles/tasks.css";
 import "./styles/debug.css";
+import "./styles/sessions.css";
+import "./styles/sessions-panels.css";
 import App from "./App";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

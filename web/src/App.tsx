@@ -8,6 +8,7 @@ import {
 import { BuilderPage } from "./builder/BuilderPage";
 import { DebugMode } from "./debug/DebugMode";
 import { MainMonitorPage } from "./monitor/MainMonitorPage";
+import { SessionsPage } from "./sessions/SessionsPage";
 import { WorkflowRedirect } from "./workflows/WorkflowRedirect";
 
 /**
@@ -56,6 +57,11 @@ export default function App() {
         <Route
           path="/executions/:executionId"
           element={<ExecutionRedirect />}
+        />
+        <Route path="/sessions" element={<SessionsPage />} />
+        <Route
+          path="/sessions/:sessionId"
+          element={<SessionsPage />}
         />
         <Route path="/build" element={<BuilderPage />} />
         <Route
