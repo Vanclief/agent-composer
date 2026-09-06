@@ -1,28 +1,13 @@
-# AGENTS.md
+<!-- BEGIN golang: generated from Vanclief/skills golang/SKILL.md, do not edit here -->
+## Go conventions
 
-## Go style rules (strict)
+Apply these Go conventions when writing code and report violations in reviews, even when review guidance says to skip routine lint or formatting nits.
 
-### No explicit semicolons outside `for`
+Write one statement per line. Never use an explicit `;` in Go syntax except the two separators in a three-clause `for init; condition; post` header. Semicolons inside SQL strings are allowed. Put header initializers on the preceding line: write `err := f()` then `if err != nil {`, never `if err := f(); err != nil {`.
 
-- Never write an explicit semicolon `;` in Go code.
-- Exception (only): semicolons are allowed _only_ inside a 3-clause `for` header:
-  `for init; condition; post { ... }`
-- All other explicit-semicolon forms are forbidden, including:
-  - multiple statements on one line: `a(); b()`
-  - `if init; condition { ... }` (e.g. `if err := f(); err != nil { ... }`)
-  - `switch init; { ... }` and type-switch init forms
+Use `err` for error variables. Do not invent per-call names such as `parseErr` when immediately checking and returning the error. Keep assignment and error check adjacent. Narrow `err` shadowing is acceptable when checked and returned immediately; flag shadowing only when it can hide a bug.
 
-### Required rewrite style
+Where the module already uses `github.com/vanclief/ez`, create errors at the origin with `ez.New(code, message, cause)` and propagate them with `ez.Wrap(err)`. Classify ez errors with `ez.ErrorCode(err)`, not by matching error messages.
 
-- One statement per line.
-- If you need an initializer for `if`/`switch`, move it to its own line above the statement.
-
-### Self-check before final output
-
-- Before returning code, scan what you wrote:
-  if it contains `;` outside `for init; condition; post {}`, rewrite until compliant.
-
-## Review guidelines
-
-- Flag any explicit semicolon `;` usage outside `for init; condition; post { ... }` as an issue.
-- Flag any `if init; cond {}` / `switch init; {}` usage as an issue (requires rewrite to multi-line).
+Before finishing Go changes, scan the code you wrote for forbidden semicolons in Go syntax and rewrite it to comply.
+<!-- END golang -->
