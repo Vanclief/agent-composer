@@ -8,9 +8,14 @@
  */
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { fetchHarnesses, fetchSettings } from "../api";
+import { REASONING_EFFORTS } from "../builder/Inspector";
+import { ModelPicker } from "../builder/ModelPicker";
+import type { HarnessInfo } from "../types/api";
 import {
   clearTranscript,
   sendMessage,
+  setSessionAgent,
   turns,
   useSessionsStore,
 } from "./mock";
@@ -56,6 +61,26 @@ function renderInline(text: string): ReactNode[] {
   return nodes;
 }
 
+/** Send — the arrow every chat box has taught people to look for. */
+function SendGlyph() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 13 V3" />
+      <path d="M4 7 L8 3 L12 7" />
+    </svg>
+  );
+}
+
 /** A prompt caret — marks a chip as something the agent ran, not said. */
 function TerminalGlyph({ size = 10 }: { size?: number }) {
   return (
@@ -83,9 +108,59 @@ export function ChatPanel({ session }: { session: Session }) {
   const busy = last?.status === "running";
 
   const [draft, setDraft] = useState("");
+  const [harnesses, setHarnesses] = useState<HarnessInfo[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const followRef = useRef(true);
+
+  // Installed harnesses come from the server; a tab that has never
+  // chosen an agent inherits the Composer default, else the first one
+  // installed — the same order the server resolves.
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.all([
+      fetchSettings(controller.signal),
+      fetchHarnesses(controller.signal),
+    ])
+      .then(([settings, list]) => {
+        const installed = (list?.harnesses ?? []).filter(
+          (info) => info.available,
+        );
+        setHarnesses(installed);
+        if (session.harness && session.model) {
+          return;
+        }
+        const harness =
+          session.harness ||
+          settings?.composer?.harness ||
+          installed[0]?.id ||
+          "";
+        const model =
+          session.model ||
+          settings?.composer?.model ||
+          installed.find((info) => info.id === harness)?.models?.[0] ||
+          "";
+        if (harness || model) {
+          setSessionAgent(session.id, {
+            harness,
+            model,
+            effort: session.effort || "medium",
+          });
+        }
+      })
+      .catch(() => {
+        // Without a server the picker stays empty; the mock answers anyway.
+      });
+    return () => controller.abort();
+    // Only re-resolve when the tab changes, not on every keystroke.
+  }, [session.id]);
+
+  function pickAgent(harness: string, model: string, effort: string) {
+    setSessionAgent(session.id, { harness, model, effort });
+  }
+
+  const knownModels =
+    harnesses.find((info) => info.id === session.harness)?.models ?? [];
 
   // A new tab starts with an empty box, its own transcript, and focus.
   useEffect(() => {
@@ -209,13 +284,19 @@ export function ChatPanel({ session }: { session: Session }) {
             ) : (
               <div className="session-chat__reply">
                 {renderInline(turn.reply ?? "")}
+                {turn.model && (
+                  <small className="session-chat__meta mono">
+                    {turn.model}
+                    {turn.effort ? ` · ${turn.effort}` : ""}
+                  </small>
+                )}
               </div>
             )}
           </div>
         ))}
       </div>
 
-      <div className="session-chat__input">
+      <div className="session-chat__composer">
         <textarea
           ref={inputRef}
           rows={1}
@@ -233,14 +314,81 @@ export function ChatPanel({ session }: { session: Session }) {
             }
           }}
         />
-        <button
-          type="button"
-          className="session-chat__send"
-          disabled={busy || !draft.trim()}
-          onClick={submit}
-        >
-          {busy ? "Working…" : "Send"}
-        </button>
+        <div className="session-chat__toolbar">
+          <select
+            className="builder-select mono session-chat__pill"
+            aria-label="Harness"
+            value={session.harness}
+            disabled={busy || harnesses.length === 0}
+            onChange={(event) => {
+              const next = event.target.value;
+              pickAgent(
+                next,
+                harnesses.find((info) => info.id === next)?.models?.[0] ?? "",
+                session.effort,
+              );
+            }}
+          >
+            {harnesses.length === 0 && (
+              <option value={session.harness}>
+                {session.harness || "no harnesses"}
+              </option>
+            )}
+            {session.harness &&
+              harnesses.length > 0 &&
+              !harnesses.some((info) => info.id === session.harness) && (
+                <option value={session.harness}>
+                  {session.harness} (not installed)
+                </option>
+              )}
+            {harnesses.map((info) => (
+              <option key={info.id} value={info.id}>
+                {info.id}
+              </option>
+            ))}
+          </select>
+          <ModelPicker
+            value={session.model}
+            models={knownModels}
+            disabled={busy || harnesses.length === 0}
+            onChange={(model) =>
+              pickAgent(session.harness, model, session.effort)
+            }
+          />
+          <select
+            className="builder-select mono session-chat__pill session-chat__effort"
+            aria-label="Reasoning effort"
+            title="Reasoning effort"
+            value={session.effort}
+            disabled={busy || harnesses.length === 0}
+            onChange={(event) =>
+              pickAgent(session.harness, session.model, event.target.value)
+            }
+          >
+            {!REASONING_EFFORTS.includes(session.effort) && (
+              <option value={session.effort}>{session.effort}</option>
+            )}
+            {REASONING_EFFORTS.map((level) => (
+              <option key={level} value={level}>
+                {level}
+              </option>
+            ))}
+          </select>
+          <span className="session-chat__toolbar-spacer" />
+          <span className="session-chat__hint">
+            {busy ? "working…" : "Enter to send · Shift+Enter for a new line"}
+          </span>
+          <button
+            type="button"
+            className="session-chat__send"
+            aria-label="Send"
+            title="Send (Enter)"
+            disabled={busy || !draft.trim()}
+            onClick={submit}
+          >
+            <SendGlyph />
+          </button>
+        </div>
       </div>
     </section>
   );

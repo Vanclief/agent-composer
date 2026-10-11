@@ -192,57 +192,164 @@
   animation: session-pulse 1.1s ease-in-out infinite;
 }
 
-.session-chat__input {
+/*
+ * The composer — one card, like Claude Code or ChatGPT: the message on
+ * top, and underneath it who answers (harness · model · effort) with
+ * the send arrow on the right. The choice is remembered per tab.
+ */
+.session-chat__composer {
   flex: 0 0 auto;
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  border-top: 1px solid var(--line);
-  padding: 10px 12px;
+  flex-direction: column;
+  margin: 0 12px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: var(--shadow-1);
+  transition:
+    border-color 0.12s,
+    box-shadow 0.12s;
 }
 
-.session-chat__input textarea {
+.session-chat__composer:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.session-chat__composer textarea {
   min-width: 0;
-  flex: 1;
   max-height: 124px;
   overflow-y: auto;
   resize: none;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 0;
+  border-radius: 12px 12px 0 0;
   outline: 0;
-  background: var(--bg);
+  background: transparent;
   color: var(--ink);
-  padding: 7px 9px;
-  font-size: 12.5px;
-  line-height: 1.45;
+  padding: 11px 14px 6px;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-.session-chat__input textarea:focus {
-  border-color: var(--accent);
-}
-
-.session-chat__input textarea::placeholder {
+.session-chat__composer textarea::placeholder {
   color: var(--ink-3);
+}
+
+.session-chat__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 8px 10px;
+}
+
+/* Harness and effort read as quiet pills, not form fields. */
+.session-chat__toolbar .session-chat__pill {
+  width: auto;
+  height: 26px;
+  border-color: transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  padding: 0 22px 0 8px;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.session-chat__toolbar .session-chat__pill:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.session-chat__toolbar .session-chat__pill:focus {
+  border-color: var(--line-2);
+  box-shadow: none;
+}
+
+.session-chat__toolbar .session-chat__pill:disabled {
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+
+.session-chat__toolbar .model-picker {
+  flex: 0 1 220px;
+}
+
+.session-chat__toolbar .model-picker input {
+  height: 26px;
+  border-color: transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  padding: 0 30px 0 8px;
+  font-size: 11.5px;
+}
+
+.session-chat__toolbar .model-picker input:hover:not(:disabled),
+.session-chat__toolbar .model-picker input:focus {
+  background: var(--hover);
+  box-shadow: none;
+}
+
+/* Same chevron as the native selects beside it, so the three read as one set. */
+.session-chat__toolbar .model-picker__toggle {
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+  color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 16 16' fill='none' stroke='%23555' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6.5 L8 10.5 L12 6.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+:root[data-theme="dark"] .session-chat__toolbar .model-picker__toggle {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 16 16' fill='none' stroke='%23ccc' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6.5 L8 10.5 L12 6.5'/%3E%3C/svg%3E");
+}
+
+/* The toolbar sits at the panel's bottom — the menu must open upward. */
+.session-chat__toolbar .model-picker__menu {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.session-chat__toolbar-spacer {
+  flex: 1;
+}
+
+.session-chat__hint {
+  color: var(--ink-4);
+  font-size: 10.5px;
+  white-space: nowrap;
 }
 
 .session-chat__send {
   flex: none;
-  height: 30px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg);
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
+  transition: background 0.12s;
+}
+
+.session-chat__send:hover:not(:disabled) {
+  background: var(--accent-ink);
 }
 
 .session-chat__send:disabled {
   background: var(--hover);
-  color: var(--ink-3);
+  color: var(--ink-4);
   cursor: not-allowed;
-  font-weight: 500;
+}
+
+/* Which agent answered — under the reply, the way the Composer does it. */
+.session-chat__meta {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-4);
+  font-size: 10.5px;
 }
 
 /* ── processes ─────────────────────────────────────────────────────── */

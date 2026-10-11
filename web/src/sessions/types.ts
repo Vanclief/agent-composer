@@ -14,8 +14,10 @@ export interface Session {
   project: string;
   /** Worktree branch, empty when running on the checkout itself. */
   branch: string;
+  /** Which agent answers — the Claude Code / ChatGPT style picker. */
   harness: string;
   model: string;
+  effort: string;
   createdAt: string;
   /** Resumable harness session — set after the first reply. */
   sessionRef: string;
@@ -30,6 +32,9 @@ export interface Turn {
   reply?: string;
   /** Tool activity the agent reported while answering. */
   actions?: string[];
+  /** The agent that answered — shown under the reply, like the Composer. */
+  model?: string;
+  effort?: string;
   error?: string;
   at: string;
 }

@@ -75,7 +75,11 @@ function load() {
       localStorage.getItem(SESSIONS_KEY) || "null",
     ) as unknown;
     if (Array.isArray(stored)) {
-      sessions = stored as Session[];
+      // Tabs saved before the picker existed have no effort yet.
+      sessions = (stored as Session[]).map((session) => ({
+        ...session,
+        effort: session.effort || "medium",
+      }));
     }
     const storedTurns = JSON.parse(
       localStorage.getItem(TRANSCRIPTS_KEY) || "null",
@@ -126,6 +130,7 @@ function seed() {
     branch: "",
     harness: "",
     model: "",
+    effort: "medium",
     createdAt: now(),
     sessionRef: "",
   }));
@@ -150,6 +155,7 @@ export function createSession(input: {
   branch: string;
   harness?: string;
   model?: string;
+  effort?: string;
 }): Session {
   const session: Session = {
     id: newId(),
@@ -158,6 +164,7 @@ export function createSession(input: {
     branch: input.branch,
     harness: input.harness ?? "",
     model: input.model ?? "",
+    effort: input.effort ?? "medium",
     createdAt: now(),
     sessionRef: "",
   };
@@ -170,6 +177,18 @@ export function createSession(input: {
 export function renameSession(id: string, name: string) {
   sessions = sessions.map((session) =>
     session.id === id ? { ...session, name: name.trim() || session.name } : session,
+  );
+  save();
+  emit();
+}
+
+/** The agent that answers from now on — remembered per tab. */
+export function setSessionAgent(
+  id: string,
+  agent: { harness: string; model: string; effort: string },
+) {
+  sessions = sessions.map((session) =>
+    session.id === id ? { ...session, ...agent } : session,
   );
   save();
   emit();
@@ -299,10 +318,13 @@ export function sendMessage(sessionId: string, request: string) {
       if (activeSessionId !== sessionId) {
         unread.add(sessionId);
       }
+      const current = getSession(sessionId) ?? session;
       updateTurn(sessionId, turn.id, {
         status: "succeeded",
         reply: answer.reply,
         actions: answer.actions,
+        model: current.model,
+        effort: current.effort,
       });
       resolve();
     }, delay);
