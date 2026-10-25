@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agc messaging protocol</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --sans: ui-sans-serif, -apple-system, "Inter", "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --bg: light-dark(#fbfaf7, #0e1014);
+  --panel: light-dark(#ffffff, #161a21);
+  --fg: light-dark(#16181d, #e8eaee);
+  --fg2: light-dark(#4b5160, #aab1bf);
+  --mu: light-dark(#8a90a0, #737a8a);
+  --line: light-dark(#e4e2dc, #272c36);
+  --p: light-dark(#6d4aff, #a48bff);
+  --p-t: light-dark(#efeaff, #231d40);
+  --c: light-dark(#0f8f86, #2dd4bf);
+  --c-t: light-dark(#e1f4f1, #0f2f2c);
+  --m: light-dark(#c26800, #f5b642);
+  --m-t: light-dark(#fdf0dc, #382811);
+  --x: light-dark(#a3a7b0, #5d6371);
+  --x-t: light-dark(#f2f2f4, #1b1f27);
+}
+:root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+code, .mono { font-family: var(--mono); }
+code { font-size: .92em; padding: 1px 6px; border-radius: 6px; background: var(--x-t); border: 1px solid var(--line); }
+
+nav { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+nav .in { max-width: 1100px; margin: 0 auto; padding: 10px 24px; display: flex; gap: 4px; align-items: center; overflow-x: auto; white-space: nowrap; }
+nav .brand { font: 600 13px var(--mono); margin-right: 14px; }
+nav a { font: 12px var(--mono); color: var(--fg2); text-decoration: none; padding: 4px 9px; border-radius: 999px; }
+nav a:hover { background: var(--x-t); color: var(--fg); }
+
+main { max-width: 1100px; margin: 0 auto; padding: 0 24px 80px; }
+section { padding: 72px 0 8px; border-top: 1px solid var(--line); }
+section.hero { border-top: 0; padding-top: 64px; }
+.kick { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; }
+.kick .n { font: 600 12px var(--mono); color: var(--mu); letter-spacing: .08em; }
+.kick h2 { margin: 0; font-size: 26px; letter-spacing: -.02em; font-weight: 700; }
+.cap { margin: 18px 0 0; color: var(--fg2); font-size: 15px; max-width: 760px; }
+.cap b { color: var(--fg); }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 20px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 900px) { .grid3, .grid4, .grid2 { grid-template-columns: 1fr; } .hero-row { flex-direction: column; } }
+
+h3 { margin: 0 0 12px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+h3 .dot { width: 10px; height: 10px; border-radius: 50%; }
+h3 .tag { margin-left: auto; font: 12px var(--mono); color: var(--mu); }
+
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { font-family: var(--sans); font-size: 12px; fill: var(--fg); }
+svg .mono { font-family: var(--mono); }
+svg .b { font-weight: 700; }
+svg .s11 { font-size: 11px; } svg .s13 { font-size: 13px; } svg .s15 { font-size: 15px; } svg .s18 { font-size: 18px; }
+svg .mid { text-anchor: middle; } svg .end { text-anchor: end; }
+.t-p { fill: var(--p) !important; } .t-c { fill: var(--c) !important; } .t-m { fill: var(--m) !important; }
+.t-mu { fill: var(--mu) !important; } .t-fg2 { fill: var(--fg2) !important; } .t-x { fill: var(--mu) !important; } .t-bg { fill: var(--panel) !important; }
+.s-p { fill: var(--p-t); stroke: var(--p); stroke-width: 1.5; }
+.s-c { fill: var(--c-t); stroke: var(--c); stroke-width: 1.5; }
+.s-m { fill: var(--m-t); stroke: var(--m); stroke-width: 1.5; }
+.s-x { fill: var(--x-t); stroke: var(--x); stroke-width: 1.2; stroke-dasharray: 4 3; }
+.s-n { fill: var(--panel); stroke: var(--fg2); stroke-width: 1.5; }
+.s-bg { fill: var(--bg); stroke: var(--line); stroke-width: 1; }
+.f-p { fill: var(--p); } .f-c { fill: var(--c); } .f-m { fill: var(--m); } .f-x { fill: var(--x); } .f-fg { fill: var(--fg); }
+.ln { stroke: var(--fg2); stroke-width: 1.6; fill: none; }
+.ln-mu { stroke: var(--line); stroke-width: 1.5; fill: none; }
+.ln-c { stroke: var(--c); stroke-width: 2; fill: none; }
+.ln-p { stroke: var(--p); stroke-width: 1.6; fill: none; }
+.ln-m { stroke: var(--m); stroke-width: 1.8; fill: none; }
+.ln-x { stroke: var(--x); stroke-width: 1.6; fill: none; }
+.dash { stroke-dasharray: 5 4; }
+.mk { fill: var(--fg2); } .mk-p { fill: var(--p); } .mk-m { fill: var(--m); } .mk-c { fill: var(--c); }
+.above { opacity: .72; }
+.above rect { fill: none; stroke: var(--fg2); stroke-width: 1.4; stroke-dasharray: 6 5; }
+
+/* hero */
+.hero h1 { font: 700 54px/1.05 var(--sans); letter-spacing: -.035em; margin: 0 0 14px; }
+.hero h1 .mono { font-weight: 600; color: var(--c); }
+.hero .lede { font-size: 19px; color: var(--fg2); margin: 0 0 30px; max-width: 560px; }
+.hero-row { display: flex; gap: 32px; align-items: center; }
+.hero-row > div:first-child { flex: 1.1; }
+.hero-row > div:last-child { flex: 1; }
+.badges { display: flex; gap: 14px; flex-wrap: wrap; }
+.badge { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px 20px 12px; min-width: 128px; }
+.badge .num { font: 700 44px/1 var(--mono); letter-spacing: -.04em; }
+.badge .lbl { font: 13px var(--mono); color: var(--fg2); margin-top: 6px; display: flex; align-items: center; gap: 8px; }
+.pips { display: inline-flex; gap: 3px; } .pips i { width: 7px; height: 7px; border-radius: 50%; display: block; }
+
+/* chips */
+.chip { display: inline-flex; align-items: center; gap: 6px; font: 13px var(--mono); padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); }
+.chip.conv { border-style: dashed; color: var(--fg2); }
+.xchip { position: relative; display: flex; flex-direction: column; justify-content: center; min-height: 64px; padding: 10px 34px 10px 14px; border-radius: 12px; border: 1.5px dashed var(--x); background: var(--x-t); color: var(--mu); font: 14px var(--mono); }
+.xchip span { text-decoration: line-through; text-decoration-color: var(--x); text-decoration-thickness: 2px; }
+.xchip small { font: 11px var(--sans); margin-top: 2px; }
+.xchip::after { content: "\00d7"; position: absolute; top: 6px; right: 10px; font: 700 18px/1 var(--sans); color: var(--x); }
+.xgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+@media (max-width: 900px) { .xgrid { grid-template-columns: repeat(2, 1fr); } }
+
+.note { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; margin-top: 16px; border-style: dashed; }
+.note .eq { font: 14px var(--mono); color: var(--fg2); }
+.note .eq b { color: var(--fg); font-weight: 600; }
+.strike { text-decoration: line-through; text-decoration-color: var(--x); text-decoration-thickness: 2px; color: var(--x); }
+.vsep { width: 1px; align-self: stretch; background: var(--line); }
+
+/* contrast */
+.cmp h3 { font-size: 14px; }
+.cmp.orca h3 .dot { background: var(--x); }
+.cmp.this h3 .dot { background: var(--c); }
+.row { display: grid; grid-template-columns: 92px 1fr; gap: 12px; align-items: center; margin: 14px 0; }
+.row .k { font: 12px var(--mono); color: var(--mu); }
+.bar { height: 22px; border-radius: 6px; display: flex; align-items: center; padding: 0 8px; font: 600 12px var(--mono); white-space: nowrap; }
+.orca .bar { background: var(--x-t); border: 1px solid var(--x); color: var(--fg2); }
+.this .bar { background: var(--c-t); border: 1px solid var(--c); color: var(--c); }
+.this .bar.tiny { width: 6px; padding: 0; overflow: visible; }
+.this .bar.tiny span { margin-left: 14px; }
+.blocks { display: flex; gap: 4px; align-items: center; }
+.blocks i { width: 20px; height: 20px; border-radius: 4px; display: block; }
+.orca .blocks i { border: 1px dashed var(--x); }
+.orca .blocks i.on { background: var(--x); border-style: solid; }
+.this .blocks i { background: var(--c); }
+.blocks span { font: 12px var(--mono); color: var(--fg2); margin-left: 8px; }
+.mech { display: flex; flex-wrap: wrap; gap: 6px; }
+.mech .chip { font-size: 11px; padding: 3px 9px; }
+.orca .mech .chip { border-color: var(--x); color: var(--fg2); background: var(--x-t); }
+.this .mech .chip { border-color: var(--c); color: var(--c); background: var(--c-t); }
+.idn { font: 600 13px var(--mono); }
+
+/* decisions */
+.dec { display: flex; flex-direction: column; gap: 10px; }
+.dec .q { font: 12px var(--mono); color: var(--mu); }
+.dec .q::before { content: "? "; color: var(--m); font-weight: 700; }
+.dec .a { font-size: 19px; font-weight: 700; letter-spacing: -.01em; display: flex; gap: 8px; align-items: baseline; }
+.dec .a::before { content: "→"; color: var(--c); font-family: var(--mono); }
+
+footer.check { margin-top: 72px; padding: 32px; border-radius: 22px; background: var(--panel); border: 2px solid var(--fg); }
+footer.check .lbl { font: 600 12px var(--mono); color: var(--mu); letter-spacing: .08em; }
+footer.check p { font-size: 18px; margin: 18px 0 0; max-width: 860px; line-height: 1.55; }
+</style>
+</head>
+<body>
+<script>
+  // ?dark / ?light forces a theme (for screenshots); default follows the OS.
+  (function () { var q = location.search; if (/dark/.test(q)) document.documentElement.dataset.theme = 'dark'; else if (/light/.test(q)) document.documentElement.dataset.theme = 'light'; })();
+</script>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk"/></marker>
+    <marker id="ah-p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk-p"/></marker>
+    <marker id="ah-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk-m"/></marker>
+    <marker id="ah-c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk-c"/></marker>
+  </defs>
+</svg>
+
+<nav><div class="in">
+  <span class="brand">agc/msg</span>
+  <a href="#purity">purity</a>
+  <a href="#nouns">nouns</a>
+  <a href="#verbs">verbs</a>
+  <a href="#guarantees">guarantees</a>
+  <a href="#missing">missing</a>
+  <a href="#contrast">contrast</a>
+  <a href="#addressing">addressing</a>
+  <a href="#shape">shape</a>
+  <a href="#layers">layers</a>
+  <a href="#open">open</a>
+  <a href="#check">check</a>
+</div></nav>
+
+<main>
+
+<!-- 01 HERO -->
+<section class="hero" id="top">
+  <div class="hero-row">
+    <div>
+      <h1><span class="mono">agc</span> messaging protocol</h1>
+      <p class="lede">Participants post to channels. Readers keep their own place. Nothing else.</p>
+      <div class="badges">
+        <div class="badge"><div class="num">3</div><div class="lbl">nouns <span class="pips"><i style="background:var(--p)"></i><i style="background:var(--c)"></i><i style="background:var(--m)"></i></span></div></div>
+        <div class="badge"><div class="num">4</div><div class="lbl">verbs</div></div>
+        <div class="badge"><div class="num">3</div><div class="lbl">guarantees</div></div>
+      </div>
+    </div>
+    <div>
+      <svg viewBox="0 0 420 240" role="img" aria-label="Three participants post into one channel; two readers hold their own cursors">
+        <!-- posters -->
+        <g>
+          <circle cx="70" cy="40" r="20" class="s-p"/><text x="70" y="44" class="mid mono s13 t-p b">a</text>
+          <circle cx="190" cy="40" r="20" class="s-p"/><text x="190" y="44" class="mid mono s13 t-p b">b</text>
+          <circle cx="310" cy="40" r="20" class="s-p"/><text x="310" y="44" class="mid mono s13 t-p b">f</text>
+          <path d="M70 62 L70 104" class="ln-p" marker-end="url(#ah-p)"/>
+          <path d="M190 62 L190 104" class="ln-p" marker-end="url(#ah-p)"/>
+          <path d="M310 62 L310 104" class="ln-p" marker-end="url(#ah-p)"/>
+          <text x="318" y="90" class="mono s11 t-p">post</text>
+        </g>
+        <!-- channel -->
+        <rect x="10" y="110" width="400" height="44" rx="22" class="s-c"/>
+        <text x="28" y="137" class="mono s13 t-c b">#ch</text>
+        <g>
+          <rect x="70" y="121" width="40" height="22" rx="6" class="s-m"/><text x="90" y="136" class="mid mono s11">1</text>
+          <rect x="130" y="121" width="40" height="22" rx="6" class="s-m"/><text x="150" y="136" class="mid mono s11">2</text>
+          <rect x="190" y="121" width="40" height="22" rx="6" class="s-m"/><text x="210" y="136" class="mid mono s11">3</text>
+          <rect x="250" y="121" width="40" height="22" rx="6" class="s-m"/><text x="270" y="136" class="mid mono s11">4</text>
+          <rect x="310" y="121" width="40" height="22" rx="6" class="s-m"/><text x="330" y="136" class="mid mono s11">5</text>
+        </g>
+        <!-- readers -->
+        <path d="M150 196 L150 160" class="ln" marker-end="url(#ah)"/>
+        <path d="M330 196 L330 160" class="ln" marker-end="url(#ah)"/>
+        <rect x="112" y="200" width="76" height="26" rx="13" class="s-n"/><text x="150" y="217" class="mid mono s11">cursor 2</text>
+        <rect x="292" y="200" width="76" height="26" rx="13" class="s-n"/><text x="330" y="217" class="mid mono s11">cursor 5</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- 02 PURITY -->
+<section id="purity">
+  <div class="kick"><span class="n">02</span><h2>The purity test</h2></div>
+  <div class="panel">
+    <svg viewBox="0 0 1000 330" role="img" aria-label="Four kinds of participant send identical requests to the server">
+      <text x="440" y="22" class="mid mono s11 t-mu">same calls · post · read · wait · join</text>
+      <!-- participants -->
+      <g>
+        <rect x="20" y="40" width="250" height="56" rx="14" class="s-p"/>
+        <circle cx="54" cy="68" r="17" class="f-p"/>
+        <path d="M54 58 L57 65 L64 68 L57 71 L54 78 L51 71 L44 68 L51 65 Z" class="t-bg"/>
+        <text x="84" y="64" class="s13 b">LLM agent</text>
+        <text x="84" y="81" class="mono s11 t-mu">Claude Code / Codex</text>
+      </g>
+      <g>
+        <rect x="20" y="112" width="250" height="56" rx="14" class="s-p"/>
+        <circle cx="54" cy="140" r="17" class="f-p"/>
+        <circle cx="54" cy="135" r="5" class="t-bg"/>
+        <path d="M45 150 Q54 139 63 150 Z" class="t-bg"/>
+        <text x="84" y="136" class="s13 b">human</text>
+        <text x="84" y="153" class="mono s11 t-mu">curl</text>
+      </g>
+      <g>
+        <rect x="20" y="184" width="250" height="56" rx="14" class="s-p"/>
+        <circle cx="54" cy="212" r="17" class="f-p"/>
+        <text x="54" y="216" class="mid mono s11 b t-bg">&gt;_</text>
+        <text x="84" y="208" class="s13 b">shell script</text>
+        <text x="84" y="225" class="mono s11 t-mu">bash · cron</text>
+      </g>
+      <g>
+        <rect x="20" y="256" width="250" height="56" rx="14" class="s-p"/>
+        <circle cx="54" cy="284" r="17" class="f-p"/>
+        <circle cx="47" cy="278" r="3" class="t-bg"/><circle cx="61" cy="278" r="3" class="t-bg"/><circle cx="54" cy="291" r="3" class="t-bg"/>
+        <text x="84" y="280" class="s13 b">whole workflow</text>
+        <text x="84" y="297" class="mono s11 t-mu">agc run</text>
+      </g>
+      <!-- identical arrows -->
+      <path d="M272 68 C 450 68, 450 138, 604 138" class="ln" marker-end="url(#ah)"/>
+      <path d="M272 140 C 450 140, 450 162, 604 162" class="ln" marker-end="url(#ah)"/>
+      <path d="M272 212 C 450 212, 450 186, 604 186" class="ln" marker-end="url(#ah)"/>
+      <path d="M272 284 C 450 284, 450 210, 604 210" class="ln" marker-end="url(#ah)"/>
+      <!-- server -->
+      <rect x="610" y="96" width="210" height="156" rx="18" class="s-n" style="stroke-width:2.5"/>
+      <text x="715" y="140" class="mid s18 b">server</text>
+      <text x="715" y="172" class="mid s11 t-mu">sees only</text>
+      <rect x="652" y="184" width="126" height="30" rx="15" class="s-p"/>
+      <text x="715" y="204" class="mid mono s13 t-p">@participant</text>
+      <!-- can't tell -->
+      <path d="M822 174 L878 174" class="ln dash"/>
+      <circle cx="922" cy="174" r="42" class="s-x"/>
+      <text x="922" y="186" class="mid s18 b t-x" style="font-size:34px">?</text>
+      <text x="922" y="238" class="mid mono s11 t-mu">what are you?</text>
+    </svg>
+  </div>
+  <p class="cap">The server cannot tell them apart. <b>If a rule needs to know what the participant is, it belongs above the protocol.</b></p>
+</section>
+
+<!-- 03 NOUNS -->
+<section id="nouns">
+  <div class="kick"><span class="n">03</span><h2>Three nouns</h2></div>
+  <div class="grid3">
+    <div class="panel">
+      <h3><span class="dot" style="background:var(--p)"></span>Participant<span class="tag">@name</span></h3>
+      <svg viewBox="0 0 320 240" role="img" aria-label="Participant: id plus display name; not harness, model or process">
+        <rect x="30" y="12" width="260" height="56" rx="28" class="s-p"/>
+        <circle cx="60" cy="40" r="18" class="f-p"/>
+        <text x="60" y="45" class="mid mono s15 b t-bg">a</text>
+        <text x="90" y="46" class="mono s15 t-p b">@reviewer_a</text>
+        <rect x="30" y="84" width="260" height="66" rx="12" class="s-bg"/>
+        <text x="46" y="110" class="s11 t-mu">id</text>
+        <text x="140" y="110" class="mono s13">reviewer_a</text>
+        <line x1="42" y1="118" x2="278" y2="118" class="ln-mu"/>
+        <text x="46" y="138" class="s11 t-mu">display name</text>
+        <text x="140" y="138" class="mono s13">Reviewer A</text>
+        <text x="160" y="182" class="mid s11 t-mu">not identity</text>
+        <g>
+          <rect x="18" y="194" width="88" height="30" rx="15" class="s-x"/><text x="62" y="214" class="mid mono s11 t-x">harness</text><line x1="28" y1="209" x2="96" y2="209" class="ln-x"/>
+          <rect x="116" y="194" width="88" height="30" rx="15" class="s-x"/><text x="160" y="214" class="mid mono s11 t-x">model</text><line x1="126" y1="209" x2="194" y2="209" class="ln-x"/>
+          <rect x="214" y="194" width="88" height="30" rx="15" class="s-x"/><text x="258" y="214" class="mid mono s11 t-x">process</text><line x1="224" y1="209" x2="292" y2="209" class="ln-x"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="panel">
+      <h3><span class="dot" style="background:var(--c)"></span>Channel<span class="tag">#name</span></h3>
+      <svg viewBox="0 0 320 240" role="img" aria-label="Channel: a name plus members. A DM is a two-member channel created on demand">
+        <rect x="14" y="12" width="292" height="104" rx="14" class="s-c"/>
+        <text x="30" y="40" class="mono s15 t-c b">#design-review</text>
+        <text x="30" y="64" class="s11 t-mu">members</text>
+        <rect x="24" y="74" width="92" height="28" rx="14" class="s-p"/><text x="70" y="92" class="mid mono s11 t-p">@reviewer_a</text>
+        <rect x="122" y="74" width="92" height="28" rx="14" class="s-p"/><text x="168" y="92" class="mid mono s11 t-p">@reviewer_b</text>
+        <rect x="220" y="74" width="76" height="28" rx="14" class="s-p"/><text x="258" y="92" class="mid mono s11 t-p">@franco</text>
+        <text x="14" y="156" class="s15 b">DM =</text>
+        <rect x="64" y="134" width="242" height="34" rx="10" class="s-c dash"/>
+        <rect x="74" y="139" width="72" height="24" rx="12" class="s-p"/><text x="110" y="155" class="mid mono s11 t-p">@franco</text>
+        <rect x="152" y="139" width="92" height="24" rx="12" class="s-p"/><text x="198" y="155" class="mid mono s11 t-p">@reviewer_a</text>
+        <text x="276" y="156" class="mid mono s11 t-c b">×2</text>
+        <text x="64" y="188" class="mono s11 t-mu">server creates on demand</text>
+        <rect x="64" y="200" width="168" height="28" rx="14" class="f-c"/>
+        <text x="148" y="218" class="mid s11 b t-bg">one concept, not two</text>
+      </svg>
+    </div>
+
+    <div class="panel">
+      <h3><span class="dot" style="background:var(--m)"></span>Message<span class="tag">envelope</span></h3>
+      <svg viewBox="0 0 320 240" role="img" aria-label="Message fields: channel, from, body, seq, created_at, optional reply_to">
+        <g>
+          <rect x="24" y="8" width="272" height="30" rx="8" class="s-m"/>
+          <text x="38" y="28" class="mono s13 t-m b">channel</text><text x="134" y="28" class="mono s13">#design-review</text>
+          <rect x="24" y="42" width="272" height="30" rx="8" class="s-m"/>
+          <text x="38" y="62" class="mono s13 t-m b">from</text><text x="134" y="62" class="mono s13 t-p">@reviewer_a</text>
+          <rect x="24" y="76" width="272" height="30" rx="8" class="s-m"/>
+          <text x="38" y="96" class="mono s13 t-m b">body</text><text x="134" y="96" class="mono s13">"looks good"</text>
+          <rect x="24" y="110" width="272" height="30" rx="8" class="s-m" style="stroke-width:2.5"/>
+          <text x="38" y="130" class="mono s13 t-m b">seq</text><text x="134" y="130" class="mono s13 b">42</text>
+          <rect x="222" y="116" width="64" height="18" rx="9" class="f-fg"/><text x="254" y="129" class="mid s11 b t-bg">server</text>
+          <rect x="24" y="144" width="272" height="30" rx="8" class="s-m"/>
+          <text x="38" y="164" class="mono s13 t-m b">created_at</text><text x="134" y="164" class="mono s13">12:04:09</text>
+          <rect x="24" y="178" width="272" height="30" rx="8" class="s-m dash" style="fill:none"/>
+          <text x="38" y="198" class="mono s13 t-m b">reply_to</text><text x="134" y="198" class="mono s13">41</text>
+          <text x="284" y="198" class="end s11 t-mu">optional</text>
+        </g>
+        <line x1="24" y1="228" x2="110" y2="228" class="ln-mu"/>
+        <text x="160" y="232" class="mid s11 t-mu">nothing else</text>
+        <line x1="210" y1="228" x2="296" y2="228" class="ln-mu"/>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- 04 VERBS -->
+<section id="verbs">
+  <div class="kick"><span class="n">04</span><h2>Four verbs</h2></div>
+  <div class="grid4">
+    <div class="panel">
+      <h3><span class="mono">post</span><span class="tag">append</span></h3>
+      <svg viewBox="0 0 240 170" role="img" aria-label="post: a retry with the same id collapses to one row">
+        <text x="40" y="16" class="mid s11 t-mu">client</text>
+        <line x1="40" y1="24" x2="40" y2="128" class="ln-mu dash"/>
+        <text x="199" y="36" class="mid s11 t-mu">server log</text>
+        <rect x="168" y="48" width="62" height="28" rx="6" class="s-m"/>
+        <text x="199" y="67" class="mid mono s13 b">m7</text>
+        <path d="M40 40 L164 58" class="ln" marker-end="url(#ah)"/>
+        <path d="M40 104 L164 70" class="ln dash" marker-end="url(#ah)"/>
+        <text x="48" y="32" class="mono s11">post id=m7</text>
+        <text x="48" y="122" class="mono s11 t-mu">retry id=m7</text>
+        <text x="199" y="96" class="mid mono s11 t-m b">1 row</text>
+        <text x="120" y="156" class="mid s11 t-mu">client id → idempotent</text>
+      </svg>
+    </div>
+    <div class="panel">
+      <h3><span class="mono">read</span><span class="tag">page</span></h3>
+      <svg viewBox="0 0 240 170" role="img" aria-label="read: messages after seq N, limit L">
+        <line x1="16" y1="80" x2="226" y2="80" class="ln-c"/>
+        <g>
+          <circle cx="30" cy="80" r="7" class="s-n"/><circle cx="56" cy="80" r="7" class="s-n"/><circle cx="82" cy="80" r="7" class="s-n"/>
+          <circle cx="108" cy="80" r="8" class="f-m"/><circle cx="134" cy="80" r="8" class="f-m"/><circle cx="160" cy="80" r="8" class="f-m"/>
+          <circle cx="186" cy="80" r="7" class="s-n"/><circle cx="212" cy="80" r="7" class="s-n"/>
+        </g>
+        <g class="mono s11 t-mu">
+          <text x="30" y="104" class="mid mono s11 t-mu">1</text><text x="56" y="104" class="mid mono s11 t-mu">2</text><text x="82" y="104" class="mid mono s11 t-mu">3</text>
+          <text x="108" y="104" class="mid mono s11 t-mu">4</text><text x="134" y="104" class="mid mono s11 t-mu">5</text><text x="160" y="104" class="mid mono s11 t-mu">6</text>
+          <text x="186" y="104" class="mid mono s11 t-mu">7</text><text x="212" y="104" class="mid mono s11 t-mu">8</text>
+        </g>
+        <path d="M82 36 L82 64" class="ln" marker-end="url(#ah)"/>
+        <text x="82" y="30" class="mid mono s13 b">N</text>
+        <path d="M100 58 L100 50 L168 50 L168 58" class="ln-m"/>
+        <text x="134" y="42" class="mid mono s13 b t-m">L</text>
+        <text x="120" y="142" class="mid mono s11">#ch after N limit L</text>
+      </svg>
+    </div>
+    <div class="panel">
+      <h3><span class="mono">wait</span><span class="tag">blocking read</span></h3>
+      <svg viewBox="0 0 240 170" role="img" aria-label="wait: like read but blocks up to a timeout">
+        <circle cx="58" cy="72" r="36" class="s-n" style="stroke-width:2.5"/>
+        <line x1="58" y1="72" x2="58" y2="48" class="ln" style="stroke-width:2.5;stroke-linecap:round"/>
+        <line x1="58" y1="72" x2="76" y2="82" class="ln" style="stroke-width:2.5;stroke-linecap:round"/>
+        <circle cx="58" cy="72" r="3" class="f-fg"/>
+        <path d="M108 72 L196 72" class="ln dash"/>
+        <circle cx="214" cy="72" r="10" class="f-m"/>
+        <text x="152" y="60" class="mid mono s11 t-mu">≤ timeout</text>
+        <text x="214" y="102" class="mid mono s11 t-m">new</text>
+        <text x="120" y="142" class="mid mono s11">= read, but blocks</text>
+      </svg>
+    </div>
+    <div class="panel">
+      <h3><span class="mono">join / leave</span><span class="tag">+ list</span></h3>
+      <svg viewBox="0 0 240 170" role="img" aria-label="join and leave change membership; list discovers channels">
+        <rect x="74" y="30" width="96" height="82" rx="12" class="s-c"/>
+        <text x="122" y="52" class="mid mono s13 t-c b">#ch</text>
+        <circle cx="104" cy="80" r="9" class="f-p"/><circle cx="128" cy="80" r="9" class="f-p"/>
+        <circle cx="22" cy="80" r="9" class="f-p"/>
+        <path d="M34 80 L90 80" class="ln-p" marker-end="url(#ah-p)"/>
+        <text x="22" y="62" class="mid mono s11 t-p">join</text>
+        <circle cx="152" cy="96" r="9" class="s-p dash"/>
+        <path d="M164 96 L222 96" class="ln-p dash" marker-end="url(#ah-p)"/>
+        <text x="204" y="86" class="mid mono s11 t-p">leave</text>
+        <circle cx="84" cy="140" r="8" class="ln" style="stroke-width:2"/>
+        <line x1="90" y1="146" x2="97" y2="153" class="ln" style="stroke-width:2.5;stroke-linecap:round"/>
+        <text x="106" y="145" class="mono s11">list</text>
+      </svg>
+    </div>
+  </div>
+  <div class="panel note">
+    <span class="eq"><span class="strike">ask / reply</span> &nbsp;=&nbsp; <b>post</b> + <b>reply_to</b></span>
+    <span class="vsep"></span>
+    <span style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <span class="chip conv">vote</span><span class="chip conv">proposal</span><span class="chip conv">handoff</span><span class="chip conv">status</span>
+      <span class="eq">&nbsp;→ conventions in the <b>body</b></span>
+    </span>
+  </div>
+</section>
+
+<!-- 05 GUARANTEES -->
+<section id="guarantees">
+  <div class="kick"><span class="n">05</span><h2>Three guarantees</h2></div>
+  <div class="grid3">
+    <div class="panel">
+      <h3>Durable, append-only</h3>
+      <svg viewBox="0 0 300 200" role="img" aria-label="An append-only log that only grows; no edit or delete">
+        <rect x="20" y="10" width="160" height="26" rx="6" class="s-m"/><text x="34" y="28" class="mono s11">seq 1</text>
+        <rect x="20" y="42" width="160" height="26" rx="6" class="s-m"/><text x="34" y="60" class="mono s11">seq 2</text>
+        <rect x="20" y="74" width="160" height="26" rx="6" class="s-m"/><text x="34" y="92" class="mono s11">seq 3</text>
+        <rect x="20" y="106" width="160" height="26" rx="6" class="s-m"/><text x="34" y="124" class="mono s11">seq 4</text>
+        <rect x="20" y="138" width="160" height="26" rx="6" class="s-m dash" style="fill:none"/><text x="100" y="156" class="mid mono s13 t-m b">+</text>
+        <path d="M100 168 L100 194" class="ln-m" marker-end="url(#ah-m)"/>
+        <text x="110" y="190" class="mono s11 t-m">grows</text>
+        <rect x="204" y="40" width="80" height="30" rx="15" class="s-x"/><text x="244" y="60" class="mid mono s11 t-x">edit</text><line x1="214" y1="55" x2="274" y2="55" class="ln-x"/>
+        <rect x="204" y="86" width="80" height="30" rx="15" class="s-x"/><text x="244" y="106" class="mid mono s11 t-x">delete</text><line x1="214" y1="101" x2="274" y2="101" class="ln-x"/>
+      </svg>
+    </div>
+    <div class="panel">
+      <h3>Total order per channel</h3>
+      <svg viewBox="0 0 300 200" role="img" aria-label="Sequence numbers 1 to 4 along a channel line">
+        <text x="20" y="54" class="mono s13 t-c b">#ch</text>
+        <path d="M20 96 L284 96" class="ln-c" marker-end="url(#ah-c)"/>
+        <circle cx="56" cy="96" r="18" class="s-m" style="fill:var(--panel)"/><text x="56" y="101" class="mid mono s15 b t-m">1</text>
+        <circle cx="116" cy="96" r="18" class="s-m" style="fill:var(--panel)"/><text x="116" y="101" class="mid mono s15 b t-m">2</text>
+        <circle cx="176" cy="96" r="18" class="s-m" style="fill:var(--panel)"/><text x="176" y="101" class="mid mono s15 b t-m">3</text>
+        <circle cx="236" cy="96" r="18" class="s-m" style="fill:var(--panel)"/><text x="236" y="101" class="mid mono s15 b t-m">4</text>
+        <rect x="60" y="148" width="180" height="32" rx="16" class="f-fg"/>
+        <text x="150" y="169" class="mid mono s13 b t-bg">seq = the only clock</text>
+      </svg>
+    </div>
+    <div class="panel">
+      <h3>Reader owns its position</h3>
+      <svg viewBox="0 0 300 200" role="img" aria-label="Two readers keep separate cursors; the server stores no delivered or read state">
+        <rect x="18" y="20" width="76" height="24" rx="12" class="s-p"/><text x="56" y="36" class="mid mono s11 t-p">@franco</text>
+        <path d="M56 46 L84 74" class="ln-p" marker-end="url(#ah-p)"/>
+        <line x1="14" y1="86" x2="288" y2="86" class="ln-c"/>
+        <g>
+          <circle cx="30" cy="86" r="7" class="f-m"/><circle cx="68" cy="86" r="7" class="f-m"/><circle cx="106" cy="86" r="7" class="f-m"/>
+          <circle cx="144" cy="86" r="7" class="f-m"/><circle cx="182" cy="86" r="7" class="f-m"/><circle cx="220" cy="86" r="7" class="f-m"/><circle cx="258" cy="86" r="7" class="f-m"/>
+        </g>
+        <rect x="178" y="122" width="96" height="24" rx="12" class="s-p"/><text x="226" y="138" class="mid mono s11 t-p">@reviewer_b</text>
+        <path d="M226 120 L222 98" class="ln-p" marker-end="url(#ah-p)"/>
+        <text x="18" y="182" class="s11 t-mu">server</text>
+        <rect x="62" y="164" width="96" height="28" rx="14" class="s-x"/><text x="110" y="183" class="mid mono s11 t-x">delivered</text><line x1="72" y1="178" x2="148" y2="178" class="ln-x"/>
+        <rect x="166" y="164" width="70" height="28" rx="14" class="s-x"/><text x="201" y="183" class="mid mono s11 t-x">read</text><line x1="176" y1="178" x2="226" y2="178" class="ln-x"/>
+      </svg>
+    </div>
+  </div>
+  <p class="cap">If you want to know whether someone saw it, <b>they post a reply.</b></p>
+</section>
+
+<!-- 06 MISSING -->
+<section id="missing">
+  <div class="kick"><span class="n">06</span><h2>Deliberately missing</h2></div>
+  <div class="panel">
+    <div class="xgrid">
+      <div class="xchip"><span>message types</span></div>
+      <div class="xchip"><span>priorities</span></div>
+      <div class="xchip"><span>acks / deliveries</span></div>
+      <div class="xchip"><span>fencing</span><small>consumer generations</small></div>
+      <div class="xchip"><span>lifecycle</span><small>channels don't finish</small></div>
+      <div class="xchip"><span>presence</span><small>online / offline</small></div>
+      <div class="xchip"><span>notifications</span><small>wake-ups</small></div>
+      <div class="xchip"><span>authority</span><small>beyond who connected</small></div>
+    </div>
+  </div>
+  <p class="cap"><code>wait</code> is as far as the protocol goes. <b>What a runner does when wait returns is the runner's business</b> — that is the seam for everything above.</p>
+</section>
+
+<!-- 07 CONTRAST -->
+<section id="contrast">
+  <div class="kick"><span class="n">07</span><h2>Contrast</h2></div>
+  <div class="grid2">
+    <div class="panel cmp orca">
+      <h3><span class="dot"></span>Orca orchestration today</h3>
+      <div class="row"><span class="k">tables</span><div class="bar" style="width:100%">31</div></div>
+      <div class="row"><span class="k">lines</span><div class="bar" style="width:100%">~25k</div></div>
+      <div class="row"><span class="k">msg types</span><div class="blocks"><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><span>9 · 2 used</span></div></div>
+      <div class="row"><span class="k">machinery</span><div class="mech"><span class="chip">deliveries</span><span class="chip">acks</span><span class="chip">fencing</span><span class="chip">consumer gens</span></div></div>
+      <div class="row"><span class="k">identity</span><span class="idn" style="color:var(--fg2)">task attempt</span></div>
+    </div>
+    <div class="panel cmp this">
+      <h3><span class="dot"></span>this</h3>
+      <div class="row"><span class="k">tables</span><div class="bar" style="width:6.5%">2</div></div>
+      <div class="row"><span class="k">lines</span><div class="bar tiny"><span>few hundred · Go</span></div></div>
+      <div class="row"><span class="k">verbs</span><div class="blocks"><i></i><i></i><i></i><i></i><span>4</span></div></div>
+      <div class="row"><span class="k">machinery</span><div class="mech"><span class="chip">seq</span></div></div>
+      <div class="row"><span class="k">identity</span><span class="idn" style="color:var(--p)">participant</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 08 ADDRESSING -->
+<section id="addressing">
+  <div class="kick"><span class="n">08</span><h2>Addressing conventions</h2></div>
+  <div class="panel" style="padding:0;overflow:hidden">
+    <svg viewBox="0 0 1000 300" role="img" aria-label="Transcript in #design-review with mentions and a reply_to arrow">
+      <rect x="0" y="0" width="1000" height="40" class="t-bg" style="fill:var(--x-t)"/>
+      <circle cx="22" cy="20" r="5" class="f-x"/><circle cx="40" cy="20" r="5" class="f-x"/><circle cx="58" cy="20" r="5" class="f-x"/>
+      <text x="500" y="25" class="mid mono s13 t-c b">#design-review</text>
+      <text x="980" y="25" class="end mono s11 t-mu">3 members</text>
+      <line x1="0" y1="40" x2="1000" y2="40" class="ln-mu"/>
+
+      <!-- 41 -->
+      <circle cx="120" cy="80" r="16" class="f-p"/><text x="120" y="85" class="mid mono s13 b t-bg">f</text>
+      <text x="150" y="76" class="mono s13 b t-p">@franco</text>
+      <text x="150" y="96" class="mono s13"><tspan class="t-p">@reviewer_a</tspan> <tspan class="t-p">@reviewer_b</tspan> please review plan.md · context in <tspan class="t-c">#api-spec</tspan></text>
+      <text x="976" y="76" class="end mono s11 t-mu">seq 41</text>
+
+      <!-- 42 -->
+      <circle cx="120" cy="138" r="16" class="f-p"/><text x="120" y="143" class="mid mono s13 b t-bg">a</text>
+      <text x="150" y="134" class="mono s13 b t-p">@reviewer_a</text>
+      <text x="150" y="154" class="mono s13">Proposal: no priorities in the protocol. Vote?</text>
+      <text x="976" y="134" class="end mono s11 t-mu">seq 42</text>
+
+      <!-- 43 -->
+      <circle cx="120" cy="196" r="16" class="f-p"/><text x="120" y="201" class="mid mono s13 b t-bg">b</text>
+      <text x="150" y="192" class="mono s13 b t-p">@reviewer_b</text>
+      <text x="150" y="212" class="mono s13">+1 — same call we made in <tspan class="t-c">#retention</tspan></text>
+      <text x="976" y="192" class="end mono s11 t-mu">seq 43</text>
+
+      <!-- 44 -->
+      <circle cx="120" cy="254" r="16" class="f-p"/><text x="120" y="259" class="mid mono s13 b t-bg">f</text>
+      <text x="150" y="250" class="mono s13 b t-p">@franco</text>
+      <rect x="222" y="238" width="96" height="18" rx="9" class="s-m"/><text x="270" y="251" class="mid mono s11 t-m">reply_to 42</text>
+      <text x="150" y="270" class="mono s13">Agreed. <tspan class="t-p">@reviewer_a</tspan> write it up in decisions.md</text>
+      <text x="976" y="250" class="end mono s11 t-mu">seq 44</text>
+
+      <!-- reply_to arrow -->
+      <path d="M100 254 C 52 254, 52 138, 98 138" class="ln-m" marker-end="url(#ah-m)"/>
+      <text x="34" y="196" class="mid mono s11 t-m" transform="rotate(-90 34 196)">reply_to</text>
+    </svg>
+  </div>
+  <p class="cap">LLMs already know <code>@</code> and <code>#</code>. <b>Mention-matching lives above the protocol as plain text search.</b></p>
+</section>
+
+<!-- 09 SHAPE -->
+<section id="shape">
+  <div class="kick"><span class="n">09</span><h2>Shape in agc</h2></div>
+  <div class="panel">
+    <svg viewBox="0 0 1000 330" role="img" aria-label="SQLite with two tables, one HTTP API on port 1202, three equal clients">
+      <!-- sqlite -->
+      <path d="M40 70 L40 262 A100 18 0 0 0 240 262 L240 70" class="s-n"/>
+      <ellipse cx="140" cy="70" rx="100" ry="18" class="s-n"/>
+      <text x="140" y="118" class="mid s15 b">SQLite</text>
+      <rect x="70" y="142" width="140" height="38" rx="8" class="s-m"/><text x="140" y="166" class="mid mono s13">messages</text>
+      <rect x="70" y="194" width="140" height="38" rx="8" class="s-c"/><text x="140" y="218" class="mid mono s13">members</text>
+      <!-- db to api -->
+      <path d="M244 170 L336 170" class="ln" marker-start="url(#ah)" marker-end="url(#ah)"/>
+      <!-- api -->
+      <rect x="340" y="104" width="240" height="132" rx="16" class="s-n" style="stroke-width:2.5"/>
+      <text x="460" y="146" class="mid s18 b">HTTP API</text>
+      <text x="460" y="174" class="mid mono s13">agc REST :1202</text>
+      <text x="460" y="204" class="mid mono s11 t-mu">post · read · wait · join</text>
+      <text x="460" y="276" class="mid mono s11 t-mu">all clients equal</text>
+      <!-- arrows -->
+      <path d="M584 170 C 640 170, 640 56, 686 56" class="ln" marker-start="url(#ah)" marker-end="url(#ah)"/>
+      <path d="M584 170 L686 170" class="ln" marker-start="url(#ah)" marker-end="url(#ah)"/>
+      <path d="M584 170 C 640 170, 640 284, 686 284" class="ln" marker-start="url(#ah)" marker-end="url(#ah)"/>
+      <!-- clients -->
+      <g>
+        <rect x="690" y="20" width="290" height="72" rx="14" class="s-p"/>
+        <circle cx="726" cy="56" r="17" class="f-p"/>
+        <path d="M726 46 L729 53 L736 56 L729 59 L726 66 L723 59 L716 56 L723 53 Z" class="t-bg"/>
+        <text x="756" y="51" class="s13 b">MCP tools <tspan class="t-mu" style="font-weight:400">· agents</tspan></text>
+        <text x="756" y="71" class="mono s11 t-mu">post / read / wait / join</text>
+      </g>
+      <g>
+        <rect x="690" y="134" width="290" height="72" rx="14" class="s-p"/>
+        <circle cx="726" cy="170" r="17" class="f-p"/>
+        <text x="726" y="174" class="mid mono s11 b t-bg">&gt;_</text>
+        <text x="756" y="165" class="mono s13 b">agc msg …</text>
+        <text x="756" y="185" class="s11 t-mu">humans + scripts</text>
+      </g>
+      <g>
+        <rect x="690" y="248" width="290" height="72" rx="14" class="s-p"/>
+        <circle cx="726" cy="284" r="17" class="f-p"/>
+        <rect x="717" y="276" width="18" height="14" rx="3" class="t-bg"/>
+        <text x="756" y="279" class="s13 b">sessions chat panel</text>
+        <text x="756" y="299" class="s11 t-mu">web UI</text>
+      </g>
+    </svg>
+  </div>
+</section>
+
+<!-- 10 LAYERS -->
+<section id="layers">
+  <div class="kick"><span class="n">10</span><h2>Layers above</h2></div>
+  <div class="panel">
+    <svg viewBox="0 0 1000 380" role="img" aria-label="Dashed layers above the seam; the protocol below">
+      <text x="36" y="110" class="mid mono s11 t-mu" transform="rotate(-90 36 110)">above · later</text>
+      <g class="above">
+        <rect x="70" y="16" width="860" height="44" rx="10"/>
+        <text x="94" y="43" class="s13"><tspan class="b">DAG integration</tspan><tspan class="t-mu"> · later</tspan></text>
+        <rect x="70" y="70" width="860" height="44" rx="10"/>
+        <text x="94" y="97" class="s13"><tspan class="b">shared state</tspan><tspan class="t-mu"> · markdown in the worktree (git)</tspan></text>
+        <rect x="70" y="124" width="860" height="44" rx="10"/>
+        <text x="94" y="151" class="s13"><tspan class="b">conventions</tspan><tspan class="t-mu"> · proposal / vote / facilitator</tspan></text>
+        <rect x="70" y="178" width="860" height="44" rx="10"/>
+        <text x="94" y="205" class="s13"><tspan class="b">runner</tspan><tspan class="t-mu"> · resume a session when </tspan><tspan class="mono">wait</tspan><tspan class="t-mu"> returns</tspan></text>
+      </g>
+      <!-- seam -->
+      <line x1="20" y1="252" x2="980" y2="252" style="stroke:var(--fg);stroke-width:6"/>
+      <rect x="400" y="236" width="200" height="32" rx="16" class="f-fg"/>
+      <text x="500" y="257" class="mid mono s13 b t-bg">the seam = wait</text>
+      <!-- protocol -->
+      <rect x="70" y="282" width="860" height="84" rx="14" class="s-c" style="stroke-width:2.5"/>
+      <text x="94" y="316" class="s18 b">protocol</text>
+      <text x="94" y="344" class="mono s13">post · read · wait · join / leave</text>
+      <rect x="682" y="306" width="110" height="36" rx="8" class="s-m"/><text x="737" y="329" class="mid mono s13">messages</text>
+      <rect x="802" y="306" width="110" height="36" rx="8" class="s-c" style="fill:var(--panel)"/><text x="857" y="329" class="mid mono s13">members</text>
+    </svg>
+  </div>
+  <p class="cap"><b>Build below the line first.</b></p>
+</section>
+
+<!-- 11 OPEN -->
+<section id="open">
+  <div class="kick"><span class="n">11</span><h2>Open decisions</h2></div>
+  <div class="grid4">
+    <div class="panel dec"><span class="q">who mints participant ids</span><span class="a">server</span></div>
+    <div class="panel dec"><span class="q">structured bodies</span><span class="a">text + free JSON metadata</span></div>
+    <div class="panel dec"><span class="q">channel visibility</span><span class="a">explicit membership</span></div>
+    <div class="panel dec"><span class="q">retention</span><span class="a">forever</span></div>
+  </div>
+</section>
+
+<!-- 12 CHECK -->
+<footer class="check" id="check">
+  <div class="lbl">12 · SANITY CHECK</div>
+  <svg viewBox="0 0 1000 120" role="img" aria-label="Three participants, a transcript, four verbs: done, or else a convention" style="margin-top:20px">
+    <circle cx="40" cy="44" r="16" class="f-p"/><circle cx="76" cy="44" r="16" class="f-p"/><circle cx="112" cy="44" r="16" class="f-p"/>
+    <text x="76" y="88" class="mid mono s11 t-mu">3 participants</text>
+    <path d="M140 44 L216 44" class="ln" marker-end="url(#ah)"/>
+    <rect x="224" y="14" width="180" height="60" rx="10" class="s-c"/>
+    <rect x="238" y="26" width="120" height="8" rx="4" class="f-m"/>
+    <rect x="238" y="40" width="150" height="8" rx="4" class="f-m"/>
+    <rect x="238" y="54" width="96" height="8" rx="4" class="f-m"/>
+    <text x="314" y="98" class="mid mono s11 t-mu">transcript of posts</text>
+    <path d="M412 44 L488 44" class="ln" marker-end="url(#ah)"/>
+    <path d="M560 6 L632 44 L560 82 L488 44 Z" class="s-n" style="stroke-width:2"/>
+    <text x="560" y="48" class="mid mono s13 b">4 verbs?</text>
+    <path d="M632 44 L716 44" class="ln" marker-end="url(#ah)"/>
+    <text x="674" y="34" class="mid mono s11 t-mu">yes</text>
+    <rect x="724" y="24" width="120" height="40" rx="20" class="f-c"/>
+    <text x="784" y="49" class="mid s13 b t-bg">done</text>
+    <path d="M560 82 L560 104 L860 104" class="ln dash"/>
+    <text x="574" y="98" class="mono s11 t-mu">no</text>
+    <rect x="864" y="88" width="122" height="32" rx="16" class="s-x"/>
+    <text x="925" y="109" class="mid mono s11 t-fg2">convention</text>
+  </svg>
+  <p>Write the consensus you want as a transcript of posts between three participants. <b>If four verbs produce it, the protocol is done.</b> If something is missing, it is a convention, not a verb.</p>
+</footer>
+
+</main>
+</body>
+</html>
