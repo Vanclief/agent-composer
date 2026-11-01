@@ -20,6 +20,7 @@ import {
   Variable,
   type LucideIcon,
 } from 'lucide-react'
+import { Brain, Eye, FileText, Hammer, Library, Lightbulb, Scale, Signpost } from 'lucide-react'
 
 export const conceptIcons = {
   // A Task: a VM agents work in.
@@ -43,6 +44,19 @@ export const conceptIcons = {
   human: User,
   // The raw YAML/JSON view behind a </> toggle.
   raw: CodeXml,
+  // The two top-level modes: Think (knowledge) and Work (tasks, messages).
+  think: Brain,
+  work: Hammer,
+  // ADR 0006: something we hold true, a choice made on beliefs, a must or
+  // must not, and what was seen.
+  belief: Lightbulb,
+  decision: Signpost,
+  rule: Scale,
+  evidence: Eye,
+  // The YAML file an item lives in.
+  file: FileText,
+  // A ruleset's subject, e.g. "the Linux rig".
+  subject: Library,
 } satisfies Record<string, LucideIcon>
 
 export type Concept = keyof typeof conceptIcons

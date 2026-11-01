@@ -28,3 +28,22 @@ test('theme defaults to dark and the toggle persists', async ({ page }) => {
   await expect(html).not.toHaveClass(/dark/)
   await expect(page.getByRole('button', { name: 'Dark theme' })).toBeVisible()
 })
+
+test('the mode switch swaps the nav between Work and Think', async ({ page }) => {
+  await page.goto('/panel/tasks')
+  const mode = page.getByRole('navigation', { name: 'Mode' })
+  const nav = page.getByRole('navigation', { name: 'Main' })
+  await expect(mode.getByRole('link', { name: 'Work' })).toHaveAttribute('aria-current', 'page')
+  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Messages'])
+
+  await mode.getByRole('link', { name: 'Think' }).click()
+  await expect(page).toHaveURL(/\/panel\/think\/beliefs$/)
+  await expect(mode.getByRole('link', { name: 'Think' })).toHaveAttribute('aria-current', 'page')
+  await expect(nav.getByRole('link')).toHaveText(['Beliefs', 'Decisions', 'Rules', 'Evidence'])
+  await nav.getByRole('link', { name: 'Rules' }).click()
+  await expect(page).toHaveURL(/\/panel\/think\/rules$/)
+
+  await mode.getByRole('link', { name: 'Work' }).click()
+  await expect(page).toHaveURL(/\/panel\/tasks$/)
+  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Messages'])
+})

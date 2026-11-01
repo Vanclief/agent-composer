@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, unwrap, type CreateTaskRequest, type Task } from './client'
 import { msg, type Message, type MessagesResponse, type PostRequest } from './msg'
 import { terminals, type StartTerminalRequest } from './terminals'
+import { knowledge } from './knowledge'
 
 // How often the tasks list refetches, so statuses stay live.
 export const TASKS_POLL_MS = 5000
@@ -27,6 +28,9 @@ export const queryKeys = {
   secrets: ['secrets'] as const,
   channels: ['msg', 'channels'] as const,
   messages: (channel: string) => ['msg', 'messages', channel] as const,
+  knowledge: ['knowledge'] as const,
+  why: (id: string) => ['knowledge', 'why', id] as const,
+  doubt: (id: string) => ['knowledge', 'doubt', id] as const,
 }
 
 // ---------- tasks ----------
@@ -235,4 +239,33 @@ export function useChannelMessages(channel: string | undefined) {
     isPending: query.isPending,
     error: query.error ?? waitError,
   }
+}
+
+// ---------- knowledge ----------
+
+// Evidence, beliefs, decisions and rules as the files in git say, with
+// labels computed by the server.
+export function useKnowledge() {
+  return useQuery({
+    queryKey: queryKeys.knowledge,
+    queryFn: ({ signal }) => knowledge.get(signal),
+  })
+}
+
+// id followed down its because chain to the evidence.
+export function useWhy(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.why(id ?? ''),
+    queryFn: ({ signal }) => knowledge.why(id ?? '', signal),
+    enabled: Boolean(id),
+  })
+}
+
+// What rests on id, a belief or a piece of evidence.
+export function useDoubt(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.doubt(id ?? ''),
+    queryFn: ({ signal }) => knowledge.doubt(id ?? '', signal),
+    enabled: Boolean(id),
+  })
 }
