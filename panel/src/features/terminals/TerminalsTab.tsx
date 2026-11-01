@@ -10,7 +10,7 @@ import { useParams } from 'react-router'
 import { queryKeys, useStartTerminal, useTask, useTerminals } from '@/api/hooks'
 import type { TaskSpec } from '@/api/client'
 import type { Terminal } from '@/api/terminals'
-import { conceptIcons } from '@/components/concept-icons'
+import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
 import { IconChip } from '@/components/icon-chip'
@@ -24,6 +24,7 @@ import { ExitedBadge, TerminalPane } from './TerminalPane'
 const QUICK_START = ['claude', 'codex', 'bash']
 // The VM user's home; the repo is cloned into a directory under it.
 const HOME_DIR = '/home/agent'
+const color = conceptColors.terminal
 
 export function TerminalsTab() {
   const { name = '' } = useParams()
@@ -118,7 +119,7 @@ function TerminalsView({ name }: { name: string }) {
                   {start.isPending && start.variables?.command === quick ? (
                     <Loader2 className="animate-spin" />
                   ) : (
-                    <conceptIcons.terminal />
+                    <conceptIcons.terminal className={color.text} />
                   )}
                   {quick}
                 </Button>
@@ -127,7 +128,7 @@ function TerminalsView({ name }: { name: string }) {
             <form onSubmit={submit} className="relative">
               <conceptIcons.terminal
                 aria-hidden
-                className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-zinc-500"
+                className={cn('pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2', color.text)}
               />
               <Input
                 aria-label="Command"
@@ -138,7 +139,7 @@ function TerminalsView({ name }: { name: string }) {
                 className="h-8 pl-8 font-mono text-xs md:text-xs"
               />
             </form>
-            <IconChip icon={conceptIcons.repo} title="Working directory" className="self-start">
+            <IconChip icon={conceptIcons.repo} concept="repo" title="Working directory" className="self-start">
               {dir}
             </IconChip>
             <ErrorText error={start.error} />
@@ -148,14 +149,14 @@ function TerminalsView({ name }: { name: string }) {
 
       <section
         aria-label="Terminal"
-        className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-800"
+        className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-white shadow-sm dark:bg-zinc-900/60"
       >
         {panes.map((job) => (
           <TerminalPane key={job.id} task={name} job={job} visible={job.id === selected} onExited={onExited} />
         ))}
         {!selectedJob && (
           <div className="grid flex-1 place-items-center bg-zinc-50 dark:bg-zinc-950">
-            <conceptIcons.terminal aria-hidden className="size-10 text-zinc-300 dark:text-zinc-800" />
+            <conceptIcons.terminal aria-hidden className="size-10 text-zinc-300 dark:text-zinc-700" />
           </div>
         )}
       </section>
@@ -179,12 +180,16 @@ function JobTile({ job, selected, exited, onSelect }: JobTileProps) {
       title={job.id}
       className={cn(
         'flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left font-mono text-sm transition-colors',
+        // Selected: the terminal tint; the rest stay dim zinc.
         selected
-          ? 'border-zinc-400 bg-zinc-100 text-zinc-900 dark:border-zinc-500 dark:bg-zinc-800 dark:text-white'
-          : 'border-zinc-200 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900',
+          ? [color.bg, color.border, 'text-foreground']
+          : 'border-border bg-white text-zinc-700 hover:bg-zinc-50 dark:bg-zinc-900/60 dark:text-zinc-300 dark:hover:bg-zinc-800/60',
       )}
     >
-      <conceptIcons.terminal aria-hidden className="size-4 shrink-0 text-zinc-500" />
+      <conceptIcons.terminal
+        aria-hidden
+        className={cn('size-4 shrink-0', selected ? color.text : 'text-muted-foreground')}
+      />
       <span className="min-w-0 flex-1 truncate">{job.command.join(' ')}</span>
       {exited && <ExitedBadge />}
       <JobShape running={job.running} />

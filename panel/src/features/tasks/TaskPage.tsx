@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { Link, NavLink, Outlet, useNavigate, useParams } from 'react-router'
 
 import { useTask } from '@/api/hooks'
-import { conceptIcons } from '@/components/concept-icons'
+import { conceptColors, conceptIcons, type Concept } from '@/components/concept-icons'
 import { ErrorText } from '@/components/error-text'
 import { IconChip } from '@/components/icon-chip'
 import { StatusPill } from '@/components/status-pill'
@@ -14,10 +14,10 @@ import { usePageTitle } from '@/shell/page-title'
 
 import { TaskActions, useTaskActions } from './TaskActions'
 
-const TABS = [
-  { to: 'terminals', label: 'Terminals', icon: conceptIcons.terminal },
-  { to: 'messages', label: 'Messages', icon: conceptIcons.message },
-  { to: 'spec', label: 'Spec', icon: conceptIcons.raw },
+const TABS: { to: string; label: string; concept: Concept }[] = [
+  { to: 'terminals', label: 'Terminals', concept: 'terminal' },
+  { to: 'messages', label: 'Messages', concept: 'message' },
+  { to: 'spec', label: 'Spec', concept: 'raw' },
 ]
 
 export function TaskPage() {
@@ -54,35 +54,50 @@ export function TaskPage() {
   return (
     <div className="flex h-full flex-col">
       <div data-testid="task-header" className="flex items-center gap-3 px-6 pt-6">
-        <span className="grid size-10 shrink-0 place-items-center rounded-lg border border-zinc-200 text-zinc-500 dark:border-zinc-800">
+        <span
+          className={cn(
+            'grid size-10 shrink-0 place-items-center rounded-xl border',
+            conceptColors.task.bg,
+            conceptColors.task.border,
+            conceptColors.task.text,
+          )}
+        >
           <TaskIcon className="size-5" />
         </span>
         <h2 className="truncate text-2xl font-semibold tracking-tight">{data.title}</h2>
-        <IconChip icon={conceptIcons.channel} title="Name and channel" className="shrink-0">
+        <IconChip icon={conceptIcons.channel} concept="channel" title="Name and channel" className="shrink-0">
           {data.name}
         </IconChip>
         <StatusPill status={data.status} detail={data.status_error} />
         <TaskActions task={data} actions={actions} onDeleted={() => navigate('/tasks')} className="ml-auto shrink-0" />
       </div>
       <ErrorText error={actions.error ?? task.error} className="mx-6 mt-4" />
-      <nav aria-label="Task" className="mt-4 flex gap-1 border-b border-zinc-200 px-6 text-sm dark:border-zinc-800">
-        {TABS.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              cn(
-                '-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2',
-                isActive
-                  ? 'border-zinc-900 font-medium dark:border-white'
-                  : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100',
-              )
-            }
-          >
-            <Icon className="size-4" />
-            {label}
-          </NavLink>
-        ))}
+      <nav aria-label="Task" className="mt-4 flex gap-1 border-b border-border px-6 text-sm">
+        {TABS.map(({ to, label, concept }) => {
+          const Icon = conceptIcons[concept]
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                cn(
+                  '-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2',
+                  isActive
+                    ? 'border-zinc-900 font-medium dark:border-white'
+                    : 'border-transparent text-muted-foreground hover:text-foreground',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  {/* The open tab's icon takes its concept color; the rest stay dim. */}
+                  <Icon className={cn('size-4', isActive && conceptColors[concept].text)} />
+                  {label}
+                </>
+              )}
+            </NavLink>
+          )
+        })}
       </nav>
       <div className="min-h-0 flex-1">
         <Outlet />

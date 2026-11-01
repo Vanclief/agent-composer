@@ -3,17 +3,16 @@
 import type { ComponentProps, ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 
+import { conceptColors, conceptIcons, type Concept } from '@/components/concept-icons'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
-// A toggle chip (Toggle or ToggleGroupItem): outlined when off, filled
-// when on (rtsdesign rule 6).
-export const chipClass =
-  'h-7 min-w-9 rounded-md border border-border bg-transparent px-2 text-xs font-normal tabular-nums text-muted-foreground shadow-none hover:bg-accent hover:text-accent-foreground data-[state=on]:border-primary data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:hover:bg-primary/90 data-[state=on]:hover:text-primary-foreground'
-
-// The same look for a plain element that is always lit.
-export const litClass = 'border-primary bg-primary text-primary-foreground'
+// A toggle chip (Toggle or ToggleGroupItem): outlined and dim when off.
+// Add a concept's `on` classes (concept-icons.ts) to light it in that
+// concept's color when on (rtsdesign rules 3 and 6).
+export const chipBase =
+  'h-7 min-w-9 rounded-md border border-border bg-transparent px-2 text-xs font-normal tabular-nums text-muted-foreground shadow-none hover:bg-accent hover:text-accent-foreground'
 
 // A tooltip on any element; explanations live here, never in the layout.
 // wrap puts the element in a span first: a Toggle needs it, because the
@@ -29,31 +28,40 @@ export function Tip({ tip, wrap, children }: { tip: ReactNode; wrap?: boolean; c
   )
 }
 
-// A bordered card with one icon in its corner and a one-word label.
+// A bordered card with its concept's icon in the corner, a one-word label
+// and a top edge in the concept's color, so cards are told apart at a glance.
 export function Card({
   name,
-  icon: Icon,
+  concept,
   label,
   tip,
   count,
   children,
 }: {
   name: string
-  icon: LucideIcon
+  concept: Concept
   label: string
   tip: string
   // Badge after the label; hidden when 0.
   count?: number
   children: ReactNode
 }) {
+  const Icon = conceptIcons[concept]
+  const color = conceptColors[concept]
   return (
-    <section data-card={name} className="flex flex-col gap-2.5 rounded-md border border-border p-3">
-      <div className="flex items-center gap-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+    <section
+      data-card={name}
+      className={cn(
+        'flex flex-col gap-3 rounded-xl border border-border bg-white p-4 shadow-sm dark:bg-zinc-900/60',
+        color.edge,
+      )}
+    >
+      <div className={cn('flex items-center gap-1.5 text-xs font-medium tracking-wide uppercase', color.text)}>
         <Tip tip={tip}>
           <Icon aria-label={tip} className="size-3.5" />
         </Tip>
         {label}
-        {count ? <CountBadge count={count} /> : null}
+        {count ? <CountBadge count={count} className={cn(color.bg, color.text)} /> : null}
       </div>
       {children}
     </section>
@@ -75,17 +83,25 @@ export function CountBadge({ count, className }: { count: number; className?: st
 }
 
 // A compact mono input with a leading icon; tip explains the field.
+// concept colors the icon.
 export function IconInput({
   icon: Icon,
+  concept,
   tip,
   className,
   wrapperClassName,
   ...props
-}: ComponentProps<'input'> & { icon: LucideIcon; tip: string; wrapperClassName?: string }) {
+}: ComponentProps<'input'> & { icon: LucideIcon; concept?: Concept; tip: string; wrapperClassName?: string }) {
   return (
     <div className={cn('relative min-w-0', wrapperClassName)}>
       <Tip tip={tip}>
-        <Icon aria-hidden className="absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Icon
+          aria-hidden
+          className={cn(
+            'absolute top-1/2 left-2 size-3.5 -translate-y-1/2',
+            concept ? conceptColors[concept].text : 'text-muted-foreground',
+          )}
+        />
       </Tip>
       <Input
         aria-label={tip}

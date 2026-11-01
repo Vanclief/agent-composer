@@ -3,7 +3,7 @@
 import { NavLink, useParams } from 'react-router'
 
 import { useChannels } from '@/api/hooks'
-import { conceptIcons } from '@/components/concept-icons'
+import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
 import { cn } from '@/lib/utils'
@@ -16,10 +16,7 @@ function ChannelRail() {
   const Channel = conceptIcons.channel
 
   return (
-    <nav
-      aria-label="Channels"
-      className="flex w-56 shrink-0 flex-col gap-1 overflow-y-auto border-r border-zinc-200 p-2 dark:border-zinc-800"
-    >
+    <nav aria-label="Channels" className="flex w-56 shrink-0 flex-col gap-1 overflow-y-auto border-r border-border p-2">
       <ErrorText error={channels.error} />
       {channels.data?.length === 0 && <EmptySlot reason="No channels" />}
       {channels.data?.map((c) => (
@@ -30,17 +27,18 @@ function ChannelRail() {
           className={({ isActive }) =>
             cn(
               'flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm transition-colors',
+              // The open channel takes the channel tint; the rest stay dim.
               isActive
-                ? 'border-zinc-300 bg-zinc-200 font-medium text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white'
+                ? [conceptColors.channel.bg, conceptColors.channel.border, 'font-medium text-foreground']
                 : 'border-transparent text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100',
             )
           }
         >
-          <Channel aria-hidden className="size-4 shrink-0 text-zinc-500" />
+          <Channel aria-hidden className={cn('size-4 shrink-0', conceptColors.channel.text)} />
           <span className="truncate font-mono">{c.channel.slice(1)}</span>
           <span
             data-testid="channel-count"
-            className="ml-auto rounded border border-zinc-300 px-1.5 font-mono text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
+            className="ml-auto rounded border border-border px-1.5 font-mono text-xs text-muted-foreground"
           >
             {c.count}
           </span>

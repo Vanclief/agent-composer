@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 
 import type { Secret } from '@/api/client'
-import { conceptIcons } from '@/components/concept-icons'
+import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
 import { IconChip } from '@/components/icon-chip'
@@ -28,7 +28,7 @@ import { Toggle } from '@/components/ui/toggle'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
 
-import { Card, chipClass, CountBadge, IconInput, litClass, Tip } from './bits'
+import { Card, chipBase, CountBadge, IconInput, Tip } from './bits'
 import {
   CPU_CHOICES,
   MEMORY_CHOICES,
@@ -63,7 +63,7 @@ function RemoveButton({ onClick, label = 'Remove' }: { onClick: () => void; labe
 // Clicking the lit chip again unsets it, so the server default applies.
 function PresetChips({
   name,
-  icon: Icon,
+  concept,
   tip,
   choices,
   value,
@@ -71,7 +71,7 @@ function PresetChips({
   onChange,
 }: {
   name: string
-  icon: typeof conceptIcons.cpu
+  concept: 'cpu' | 'memory'
   tip: string
   choices: number[]
   value: number | null
@@ -79,10 +79,12 @@ function PresetChips({
   onChange: (n: number | null) => void
 }) {
   const all = value && !choices.includes(value) ? [...choices, value] : choices
+  const Icon = conceptIcons[concept]
+  const color = conceptColors[concept]
   return (
     <div className="flex items-center gap-2" {...{ [`data-${name}`]: '' }}>
       <Tip tip={tip}>
-        <Icon aria-label={tip} className="size-4 shrink-0 text-muted-foreground" />
+        <Icon aria-label={tip} className={cn('size-4 shrink-0', color.text)} />
       </Tip>
       <ToggleGroup
         type="single"
@@ -93,7 +95,7 @@ function PresetChips({
         className="flex-wrap"
       >
         {all.map((n) => (
-          <ToggleGroupItem key={n} value={String(n)} size="sm" className={chipClass}>
+          <ToggleGroupItem key={n} value={String(n)} size="sm" className={cn(chipBase, color.on)}>
             {label(n)}
           </ToggleGroupItem>
         ))}
@@ -104,10 +106,11 @@ function PresetChips({
 
 export function MachineCard({ form, update }: CardProps) {
   return (
-    <Card name="machine" icon={conceptIcons.task} label="Machine" tip="The VM the task runs in">
+    <Card name="machine" concept="task" label="Machine" tip="The VM the task runs in">
       <IconInput
         data-image
         icon={conceptIcons.image}
+        concept="image"
         tip="Image: any OCI image"
         value={form.image}
         onChange={(e) => update({ image: e.target.value })}
@@ -115,7 +118,7 @@ export function MachineCard({ form, update }: CardProps) {
       />
       <PresetChips
         name="cpus"
-        icon={conceptIcons.cpu}
+        concept="cpu"
         tip="vCPUs. Click the lit chip again for the server default."
         choices={CPU_CHOICES}
         value={form.cpus}
@@ -124,7 +127,7 @@ export function MachineCard({ form, update }: CardProps) {
       />
       <PresetChips
         name="memory"
-        icon={conceptIcons.memory}
+        concept="memory"
         tip="Memory. Click the lit chip again for the server default."
         choices={MEMORY_CHOICES}
         value={form.memory}
@@ -145,10 +148,11 @@ export function CodeCard({ form, update }: CardProps) {
   const SetupIcon = conceptIcons.setup
 
   return (
-    <Card name="code" icon={conceptIcons.repo} label="Code" tip="Repository cloned into the VM">
+    <Card name="code" concept="repo" label="Code" tip="Repository cloned into the VM">
       <IconInput
         data-repo
         icon={conceptIcons.repo}
+        concept="repo"
         tip="Repository: github.com/owner/name or an https URL"
         value={form.repo}
         onChange={(e) => update({ repo: e.target.value })}
@@ -158,6 +162,7 @@ export function CodeCard({ form, update }: CardProps) {
         <IconInput
           data-ref
           icon={conceptIcons.ref}
+          concept="ref"
           tip="Branch, tag or commit"
           wrapperClassName="w-36 shrink-0"
           value={form.ref}
@@ -166,7 +171,7 @@ export function CodeCard({ form, update }: CardProps) {
         />
         {dir ? (
           <span data-repo-dir className="min-w-0">
-            <IconChip icon={conceptIcons.repo} title="Where the repo is cloned in the VM" className="bg-muted/50">
+            <IconChip icon={conceptIcons.repo} concept="repo" title="Where the repo is cloned in the VM">
               {dir}
             </IconChip>
           </span>
@@ -181,12 +186,12 @@ export function CodeCard({ form, update }: CardProps) {
           className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-accent"
         >
           <Tip tip="Bash script, runs once after the clone">
-            <SetupIcon aria-hidden className="size-3.5 text-muted-foreground" />
+            <SetupIcon aria-hidden className={cn('size-3.5', conceptColors.setup.text)} />
           </Tip>
           Setup script
           {setupLines ? (
             <span data-setup-lines>
-              <CountBadge count={setupLines} />
+              <CountBadge count={setupLines} className={cn(conceptColors.setup.bg, conceptColors.setup.text)} />
             </span>
           ) : null}
           {setupOpen ? (
@@ -247,7 +252,7 @@ export function SecretsCard({
   return (
     <Card
       name="secrets"
-      icon={conceptIcons.secret}
+      concept="secret"
       label="Secrets"
       tip="Secrets from secrets.env. Each is sent only to its hosts."
       count={form.secrets.length}
@@ -270,7 +275,12 @@ export function SecretsCard({
                   pressed={Boolean(pick)}
                   onPressedChange={(on) => toggle(chip, on)}
                   size="sm"
-                  className={cn(chipClass, 'gap-1 font-mono', !chip.known && 'border-dashed border-red-500/70')}
+                  className={cn(
+                    chipBase,
+                    conceptColors.secret.on,
+                    'gap-1 font-mono',
+                    !chip.known && 'border-dashed border-red-500/70',
+                  )}
                 >
                   {chip.known ? <conceptIcons.secret aria-hidden /> : <TriangleAlert className="text-red-500" />}
                   {chip.name}
@@ -317,13 +327,7 @@ export function EnvCard({ form, update }: CardProps) {
   }
 
   return (
-    <Card
-      name="env"
-      icon={conceptIcons.env}
-      label="Env"
-      tip="Environment variables set in the VM"
-      count={form.env.length}
-    >
+    <Card name="env" concept="env" label="Env" tip="Environment variables set in the VM" count={form.env.length}>
       <div className="flex flex-col gap-1.5">
         {form.env.map((row) => (
           <div key={row.id} data-env className="flex items-center gap-1.5">
@@ -372,7 +376,7 @@ export function VolumesCard({ form, update }: CardProps) {
   return (
     <Card
       name="volumes"
-      icon={conceptIcons.volume}
+      concept="volume"
       label="Volumes"
       tip="Mounted into the VM. Named volumes are kept by agc across tasks; host paths come from this machine."
       count={form.volumes.length}
@@ -394,7 +398,7 @@ export function VolumesCard({ form, update }: CardProps) {
                   value="named"
                   data-kind="named"
                   aria-label="Named volume"
-                  className={cn(chipClass, 'min-w-7 px-1.5')}
+                  className={cn(chipBase, conceptColors.volume.on, 'min-w-7 px-1.5')}
                 >
                   <Database className="size-3.5" />
                 </ToggleGroupItem>
@@ -402,7 +406,7 @@ export function VolumesCard({ form, update }: CardProps) {
                   value="host"
                   data-kind="host"
                   aria-label="Host path"
-                  className={cn(chipClass, 'min-w-7 px-1.5')}
+                  className={cn(chipBase, conceptColors.volume.on, 'min-w-7 px-1.5')}
                 >
                   <Laptop className="size-3.5" />
                 </ToggleGroupItem>
@@ -433,11 +437,7 @@ export function VolumesCard({ form, update }: CardProps) {
                 pressed={v.rw}
                 onPressedChange={(rw) => setRow(v.id, { rw })}
                 size="sm"
-                className={cn(
-                  chipClass,
-                  'min-w-0 gap-0.5 px-1.5 font-mono',
-                  'data-[state=on]:border-amber-500/60 data-[state=on]:bg-amber-500/15 data-[state=on]:text-amber-700 data-[state=on]:hover:bg-amber-500/25 data-[state=on]:hover:text-amber-700 dark:data-[state=on]:text-amber-300 dark:data-[state=on]:hover:text-amber-300',
-                )}
+                className={cn(chipBase, conceptColors.volume.on, 'min-w-0 gap-0.5 px-1.5 font-mono')}
               >
                 {v.rw ? <LockOpen className="size-3.5" /> : <Lock className="size-3.5" />}
                 {v.rw ? 'rw' : 'ro'}
@@ -457,6 +457,7 @@ export function VolumesCard({ form, update }: CardProps) {
 export function ChannelsCard({ form, update, slug }: CardProps & { slug: string }) {
   const [draft, setDraft] = useState('')
   const ChannelIcon = conceptIcons.channel
+  const color = conceptColors.channel
 
   function add() {
     if (!draft.trim()) {
@@ -477,7 +478,7 @@ export function ChannelsCard({ form, update, slug }: CardProps & { slug: string 
   return (
     <Card
       name="channels"
-      icon={conceptIcons.channel}
+      concept="channel"
       label="Channels"
       tip="Message channels the task can use"
       count={form.channels.length + 1}
@@ -488,7 +489,7 @@ export function ChannelsCard({ form, update, slug }: CardProps & { slug: string 
             data-own-channel
             className={cn(
               'flex h-7 items-center gap-1 rounded-md border px-2 font-mono',
-              slug ? litClass : 'border-dashed border-border text-muted-foreground',
+              slug ? color.selected : 'border-dashed border-border text-muted-foreground',
             )}
           >
             <ChannelIcon aria-hidden className="size-3.5" />
@@ -500,7 +501,11 @@ export function ChannelsCard({ form, update, slug }: CardProps & { slug: string 
           <span
             key={c.name}
             data-channel={c.name}
-            className={cn('flex h-7 items-center gap-1 rounded-md border pr-1 pl-2 font-mono', litClass)}
+            className={cn(
+              'flex h-7 items-center gap-1 rounded-md border pr-1 pl-2 font-mono',
+              // Read-write is lit; read-only is the dimmer tint.
+              c.read ? [color.bg, color.border, color.text] : color.selected,
+            )}
           >
             <ChannelIcon aria-hidden className="size-3.5" />
             {c.name.replace(/^#/, '')}
@@ -517,10 +522,7 @@ export function ChannelsCard({ form, update, slug }: CardProps & { slug: string 
                 aria-label={c.read ? 'Read-only' : 'Read-write'}
                 aria-pressed={c.read}
                 onClick={() => setRead(c.name, !c.read)}
-                className={cn(
-                  'ml-0.5 rounded p-0.5 hover:bg-primary-foreground/15',
-                  c.read && 'text-amber-400 dark:text-amber-600',
-                )}
+                className="ml-0.5 rounded p-0.5 hover:bg-current/20"
               >
                 {c.read ? <Eye className="size-3.5" /> : <Pencil className="size-3.5" />}
               </button>
@@ -530,7 +532,7 @@ export function ChannelsCard({ form, update, slug }: CardProps & { slug: string 
               aria-label={'Remove ' + c.name}
               title="Remove"
               onClick={() => update({ channels: form.channels.filter((x) => x.name !== c.name) })}
-              className="rounded p-0.5 opacity-70 hover:bg-primary-foreground/15 hover:opacity-100"
+              className="rounded p-0.5 opacity-70 hover:bg-current/20 hover:opacity-100"
             >
               <X className="size-3.5" />
             </button>

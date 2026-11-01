@@ -2,12 +2,12 @@
 // dialog's vocabulary. The raw YAML sits behind the </> toggle.
 import { useState, type ReactNode } from 'react'
 import { dump } from 'js-yaml'
-import { ArrowRight, ChevronRight, Eye, FolderOpen, Lock, Pencil, type LucideIcon } from 'lucide-react'
+import { ArrowRight, ChevronRight, Eye, FolderOpen, Lock, Pencil } from 'lucide-react'
 import { useParams } from 'react-router'
 
 import type { TaskSpec } from '@/api/client'
 import { useSecrets, useTask } from '@/api/hooks'
-import { conceptIcons } from '@/components/concept-icons'
+import { conceptColors, conceptIcons, type Concept } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { IconChip } from '@/components/icon-chip'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -49,7 +49,7 @@ export function SpecTab() {
         </Toggle>
       </div>
       {raw ? (
-        <pre className="overflow-auto rounded-xl border border-zinc-200 bg-zinc-50 p-4 font-mono text-xs dark:border-zinc-800 dark:bg-zinc-900/60">
+        <pre className="overflow-auto rounded-xl border border-border bg-white p-4 font-mono text-xs shadow-sm dark:bg-zinc-900/60">
           {dump(spec)}
         </pre>
       ) : (
@@ -69,21 +69,21 @@ function SpecCards({ spec }: { spec: TaskSpec }) {
 
   return (
     <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
-      <SpecCard title="Machine" icon={conceptIcons.task}>
+      <SpecCard title="Machine" concept="task">
         {hasMachine ? (
           <div className="flex flex-wrap gap-1.5">
             {spec.image && (
-              <IconChip icon={conceptIcons.image} title="Image">
+              <IconChip icon={conceptIcons.image} concept="image" title="Image">
                 {spec.image}
               </IconChip>
             )}
             {spec.cpus ? (
-              <IconChip icon={conceptIcons.cpu} title="CPUs">
+              <IconChip icon={conceptIcons.cpu} concept="cpu" title="CPUs">
                 {spec.cpus} CPU
               </IconChip>
             ) : null}
             {spec.memory ? (
-              <IconChip icon={conceptIcons.memory} title={`Memory, ${spec.memory} MiB`}>
+              <IconChip icon={conceptIcons.memory} concept="memory" title={`Memory, ${spec.memory} MiB`}>
                 {formatMemory(spec.memory)}
               </IconChip>
             ) : null}
@@ -93,20 +93,20 @@ function SpecCards({ spec }: { spec: TaskSpec }) {
         )}
       </SpecCard>
 
-      <SpecCard title="Code" icon={conceptIcons.repo}>
+      <SpecCard title="Code" concept="repo">
         {spec.repo || spec.setup ? (
           <div className="flex flex-col gap-2">
             {spec.repo && (
               <div className="flex flex-wrap gap-1.5">
-                <IconChip icon={conceptIcons.repo} title="Repo">
+                <IconChip icon={conceptIcons.repo} concept="repo" title="Repo">
                   {spec.repo}
                 </IconChip>
                 {spec.ref && (
-                  <IconChip icon={conceptIcons.ref} title="Ref">
+                  <IconChip icon={conceptIcons.ref} concept="ref" title="Ref">
                     {spec.ref}
                   </IconChip>
                 )}
-                <IconChip icon={FolderOpen} title="Cloned to">
+                <IconChip icon={FolderOpen} concept="repo" title="Cloned to">
                   {repoPath(spec.repo)}
                 </IconChip>
               </div>
@@ -118,7 +118,7 @@ function SpecCards({ spec }: { spec: TaskSpec }) {
         )}
       </SpecCard>
 
-      <SpecCard title="Secrets" icon={conceptIcons.secret} count={spec.secrets?.length}>
+      <SpecCard title="Secrets" concept="secret" count={spec.secrets?.length}>
         {spec.secrets?.length ? (
           <div className="flex flex-wrap gap-1.5">
             {spec.secrets.map(parseSecret).map((secret) => {
@@ -127,6 +127,7 @@ function SpecCards({ spec }: { spec: TaskSpec }) {
                 <IconChip
                   key={secret.name}
                   icon={conceptIcons.secret}
+                  concept="secret"
                   title={hosts.length ? hosts.join(', ') : 'No hosts'}
                 >
                   {secret.name}
@@ -139,12 +140,12 @@ function SpecCards({ spec }: { spec: TaskSpec }) {
         )}
       </SpecCard>
 
-      <SpecCard title="Env" icon={conceptIcons.env} count={env.length}>
+      <SpecCard title="Env" concept="env" count={env.length}>
         {env.length ? (
           <ul className="flex flex-col gap-1 font-mono text-xs">
             {env.map(([key, value]) => (
               <li key={key} className="truncate" title={`${key}=${value}`}>
-                <span className="text-zinc-500">{key}=</span>
+                <span className={conceptColors.env.text}>{key}=</span>
                 {value}
               </li>
             ))}
@@ -154,7 +155,7 @@ function SpecCards({ spec }: { spec: TaskSpec }) {
         )}
       </SpecCard>
 
-      <SpecCard title="Volumes" icon={conceptIcons.volume} count={volumes.length}>
+      <SpecCard title="Volumes" concept="volume" count={volumes.length}>
         {volumes.length ? (
           <ul className="flex flex-col gap-1.5">
             {volumes.map((volume) => (
@@ -162,14 +163,18 @@ function SpecCards({ spec }: { spec: TaskSpec }) {
                 key={`${volume.source}:${volume.destination}`}
                 className="flex min-w-0 items-center gap-1.5 font-mono text-xs"
               >
-                <IconChip icon={conceptIcons.volume} title={volume.host ? 'Host path' : 'Named volume'}>
+                <IconChip
+                  icon={conceptIcons.volume}
+                  concept="volume"
+                  title={volume.host ? 'Host path' : 'Named volume'}
+                >
                   {volume.source}
                 </IconChip>
-                <ArrowRight aria-hidden className="size-3.5 shrink-0 text-zinc-500" />
+                <ArrowRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
                 <span className="truncate">{volume.destination}</span>
                 {volume.readOnly ? (
                   <span role="img" aria-label="Read-only" title="Read-only" className="shrink-0">
-                    <Lock aria-hidden className="size-3.5 text-zinc-500" />
+                    <Lock aria-hidden className={cn('size-3.5', conceptColors.volume.text)} />
                   </span>
                 ) : null}
               </li>
@@ -180,7 +185,7 @@ function SpecCards({ spec }: { spec: TaskSpec }) {
         )}
       </SpecCard>
 
-      <SpecCard title="Channels" icon={conceptIcons.channel} count={channels.length}>
+      <SpecCard title="Channels" concept="channel" count={channels.length}>
         {channels.length ? (
           <div className="flex flex-wrap gap-1.5">
             {channels.map((channel) => {
@@ -189,11 +194,14 @@ function SpecCards({ spec }: { spec: TaskSpec }) {
                 <IconChip
                   key={channel.name}
                   icon={conceptIcons.channel}
+                  concept="channel"
                   title={channel.readOnly ? 'Read-only' : 'Read-write'}
+                  // Read-write is lit, read-only the softer tint, as in the create dialog.
+                  className={channel.readOnly ? undefined : conceptColors.channel.selected}
                 >
                   <span className="inline-flex items-center gap-1" data-mode={channel.readOnly ? 'read' : 'write'}>
                     {channel.name}
-                    <Mode aria-hidden className="size-3 text-zinc-500" />
+                    <Mode aria-hidden className="size-3" />
                   </span>
                 </IconChip>
               )
@@ -209,22 +217,33 @@ function SpecCards({ spec }: { spec: TaskSpec }) {
 
 type SpecCardProps = {
   title: string
-  icon: LucideIcon
+  concept: Concept
   // Items in the card, shown as a badge when there are any.
   count?: number
   children: ReactNode
 }
 
-function SpecCard({ title, icon: Icon, count, children }: SpecCardProps) {
+// A card per concept: its icon and title in the concept's color and a top
+// edge in that color, so cards are told apart at a glance.
+function SpecCard({ title, concept, count, children }: SpecCardProps) {
+  const Icon = conceptIcons[concept]
+  const color = conceptColors[concept]
   return (
     <section
       aria-label={title}
-      className="flex flex-col gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800"
+      className={cn(
+        'flex flex-col gap-3 rounded-xl border border-border bg-white p-4 shadow-sm dark:bg-zinc-900/60',
+        color.edge,
+      )}
     >
-      <h3 className="flex items-center gap-2 text-sm font-medium">
-        <Icon className="size-4 text-zinc-500" />
+      <h3 className={cn('flex items-center gap-2 text-sm font-medium', color.text)}>
+        <Icon className="size-4" />
         {title}
-        {count ? <span className="ml-auto text-xs text-zinc-500 tabular-nums">{count}</span> : null}
+        {count ? (
+          <span className={cn('ml-auto rounded px-1.5 font-mono text-xs tabular-nums', color.bg, color.text)}>
+            {count}
+          </span>
+        ) : null}
       </h3>
       {children}
     </section>
@@ -238,25 +257,21 @@ function SetupScript({ script }: { script: string }) {
   const lines = lineCount(script)
 
   return (
-    <div className="rounded-md border border-zinc-200 dark:border-zinc-800">
+    <div className="rounded-md border border-border">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-900/60"
+        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/40"
       >
         <ChevronRight aria-hidden className={cn('size-3.5 text-zinc-500 transition-transform', open && 'rotate-90')} />
-        <SetupIcon aria-hidden className="size-3.5 text-zinc-500" />
+        <SetupIcon aria-hidden className={cn('size-3.5', conceptColors.setup.text)} />
         Setup
-        <span className="ml-auto rounded-full border border-zinc-200 px-1.5 font-mono text-[11px] text-zinc-500 dark:border-zinc-800">
+        <span className="ml-auto rounded-full border border-border px-1.5 font-mono text-[11px] text-muted-foreground">
           {lines} {lines === 1 ? 'line' : 'lines'}
         </span>
       </button>
-      {open && (
-        <pre className="overflow-auto border-t border-zinc-200 p-2.5 font-mono text-xs dark:border-zinc-800">
-          {script}
-        </pre>
-      )}
+      {open && <pre className="overflow-auto border-t border-border p-2.5 font-mono text-xs">{script}</pre>}
     </div>
   )
 }

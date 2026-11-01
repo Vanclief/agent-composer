@@ -6,7 +6,7 @@ import { File, Loader2, Play, Trash2, X } from 'lucide-react'
 import { useNavigate } from 'react-router'
 
 import { useCreateTask, useDeleteSpec, useSaveSpec, useSecrets, useSpecs } from '@/api/hooks'
-import { conceptIcons } from '@/components/concept-icons'
+import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { ErrorText } from '@/components/error-text'
 import { IconChip } from '@/components/icon-chip'
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Toggle } from '@/components/ui/toggle'
 import { cn } from '@/lib/utils'
 
-import { chipClass, IconInput, Tip } from './bits'
+import { chipBase, IconInput, Tip } from './bits'
 import { ChannelsCard, CodeCard, EnvCard, MachineCard, SecretsCard, VolumesCard } from './cards'
 import { blankForm, formToSpec, parseSpecYAML, slugify, specYAML, type SpecForm } from './spec-form'
 
@@ -26,7 +26,8 @@ type CreateTaskDialogProps = {
 }
 
 const tileClass = 'flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors'
-const tileOn = 'border-primary bg-primary text-primary-foreground'
+// A lit Start-from tile takes the saved-spec color.
+const tileOn = conceptColors.savedSpec.selected
 const tileOff = 'border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground'
 
 export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) {
@@ -204,7 +205,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
       >
         <form data-create-form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
           <div className="flex items-center gap-2 border-b border-border px-5 py-3">
-            <TaskIcon aria-hidden className="size-4 text-muted-foreground" />
+            <TaskIcon aria-hidden className={cn('size-4', conceptColors.task.text)} />
             <DialogTitle className="text-sm">New task</DialogTitle>
             <div className="ml-auto flex items-center gap-1">
               <Tip wrap tip={raw ? 'Back to cards' : 'Edit as YAML'}>
@@ -214,7 +215,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
                   pressed={raw}
                   onPressedChange={toggleRaw}
                   size="sm"
-                  className={cn(chipClass, 'gap-1')}
+                  className={cn(chipBase, conceptColors.raw.on, 'gap-1')}
                 >
                   <RawIcon className="size-3.5" />
                   YAML
@@ -235,7 +236,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
                 <Tip tip="Title">
                   <TaskIcon
                     aria-hidden
-                    className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+                    className={cn('absolute top-1/2 left-2.5 size-4 -translate-y-1/2', conceptColors.task.text)}
                   />
                 </Tip>
                 <Input
@@ -251,7 +252,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
               <Tip tip="VM and channel name, derived from the title">
                 <span className="shrink-0">
                   {slug ? (
-                    <IconChip icon={ChannelIcon} className="h-9 bg-muted/50 px-2.5 text-sm">
+                    <IconChip icon={ChannelIcon} concept="channel" className="h-9 px-2.5 text-sm">
                       <span data-slug>{slug}</span>
                     </IconChip>
                   ) : (
@@ -277,7 +278,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
               <div data-start-from className="flex flex-wrap items-center gap-1.5">
                 <Tip tip="Start from a saved spec. Editing afterwards does not change the saved one.">
                   <span className="mr-1 flex items-center gap-1 text-xs text-muted-foreground">
-                    <SpecIcon aria-hidden className="size-3.5" />
+                    <SpecIcon aria-hidden className={cn('size-3.5', conceptColors.savedSpec.text)} />
                     Start from
                   </span>
                 </Tip>
@@ -355,7 +356,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
                     }}
                     title="Save this form as a reusable spec"
                   >
-                    <SpecIcon />
+                    <SpecIcon className={conceptColors.savedSpec.text} />
                     Save spec
                   </Button>
                 ) : (
@@ -409,7 +410,12 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="submit" data-create disabled={!ready || create.isPending}>
+            <Button
+              type="submit"
+              data-create
+              disabled={!ready || create.isPending}
+              className={conceptColors.task.solid}
+            >
               {create.isPending ? <Loader2 className="animate-spin" /> : <Play />}
               {createLabel}
             </Button>
@@ -453,6 +459,7 @@ function SaveSpecInput({
       <IconInput
         data-spec-name
         icon={conceptIcons.savedSpec}
+        concept="savedSpec"
         tip="Saved spec name"
         wrapperClassName="w-44"
         autoFocus
@@ -467,11 +474,18 @@ function SaveSpecInput({
         placeholder="backend-review"
       />
       {slug && slug !== name.trim() ? (
-        <IconChip icon={conceptIcons.savedSpec} title="Saved as" className="h-7 bg-muted/50">
+        <IconChip icon={conceptIcons.savedSpec} concept="savedSpec" title="Saved as" className="h-7">
           {slug}
         </IconChip>
       ) : null}
-      <Button type="button" size="xs" className="h-7 px-2.5" disabled={pending || !slug || !canSave} onClick={onSave}>
+      <Button
+        type="button"
+        variant="outline"
+        size="xs"
+        className={cn('h-7 px-2.5', conceptColors.savedSpec.text)}
+        disabled={pending || !slug || !canSave}
+        onClick={onSave}
+      >
         {label}
       </Button>
       <Button type="button" variant="ghost" size="icon-xs" aria-label="Cancel" onClick={onCancel}>
