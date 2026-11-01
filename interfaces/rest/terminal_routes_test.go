@@ -85,7 +85,7 @@ func (s *fakeSandbox) Detach(ctx context.Context) error {
 
 func TestTerminalRoutes(t *testing.T) {
 	sb := &fakeSandbox{}
-	e, db := newTaskRoutes(t, &fakeRuntime{sb: sb})
+	e, db := newTaskRoutes(t, &fakeRuntime{sb: sb}, "")
 
 	record := &taskmodels.Task{Title: "Review 42", Name: "review-42", Spec: []byte(`{}`)}
 	err := record.Insert(context.Background(), db)

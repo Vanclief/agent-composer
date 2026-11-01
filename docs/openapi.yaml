@@ -734,6 +734,36 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
+  /secrets:
+    get:
+      tags: [Tasks]
+      operationId: listSecrets
+      summary: List secret names
+      description: >
+        Names in ~/.agent_composer/config/secrets.env, sorted, each with the hosts it is bound to
+        by default (empty for names agc does not know, which a spec must bind as NAME@host).
+        Values are never returned (ADR 0004). A missing file lists nothing; a file readable by
+        anyone but its owner is refused.
+      responses:
+        '200':
+          description: Secret names.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secrets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Secret'
+                required:
+                  - secrets
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
 components:
   parameters:
     LimitParam:
@@ -1364,6 +1394,19 @@ components:
       required:
         - name
         - yaml
+    Secret:
+      type: object
+      properties:
+        name:
+          type: string
+        hosts:
+          type: array
+          description: Hosts the secret is bound to by default; empty when agc knows none.
+          items:
+            type: string
+      required:
+        - name
+        - hosts
     DeleteTaskResponse:
       type: object
       properties:
