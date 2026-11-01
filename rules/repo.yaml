@@ -62,6 +62,11 @@ rules:
     rule: Never put a secret value in a task spec or an API response; specs and the REST API carry secret names only.
     because: [secrets-are-placeholders-bound-to-hosts]
 
+  # Knowledge (ADR 0006). agc rejects evidence whose who names a model.
+  - id: evidence-who-is-never-a-model
+    rule: The source is never the model. The model translates evidence from a real source (who is the witness, translated_by the model), or it writes an opinion, and those are different things.
+    because: [llms-are-parsers-not-sensors]
+
   # Agent workflow
   - id: never-push-from-a-worktree
     rule: Never push from an agent worktree; commit there and the main session merges.

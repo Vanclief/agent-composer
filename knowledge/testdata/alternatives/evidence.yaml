@@ -1,0 +1,9 @@
+evidence:
+  - id: seen-x
+    evidence: X was seen.
+    who: franco
+    when: 2026-11-01
+  - id: seen-y
+    evidence: Y was seen.
+    who: ana
+    when: 2026-11-02

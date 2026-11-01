@@ -1,0 +1,14 @@
+actions:
+  - id: open-action
+    action: Build X.
+    because: [choice]
+    opened: { who: franco, when: 2026-11-01 }
+  - id: done-action
+    action: Write down X.
+    because: [choice, derived]
+    opened: { who: franco, when: 2026-11-01 }
+    done: { who: franco, when: 2026-11-03 }
+  - id: doubted-action
+    action: Build Z.
+    because: [doubted-choice]
+    opened: { who: franco, when: 2026-11-01 }

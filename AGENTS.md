@@ -67,12 +67,14 @@
 
 ## Rules, beliefs and decisions
 
-- `evidence/` records what was seen (who, when, source), `rules/` says what must or must not be done, `beliefs/` what we hold true and why, `decisions/` the choices made on those beliefs (one per ADR). See ADR 0006.
-- Beliefs cite evidence by id. A belief is grounded, an opinion (a leaf with no evidence) or in doubt (a leaf whose evidence is all retracted); the label is computed when printed, never written. Retract evidence with `retracted: { who, when, why }` and keep it in the file.
-- `go run . rules check rules/` runs the mechanical rules and lists the manual ones; `agc rules show` prints them as markdown. Both note rules resting on an opinion or a doubted belief.
-- `agc beliefs show` prints every belief with its label; `agc evidence show` prints the evidence and how many beliefs cite each piece.
-- `agc beliefs why <id>` follows a belief down to its evidence; `agc beliefs doubt <id>` lists the beliefs, decisions and rules resting on a belief or a piece of evidence.
-- `agc decisions show` prints the decisions with their ADRs.
+- Five kinds of file (ADR 0006): `evidence/` records what was seen (who, when, source), `rules/` says what must or must not be done, `beliefs/` what we hold true and why, `decisions/` the choices made on those beliefs (one per ADR), `actions/` what to do because of a decision (`opened:`, and `done:` once done).
+- Beliefs cite evidence by id. A belief is grounded, an opinion (no evidence under it), contested (something grounded contradicts it) or in doubt (its evidence is all retracted); the label is computed when printed, never written. Retract evidence with `retracted: { who, when, why }` and keep it in the file.
+- `or:` lists alternative reasons (`{ because, evidence }` on beliefs, `{ because }` elsewhere): grounded if any set is. `contradicts: [ids]` on a belief or evidence flags a contradiction; nothing picks a side.
+- Evidence `who` is a person or a mechanical check (`ci`), never a model: agc rejects it. A model that read a real source goes in `translated_by`, with `source` set; a model's own conclusion is an opinion.
+- `go run . rules check rules/` runs the mechanical rules and lists the manual ones (CI runs it); `agc rules show` prints them as a markdown checklist. Both note rules resting on an opinion or a doubted belief.
+- `agc beliefs show`, `agc decisions show`, `agc actions show` (open first, then done) and `agc evidence show` print each item as a sentence with its ids in a trailer.
+- `agc beliefs why <id>` follows a belief down to its evidence; `agc beliefs doubt <id>` lists the beliefs, decisions, rules and open actions resting on a belief or a piece of evidence, and apart those still standing on other support; `agc beliefs conflicts` lists contested contradictions with the evidence and opinions under each side.
+- `--without <id>` (repeatable) on the show commands judges as if that evidence or belief were gone, under a "Without <ids>:" first line; nothing is written. `--ids` on every show and why command prints the compact id form; use it in scripts.
 
 ## Deploying to the rig
 

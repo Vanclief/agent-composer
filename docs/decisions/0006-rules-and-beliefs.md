@@ -1,6 +1,8 @@
 # ADR 0006: Rules, beliefs and decisions
 
-**Status:** Accepted — 2026-11-01
+**Status:** Accepted — 2026-11-01; amended the same day with actions,
+alternative support, contradictions, what-if, sentence output and
+translated evidence (decisions 7–12)
 **Builds on:** [0001 — git + plain text for all artifacts](0001-git-and-plain-text-for-all-artifacts.md)
 
 ## Context
@@ -32,10 +34,18 @@ Franco's framing:
   for writing code with agents") and on decisions. When a belief is put in
   doubt, every decision and rule resting on it, directly or through others,
   shows up for review.
+- The aim is to think clearly as a human in terms of rules, beliefs,
+  decisions, actions to take and opinions: "a TMS that is just not
+  overbloated but has all the important components". Output reads like a
+  thought, not a report of ids.
+- "An LLM is a great parser and a terrible sensor. If a model's opinion can
+  become an evidence record, your beliefs will look grounded while resting
+  on nothing. The source is never the model."
 
 ## Decision
 
-1. **Four kinds of YAML file, loaded by the `knowledge` package.** A file
+1. **Four kinds of YAML file, loaded by the `knowledge` package** (five
+   with actions, decision 7). A file
    is a ruleset if it has `subject:`, an evidence file if it has
    `evidence:`, a beliefs file if it has `beliefs:`, a decisions file if it
    has `decisions:`. They live in `rules/`, `evidence/`, `beliefs/` and
@@ -112,6 +122,74 @@ Franco's framing:
    it is not, and the tool never relabels or rewrites anything: labels are
    computed each time they are printed, and a human rechecks what doubt
    lists.
+7. **Actions are a fifth kind.** A file with `actions:` (in `actions/`)
+   lists things to do because of a decision:
+
+   ```yaml
+   actions:
+     - id: attach-rulesets-to-task-specs
+       action: Let a task spec name rulesets, beliefs and decisions so agents in its sandbox receive them.
+       because: [rules-beliefs-and-decisions-as-yaml]   # at least one decision; may cite beliefs
+       opened: { who: franco, when: 2026-11-01 }
+       done: { who: franco, when: 2026-11-05 }          # optional; absent means open
+   ```
+
+   `agc actions show` lists open actions, then done ones, each with the
+   decision it serves; an open action resting on an opinion or a doubted
+   belief says so, as decisions do. `agc beliefs doubt` lists the open
+   actions above the doubted id under "Actions to reconsider".
+8. **Alternative support.** `because` (with `evidence` on a belief) is one
+   set of reasons that must all hold. Beliefs, decisions, rules and actions
+   may add `or:`, a list of other sets, `{ because, evidence }` on beliefs
+   and `{ because }` on the rest. A thing is grounded if its own set is or
+   any alternative is; when none is, the reasons of every set are reported.
+   Labels are now judged per set, recursively, so a belief citing evidence
+   and resting on beliefs needs both. `why` prints alternatives as "or
+   because …". `doubt` lists a dependent only when every one of its sets
+   reaches the doubted id; one that still has another set is listed apart,
+   under "Still standing (other support)". Cycle detection follows `or`
+   edges too.
+9. **Contradictions are flagged, never resolved.** Beliefs and evidence may
+   say `contradicts: [ids]`, naming beliefs or evidence; one side declaring
+   it is enough. A belief is `contested` when it is not in doubt and a
+   grounded belief or live evidence contradicts it or evidence it cites.
+   The single label takes the first of `in doubt`, `contested`, `opinion`,
+   `grounded`, and every reason is printed. `agc beliefs conflicts` lists
+   each contested pair with the live evidence and opinions under both
+   sides, so a human sees what to retract; the tool picks no side.
+   Contradictions are not support edges and do not take part in cycles.
+10. **What-if.** `--without <id>` (repeatable) on `beliefs show`,
+    `decisions show`, `rules show` and `actions show` judges everything as
+    if that evidence were retracted or that belief absent. The output
+    starts with "Without <ids>:" so it cannot be mistaken for the real
+    state, and nothing is written.
+11. **Sentences by default, ids on request.** Each item prints as a
+    sentence built from the texts: "I believe Go is better than Rust …
+    because Go has one canonical format … and Go's syntax is small …, both
+    seen by franco on 2026-11-01", "I think …, but have no evidence yet",
+    "I believed …, but … was retracted on …: …", "I decided that … because
+    …, on … — though I only think that …", "I will …, because I decided
+    that …", "<who> saw that … on …". The ids follow in a dim trailer for
+    editing. A text embedded in a sentence loses its closing period and its
+    first capital, unless its first word is a name (written capitalized
+    mid-sentence somewhere in the loaded texts, or with an inner capital).
+    `--ids` on every show and why command prints the earlier compact id
+    form, a stable format for scripts and agents. `rules check` keeps its
+    summary line and exit status.
+12. **The translator can testify, the model is never the witness.**
+    Evidence `who` is a person or a mechanical check such as `ci`. Evidence
+    whose `who` names a model or harness (the ids in
+    `runtime/harnesses/catalog.go`, `claude-*`, `gpt-*`, `gemini-*`, or
+    words such as `llm`, `model`, `agent`) is rejected. When a model read a
+    real source and wrote the record, it goes in `translated_by`, which
+    requires `source`, and output says "…, written up by codex-cli".
+    Anything a model concludes without a source is an opinion: a belief
+    with no evidence.
+
+What was left out, on purpose: stored labels, probabilities or any
+confidence number, automatic retraction or relabeling, tracking several
+contexts or worlds at once (beyond the one-off `--without`), and an
+inference engine that derives new beliefs.
 
 ## Alternatives considered
 
@@ -126,6 +204,12 @@ Franco's framing:
   repeat it, and doubting the fact could not find both.
 - **A graph library.** The graphs are tens of nodes; maps and a depth-first
   walk are enough.
+- **Resolving contradictions automatically** (newest wins, more evidence
+  wins). It would pick a side behind a human's back; flagging both sides
+  with what they rest on is enough to decide.
+- **Generating sentences with a model.** Sentences are built from the
+  texts in the files with fixed templates, so the same files always print
+  the same thing.
 
 ## Consequences
 
@@ -142,8 +226,15 @@ Franco's framing:
 - Check commands run with `sh -c` from the directory agc is run in, so
   `agc rules check` runs from the repo root.
 
+- Follow-ups written down elsewhere are actions in `actions/repo.yaml`,
+  each with a comment naming where it was written.
+- Sentences embed texts, so a belief or decision reads best written as a
+  plain statement; a lowercase-first heuristic can miss a name used only
+  at the start of sentences.
+
 ## Next step
 
 Attach named rulesets, beliefs and decisions to task specs so agents in
 sandboxes get them, for example written into the sandbox's `AGENTS.md` at
-setup. Not part of this change.
+setup. Not part of this change; it is the action
+`attach-rulesets-to-task-specs`.

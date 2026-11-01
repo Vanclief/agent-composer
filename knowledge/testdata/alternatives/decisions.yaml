@@ -1,0 +1,15 @@
+decisions:
+  - id: choose-either
+    decision: We chose W.
+    because: [either]
+    decided: { who: franco, when: 2026-11-01 }
+  - id: choose-x
+    decision: We chose V.
+    because: [only-x]
+    or:
+      - because: [by-y]
+    decided: { who: franco, when: 2026-11-01 }
+  - id: decide-x
+    decision: We chose V alone.
+    because: [only-x]
+    decided: { who: franco, when: 2026-11-01 }

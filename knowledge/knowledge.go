@@ -1,14 +1,18 @@
-// Package knowledge loads evidence, rules, beliefs and decisions: plain
-// YAML files anything can read (docs/decisions/0006-rules-and-beliefs.md).
+// Package knowledge loads evidence, rules, beliefs, decisions and actions:
+// plain YAML files anything can read
+// (docs/decisions/0006-rules-and-beliefs.md).
 //
 // Evidence is something seen: who saw it, when, and where. A rule says what
 // must or must not be done; when reality disagrees, the actor is wrong. A
 // belief is something held true; when reality disagrees, the belief is
 // wrong. A decision is a choice made once on beliefs; it is reviewed when
-// what it rests on is in doubt. Beliefs rest on other beliefs and cite
-// evidence; decisions and rules rest on beliefs and decisions. Whether a
-// belief is grounded, an opinion or in doubt is computed from its evidence
-// when asked, never stored.
+// what it rests on is in doubt. An action is something to do because of a
+// decision, open until it is done. Beliefs rest on other beliefs and cite
+// evidence; decisions, rules and actions rest on beliefs and decisions.
+// Any of them may list alternative reasons under or:, and beliefs and
+// evidence may name what they contradict. Whether a belief is grounded, an
+// opinion, contested or in doubt is computed from its evidence when asked,
+// never stored.
 package knowledge
 
 import (
@@ -41,26 +45,50 @@ type Retraction struct {
 }
 
 // Evidence is something seen. Source, when set, is a URL, a file path or a
-// command whose output was seen. Retracted evidence stays in its file but
-// no longer grounds anything.
+// command whose output was seen. Who is the witness, a person or a
+// mechanical check such as ci, never a model: a model only translates a
+// real source into a record, and TranslatedBy names it then. Retracted
+// evidence stays in its file but no longer grounds anything. Contradicts
+// names beliefs or evidence that cannot be true along with it.
 type Evidence struct {
-	ID        string      `yaml:"id" json:"id"`
-	Evidence  string      `yaml:"evidence" json:"evidence"`
-	Who       string      `yaml:"who" json:"who"`
-	When      string      `yaml:"when" json:"when"`
-	Source    string      `yaml:"source" json:"source,omitempty"`
-	Retracted *Retraction `yaml:"retracted" json:"retracted,omitempty"`
-	File      string      `yaml:"-" json:"file"`
+	ID           string      `yaml:"id" json:"id"`
+	Evidence     string      `yaml:"evidence" json:"evidence"`
+	Who          string      `yaml:"who" json:"who"`
+	When         string      `yaml:"when" json:"when"`
+	Source       string      `yaml:"source" json:"source,omitempty"`
+	TranslatedBy string      `yaml:"translated_by" json:"translated_by,omitempty"`
+	Retracted    *Retraction `yaml:"retracted" json:"retracted,omitempty"`
+	Contradicts  []string    `yaml:"contradicts" json:"contradicts,omitempty"`
+	File         string      `yaml:"-" json:"file"`
+}
+
+// Support is one set of reasons, all of which must hold together. Only
+// beliefs cite evidence: a set is grounded when every belief in Because is
+// and, if Evidence is listed, one piece of it is live.
+type Support struct {
+	Because  []string `yaml:"because" json:"because,omitempty"`
+	Evidence []string `yaml:"evidence" json:"evidence,omitempty"`
 }
 
 // Belief is something held true. It rests on other beliefs, cites
 // evidence, both or neither; one with no evidence under it is an opinion.
+// Or lists alternative reasons: the belief is grounded if its own because
+// and evidence are, or if any one alternative is. Contradicts names
+// beliefs or evidence that cannot be true along with it; declaring it on
+// one side is enough.
 type Belief struct {
-	ID       string   `yaml:"id" json:"id"`
-	Belief   string   `yaml:"belief" json:"belief"`
-	Because  []string `yaml:"because" json:"because,omitempty"`
-	Evidence []string `yaml:"evidence" json:"evidence,omitempty"`
-	File     string   `yaml:"-" json:"file"`
+	ID          string    `yaml:"id" json:"id"`
+	Belief      string    `yaml:"belief" json:"belief"`
+	Because     []string  `yaml:"because" json:"because,omitempty"`
+	Evidence    []string  `yaml:"evidence" json:"evidence,omitempty"`
+	Or          []Support `yaml:"or" json:"or,omitempty"`
+	Contradicts []string  `yaml:"contradicts" json:"contradicts,omitempty"`
+	File        string    `yaml:"-" json:"file"`
+}
+
+// Supports lists the belief's own reasons first, then its alternatives.
+func (belief Belief) Supports() []Support {
+	return append([]Support{{Because: belief.Because, Evidence: belief.Evidence}}, belief.Or...)
 }
 
 // Decision is a choice made once on beliefs and other decisions, whose
@@ -69,19 +97,48 @@ type Decision struct {
 	ID       string       `yaml:"id" json:"id"`
 	Decision string       `yaml:"decision" json:"decision"`
 	Because  []string     `yaml:"because" json:"because"`
+	Or       []Support    `yaml:"or" json:"or,omitempty"`
 	ADR      string       `yaml:"adr" json:"adr,omitempty"`
 	Decided  *Observation `yaml:"decided" json:"decided"`
 	File     string       `yaml:"-" json:"file"`
 }
 
+// Supports lists the decision's own reasons first, then its alternatives.
+func (decision Decision) Supports() []Support {
+	return append([]Support{{Because: decision.Because}}, decision.Or...)
+}
+
 // Rule says what must or must not be done. Check, when set, is a shell
 // command whose exit status says whether the rule holds.
 type Rule struct {
-	ID      string   `yaml:"id" json:"id"`
-	Rule    string   `yaml:"rule" json:"rule"`
-	Check   string   `yaml:"check" json:"check,omitempty"`
-	Because []string `yaml:"because" json:"because,omitempty"`
-	File    string   `yaml:"-" json:"file"`
+	ID      string    `yaml:"id" json:"id"`
+	Rule    string    `yaml:"rule" json:"rule"`
+	Check   string    `yaml:"check" json:"check,omitempty"`
+	Because []string  `yaml:"because" json:"because,omitempty"`
+	Or      []Support `yaml:"or" json:"or,omitempty"`
+	File    string    `yaml:"-" json:"file"`
+}
+
+// Supports lists the rule's own reasons first, then its alternatives.
+func (rule Rule) Supports() []Support {
+	return append([]Support{{Because: rule.Because}}, rule.Or...)
+}
+
+// Action is something to do because of a decision. It is open until Done
+// is set.
+type Action struct {
+	ID      string       `yaml:"id" json:"id"`
+	Action  string       `yaml:"action" json:"action"`
+	Because []string     `yaml:"because" json:"because"`
+	Or      []Support    `yaml:"or" json:"or,omitempty"`
+	Opened  *Observation `yaml:"opened" json:"opened"`
+	Done    *Observation `yaml:"done" json:"done,omitempty"`
+	File    string       `yaml:"-" json:"file"`
+}
+
+// Supports lists the action's own reasons first, then its alternatives.
+func (action Action) Supports() []Support {
+	return append([]Support{{Because: action.Because}}, action.Or...)
 }
 
 // Ruleset is the rules of one subject, from one file.
@@ -97,11 +154,17 @@ type Set struct {
 	Rulesets  []Ruleset
 	Beliefs   []Belief
 	Decisions []Decision
+	Actions   []Action
 
-	// nodes holds every belief and decision by id, and evidenceByID every
-	// piece of evidence, both built by Validate.
+	// nodes holds every belief and decision by id, evidenceByID every
+	// piece of evidence, contradicts both sides of every contradiction and
+	// proper the words written capitalized mid-sentence, all built by
+	// Validate. without holds the ids set aside by Without.
 	nodes        map[string]node
 	evidenceByID map[string]Evidence
+	contradicts  map[string][]string
+	proper       map[string]bool
+	without      map[string]bool
 }
 
 // file is one YAML file; exactly one of its keys says its kind.
@@ -111,12 +174,13 @@ type file struct {
 	Evidence  *[]Evidence `yaml:"evidence"`
 	Beliefs   *[]Belief   `yaml:"beliefs"`
 	Decisions *[]Decision `yaml:"decisions"`
+	Actions   *[]Action   `yaml:"actions"`
 }
 
 // Load reads and validates files and directories. A directory loads every
 // *.yaml in it, not recursing. A file with subject: is a ruleset, one with
 // evidence: an evidence file, one with beliefs: a beliefs file, one with
-// decisions: a decisions file.
+// decisions: a decisions file, one with actions: an actions file.
 func Load(paths ...string) (*Set, error) {
 	files, err := yamlFiles(paths)
 	if err != nil {
@@ -191,13 +255,13 @@ func (s *Set) loadFile(filePath string) error {
 	}
 
 	kinds := 0
-	for _, present := range []bool{parsed.Subject != nil, parsed.Evidence != nil, parsed.Beliefs != nil, parsed.Decisions != nil} {
+	for _, present := range []bool{parsed.Subject != nil, parsed.Evidence != nil, parsed.Beliefs != nil, parsed.Decisions != nil, parsed.Actions != nil} {
 		if present {
 			kinds++
 		}
 	}
 	if kinds != 1 || (parsed.Rules != nil && parsed.Subject == nil) {
-		msg := filePath + ": a file has exactly one of subject: with rules: (a ruleset), evidence:, beliefs: or decisions:"
+		msg := filePath + ": a file has exactly one of subject: with rules: (a ruleset), evidence:, beliefs:, decisions: or actions:"
 		return ez.New(ez.EINVALID, msg, nil)
 	}
 
@@ -219,10 +283,15 @@ func (s *Set) loadFile(filePath string) error {
 			belief.File = filePath
 			s.Beliefs = append(s.Beliefs, belief)
 		}
-	default:
+	case parsed.Decisions != nil:
 		for _, decision := range *parsed.Decisions {
 			decision.File = filePath
 			s.Decisions = append(s.Decisions, decision)
+		}
+	default:
+		for _, action := range *parsed.Actions {
+			action.File = filePath
+			s.Actions = append(s.Actions, action)
 		}
 	}
 

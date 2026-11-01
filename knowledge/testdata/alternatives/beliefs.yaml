@@ -1,0 +1,16 @@
+beliefs:
+  - id: by-x
+    belief: X holds.
+    evidence: [seen-x]
+  - id: by-y
+    belief: Y holds.
+    evidence: [seen-y]
+  # Two independent reasons: X, or what ana saw.
+  - id: either
+    belief: W holds.
+    because: [by-x]
+    or:
+      - evidence: [seen-y]
+  - id: only-x
+    belief: V follows from X.
+    because: [by-x]
