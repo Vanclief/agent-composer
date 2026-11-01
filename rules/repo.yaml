@@ -113,6 +113,29 @@ rules:
     rule: A model's verdict on a rule is an opinion, never evidence; record it as a belief by the model with no evidence under it (agc rules judge --record), never as an evidence file.
     because: [llms-are-parsers-not-sensors]
 
+  # Proposals and gates (ADR 0007). agc refuses a gate on gate changes
+  # and a rejection without why, so those need no rule.
+  - id: agents-land-only-what-their-gate-allows
+    rule: An agent lands a proposal only when `agc proposals show` says its tier is observe or delegated, or a human has accepted it; what needs a decision waits.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: >-
+        Does the subject (a diff, transcript or instructions to an agent) have an agent merging,
+        committing to the feature branch or otherwise applying a rule, decision, action, evidence
+        record, gate or code change that `agc proposals show` would put under "Needs my decision",
+        without an accepted: on its proposal?
+    because: [proposals-pass-through-human-gates]
+  - id: agents-never-edit-gates
+    rule: >-
+      Never edit gates/ from an agent; propose the change with proposes: gate and a human edits
+      the file.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: >-
+        Does the diff change a file under gates/, and was it made by an agent rather than a human?
+        A new proposal with proposes: gate under proposals/ is the right way and holds.
+    because: [proposals-pass-through-human-gates]
+
   # Agent workflow
   - id: never-push-from-a-worktree
     rule: Never push from an agent worktree; commit there and the main session merges.

@@ -1,6 +1,7 @@
-// Package knowledge loads evidence, rules, beliefs, decisions and actions:
-// plain YAML files anything can read
-// (docs/decisions/0006-rules-and-beliefs.md).
+// Package knowledge loads evidence, rules, beliefs, decisions, actions,
+// proposals and gates: plain YAML files anything can read
+// (docs/decisions/0006-rules-and-beliefs.md,
+// docs/decisions/0007-proposals-and-gates.md).
 //
 // Evidence is something seen: who saw it, when, and where. A rule says what
 // must or must not be done; when reality disagrees, the actor is wrong. A
@@ -12,7 +13,10 @@
 // Any of them may list alternative reasons under or:, and beliefs and
 // evidence may name what they contradict. Whether a belief is grounded, a
 // judgment, an opinion, contested or in doubt is computed from its evidence
-// when asked, never stored.
+// when asked, never stored. A proposal is what an agent puts forward
+// before it lands, and a gate says which proposals land without a human;
+// the tier a proposal gets is computed from the gates and the rejections
+// under them, never stored.
 package knowledge
 
 import (
@@ -159,6 +163,70 @@ func (action Action) Supports() []Support {
 	return append([]Support{{Because: action.Because}}, action.Or...)
 }
 
+// Proposal is what an agent, or anyone, puts forward: a rule, belief,
+// piece of evidence, decision, action, gate change or code change, with
+// what it rests on. It is open until Accepted or Rejected, and a
+// rejection says why: an override is a record. Change, when set, says
+// where the change itself lives (a branch, a commit, a path) and Became
+// the id it was recorded under once accepted. Nothing here lands
+// anything: a human merges, or the gate lets the proposer land it
+// (docs/decisions/0007-proposals-and-gates.md).
+type Proposal struct {
+	ID       string       `yaml:"id" json:"id"`
+	Proposes string       `yaml:"proposes" json:"proposes"`
+	Proposal string       `yaml:"proposal" json:"proposal"`
+	Because  []string     `yaml:"because" json:"because,omitempty"`
+	Evidence []string     `yaml:"evidence" json:"evidence,omitempty"`
+	By       string       `yaml:"by" json:"by"`
+	When     string       `yaml:"when" json:"when"`
+	Change   string       `yaml:"change" json:"change,omitempty"`
+	Became   string       `yaml:"became" json:"became,omitempty"`
+	Accepted *Observation `yaml:"accepted" json:"accepted,omitempty"`
+	Rejected *Rejection   `yaml:"rejected" json:"rejected,omitempty"`
+	File     string       `yaml:"-" json:"file"`
+}
+
+// Rejection says who turned a proposal down, when and why.
+type Rejection struct {
+	Who  string `yaml:"who" json:"who"`
+	When string `yaml:"when" json:"when"`
+	Why  string `yaml:"why" json:"why"`
+}
+
+// Support is the proposal's one set of reasons.
+func (proposal Proposal) Support() Support {
+	return Support{Because: proposal.Because, Evidence: proposal.Evidence}
+}
+
+// Open says the proposal is neither accepted nor rejected.
+func (proposal Proposal) Open() bool {
+	return proposal.Accepted == nil && proposal.Rejected == nil
+}
+
+// Gate says which proposals land without a human: those proposing
+// Proposes, by anyone in By (or anyone at all when By is empty), get
+// Tier. With no gate a proposal needs a decision. Sample, on an observe
+// gate, audits about one proposal in that many as if the gate were
+// decide. A rejection under the gate on or after Since tightens it to
+// decide until a human edits the gate again; empty Since counts every
+// rejection. A gate on gate changes cannot be written: those always need
+// a human.
+type Gate struct {
+	ID       string   `yaml:"id" json:"id"`
+	Proposes string   `yaml:"proposes" json:"proposes"`
+	By       []string `yaml:"by" json:"by,omitempty"`
+	Tier     Tier     `yaml:"tier" json:"tier"`
+	Sample   int      `yaml:"sample" json:"sample,omitempty"`
+	Since    string   `yaml:"since" json:"since,omitempty"`
+	Because  []string `yaml:"because" json:"because,omitempty"`
+	File     string   `yaml:"-" json:"file"`
+}
+
+// Supports is the gate's one set of reasons.
+func (gate Gate) Supports() []Support {
+	return []Support{{Because: gate.Because}}
+}
+
 // Ruleset is the rules of one subject, from one file.
 type Ruleset struct {
 	Subject string `json:"subject"`
@@ -173,6 +241,8 @@ type Set struct {
 	Beliefs   []Belief
 	Decisions []Decision
 	Actions   []Action
+	Proposals []Proposal
+	Gates     []Gate
 
 	// nodes holds every belief and decision by id, evidenceByID every
 	// piece of evidence, contradicts both sides of every contradiction and
@@ -193,12 +263,15 @@ type file struct {
 	Beliefs   *[]Belief   `yaml:"beliefs"`
 	Decisions *[]Decision `yaml:"decisions"`
 	Actions   *[]Action   `yaml:"actions"`
+	Proposals *[]Proposal `yaml:"proposals"`
+	Gates     *[]Gate     `yaml:"gates"`
 }
 
 // Load reads and validates files and directories. A directory loads every
 // *.yaml in it, not recursing. A file with subject: is a ruleset, one with
 // evidence: an evidence file, one with beliefs: a beliefs file, one with
-// decisions: a decisions file, one with actions: an actions file.
+// decisions: a decisions file, one with actions: an actions file, one
+// with proposals: a proposals file and one with gates: a gates file.
 func Load(paths ...string) (*Set, error) {
 	files, err := yamlFiles(paths)
 	if err != nil {
@@ -273,13 +346,13 @@ func (s *Set) loadFile(filePath string) error {
 	}
 
 	kinds := 0
-	for _, present := range []bool{parsed.Subject != nil, parsed.Evidence != nil, parsed.Beliefs != nil, parsed.Decisions != nil, parsed.Actions != nil} {
+	for _, present := range []bool{parsed.Subject != nil, parsed.Evidence != nil, parsed.Beliefs != nil, parsed.Decisions != nil, parsed.Actions != nil, parsed.Proposals != nil, parsed.Gates != nil} {
 		if present {
 			kinds++
 		}
 	}
 	if kinds != 1 || (parsed.Rules != nil && parsed.Subject == nil) {
-		msg := filePath + ": a file has exactly one of subject: with rules: (a ruleset), evidence:, beliefs:, decisions: or actions:"
+		msg := filePath + ": a file has exactly one of subject: with rules: (a ruleset), evidence:, beliefs:, decisions:, actions:, proposals: or gates:"
 		return ez.New(ez.EINVALID, msg, nil)
 	}
 
@@ -306,10 +379,20 @@ func (s *Set) loadFile(filePath string) error {
 			decision.File = filePath
 			s.Decisions = append(s.Decisions, decision)
 		}
-	default:
+	case parsed.Actions != nil:
 		for _, action := range *parsed.Actions {
 			action.File = filePath
 			s.Actions = append(s.Actions, action)
+		}
+	case parsed.Proposals != nil:
+		for _, proposal := range *parsed.Proposals {
+			proposal.File = filePath
+			s.Proposals = append(s.Proposals, proposal)
+		}
+	default:
+		for _, gate := range *parsed.Gates {
+			gate.File = filePath
+			s.Gates = append(s.Gates, gate)
 		}
 	}
 

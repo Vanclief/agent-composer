@@ -1,0 +1,31 @@
+# Which proposals land without a human (ADR 0007). A gate covers the
+# proposals of one kind (proposes) by the named proposers (by), or by
+# anyone when by is empty, and gives them a tier: decide (a human accepts
+# it first, the default when no gate covers a proposal), observe (it lands
+# and shows up in `agc proposals show`; sample audits about one in that
+# many as if decide) or delegated (it lands unseen). A rejection under an
+# observe or delegated gate on or after since tightens it to decide until
+# a human edits this file again; loosening is always a human act. No gate
+# covers gate changes: that line is the one the system never gets to
+# move. Only a human edits this file; an agent proposes a gate change with
+# proposes: gate.
+gates:
+  # Agents' beliefs are opinions by construction (ADR 0006, decision 13),
+  # so one landing costs nothing but a line in beliefs/; a sample keeps
+  # them read.
+  - id: agent-beliefs-land-for-review
+    proposes: belief
+    by: [claude_code, codex_cli, pi]
+    tier: observe
+    sample: 5
+    since: 2026-11-01
+    because: [model-verdicts-are-opinions-not-evidence]
+
+  # Evidence is the one thing a model must never author on its own. An
+  # agent's evidence record is a translation of a real source, and a human
+  # checks the source before it grounds anything.
+  - id: agent-evidence-needs-a-human
+    proposes: evidence
+    by: [claude_code, codex_cli, pi]
+    tier: decide
+    because: [llms-are-parsers-not-sensors]

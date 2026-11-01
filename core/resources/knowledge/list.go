@@ -25,7 +25,8 @@ func (r ListRequest) Validate() error {
 }
 
 // KnowledgeSet is everything in the knowledge directory, in load order.
-// Without echoes the ids set aside, [] when none.
+// Without echoes the ids set aside, [] when none. Gates ends with the
+// default gate, whose id is empty.
 type KnowledgeSet struct {
 	Dir       string     `json:"dir"`
 	Without   []string   `json:"without"`
@@ -34,6 +35,8 @@ type KnowledgeSet struct {
 	Decisions []Decision `json:"decisions"`
 	Rules     []Rule     `json:"rules"`
 	Actions   []Action   `json:"actions"`
+	Proposals []Proposal `json:"proposals"`
+	Gates     []Gate     `json:"gates"`
 }
 
 func (api *API) List(ctx context.Context, requester interface{}, request *ListRequest) (*KnowledgeSet, error) {
@@ -61,6 +64,16 @@ func (api *API) List(ctx context.Context, requester interface{}, request *ListRe
 		Decisions: decisionViews(set, set.Decisions),
 		Rules:     []Rule{},
 		Actions:   actionViews(set, set.Actions),
+		Proposals: []Proposal{},
+		Gates:     []Gate{},
+	}
+
+	for _, review := range set.Reviews() {
+		response.Proposals = append(response.Proposals, proposalView(review))
+	}
+
+	for _, report := range set.GateReports() {
+		response.Gates = append(response.Gates, gateView(report))
 	}
 
 	for _, evidence := range set.Evidence {

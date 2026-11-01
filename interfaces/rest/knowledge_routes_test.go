@@ -71,6 +71,33 @@ rules:
     rule: Must be read by a human.
     because: [hunch]
 `,
+	"proposals/open.yaml": `proposals:
+  - id: proposed-rule
+    proposes: rule
+    proposal: Never do W.
+    because: [derived]
+    by: codex_cli
+    when: 2026-11-02
+  - id: proposed-belief
+    proposes: belief
+    proposal: J follows from A.
+    because: [observed-a]
+    by: codex_cli
+    when: 2026-11-02
+  - id: rejected-belief
+    proposes: belief
+    proposal: K is so.
+    by: codex_cli
+    when: 2026-11-02
+    rejected: { who: franco, when: 2026-11-03, why: K is not so. }
+`,
+	"gates/agents.yaml": `gates:
+  - id: agent-beliefs
+    proposes: belief
+    by: [codex_cli]
+    tier: observe
+    since: 2026-11-01
+`,
 }
 
 // newKnowledgeRoutes serves the API routes with dir as the knowledge
@@ -140,7 +167,7 @@ func TestKnowledgeRoutesEmptyDir(t *testing.T) {
 		e := newKnowledgeRoutes(t, dir)
 
 		body := getKnowledge(t, e, "/api/knowledge", http.StatusOK)
-		want := `{"dir":"` + dir + `","without":[],"evidence":[],"beliefs":[],"decisions":[],"rules":[],"actions":[]}`
+		want := `{"dir":"` + dir + `","without":[],"evidence":[],"beliefs":[],"decisions":[],"rules":[],"actions":[],"proposals":[],"gates":[{"id":"","proposes":"","by":[],"written":"decide","tier":"decide","sample":0,"since":"","because":[],"tightened_by":[],"open":0,"accepted":0,"rejected":0,"audited":0,"all_accepted":false,"label":"grounded","opinions":[],"doubted":[],"file":""}]}`
 		if strings.TrimSpace(string(body)) != want {
 			t.Fatalf("body %s, want %s", body, want)
 		}
@@ -199,6 +226,28 @@ func TestKnowledgeRoutesList(t *testing.T) {
 		t.Fatalf("decision doubted-choice %+v", set.Decisions[1])
 	}
 
+	if len(set.Proposals) != 3 || len(set.Gates) != 2 {
+		t.Fatalf("proposals %d, gates %d: %s", len(set.Proposals), len(set.Gates), body)
+	}
+	rule := set.Proposals[0]
+	if rule.Gate != "" || rule.Tier != "decide" || rule.Written != "decide" || rule.Label != "grounded" || rule.Accepted != nil || rule.Rejected != nil || !slices.Equal(rule.TightenedBy, []string{}) {
+		t.Fatalf("proposal proposed-rule %+v", rule)
+	}
+	belief := set.Proposals[1]
+	if belief.Gate != "agent-beliefs" || belief.Written != "observe" || belief.Tier != "decide" || !slices.Equal(belief.TightenedBy, []string{"rejected-belief"}) {
+		t.Fatalf("proposal proposed-belief %+v", belief)
+	}
+	if set.Proposals[2].Rejected == nil || set.Proposals[2].Rejected.Why != "K is not so." {
+		t.Fatalf("proposal rejected-belief %+v", set.Proposals[2])
+	}
+	gate := set.Gates[0]
+	if gate.ID != "agent-beliefs" || gate.Written != "observe" || gate.Tier != "decide" || gate.Open != 1 || gate.Rejected != 1 || !slices.Equal(gate.By, []string{"codex_cli"}) {
+		t.Fatalf("gate agent-beliefs %+v", gate)
+	}
+	if set.Gates[1].ID != "" || set.Gates[1].Tier != "decide" || set.Gates[1].Open != 1 {
+		t.Fatalf("default gate %+v", set.Gates[1])
+	}
+
 	passes := set.Rules[0]
 	if passes.Subject != "testing" || passes.Kind != "mechanical" || passes.Label != "grounded" || passes.Check != "echo fine" {
 		t.Fatalf("rule passes %+v", passes)
@@ -209,10 +258,13 @@ func TestKnowledgeRoutesList(t *testing.T) {
 	}
 
 	// Empty lists are [] not null.
-	// The only nulls are the retracted of live evidence and the
-	// experience of beliefs that are not judgments.
+	// The only nulls are the retracted of live evidence, the experience
+	// of beliefs that are not judgments and the accepted and rejected of
+	// open proposals.
 	stripped := strings.ReplaceAll(string(body), `"retracted":null`, "")
 	stripped = strings.ReplaceAll(stripped, `"experience":null`, "")
+	stripped = strings.ReplaceAll(stripped, `"accepted":null`, "")
+	stripped = strings.ReplaceAll(stripped, `"rejected":null`, "")
 	if strings.Contains(stripped, "null") {
 		t.Fatalf("body has a null list: %s", body)
 	}
@@ -239,7 +291,7 @@ func TestKnowledgeRoutesWhy(t *testing.T) {
 	}
 
 	body = getKnowledge(t, e, "/api/knowledge/why/nope", http.StatusNotFound)
-	if !strings.Contains(string(body), "belief, decision, rule or action nope not found") {
+	if !strings.Contains(string(body), "belief, decision, rule, action or proposal nope not found") {
 		t.Fatalf("body %s", body)
 	}
 }

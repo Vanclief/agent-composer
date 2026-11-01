@@ -1,0 +1,62 @@
+proposals:
+  - id: proposed-rule
+    proposes: rule
+    proposal: Never do W.
+    because: [top]
+    by: codex_cli
+    when: 2026-11-02
+  - id: proposed-belief
+    proposes: belief
+    proposal: J follows from A.
+    because: [observed-a]
+    by: codex_cli
+    when: 2026-11-02
+  - id: proposed-belief-audited
+    proposes: belief
+    proposal: K might be so.
+    by: codex_cli
+    when: 2026-11-02
+  - id: proposed-by-ana
+    proposes: belief
+    proposal: L is so.
+    by: ana
+    when: 2026-11-02
+  - id: proposed-code
+    proposes: code
+    proposal: Add W to the build.
+    by: codex_cli
+    when: 2026-11-02
+    change: codex/add-w
+  - id: proposed-gate
+    proposes: gate
+    proposal: Let codex_cli land rules.
+    because: [choice]
+    by: codex_cli
+    when: 2026-11-02
+  - id: proposed-action
+    proposes: action
+    proposal: Build W.
+    because: [doubted-choice]
+    by: codex_cli
+    when: 2026-11-02
+  - id: accepted-evidence
+    proposes: evidence
+    proposal: W was seen in the logs.
+    evidence: [seen-b]
+    by: codex_cli
+    when: 2026-11-01
+    accepted: { who: franco, when: 2026-11-02 }
+  - id: rejected-decision
+    proposes: decision
+    proposal: Drop X.
+    because: [derived]
+    by: codex_cli
+    when: 2026-10-01
+    rejected: { who: franco, when: 2026-10-02, why: X still pays for itself. }
+  - id: rejected-old-code
+    proposes: code
+    proposal: Remove V.
+    because: [choice]
+    by: codex_cli
+    when: 2026-09-01
+    rejected: { who: franco, when: 2026-09-02, why: V is still used. }

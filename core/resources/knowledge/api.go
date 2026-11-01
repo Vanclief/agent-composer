@@ -1,7 +1,9 @@
-// Package knowledge serves the evidence, beliefs, decisions, rules and
-// actions of package knowledge read only, with each label computed when
-// asked (docs/decisions/0006-rules-and-beliefs.md). Checks are never run
-// here.
+// Package knowledge serves the evidence, beliefs, decisions, rules,
+// actions, proposals and gates of package knowledge read only, with each
+// label and tier computed when asked
+// (docs/decisions/0006-rules-and-beliefs.md,
+// docs/decisions/0007-proposals-and-gates.md). Checks are never run here,
+// and nothing is accepted or rejected here.
 package knowledge
 
 import (
@@ -16,14 +18,14 @@ import (
 
 // kinds are the subdirectories of the knowledge directory, the same ones
 // the agc CLI loads by default.
-var kinds = []string{"evidence", "beliefs", "decisions", "rules", "actions"}
+var kinds = []string{"evidence", "beliefs", "decisions", "rules", "actions", "proposals", "gates"}
 
 type API struct {
 	dir string
 }
 
 // NewAPI returns the knowledge API over dir, which holds evidence/,
-// beliefs/, decisions/, rules/ and actions/.
+// beliefs/, decisions/, rules/, actions/, proposals/ and gates/.
 func NewAPI(dir string) *API {
 	return &API{dir: dir}
 }
@@ -128,6 +130,58 @@ type Action struct {
 	Opinions []string        `json:"opinions"`
 	Doubted  []string        `json:"doubted"`
 	File     string          `json:"file"`
+}
+
+// Proposal is a proposal with how it stands at the gate now: the gate
+// covering it, the tier the gate is written with, the tier it gets and
+// why they differ, and the status of what it rests on. Accepted and
+// Rejected are null while it is open.
+type Proposal struct {
+	ID          string          `json:"id"`
+	Proposes    string          `json:"proposes"`
+	Text        string          `json:"text"`
+	Because     []string        `json:"because"`
+	Evidence    []string        `json:"evidence"`
+	By          string          `json:"by"`
+	When        string          `json:"when"`
+	Change      string          `json:"change"`
+	Became      string          `json:"became"`
+	Accepted    *kb.Observation `json:"accepted"`
+	Rejected    *kb.Rejection   `json:"rejected"`
+	Gate        string          `json:"gate"`
+	Written     string          `json:"written"`
+	Tier        string          `json:"tier"`
+	Audited     bool            `json:"audited"`
+	TightenedBy []string        `json:"tightened_by"`
+	Illegible   bool            `json:"illegible"`
+	Label       string          `json:"label"`
+	Opinions    []string        `json:"opinions"`
+	Doubted     []string        `json:"doubted"`
+	File        string          `json:"file"`
+}
+
+// Gate is a gate with the tier it gives now and how the proposals under
+// it have gone. The last one has an empty ID: the default for proposals
+// no gate covers.
+type Gate struct {
+	ID          string   `json:"id"`
+	Proposes    string   `json:"proposes"`
+	By          []string `json:"by"`
+	Written     string   `json:"written"`
+	Tier        string   `json:"tier"`
+	Sample      int      `json:"sample"`
+	Since       string   `json:"since"`
+	Because     []string `json:"because"`
+	TightenedBy []string `json:"tightened_by"`
+	Open        int      `json:"open"`
+	Accepted    int      `json:"accepted"`
+	Rejected    int      `json:"rejected"`
+	Audited     int      `json:"audited"`
+	AllAccepted bool     `json:"all_accepted"`
+	Label       string   `json:"label"`
+	Opinions    []string `json:"opinions"`
+	Doubted     []string `json:"doubted"`
+	File        string   `json:"file"`
 }
 
 // label is the package's label as an identifier, its spaces replaced by
@@ -263,6 +317,59 @@ func actionView(set *kb.Set, action kb.Action) Action {
 	}
 
 	return view
+}
+
+func proposalView(review kb.Review) Proposal {
+	proposal := review.Proposal
+
+	return Proposal{
+		ID:          proposal.ID,
+		Proposes:    proposal.Proposes,
+		Text:        proposal.Proposal,
+		Because:     list(proposal.Because),
+		Evidence:    list(proposal.Evidence),
+		By:          proposal.By,
+		When:        proposal.When,
+		Change:      proposal.Change,
+		Became:      proposal.Became,
+		Accepted:    proposal.Accepted,
+		Rejected:    proposal.Rejected,
+		Gate:        review.Gate,
+		Written:     string(review.Written),
+		Tier:        string(review.Tier),
+		Audited:     review.Audited,
+		TightenedBy: list(review.TightenedBy),
+		Illegible:   review.Illegible,
+		Label:       label(review.Status),
+		Opinions:    list(review.Status.Opinions),
+		Doubted:     list(review.Status.Doubted),
+		File:        proposal.File,
+	}
+}
+
+func gateView(report kb.GateReport) Gate {
+	gate := report.Gate
+
+	return Gate{
+		ID:          gate.ID,
+		Proposes:    gate.Proposes,
+		By:          list(gate.By),
+		Written:     string(gate.Tier),
+		Tier:        string(report.Tier),
+		Sample:      gate.Sample,
+		Since:       gate.Since,
+		Because:     list(gate.Because),
+		TightenedBy: list(report.TightenedBy),
+		Open:        report.Open,
+		Accepted:    report.Accepted,
+		Rejected:    report.Rejected,
+		Audited:     report.Audited,
+		AllAccepted: report.AllAccepted,
+		Label:       label(report.Status),
+		Opinions:    list(report.Status.Opinions),
+		Doubted:     list(report.Status.Doubted),
+		File:        gate.File,
+	}
 }
 
 func beliefViews(set *kb.Set, beliefs []kb.Belief) ([]Belief, error) {

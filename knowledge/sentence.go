@@ -699,3 +699,205 @@ func because(text string) string {
 
 	return " because "
 }
+
+// proposed says a proposal as a thing: the rule that …, the action to ….
+// Action and code texts are imperative, so they take "to".
+func (s *Set) proposed(proposal Proposal) string {
+	text := s.embed(proposal.Proposal)
+	switch proposal.Proposes {
+	case "action":
+		return "the action to " + text
+	case "code":
+		return "the code change to " + text
+	case "gate":
+		return "the gate change to " + text
+	}
+
+	return "the " + proposal.Proposes + " that " + text
+}
+
+// ProposalLine says what someone proposes, what it rests on and what it
+// needs before it lands, or what I did with it and why.
+func (s *Set) ProposalLine(review Review) Line {
+	proposal := review.Proposal
+	what := s.proposed(proposal)
+	trailer := proposalTrailer(review)
+
+	if proposal.Accepted != nil {
+		sentence := "I accepted " + what + ", proposed by " + proposal.By + ", on " + proposal.Accepted.When + "."
+		return Line{Text: sentence, Trailer: trailer}
+	}
+	if proposal.Rejected != nil {
+		sentence := "I rejected " + what + ", proposed by " + proposal.By + ", on " + proposal.Rejected.When + ": " + trimPeriod(fold(proposal.Rejected.Why)) + "."
+		return Line{Text: sentence, Trailer: trailer}
+	}
+
+	sentence := proposal.By + " proposes " + what
+	support := proposal.Support()
+	if len(support.Because) > 0 || len(support.Evidence) > 0 {
+		sentence += because(what) + s.setPhrase(support)
+	}
+
+	// The proposal itself is the opinion when it rests on nothing; what
+	// restsOn says is about the beliefs under it.
+	status := review.Status
+	status.Opinions = slices.DeleteFunc(slices.Clone(status.Opinions), func(id string) bool { return id == proposal.ID })
+	if len(status.Opinions) < len(review.Status.Opinions) {
+		sentence += ", with no evidence under it"
+	}
+	sentence += s.restsOn(status)
+
+	switch {
+	case review.Illegible:
+		sentence += ", but it rests on nothing I hold, so there is no why to read, and it needs my decision"
+	case len(review.TightenedBy) > 0:
+		sentence += ", and it needs my decision, since I rejected " + count(len(review.TightenedBy), "one like it", "like it")
+	case review.Audited:
+		sentence += ", and it is audited, so it needs my decision"
+	case review.Tier == Decide:
+		sentence += ", and it needs my decision"
+	case review.Tier == Observe:
+		sentence += ", and it lands for me to see"
+	default:
+		sentence += ", and it lands"
+	}
+
+	return Line{Text: sentence + ".", Trailer: trailer}
+}
+
+// proposalTrailer names the ids behind a proposal: what it rests on, the
+// gate and tier, who proposed it and what became of it.
+func proposalTrailer(review Review) string {
+	proposal := review.Proposal
+	trailer := "(" + proposal.ID
+	ids := append(append([]string{}, proposal.Because...), proposal.Evidence...)
+	if len(ids) > 0 {
+		trailer += " ← " + strings.Join(ids, ", ")
+	}
+
+	tier := string(review.Tier)
+	switch {
+	case review.Gate == "":
+		tier += " by default"
+	case review.Tier != review.Written:
+		tier += " via " + review.Gate + ", written " + string(review.Written)
+	default:
+		tier += " via " + review.Gate
+	}
+	if len(review.TightenedBy) > 0 {
+		tier += " · tightened by " + strings.Join(review.TightenedBy, ", ")
+	}
+	trailer += " · " + tier + " · proposed by " + proposal.By + " on " + proposal.When
+
+	switch {
+	case proposal.Accepted != nil:
+		trailer += " · accepted by " + proposal.Accepted.Who
+	case proposal.Rejected != nil:
+		trailer += " · rejected by " + proposal.Rejected.Who
+	}
+	if proposal.Became != "" {
+		trailer += " · now " + proposal.Became
+	}
+	if proposal.Change != "" {
+		trailer += " · change: " + proposal.Change
+	}
+
+	return trailer + ")"
+}
+
+// count says n things: "one like it", "3 like it".
+func count(n int, one string, many string) string {
+	if n == 1 {
+		return one
+	}
+
+	return strconv.Itoa(n) + " " + many
+}
+
+// plural says a proposable kind as a plural noun.
+func plural(kind string) string {
+	switch kind {
+	case "evidence":
+		return "evidence"
+	case "code":
+		return "code changes"
+	}
+
+	return kind + "s"
+}
+
+// GateLine says who a gate covers, what their proposals need, and how
+// the proposals under it have gone: the counts are the health signal, and
+// a decide gate that has only ever accepted says so.
+func (s *Set) GateLine(report GateReport) Line {
+	gate := report.Gate
+	tally := " So far " + strconv.Itoa(report.Accepted) + " accepted, " + strconv.Itoa(report.Rejected) + " rejected and " + strconv.Itoa(report.Open) + " open"
+	if report.Audited > 0 {
+		tally += ", " + strconv.Itoa(report.Audited) + " audited"
+	}
+	tally += "."
+
+	if gate.ID == "" {
+		return Line{Text: "Anything no gate covers needs my decision." + tally, Trailer: "(default · decide)"}
+	}
+
+	who := "anyone"
+	if len(gate.By) > 0 {
+		who = joinOr(gate.By)
+	}
+	sentence := capitalize(plural(gate.Proposes)) + " proposed by " + who
+	switch gate.Tier {
+	case Decide:
+		sentence += " need my decision before they land"
+	case Observe:
+		sentence += " land for me to see"
+	default:
+		sentence += " land without me"
+	}
+	if gate.Since != "" {
+		sentence += " since " + gate.Since
+	}
+	if gate.Tier == Observe && gate.Sample > 0 {
+		sentence += ", about one in " + strconv.Itoa(gate.Sample) + " audited"
+	}
+	if len(report.TightenedBy) > 0 {
+		sentence += ", but need my decision now, since I rejected " + count(len(report.TightenedBy), "one of them", "of them")
+	}
+	if len(gate.Because) > 0 {
+		sentence += because(sentence) + s.setPhrase(Support{Because: gate.Because})
+	}
+	sentence += s.restsOn(report.Status) + "." + tally
+	if report.AllAccepted {
+		sentence += " I have accepted every one: either they are perfect or I have stopped deciding, so move this gate to observe honestly, or audit it."
+	}
+
+	trailer := "(" + gate.ID + " · " + gate.Proposes + " by " + strings.Join(append([]string{}, gate.By...), ", ")
+	if len(gate.By) == 0 {
+		trailer = "(" + gate.ID + " · " + gate.Proposes + " by anyone"
+	}
+	trailer += " · " + string(gate.Tier)
+	if gate.Sample > 0 {
+		trailer += " · sample 1/" + strconv.Itoa(gate.Sample)
+	}
+	if gate.Since != "" {
+		trailer += " · since " + gate.Since
+	}
+	if len(report.TightenedBy) > 0 {
+		trailer += " · tightened by " + strings.Join(report.TightenedBy, ", ")
+	}
+	if len(gate.Because) > 0 {
+		trailer += " ← " + strings.Join(gate.Because, ", ")
+	}
+
+	return Line{Text: sentence, Trailer: trailer + ")"}
+}
+
+// capitalize upper-cases the first letter of a text.
+func capitalize(text string) string {
+	r, size := utf8.DecodeRuneInString(text)
+	if size == 0 {
+		return text
+	}
+
+	return string(unicode.ToUpper(r)) + text[size:]
+}

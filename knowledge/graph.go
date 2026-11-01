@@ -64,9 +64,9 @@ func (s *Set) why(set Support) (Alternative, error) {
 	return alternative, nil
 }
 
-// WhyNode is a belief, decision, rule or action, the evidence it cites
-// (only beliefs cite evidence), the beliefs and decisions it rests on and
-// its alternatives, each in Or.
+// WhyNode is a belief, decision, rule, action or proposal, the evidence
+// it cites (beliefs and proposals cite evidence), the beliefs and
+// decisions it rests on and its alternatives, each in Or.
 type WhyNode struct {
 	Kind     string     `json:"kind"`
 	ID       string     `json:"id"`
@@ -83,12 +83,13 @@ type WhySet struct {
 	Because  []WhyNode  `json:"because,omitempty"`
 }
 
-// WhyAny is Why for any kind: it follows a belief, decision, rule or
-// action down its because chains, alternatives included, to the evidence.
+// WhyAny is Why for any kind: it follows a belief, decision, rule, action
+// or proposal down its because chains, alternatives included, to the
+// evidence.
 func (s *Set) WhyAny(id string) (WhyNode, error) {
 	found, sets, exists := s.item(id)
 	if !exists {
-		return WhyNode{}, ez.New(ez.ENOTFOUND, "belief, decision, rule or action "+id+" not found", nil)
+		return WhyNode{}, ez.New(ez.ENOTFOUND, "belief, decision, rule, action or proposal "+id+" not found", nil)
 	}
 
 	for i, set := range sets {
@@ -116,7 +117,8 @@ func (s *Set) WhyAny(id string) (WhyNode, error) {
 	return found, nil
 }
 
-// Kind says what id is: evidence, belief, decision, rule or action.
+// Kind says what id is: evidence, belief, decision, rule, action or
+// proposal.
 func (s *Set) Kind(id string) (string, bool) {
 	_, isEvidence := s.evidenceByID[id]
 	if isEvidence {
@@ -128,8 +130,8 @@ func (s *Set) Kind(id string) (string, bool) {
 	return found.Kind, exists
 }
 
-// item finds the belief, decision, rule or action id, with no reasons
-// filled in, and its sets of reasons, its own first.
+// item finds the belief, decision, rule, action or proposal id, with no
+// reasons filled in, and its sets of reasons, its own first.
 func (s *Set) item(id string) (WhyNode, []Support, bool) {
 	for _, belief := range s.Beliefs {
 		if belief.ID == id {
@@ -151,6 +153,11 @@ func (s *Set) item(id string) (WhyNode, []Support, bool) {
 	for _, action := range s.Actions {
 		if action.ID == id {
 			return WhyNode{Kind: "action", ID: id, Text: action.Action, File: action.File}, action.Supports(), true
+		}
+	}
+	for _, proposal := range s.Proposals {
+		if proposal.ID == id {
+			return WhyNode{Kind: "proposal", ID: id, Text: proposal.Proposal, File: proposal.File}, []Support{proposal.Support()}, true
 		}
 	}
 

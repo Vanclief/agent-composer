@@ -366,7 +366,7 @@ export interface paths {
         };
         /**
          * List evidence, beliefs, decisions, rules and actions
-         * @description Loads evidence/, beliefs/, decisions/, rules/ and actions/ under the knowledge directory (~/.agent_composer/knowledge, or AGC_KNOWLEDGE_DIR) on every request, so edits show live. A missing directory lists nothing. A file that does not validate is a 400 whose message is the validation error, naming the file and the id.
+         * @description Loads evidence/, beliefs/, decisions/, rules/, actions/, proposals/ and gates/ under the knowledge directory (~/.agent_composer/knowledge, or AGC_KNOWLEDGE_DIR) on every request, so edits show live. A missing directory lists nothing. A file that does not validate is a 400 whose message is the validation error, naming the file and the id.
          */
         get: operations["listKnowledge"];
         put?: never;
@@ -723,6 +723,10 @@ export interface components {
             decisions: components["schemas"]["Decision"][];
             rules: components["schemas"]["Rule"][];
             actions: components["schemas"]["KnowledgeAction"][];
+            /** @description Every proposal with how it stands at the gate now (ADR 0007). */
+            proposals: components["schemas"]["KnowledgeProposal"][];
+            /** @description Every gate with the tier it gives now and its counts, ending with the default gate, whose id is empty. */
+            gates: components["schemas"]["KnowledgeGate"][];
         };
         /** @description Something seen. Retracted evidence stays in its file but grounds nothing. */
         Evidence: {
@@ -854,6 +858,88 @@ export interface components {
             opened: components["schemas"]["KnowledgeObservation"];
             /** @description Null while the action is open. */
             done: components["schemas"]["KnowledgeObservation"] | null;
+            label: components["schemas"]["KnowledgeLabel"];
+            opinions: string[];
+            doubted: string[];
+            file: string;
+        };
+        /**
+         * @description How much of a human a proposal needs before it lands (ADR 0007).
+         * @enum {string}
+         */
+        KnowledgeTier: "decide" | "observe" | "delegated";
+        /**
+         * @description What an agent put forward, with what it rests on and how it stands at the gate now:
+         *     the gate covering it, the tier the gate is written with, the tier it gets and why they
+         *     differ. Computed on every request, never stored.
+         */
+        KnowledgeProposal: {
+            id: string;
+            /**
+             * @description What kind of thing is proposed.
+             * @enum {string}
+             */
+            proposes: "rule" | "belief" | "evidence" | "decision" | "action" | "gate" | "code";
+            text: string;
+            /** @description Ids of the beliefs and decisions the proposal rests on. */
+            because: string[];
+            /** @description Ids of the evidence the proposal cites. */
+            evidence: string[];
+            /** @description Who proposed it, an agent id or a person. */
+            by: string;
+            when: string;
+            /** @description Where the change itself lives (a branch, a commit, a path), or empty. */
+            change: string;
+            /** @description The id it was recorded under once accepted, or empty. */
+            became: string;
+            /** @description Null unless accepted. */
+            accepted: components["schemas"]["KnowledgeObservation"] | null;
+            /** @description Null unless rejected. */
+            rejected: components["schemas"]["KnowledgeRejection"] | null;
+            /** @description Id of the gate covering it, empty when none does and the default applies. */
+            gate: string;
+            written: components["schemas"]["KnowledgeTier"];
+            tier: components["schemas"]["KnowledgeTier"];
+            /** @description An observe gate sampled this one, so it needs a decision. */
+            audited: boolean;
+            /** @description Rejected proposals under the same gate that pulled it to decide. */
+            tightened_by: string[];
+            /** @description It acts and rests on nothing, so there is no why to read; it needs a decision. */
+            illegible: boolean;
+            label: components["schemas"]["KnowledgeLabel"];
+            opinions: string[];
+            doubted: string[];
+            file: string;
+        };
+        /** @description Who turned a proposal down, when and why. */
+        KnowledgeRejection: {
+            who: string;
+            when: string;
+            why: string;
+        };
+        /**
+         * @description A gate with the tier it gives now and how the proposals under it have gone. The last
+         *     gate in the list has an empty id: the default for proposals no gate covers.
+         */
+        KnowledgeGate: {
+            id: string;
+            proposes: string;
+            /** @description Proposers covered; empty means anyone. */
+            by: string[];
+            written: components["schemas"]["KnowledgeTier"];
+            tier: components["schemas"]["KnowledgeTier"];
+            /** @description On an observe gate, about one in this many is audited; 0 means none. */
+            sample: number;
+            /** @description Rejections before this day do not tighten the gate; empty counts every one. */
+            since: string;
+            because: string[];
+            tightened_by: string[];
+            open: number;
+            accepted: number;
+            rejected: number;
+            audited: number;
+            /** @description A decide gate that has accepted five or more and rejected none. */
+            all_accepted: boolean;
             label: components["schemas"]["KnowledgeLabel"];
             opinions: string[];
             doubted: string[];

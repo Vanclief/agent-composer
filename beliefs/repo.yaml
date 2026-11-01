@@ -89,6 +89,16 @@ beliefs:
   - id: llms-are-parsers-not-sensors
     belief: An LLM is a great parser and a terrible sensor.
 
+  # ADR 0007: proposals and gates. Opinions: Franco's framing of how a
+  # human stays in the loop, from the Serac question; nothing measured.
+  - id: authority-without-legibility-is-ritual
+    belief: A human who cannot follow why a recommendation was made stops saying no to it, so their final say becomes a ritual.
+  - id: unread-digests-remove-the-human
+    belief: A digest nobody reads is how a human quietly leaves the loop.
+  - id: model-verdicts-are-opinions-not-evidence
+    belief: A model's verdict or belief with no evidence under it is an opinion by construction, so one landing can ground nothing.
+    because: [llms-are-parsers-not-sensors]
+
   # Design language (AGENTS.md). Judgment: the panel follows the rtsdesign
   # skill on this premise from Franco's experience; nobody has measured
   # operator mistakes yet.

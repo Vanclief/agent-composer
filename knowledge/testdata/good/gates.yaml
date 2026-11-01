@@ -1,0 +1,16 @@
+gates:
+  - id: agent-beliefs-observed
+    proposes: belief
+    by: [codex_cli]
+    tier: observe
+    sample: 2
+    because: [top]
+  - id: code-delegated
+    proposes: code
+    by: [codex_cli]
+    tier: delegated
+    since: 2026-10-01
+  - id: any-rule-decided
+    proposes: rule
+    tier: decide
+    because: [hunch]

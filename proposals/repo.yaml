@@ -1,0 +1,21 @@
+# What agents (or anyone) have put forward: a rule, belief, piece of
+# evidence, decision, action, gate change or code change, with what it
+# rests on (ADR 0007). A proposal is open until it has accepted: { who,
+# when } or rejected: { who, when, why }; `agc proposals accept|reject`
+# write those, and the record stays here either way: a rejection is what
+# the human saw that the proposer did not. `agc proposals show` says what
+# each needs now, computed from gates/; `agc proposals why <id>` reads the
+# chain under it before you decide. Nothing here lands anything: a human
+# merges, or the gate lets the proposer land it.
+proposals:
+  # The conversation that produced ADR 0007: claude_code proposed the
+  # gating design, Franco accepted it ("Yes please implement that
+  # proposal") and it became the decision below.
+  - id: gate-proposals-through-a-human
+    proposes: decision
+    proposal: Everything an agent produces is a proposal, gates written by a human say which land without one, and a gate change always needs a human.
+    because: [authority-without-legibility-is-ritual, unread-digests-remove-the-human, llms-are-parsers-not-sensors]
+    by: claude_code
+    when: 2026-11-01
+    became: proposals-pass-through-human-gates
+    accepted: { who: franco, when: 2026-11-01 }

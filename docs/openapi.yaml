@@ -774,7 +774,7 @@ paths:
       operationId: listKnowledge
       summary: List evidence, beliefs, decisions, rules and actions
       description: >
-        Loads evidence/, beliefs/, decisions/, rules/ and actions/ under the knowledge directory
+        Loads evidence/, beliefs/, decisions/, rules/, actions/, proposals/ and gates/ under the knowledge directory
         (~/.agent_composer/knowledge, or AGC_KNOWLEDGE_DIR) on every request, so edits show
         live. A missing directory lists nothing. A file that does not validate is a 400 whose
         message is the validation error, naming the file and the id.
@@ -1578,6 +1578,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/KnowledgeAction'
+        proposals:
+          type: array
+          description: Every proposal with how it stands at the gate now (ADR 0007).
+          items:
+            $ref: '#/components/schemas/KnowledgeProposal'
+        gates:
+          type: array
+          description: Every gate with the tier it gives now and its counts, ending with the default gate, whose id is empty.
+          items:
+            $ref: '#/components/schemas/KnowledgeGate'
       required:
         - dir
         - without
@@ -1586,6 +1596,8 @@ components:
         - decisions
         - rules
         - actions
+        - proposals
+        - gates
     Evidence:
       type: object
       description: Something seen. Retracted evidence stays in its file but grounds nothing.
@@ -1976,6 +1988,197 @@ components:
         - because
         - opened
         - done
+        - label
+        - opinions
+        - doubted
+        - file
+    KnowledgeTier:
+      type: string
+      description: How much of a human a proposal needs before it lands (ADR 0007).
+      enum: [decide, observe, delegated]
+    KnowledgeProposal:
+      type: object
+      description: |
+        What an agent put forward, with what it rests on and how it stands at the gate now:
+        the gate covering it, the tier the gate is written with, the tier it gets and why they
+        differ. Computed on every request, never stored.
+      properties:
+        id:
+          type: string
+        proposes:
+          type: string
+          description: What kind of thing is proposed.
+          enum: [rule, belief, evidence, decision, action, gate, code]
+        text:
+          type: string
+        because:
+          type: array
+          description: Ids of the beliefs and decisions the proposal rests on.
+          items:
+            type: string
+        evidence:
+          type: array
+          description: Ids of the evidence the proposal cites.
+          items:
+            type: string
+        by:
+          type: string
+          description: Who proposed it, an agent id or a person.
+        when:
+          type: string
+        change:
+          type: string
+          description: Where the change itself lives (a branch, a commit, a path), or empty.
+        became:
+          type: string
+          description: The id it was recorded under once accepted, or empty.
+        accepted:
+          allOf:
+            - $ref: '#/components/schemas/KnowledgeObservation'
+          nullable: true
+          description: Null unless accepted.
+        rejected:
+          allOf:
+            - $ref: '#/components/schemas/KnowledgeRejection'
+          nullable: true
+          description: Null unless rejected.
+        gate:
+          type: string
+          description: Id of the gate covering it, empty when none does and the default applies.
+        written:
+          $ref: '#/components/schemas/KnowledgeTier'
+        tier:
+          $ref: '#/components/schemas/KnowledgeTier'
+        audited:
+          type: boolean
+          description: An observe gate sampled this one, so it needs a decision.
+        tightened_by:
+          type: array
+          description: Rejected proposals under the same gate that pulled it to decide.
+          items:
+            type: string
+        illegible:
+          type: boolean
+          description: It acts and rests on nothing, so there is no why to read; it needs a decision.
+        label:
+          $ref: '#/components/schemas/KnowledgeLabel'
+        opinions:
+          type: array
+          items:
+            type: string
+        doubted:
+          type: array
+          items:
+            type: string
+        file:
+          type: string
+      required:
+        - id
+        - proposes
+        - text
+        - because
+        - evidence
+        - by
+        - when
+        - change
+        - became
+        - accepted
+        - rejected
+        - gate
+        - written
+        - tier
+        - audited
+        - tightened_by
+        - illegible
+        - label
+        - opinions
+        - doubted
+        - file
+    KnowledgeRejection:
+      type: object
+      description: Who turned a proposal down, when and why.
+      properties:
+        who:
+          type: string
+        when:
+          type: string
+        why:
+          type: string
+      required:
+        - who
+        - when
+        - why
+    KnowledgeGate:
+      type: object
+      description: |
+        A gate with the tier it gives now and how the proposals under it have gone. The last
+        gate in the list has an empty id: the default for proposals no gate covers.
+      properties:
+        id:
+          type: string
+        proposes:
+          type: string
+        by:
+          type: array
+          description: Proposers covered; empty means anyone.
+          items:
+            type: string
+        written:
+          $ref: '#/components/schemas/KnowledgeTier'
+        tier:
+          $ref: '#/components/schemas/KnowledgeTier'
+        sample:
+          type: integer
+          description: On an observe gate, about one in this many is audited; 0 means none.
+        since:
+          type: string
+          description: Rejections before this day do not tighten the gate; empty counts every one.
+        because:
+          type: array
+          items:
+            type: string
+        tightened_by:
+          type: array
+          items:
+            type: string
+        open:
+          type: integer
+        accepted:
+          type: integer
+        rejected:
+          type: integer
+        audited:
+          type: integer
+        all_accepted:
+          type: boolean
+          description: A decide gate that has accepted five or more and rejected none.
+        label:
+          $ref: '#/components/schemas/KnowledgeLabel'
+        opinions:
+          type: array
+          items:
+            type: string
+        doubted:
+          type: array
+          items:
+            type: string
+        file:
+          type: string
+      required:
+        - id
+        - proposes
+        - by
+        - written
+        - tier
+        - sample
+        - since
+        - because
+        - tightened_by
+        - open
+        - accepted
+        - rejected
+        - audited
+        - all_accepted
         - label
         - opinions
         - doubted

@@ -93,7 +93,36 @@ func (s *Set) Validate() error {
 		}
 	}
 
+	for _, proposal := range s.Proposals {
+		err := claim(owners, proposal.File, "proposal", proposal.ID)
+		if err != nil {
+			return err
+		}
+
+		err = validateProposal(proposal)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, gate := range s.Gates {
+		err := claim(owners, gate.File, "gate", gate.ID)
+		if err != nil {
+			return err
+		}
+
+		err = validateGate(gate)
+		if err != nil {
+			return err
+		}
+	}
+
 	err := s.resolveAll()
+	if err != nil {
+		return err
+	}
+
+	err = s.resolveProposals(owners)
 	if err != nil {
 		return err
 	}
@@ -275,6 +304,108 @@ func validateJudge(rule Rule) error {
 		if isModel(name) && !slices.Contains(harnessIDs, name) {
 			msg := "judge: trusted names " + name + ", a model but not a harness id; use one of " + strings.Join(harnessIDs, ", ") + ", or a person"
 			return invalid(rule.File, "rule", rule.ID, msg)
+		}
+	}
+
+	return nil
+}
+
+// validateProposal checks a proposal's kind, text, proposer and verdict.
+// Only a listed kind may be proposed; a goal is refused by name, since
+// what we want is never proposed. A proposal is open, accepted or
+// rejected, never two of those, and a rejection says why.
+func validateProposal(proposal Proposal) error {
+	kind := strings.TrimSpace(proposal.Proposes)
+	if kind == "goal" {
+		return invalid(proposal.File, "proposal", proposal.ID, "proposes: a goal is never proposed; what we want stays ours, propose how to get there")
+	}
+	if !slices.Contains(Proposable, kind) {
+		return invalid(proposal.File, "proposal", proposal.ID, "proposes: must be one of "+strings.Join(Proposable, ", "))
+	}
+
+	if strings.TrimSpace(proposal.Proposal) == "" {
+		return invalid(proposal.File, "proposal", proposal.ID, "proposal: text is required")
+	}
+
+	if strings.TrimSpace(proposal.By) == "" || strings.TrimSpace(proposal.When) == "" {
+		return invalid(proposal.File, "proposal", proposal.ID, "needs by and when")
+	}
+
+	if proposal.Accepted != nil && proposal.Rejected != nil {
+		return invalid(proposal.File, "proposal", proposal.ID, "is both accepted and rejected")
+	}
+
+	if proposal.Accepted != nil && !complete(proposal.Accepted) {
+		return invalid(proposal.File, "proposal", proposal.ID, "accepted: needs who and when")
+	}
+
+	rejected := proposal.Rejected
+	if rejected != nil && (strings.TrimSpace(rejected.Who) == "" || strings.TrimSpace(rejected.When) == "" || strings.TrimSpace(rejected.Why) == "") {
+		return invalid(proposal.File, "proposal", proposal.ID, "rejected: needs who, when and why")
+	}
+
+	if strings.TrimSpace(proposal.Became) != "" && proposal.Accepted == nil {
+		return invalid(proposal.File, "proposal", proposal.ID, "became: says what it was recorded as, and it is not accepted")
+	}
+
+	return nil
+}
+
+// validateGate checks a gate's kind, tier and sample. A gate on gate
+// changes is refused: those always need a human, and writing one would
+// let the system loosen its own gates.
+func validateGate(gate Gate) error {
+	kind := strings.TrimSpace(gate.Proposes)
+	if kind == "gate" {
+		return invalid(gate.File, "gate", gate.ID, "proposes: a gate change always needs a human; no gate covers it")
+	}
+	if !slices.Contains(Proposable, kind) {
+		return invalid(gate.File, "gate", gate.ID, "proposes: must be one of "+strings.Join(Proposable, ", "))
+	}
+
+	if !slices.Contains(tiers, gate.Tier) {
+		return invalid(gate.File, "gate", gate.ID, "tier: must be decide, observe or delegated")
+	}
+
+	if gate.Sample < 0 || (gate.Sample > 0 && gate.Tier != Observe) {
+		return invalid(gate.File, "gate", gate.ID, "sample: audits about one in that many proposals, and only an observe gate audits")
+	}
+
+	for _, name := range gate.By {
+		if strings.TrimSpace(name) == "" {
+			return invalid(gate.File, "gate", gate.ID, "by: has an empty name")
+		}
+	}
+
+	return nil
+}
+
+// resolveProposals checks what proposals and gates rest on, and that a
+// proposal's became names something loaded.
+func (s *Set) resolveProposals(owners map[string]string) error {
+	for _, proposal := range s.Proposals {
+		err := s.resolve(proposal.File, "proposal", proposal.ID, proposal.Because, false)
+		if err != nil {
+			return err
+		}
+
+		for _, evidenceID := range proposal.Evidence {
+			_, exists := s.evidenceByID[evidenceID]
+			if !exists {
+				return invalid(proposal.File, "proposal", proposal.ID, "evidence names "+evidenceID+", which is not loaded evidence")
+			}
+		}
+
+		_, exists := owners[proposal.Became]
+		if proposal.Became != "" && !exists {
+			return invalid(proposal.File, "proposal", proposal.ID, "became names "+proposal.Became+", which is not loaded")
+		}
+	}
+
+	for _, gate := range s.Gates {
+		err := s.resolve(gate.File, "gate", gate.ID, gate.Because, false)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -510,6 +641,9 @@ func (s *Set) texts() []string {
 	}
 	for _, action := range s.Actions {
 		texts = append(texts, action.Action)
+	}
+	for _, proposal := range s.Proposals {
+		texts = append(texts, proposal.Proposal)
 	}
 
 	return texts

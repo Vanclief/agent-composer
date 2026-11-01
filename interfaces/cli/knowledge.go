@@ -175,6 +175,10 @@ type knowledgeArgs struct {
 	on     string
 	model  string
 	record bool
+
+	// proposals accept and reject only.
+	by  string
+	why string
 }
 
 func parseArgs(args []string, c *cli.Context) knowledgeArgs {
@@ -183,8 +187,10 @@ func parseArgs(args []string, c *cli.Context) knowledgeArgs {
 	parsed.on = c.String("on")
 	parsed.model = c.String("model")
 	parsed.record = c.Bool("record")
+	parsed.by = c.String("by")
+	parsed.why = c.String("why")
 	values := map[string]*[]string{"--without": &parsed.without, "--beliefs": &parsed.beliefs}
-	singles := map[string]*string{"--as": &parsed.as, "--on": &parsed.on, "--model": &parsed.model}
+	singles := map[string]*string{"--as": &parsed.as, "--on": &parsed.on, "--model": &parsed.model, "--by": &parsed.by, "--why": &parsed.why}
 
 	for i := 0; i < len(args); i++ {
 		name, value, hasValue := strings.Cut(args[i], "=")
@@ -227,15 +233,15 @@ func existing(paths ...string) []string {
 }
 
 // loadDefault loads paths, or evidence/ beliefs/ decisions/ rules/
-// actions/ when none are given, judged without the ids in without. A
+// actions/ proposals/ gates/ when none are given, judged without the ids in without. A
 // what-if says so on its first line, so it cannot be mistaken for the
 // real state.
 func loadDefault(paths []string, without []string) (*knowledge.Set, error) {
 	if len(paths) == 0 {
-		paths = existing("evidence", "beliefs", "decisions", "rules", "actions")
+		paths = existing("evidence", "beliefs", "decisions", "rules", "actions", "proposals", "gates")
 	}
 	if len(paths) == 0 {
-		return nil, ez.New(ez.EINVALID, "no evidence/, beliefs/, decisions/, rules/ or actions/ here: pass the files or directories", nil)
+		return nil, ez.New(ez.EINVALID, "no evidence/, beliefs/, decisions/, rules/, actions/, proposals/ or gates/ here: pass the files or directories", nil)
 	}
 
 	set, err := knowledge.Load(paths...)
@@ -1005,6 +1011,12 @@ func loadedIDs(set *knowledge.Set) map[string]bool {
 		for _, rule := range ruleset.Rules {
 			ids[rule.ID] = true
 		}
+	}
+	for _, proposal := range set.Proposals {
+		ids[proposal.ID] = true
+	}
+	for _, gate := range set.Gates {
+		ids[gate.ID] = true
 	}
 
 	return ids

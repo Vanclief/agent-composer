@@ -90,6 +90,8 @@ func Run(ctx context.Context, args []string) error {
 			evidenceCommand(),
 			decisionsCommand(),
 			actionsCommand(),
+			proposalsCommand(),
+			gatesCommand(),
 			{
 				Name:  "mcp",
 				Usage: "Start the AGC MCP stdio server",
