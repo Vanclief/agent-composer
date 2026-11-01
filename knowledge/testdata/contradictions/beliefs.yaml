@@ -1,0 +1,16 @@
+beliefs:
+  - id: claim-a
+    belief: The rig can run sandboxes.
+    evidence: [rig-has-kvm]
+  - id: claim-b
+    belief: B is true.
+    evidence: [seen-b]
+    contradicts: [claim-c]
+  - id: claim-c
+    belief: C is true.
+    because: [hunch-c]
+  - id: hunch-c
+    belief: C seems likely.
+  - id: claim-d
+    belief: D is there.
+    evidence: [seen-d]

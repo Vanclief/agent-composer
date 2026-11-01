@@ -1,0 +1,16 @@
+actions:
+  - id: act-falls
+    action: Do V.
+    because: [decide-x]
+    opened: { who: franco, when: 2026-11-01 }
+  - id: act-stands
+    action: Do V or W.
+    because: [decide-x]
+    or:
+      - because: [choose-either]
+    opened: { who: franco, when: 2026-11-01 }
+  - id: act-done
+    action: Did V.
+    because: [decide-x]
+    opened: { who: franco, when: 2026-11-01 }
+    done: { who: franco, when: 2026-11-02 }

@@ -1,0 +1,10 @@
+subject: alternatives
+rules:
+  - id: rule-x
+    rule: Must follow V.
+    because: [only-x]
+  - id: rule-or
+    rule: Must follow V or Y.
+    because: [only-x]
+    or:
+      - because: [by-y]

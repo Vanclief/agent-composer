@@ -84,6 +84,10 @@ beliefs:
   - id: rules-and-beliefs-fail-differently
     belief: When reality disagrees with a rule the actor is wrong; when it disagrees with a belief the belief is wrong.
     evidence: [rules-and-beliefs-framing]
+  # Opinion: Franco's framing for who may be a witness in evidence/; no
+  # observation is recorded under it yet.
+  - id: llms-are-parsers-not-sensors
+    belief: An LLM is a great parser and a terrible sensor.
 
   # Design language (AGENTS.md). Opinion: the panel follows the rtsdesign
   # skill on this premise, and nobody has measured operator mistakes yet.

@@ -1,0 +1,43 @@
+# What to do because of a decision. An action is open until it has
+# done: { who, when }; keep it here once done. `agc actions show` lists the
+# open ones first, and `agc beliefs doubt <id>` lists the open ones resting
+# on a doubted belief or piece of evidence (ADR 0006). Each comment names
+# where the follow-up was written down.
+actions:
+  # ADR 0006, "Next step".
+  - id: attach-rulesets-to-task-specs
+    action: Let a task spec name rulesets, beliefs and decisions so agents in its sandbox receive them, for example in the sandbox's AGENTS.md.
+    because: [rules-beliefs-and-decisions-as-yaml, tasks-run-in-microsandbox-vms]
+    opened: { who: franco, when: 2026-11-01 }
+
+  # .github/workflows/release.yml builds with CGO_ENABLED=0, and
+  # executor/sandbox/nocgo.go says the sandbox executor is not in a build
+  # without cgo.
+  - id: release-builds-with-cgo
+    action: Build the release binaries with cgo so Tasks can run sandboxes from a released agc.
+    because: [tasks-run-in-microsandbox-vms]
+    opened: { who: franco, when: 2026-11-01 }
+
+  # ADR 0003, Consequences: "Workflow nodes need `environment:` to say where
+  # they run"; decision 2 embeds the Task spec in a workflow spec under
+  # environment:. No workflow spec reads it yet.
+  - id: workflow-nodes-name-their-environment
+    action: "Let a workflow spec embed a Task spec under `environment:` so its nodes say where they run."
+    because: [tasks-run-in-microsandbox-vms]
+    opened: { who: franco, when: 2026-11-01 }
+
+  # ADR 0003, Consequences: deleting a Task deletes uncommitted work and
+  # keeps its volumes, and "the UI must say both in the delete control
+  # itself". panel/src/features/tasks/TaskActions.tsx only asks "Delete?".
+  - id: task-delete-says-what-is-lost
+    action: Make the panel's Task delete control say that uncommitted work is deleted and mounted volumes are kept.
+    because: [tasks-run-in-microsandbox-vms]
+    opened: { who: franco, when: 2026-11-01 }
+
+  # ADR 0004, Consequences: .gitignore "must also exclude .agent_composer/".
+  # Done in d458f37 (.gitignore lines 52-53).
+  - id: gitignore-the-local-data-dir
+    action: Exclude .agent_composer/ in .gitignore so a project-local secrets.env never enters git.
+    because: [secrets-are-placeholders-bound-to-hosts]
+    opened: { who: franco, when: 2026-11-01 }
+    done: { who: franco, when: 2026-11-01 }

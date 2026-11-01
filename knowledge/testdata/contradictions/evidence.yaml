@@ -1,0 +1,24 @@
+evidence:
+  - id: rig-has-kvm
+    evidence: The rig has KVM.
+    who: franco
+    when: 2026-11-01
+  - id: rig-lacks-kvm
+    evidence: The rig has no KVM.
+    who: ana
+    when: 2026-11-02
+    contradicts: [rig-has-kvm]
+  - id: seen-b
+    evidence: B was seen.
+    who: franco
+    when: 2026-11-01
+  - id: seen-d
+    evidence: D was seen.
+    who: franco
+    when: 2026-11-01
+  - id: old-sighting
+    evidence: D was not there.
+    who: ana
+    when: 2026-10-01
+    retracted: { who: ana, when: 2026-10-02, why: It was the wrong rig. }
+    contradicts: [claim-d]
