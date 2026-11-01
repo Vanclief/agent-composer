@@ -1,20 +1,19 @@
 package harnesses
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"os/exec"
 	"strings"
-	"syscall"
 
+	"github.com/vanclief/agent-composer/executor"
 	"github.com/vanclief/agent-composer/models/agent"
 	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/ez"
 )
 
-type ClaudeCode struct{}
+type ClaudeCode struct {
+	exec executor.Executor
+}
 
 type claudeCodeConfig struct {
 	Permissions        Permissions `json:"permissions,omitempty"`
@@ -59,7 +58,7 @@ func (c *ClaudeCode) Validate(ctx context.Context, model string, config json.Raw
 		return ez.New(ez.EINVALID, "model is required", nil)
 	}
 
-	_, err := exec.LookPath("claude")
+	err := c.exec.LookPath(ctx, "claude")
 	if err != nil {
 		return ez.New(ez.EINVALID, "claude CLI is not installed or not on PATH", err)
 	}
@@ -85,33 +84,17 @@ func (c *ClaudeCode) Run(ctx context.Context, conversation *agent.Conversation, 
 		workdir = "."
 	}
 
-	cmd := exec.CommandContext(ctx, "claude", args...)
-	cmd.Dir = workdir
+	run, runErr := runCommand(ctx, c.exec, executor.Command{
+		Name: "claude",
+		Args: args,
+		Dir:  workdir,
+	})
+	exitCode := run.ExitCode
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	runErr := cmd.Run()
-
-	exitCode := 0
-	if runErr != nil {
-		var exitErr *exec.ExitError
-		found := errors.As(runErr, &exitErr)
-		if found {
-			status, ok := exitErr.Sys().(syscall.WaitStatus)
-			if ok {
-				exitCode = status.ExitStatus()
-			}
-		}
-	}
-
-	rawOutput := strings.TrimSpace(stdout.String())
+	rawOutput := strings.TrimSpace(string(run.Stdout))
 	summary, parseErr := parseClaudeCodeResult(rawOutput)
 
-	harnessError := strings.TrimSpace(stderr.String())
+	harnessError := strings.TrimSpace(string(run.Stderr))
 	if summary.IsError {
 		if strings.TrimSpace(summary.ErrorMessage()) != "" {
 			harnessError = strings.TrimSpace(summary.ErrorMessage())

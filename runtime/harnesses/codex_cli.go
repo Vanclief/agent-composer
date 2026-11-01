@@ -4,19 +4,20 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"os"
-	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 
+	"github.com/google/uuid"
 	"github.com/vanclief/agent-composer/core/helpers/jsonutil"
+	"github.com/vanclief/agent-composer/executor"
 	"github.com/vanclief/agent-composer/models/agent"
 	"github.com/vanclief/ez"
 )
 
-type CodexCLI struct{}
+type CodexCLI struct {
+	exec executor.Executor
+}
 
 type codexCLIConfig struct {
 	Profile          string      `json:"profile,omitempty"`
@@ -48,7 +49,7 @@ func (c *CodexCLI) Validate(ctx context.Context, model string, config json.RawMe
 		return ez.New(ez.EINVALID, "model is required", nil)
 	}
 
-	_, err := exec.LookPath("codex")
+	err := c.exec.LookPath(ctx, "codex")
 	if err != nil {
 		return ez.New(ez.EINVALID, "codex CLI is not installed or not on PATH", err)
 	}
@@ -67,39 +68,24 @@ func (c *CodexCLI) Run(ctx context.Context, conversation *agent.Conversation, pr
 		return nil, ez.Wrap(err)
 	}
 
-	lastMessageFile, err := os.CreateTemp("", "agent-composer-codex-last-message-*.txt")
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-	lastMessagePath := lastMessageFile.Name()
-
-	err = lastMessageFile.Close()
+	// Created empty up front so codex writes into a file only we can read.
+	lastMessagePath := filepath.Join(c.exec.TempDir(), "agent-composer-codex-last-message-"+uuid.NewString()+".txt")
+	err = c.exec.WriteFile(ctx, lastMessagePath, nil)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	defer os.Remove(lastMessagePath)
+	defer c.exec.RemoveFile(ctx, lastMessagePath)
 
 	schemaPath := ""
 	if hasStructuredOutputSchema(conversation.StructuredOutputSchema) {
-		schemaFile, err := os.CreateTemp("", "agent-composer-codex-output-schema-*.json")
-		if err != nil {
-			return nil, ez.Wrap(err)
-		}
-		schemaPath = schemaFile.Name()
-
-		_, err = schemaFile.Write(conversation.StructuredOutputSchema)
-		if err != nil {
-			schemaFile.Close()
-			return nil, ez.Wrap(err)
-		}
-
-		err = schemaFile.Close()
+		schemaPath = filepath.Join(c.exec.TempDir(), "agent-composer-codex-output-schema-"+uuid.NewString()+".json")
+		err = c.exec.WriteFile(ctx, schemaPath, conversation.StructuredOutputSchema)
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}
 
-		defer os.Remove(schemaPath)
+		defer c.exec.RemoveFile(ctx, schemaPath)
 	}
 
 	workdir := strings.TrimSpace(conversation.ProjectDir)
@@ -109,39 +95,23 @@ func (c *CodexCLI) Run(ctx context.Context, conversation *agent.Conversation, pr
 
 	args := c.buildArgs(conversation, cfg, prompt, lastMessagePath, schemaPath)
 
-	cmd := exec.CommandContext(ctx, "codex", args...)
-	cmd.Dir = workdir
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	runErr := cmd.Run()
-
-	exitCode := 0
-	if runErr != nil {
-		var exitErr *exec.ExitError
-		found := errors.As(runErr, &exitErr)
-		if found {
-			status, ok := exitErr.Sys().(syscall.WaitStatus)
-			if ok {
-				exitCode = status.ExitStatus()
-			}
-		}
-	}
+	run, runErr := runCommand(ctx, c.exec, executor.Command{
+		Name: "codex",
+		Args: args,
+		Dir:  workdir,
+	})
+	exitCode := run.ExitCode
 
 	lastAssistantMessage := ""
-	content, readErr := os.ReadFile(lastMessagePath)
+	content, readErr := c.exec.ReadFile(ctx, lastMessagePath)
 	if readErr == nil {
 		lastAssistantMessage = strings.TrimSpace(string(content))
 	}
 
-	rawOutput := stdout.String()
+	rawOutput := string(run.Stdout)
 	summary := parseCodexRunSummary(rawOutput)
 
-	harnessError := selectCodexHarnessError(strings.TrimSpace(stderr.String()), summary)
+	harnessError := selectCodexHarnessError(strings.TrimSpace(string(run.Stderr)), summary)
 
 	result := &RunResult{
 		LastAssistantMessage: lastAssistantMessage,

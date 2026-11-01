@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/vanclief/agent-composer/core/controller"
+	"github.com/vanclief/agent-composer/executor/host"
 	"github.com/vanclief/agent-composer/models/agent"
 	"github.com/vanclief/agent-composer/runtime/harnesses"
 	"github.com/vanclief/compose/components/scheduler"
@@ -44,7 +45,7 @@ func New(rootCtx context.Context, ctrl *controller.Controller, sch *scheduler.Sc
 }
 
 func (rt *Runtime) ValidateHarness(ctx context.Context, kind agent.Harness, model string, config []byte) error {
-	harness, err := harnesses.New(kind)
+	harness, err := harnesses.New(kind, host.New())
 	if err != nil {
 		return ez.Wrap(err)
 	}
