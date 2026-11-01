@@ -24,8 +24,12 @@ panel-check: | panel/node_modules
 build: panel
 	go build -o bin/agc .
 
+# go install would name the binary after the module directory
+# (agent-composer), so build straight to GOBIN/agc instead.
+GOBIN ?= $(shell go env GOPATH)/bin
+
 install: panel
-	go install .
+	go build -o $(GOBIN)/agc .
 
 test:
 	go test ./...
