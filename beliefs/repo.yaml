@@ -89,7 +89,9 @@ beliefs:
   - id: llms-are-parsers-not-sensors
     belief: An LLM is a great parser and a terrible sensor.
 
-  # Design language (AGENTS.md). Opinion: the panel follows the rtsdesign
-  # skill on this premise, and nobody has measured operator mistakes yet.
+  # Design language (AGENTS.md). Judgment: the panel follows the rtsdesign
+  # skill on this premise from Franco's experience; nobody has measured
+  # operator mistakes yet.
   - id: icon-and-shape-ui-reduces-operator-mistakes
     belief: An interface that speaks through icons, slots, numbers and shape, as strategy games do, leads operators to fewer mistakes than one that makes them read text or YAML.
+    experience: { of: franco, in: "years of using strategy-game and operator UIs" }

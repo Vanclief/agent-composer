@@ -165,6 +165,11 @@ const (
 	// Grounded beliefs have live evidence under every leaf of some set of
 	// reasons.
 	Grounded Label = "grounded"
+	// Judgment beliefs rest, in some set of reasons, on a leaf that comes
+	// from someone's experience and cites no evidence, and on no opinion
+	// or doubted leaf: expert testimony, stronger than an opinion and
+	// weaker than evidence.
+	Judgment Label = "judgment"
 	// Opinion beliefs have, in every set of reasons, a leaf with no
 	// evidence at all.
 	Opinion Label = "opinion"
@@ -180,12 +185,15 @@ const (
 // is grounded. Each set of reasons is judged on the leaves under it: the
 // beliefs that rest on no other belief. The thing is grounded if one set
 // is. Otherwise the reasons of every set are listed, and Label is the
-// first that applies of in doubt, contested, opinion; all reasons are
-// kept whatever the label.
+// first that applies of in doubt, contested, opinion, judgment; all
+// reasons are kept whatever the label.
 type Status struct {
 	Label Label `json:"label"`
-	// Opinions are the leaves with no evidence.
+	// Opinions are the leaves with no evidence and no experience.
 	Opinions []string `json:"opinions,omitempty"`
+	// Judgments are the leaves with no evidence that come from someone's
+	// experience.
+	Judgments []string `json:"judgments,omitempty"`
 	// Doubted are the beliefs whose evidence is all retracted or set
 	// aside, or that are set aside themselves. Retracted is the retracted
 	// evidence under them and Without the ids set aside with Set.Without.
@@ -252,10 +260,15 @@ func (s *Set) judgeSets(owner string, sets []Support, isBelief bool) Status {
 }
 
 // judgeSet judges one set of reasons: all of it must hold. A belief's set
-// with no because and no evidence is an opinion.
+// with no because and no evidence is a judgment when the belief comes from
+// someone's experience, and an opinion otherwise.
 func (s *Set) judgeSet(owner string, set Support, isBelief bool) Status {
 	status := Status{}
-	if isBelief && len(set.Because) == 0 && len(set.Evidence) == 0 {
+	leaf := isBelief && len(set.Because) == 0 && len(set.Evidence) == 0
+	switch {
+	case leaf && s.nodes[owner].judged:
+		status.Judgments = []string{owner}
+	case leaf:
 		status.Opinions = []string{owner}
 	}
 
@@ -288,6 +301,9 @@ func merge(into *Status, from Status) {
 	for _, id := range from.Opinions {
 		into.Opinions = appendNew(into.Opinions, id)
 	}
+	for _, id := range from.Judgments {
+		into.Judgments = appendNew(into.Judgments, id)
+	}
 	for _, id := range from.Doubted {
 		into.Doubted = appendNew(into.Doubted, id)
 	}
@@ -305,6 +321,8 @@ func labelFor(status Status) Label {
 		return InDoubt
 	case len(status.Opinions) > 0:
 		return Opinion
+	case len(status.Judgments) > 0:
+		return Judgment
 	}
 
 	return Grounded

@@ -397,6 +397,9 @@ func statusLabel(status knowledge.Status) string {
 	if len(status.Opinions) > 0 {
 		text += " [opinion: missing evidence on " + strings.Join(status.Opinions, ", ") + "]"
 	}
+	if len(status.Judgments) > 0 {
+		text += " [judgment: experience on " + strings.Join(status.Judgments, ", ") + "]"
+	}
 	if len(status.Retracted) > 0 {
 		text += " [in doubt: retracted evidence " + strings.Join(status.Retracted, ", ") + " under " + strings.Join(status.Doubted, ", ") + "]"
 	}
@@ -446,12 +449,17 @@ func beliefsWhy(c *cli.Context) error {
 
 // printReason prints a belief with the evidence it cites and, indented
 // under it, what it rests on, alternatives after "or:". A leaf citing
-// nothing is an opinion.
+// nothing is a judgment when it comes from someone's experience, and an
+// opinion otherwise.
 func printReason(reason knowledge.Reason, depth int) {
 	belief := reason.Belief
 	line := fmt.Sprintf("%s- %s: %s", strings.Repeat("  ", depth), belief.ID, oneLine(belief.Belief))
 	line += evidenceIDs(reason.Evidence)
-	if len(reason.Evidence) == 0 && len(reason.Because) == 0 {
+	leaf := len(reason.Evidence) == 0 && len(reason.Because) == 0
+	switch {
+	case leaf && belief.Experience != nil:
+		line += " — judgment: experience of " + belief.Experience.Of
+	case leaf:
 		line += " — opinion: no evidence"
 	}
 	fmt.Println(line)

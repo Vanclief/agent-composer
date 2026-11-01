@@ -704,10 +704,10 @@ export interface components {
             hosts: string[];
         };
         /**
-         * @description How what a belief, decision, rule or action rests on is grounded: grounded (live evidence under every leaf of some set of reasons), opinion (a leaf with no evidence), in_doubt (a leaf whose evidence is all retracted or set aside; wins over the others) or contested (beliefs only: something grounded contradicts it or its evidence; wins over opinion).
+         * @description How what a belief, decision, rule or action rests on is grounded: grounded (live evidence under every leaf of some set of reasons), judgment (a leaf with no evidence that comes from a person's experience; wins over grounded), opinion (a leaf with no evidence and no experience; wins over judgment), in_doubt (a leaf whose evidence is all retracted or set aside; wins over the others) or contested (beliefs only: something grounded contradicts it or its evidence; wins over opinion).
          * @enum {string}
          */
-        KnowledgeLabel: "grounded" | "opinion" | "in_doubt" | "contested";
+        KnowledgeLabel: "grounded" | "judgment" | "opinion" | "in_doubt" | "contested";
         Retraction: {
             who: string;
             when: string;
@@ -744,12 +744,19 @@ export interface components {
         Belief: {
             id: string;
             text: string;
+            /** @description Who holds the belief, a person or an agent id; empty for the repo owner. */
+            by: string;
             /** @description Ids of the beliefs this one rests on. */
             because: string[];
             /** @description Ids of the evidence this belief cites. */
             evidence: string[];
             /** @description Alternative sets of reasons, each the ids of its beliefs then its evidence; the belief is grounded if its own set or any of these is. [] when none. */
             or: string[][];
+            /** @description Whose experience, and in what, a leaf belief comes from, which makes it a judgment; null when absent. */
+            experience: {
+                of: string;
+                in: string;
+            } | null;
             label: components["schemas"]["KnowledgeLabel"];
             /** @description Leaf beliefs with no evidence. */
             opinions: string[];
