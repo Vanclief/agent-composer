@@ -49,6 +49,10 @@ type ChannelsResponse struct {
 	Channels []messaging.ChannelInfo `json:"channels"`
 }
 
+type ParticipantsResponse struct {
+	Participants []msgmodels.Participant `json:"participants"`
+}
+
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
@@ -70,6 +74,7 @@ func New(svc *messaging.Service, caller func(*http.Request) (messaging.Caller, e
 	mux.HandleFunc("GET /read", a.read)
 	mux.HandleFunc("GET /wait", a.wait)
 	mux.HandleFunc("GET /channels", a.channels)
+	mux.HandleFunc("GET /participants", a.participants)
 
 	return mux
 }
@@ -205,6 +210,22 @@ func (a *api) channels(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, ChannelsResponse{Channels: channels})
+}
+
+func (a *api) participants(w http.ResponseWriter, r *http.Request) {
+	caller, err := a.caller(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	participants, err := a.svc.Participants(r.Context(), caller, r.URL.Query().Get("channel"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, ParticipantsResponse{Participants: participants})
 }
 
 // decode resolves the caller and reads a JSON body into dst.

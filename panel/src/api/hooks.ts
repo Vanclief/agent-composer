@@ -34,6 +34,7 @@ export const queryKeys = {
   doubt: (id: string) => ['knowledge', 'doubt', id] as const,
   knowledgeWithout: (without: string) => ['knowledge', 'without', without] as const,
   conflicts: ['knowledge', 'conflicts'] as const,
+  participants: (channel: string) => ['msg', 'participants', channel] as const,
 }
 
 // ---------- tasks ----------
@@ -289,5 +290,18 @@ export function useConflicts() {
   return useQuery({
     queryKey: queryKeys.conflicts,
     queryFn: ({ signal }) => knowledge.conflicts(signal),
+  })
+}
+
+// ---------- messaging participants ----------
+
+// Everyone who has posted in channel ("#name"), active first, then those
+// who left. Polled like the channel list so joins and leaves show up.
+export function useParticipants(channel: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.participants(channel ?? ''),
+    queryFn: async ({ signal }) => (await msg.participants(channel ?? '', signal)).participants,
+    enabled: Boolean(channel),
+    refetchInterval: TASKS_POLL_MS,
   })
 }

@@ -520,6 +520,19 @@ async function msgAPI(state: State, method: string, verb: string, url: URL, req:
     return { messages: found, cursor: found.at(-1)?.id ?? cursor }
   }
 
+  // Everyone who has posted in the channel: active first, then departed,
+  // each by name, like Service.Participants.
+  if (method === 'GET' && verb === 'participants') {
+    const channel = url.searchParams.get('channel') ?? ''
+    checkChannel(channel)
+    const ids = new Set(state.messages.filter((m) => m.channel === channel).map((m) => m.participant_id))
+    const participants = [...ids]
+      .map((id) => state.participants.get(id))
+      .filter((p): p is Participant => p !== undefined)
+      .sort((a, b) => Number(Boolean(a.left_at)) - Number(Boolean(b.left_at)) || a.name.localeCompare(b.name))
+    return { participants }
+  }
+
   if (method !== 'POST') {
     throw msgError(404, 'no such endpoint')
   }

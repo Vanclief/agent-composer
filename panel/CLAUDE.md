@@ -91,9 +91,9 @@ detail={task.status_error} />`. Never derive, map or relabel a status in
   `useSpecs`, `useSpec`, `useSaveSpec`, `useDeleteSpec`, `useSecrets`,
   `useTerminals(task, enabled)`, `useStartTerminal(task)`, `useChannels`,
   `useJoin`, `useLeave`, `usePostMessage`, and `useChannelMessages(channel)`
-  (a live feed: read, then a long-poll wait loop). Query keys live only in
-  `queryKeys`.
-- `@/api/msg`: messaging types and calls (`/api/msg/join|leave|post|read|wait|channels`),
+  (a live feed: read, then a long-poll wait loop), `useParticipants(channel)`.
+  Query keys live only in `queryKeys`.
+- `@/api/msg`: messaging types and calls (`/api/msg/join|leave|post|read|wait|channels|participants`),
   hand-typed from `messaging/httpapi/httpapi.go`. Join answers 409
   `name @x is already in use` while the name is held.
 - `@/api/terminals`: terminal types, `terminals.list/start`, and
