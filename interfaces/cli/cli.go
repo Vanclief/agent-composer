@@ -85,6 +85,7 @@ func Run(ctx context.Context, args []string) error {
 		Commands: []*cli.Command{
 			workflowCommand(),
 			msgCommand(),
+			taskCommand(),
 			{
 				Name:  "mcp",
 				Usage: "Start the AGC MCP stdio server",
@@ -379,7 +380,7 @@ func runServer(ctx context.Context, project string) error {
 	}
 
 	group, gctx := errgroup.WithContext(ctx)
-	app := restserver.New(gctx, stack.Controller, stack.HooksAPI, stack.WorkflowAPI)
+	app := restserver.New(gctx, stack.Controller, stack.HooksAPI, stack.WorkflowAPI, stack.TasksAPI, stack.Messaging)
 
 	group.Go(func() error {
 		stack.StartScheduler(gctx)

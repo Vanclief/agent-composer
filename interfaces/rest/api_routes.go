@@ -53,4 +53,14 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	worktrees.GET("", h.ListWorktrees)
 	worktrees.POST("", h.CreateWorktree)
 	worktrees.DELETE("", h.RemoveWorktree)
+
+	tasks := api.Group("/tasks")
+	tasks.GET("", h.ListTasks)
+	tasks.POST("", h.CreateTask)
+	tasks.GET("/:id", h.GetTask)
+	tasks.POST("/:id/stop", h.StopTask)
+	tasks.POST("/:id/start", h.StartTask)
+	tasks.DELETE("/:id", h.DeleteTask)
+
+	api.Any("/msg/*", echo.WrapHandler(h.Messaging()))
 }

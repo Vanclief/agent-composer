@@ -3,14 +3,19 @@ package core
 import (
 	"context"
 	"io"
+	"path/filepath"
 	"time"
 
 	"github.com/rs/zerolog/log"
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
+	"github.com/vanclief/agent-composer/core/resources/tasks"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
+	"github.com/vanclief/agent-composer/messaging"
 	"github.com/vanclief/agent-composer/runtime"
+	"github.com/vanclief/agent-composer/secrets"
+	workflowruntime "github.com/vanclief/agent-composer/workflow"
 	"github.com/vanclief/compose/components/logger"
 	"github.com/vanclief/compose/components/scheduler"
 )
@@ -24,6 +29,8 @@ type Stack struct {
 	Runtime     *runtime.Runtime
 	HooksAPI    *hooks.API
 	WorkflowAPI *workflowapi.API
+	Messaging   *messaging.Service
+	TasksAPI    *tasks.API
 }
 
 type StackOptions struct {
@@ -64,12 +71,35 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		log.Warn().Err(err).Msg("workflow uuid backfill failed")
 	}
 
+	msg := messaging.NewService(ctrl.DB)
+
+	secretsPath, err := secrets.DefaultPath()
+	if err != nil {
+		return nil, err
+	}
+
+	home, err := workflowruntime.ResolveHomeDir()
+	if err != nil {
+		return nil, err
+	}
+
+	tasksAPI := tasks.NewAPI(ctrl, msg, tasks.SandboxRuntime{}, secretsPath, filepath.Join(home, "tasks"))
+
+	// Tasks keep running while agc is down. Their messaging listeners
+	// come back here.
+	err = tasksAPI.Resume(rootCtx)
+	if err != nil {
+		log.Warn().Err(err).Msg("task messaging resume failed")
+	}
+
 	return &Stack{
 		Controller:  ctrl,
 		Scheduler:   sch,
 		Runtime:     rt,
 		HooksAPI:    hooksAPI,
 		WorkflowAPI: workflowAPI,
+		Messaging:   msg,
+		TasksAPI:    tasksAPI,
 	}, nil
 }
 

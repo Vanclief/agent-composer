@@ -11,11 +11,13 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/harnessinfo"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
 	settingsapi "github.com/vanclief/agent-composer/core/resources/settings"
+	"github.com/vanclief/agent-composer/core/resources/tasks"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
 	workflowconversations "github.com/vanclief/agent-composer/core/resources/workflow/conversations"
 	workflowexecutions "github.com/vanclief/agent-composer/core/resources/workflow/executions"
 	workflownodeexecutions "github.com/vanclief/agent-composer/core/resources/workflow/nodeexecutions"
 	workflowworktrees "github.com/vanclief/agent-composer/core/resources/workflow/worktrees"
+	"github.com/vanclief/agent-composer/messaging"
 	"github.com/vanclief/agent-composer/models/user"
 	"github.com/vanclief/compose/components/ratelimit"
 	"github.com/vanclief/compose/components/rest/requests"
@@ -31,9 +33,11 @@ type Server struct {
 	FilesystemAPI *filesystem.API
 	HarnessesAPI  *harnessinfo.API
 	SettingsAPI   *settingsapi.API
+	TasksAPI      *tasks.API
+	Messaging     *messaging.Service
 }
 
-func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API) *Server {
+func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API, tasksAPI *tasks.API, msg *messaging.Service) *Server {
 	if rootCtx == nil {
 		rootCtx = context.Background()
 	}
@@ -49,6 +53,8 @@ func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.A
 		FilesystemAPI: filesystem.NewAPI(),
 		HarnessesAPI:  harnessinfo.NewAPI(),
 		SettingsAPI:   settingsapi.NewAPI(),
+		TasksAPI:      tasksAPI,
+		Messaging:     msg,
 	}
 }
 
@@ -135,6 +141,30 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.WorkflowAPI.Worktrees.Create(request.GetContext(), nil, body)
 	case *workflowworktrees.DeleteRequest:
 		return s.WorkflowAPI.Worktrees.Delete(request.GetContext(), nil, body)
+
+	case *tasks.ListRequest:
+		return s.TasksAPI.List(request.GetContext(), nil, body)
+	case *tasks.GetRequest:
+		return s.TasksAPI.Get(request.GetContext(), nil, body)
+	case *tasks.CreateRequest:
+		// Booting, cloning and setup outlive the default request timeout.
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 30*time.Minute)
+		defer cancel()
+		return s.TasksAPI.Create(ctx, nil, body)
+	// Booting and shutting a VM down can outlive the default request
+	// timeout, and cutting msb off mid-boot leaves the sandbox half up.
+	case *tasks.StopRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
+		defer cancel()
+		return s.TasksAPI.Stop(ctx, nil, body)
+	case *tasks.StartRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
+		defer cancel()
+		return s.TasksAPI.Start(ctx, nil, body)
+	case *tasks.DeleteRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
+		defer cancel()
+		return s.TasksAPI.Delete(ctx, nil, body)
 
 	default:
 		return nil, ez.New(ez.EINVALID, "Unsupported request type", nil)
