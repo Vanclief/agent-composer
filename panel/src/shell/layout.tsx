@@ -1,9 +1,12 @@
 // Sidebar nav, top bar with the page title, and the routed page.
 import { useState } from 'react'
-import { Hexagon } from 'lucide-react'
+import { Hexagon, Lock } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router'
 
+import { useChannels } from '@/api/hooks'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
+import { ErrorText } from '@/components/error-text'
+import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
 import { MODES, ModeSwitch, useMode } from './mode'
@@ -46,6 +49,7 @@ export function Layout() {
                     <Icon className={cn('size-4', conceptColors[concept].text)} />
                     {label}
                   </NavLink>
+                  {mode === 'talk' && to === '/messages' && <ChannelRows />}
                 </li>
               )
             })}
@@ -69,5 +73,62 @@ export function Layout() {
         </div>
       </main>
     </div>
+  )
+}
+
+// Talk mode: one row per channel under Channels, Slack style. The open
+// channel takes the message tint; the count chip is its message count.
+function ChannelRows() {
+  const channels = useChannels()
+
+  if (channels.isPending) {
+    return (
+      <ul data-testid="channel-rows-loading" className="mt-0.5 flex flex-col gap-0.5 pl-6">
+        <li>
+          <Skeleton className="h-7" />
+        </li>
+        <li>
+          <Skeleton className="h-7" />
+        </li>
+      </ul>
+    )
+  }
+  if (channels.error) {
+    return <ErrorText error={channels.error} className="mt-0.5 ml-6 px-2 py-1.5 text-xs" />
+  }
+  if (channels.data.length === 0) {
+    return <p className="mt-0.5 py-1.5 pr-2 pl-8 text-sm text-zinc-500 dark:text-zinc-500">No channels yet</p>
+  }
+  return (
+    <ul className="mt-0.5 flex flex-col gap-0.5 pl-6">
+      {channels.data.map((c) => {
+        const name = c.channel.replace(/^#/, '')
+        return (
+          <li key={c.channel}>
+            <NavLink
+              to={`/messages/${encodeURIComponent(name)}`}
+              title={c.read_only ? 'Read only' : undefined}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-sm transition-colors',
+                  isActive
+                    ? cn('font-medium', conceptColors.message.selected)
+                    : 'border-transparent text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100',
+                )
+              }
+            >
+              {c.read_only && <Lock aria-label="Read only" className="size-3.5 shrink-0" />}
+              <span className="truncate font-mono">#{name}</span>
+              <span
+                data-testid="channel-count"
+                className="ml-auto rounded border border-border px-1.5 font-mono text-xs text-muted-foreground"
+              >
+                {c.count}
+              </span>
+            </NavLink>
+          </li>
+        )
+      })}
+    </ul>
   )
 }

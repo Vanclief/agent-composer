@@ -65,7 +65,7 @@ test('/messages is Talk mode with the Channels nav', async ({ page }) => {
   const nav = page.getByRole('navigation', { name: 'Main' })
   await expect(mode.getByRole('link', { name: 'Talk' })).toHaveAttribute('aria-current', 'page')
   await expect(mode.getByRole('link', { name: 'Work' })).not.toHaveAttribute('aria-current', 'page')
-  await expect(nav.getByRole('link')).toHaveText(['Channels'])
+  await expect(nav.getByRole('link', { name: 'Channels', exact: true })).toBeVisible()
   await expect(nav.getByRole('link', { name: 'Tasks' })).toHaveCount(0)
 })
 
@@ -73,4 +73,40 @@ test('/ opens Talk when it was the last mode', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('agc.panel.mode', 'talk'))
   await page.goto('/panel/')
   await expect(page).toHaveURL(/\/panel\/messages$/)
+})
+
+test('the Talk sidebar lists channels with their counts', async ({ page }) => {
+  const res = await page.request.get('/api/msg/channels')
+  const { channels } = (await res.json()) as { channels: { channel: string; count: number }[] }
+  await page.goto('/panel/messages')
+  const nav = page.getByRole('navigation', { name: 'Main' })
+  for (const name of ['#review-42', '#releases']) {
+    const info = channels.find((c) => c.channel === name)
+    expect(info).toBeDefined()
+    const row = nav.getByRole('link', { name: new RegExp(`^${name}\\b`) })
+    await expect(row).toBeVisible()
+    await expect(row.getByTestId('channel-count')).toHaveText(/^\d+$/)
+    const count = Number(await row.getByTestId('channel-count').textContent())
+    expect(count).toBeGreaterThanOrEqual(info!.count)
+  }
+})
+
+test('clicking a channel in the sidebar opens and highlights it', async ({ page }) => {
+  await page.goto('/panel/messages/review-42')
+  const nav = page.getByRole('navigation', { name: 'Main' })
+  const releases = nav.getByRole('link', { name: /^#releases\b/ })
+  const review = nav.getByRole('link', { name: /^#review-42\b/ })
+  await expect(review).toHaveAttribute('aria-current', 'page')
+  await releases.click()
+  await expect(page).toHaveURL(/\/panel\/messages\/releases$/)
+  await expect(releases).toHaveAttribute('aria-current', 'page')
+  await expect(releases).toHaveClass(/bg-pink-500\/20/)
+  await expect(review).not.toHaveAttribute('aria-current', 'page')
+})
+
+test('Work mode shows no channel rows', async ({ page }) => {
+  await page.goto('/panel/tasks')
+  const nav = page.getByRole('navigation', { name: 'Main' })
+  await expect(nav.getByRole('link')).toHaveText(['Tasks'])
+  await expect(nav.getByTestId('channel-count')).toHaveCount(0)
 })
