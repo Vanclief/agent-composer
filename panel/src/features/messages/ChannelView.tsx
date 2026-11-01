@@ -30,7 +30,12 @@ function MembersStrip({ members }: { members: Member[] }) {
             @{m.name}
           </IconChip>
         ) : (
-          <IconChip key={`${m.task}/${m.name}`} icon={conceptIcons.task} concept="task" title={`Agent in task ${m.task}`}>
+          <IconChip
+            key={`${m.task}/${m.name}`}
+            icon={conceptIcons.task}
+            concept="task"
+            title={`Agent in task ${m.task}`}
+          >
             @{m.name}
           </IconChip>
         ),

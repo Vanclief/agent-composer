@@ -21,7 +21,8 @@ test('a task messages tab shows its channel with human and agent authors', async
     'Reproduced 2 of 3 locally. The third looks flaky.',
     'Fixed the loop node. Pushing to review-42.',
   ]) {
-    await expect(list.getByText(body)).toBeVisible()
+    // exact: the reply stub quotes the first one too.
+    await expect(list.getByText(body, { exact: true })).toBeVisible()
   }
   await expect(list.locator('[data-kind="human"]', { hasText: '@franco' })).toBeVisible()
   await expect(list.locator('[data-kind="agent"]', { hasText: '@reviewer' }).first()).toBeVisible()
@@ -74,19 +75,19 @@ test('a taken name shows the 409 verbatim and Join as… picks another', async (
   await expect(page.getByRole('button', { name: 'Send: empty' })).toBeVisible()
 })
 
-test('messages page rail lists channels and navigates', async ({ page }) => {
+test('messages page asks for a channel and opens one from the sidebar', async ({ page }) => {
   await actAs(page, uniqueName())
   await page.goto('/panel/messages')
   await expect(page.getByTestId('page-title')).toHaveText('Messages')
-  await expect(page.getByText('Pick a channel')).toBeVisible()
+  await expect(page.getByText('Pick a channel on the left')).toBeVisible()
+  // The sidebar owns the channel list; the page draws none of its own.
+  await expect(page.getByRole('navigation', { name: 'Channels' })).toHaveCount(0)
 
-  const rail = page.getByRole('navigation', { name: 'Channels' })
-  await expect(rail.getByRole('link', { name: /review-42/ })).toBeVisible()
-  await rail.getByRole('link', { name: /releases/ }).click()
+  const nav = page.getByRole('navigation', { name: 'Main' })
+  await nav.getByRole('link', { name: /^#releases\b/ }).click()
   await expect(page).toHaveURL(/\/panel\/messages\/releases$/)
   await expect(page.getByTestId('page-title')).toHaveText('Messages #releases')
-  await expect(page.getByText('v0.4.0 tagged.')).toBeVisible()
-  await expect(rail.getByRole('link', { name: /releases/ })).toHaveAttribute('aria-current', 'page')
+  await expect(page.getByTestId('message-list').getByText('v0.4.0 tagged.')).toBeVisible()
 })
 
 test('the live feed shows a message another client posts', async ({ page, request }) => {
