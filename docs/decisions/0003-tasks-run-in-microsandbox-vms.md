@@ -59,6 +59,11 @@ blocked when sent to a non-allowed host.
    deleting a Task never deletes a volume. The repo is a clone, not a
    volume, so it stays private to the Task.
 
+   After the clone and before `setup`, agc marks the Claude Code and Codex
+   first-run prompts (onboarding, theme, folder trust, bypass permissions)
+   as answered for the repo directory, or `/home/agent` without a repo, so
+   an agent starts working at once; `setup` may change that config.
+
 3. **Lifecycle is microsandbox's lifecycle, shown verbatim.** Stop keeps the
    disk and frees CPU and memory; that is what the UI calls a saved task,
    using the backend word `stopped`. Start boots it again from its disk.

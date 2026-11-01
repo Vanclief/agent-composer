@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path"
 	"strings"
+	"unicode"
 
 	"github.com/rs/zerolog/log"
 	"github.com/vanclief/ez"
@@ -141,8 +143,9 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 	return api.view(ctx, record)
 }
 
-// prepare clones the repo and runs the setup script, as the sandbox user.
-// Setup runs in the repo, or in the home directory when there is no repo.
+// prepare clones the repo, writes the agent config and runs the setup
+// script, as the sandbox user. Setup runs in the repo, or in the home
+// directory when there is no repo, and can still change the agent config.
 func prepare(ctx context.Context, sb Sandbox, spec task.Spec) error {
 	dir := ""
 
@@ -168,14 +171,88 @@ func prepare(ctx context.Context, sb Sandbox, spec task.Spec) error {
 		dir = repoDir
 	}
 
+	trusted := dir
+	if trusted == "" {
+		trusted = task.HomeDir
+	}
+
+	script, err := agentConfigScript(trusted)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	err = run(ctx, sb, executor.Command{Name: "bash", Args: []string{"-c", script}}, "agent config")
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
 	if spec.Setup != "" {
-		err := run(ctx, sb, executor.Command{Name: "bash", Args: []string{"-lc", spec.Setup}, Dir: dir}, "setup")
+		err = run(ctx, sb, executor.Command{Name: "bash", Args: []string{"-lc", spec.Setup}, Dir: dir}, "setup")
 		if err != nil {
 			return ez.Wrap(err)
 		}
 	}
 
 	return nil
+}
+
+// agentConfigTemplate merges first-run answers into the sandbox user's
+// Claude Code and Codex config, keeping whatever is already there (a
+// mounted volume may hold a harness home). Keys, from the shipped CLIs:
+// Claude Code's global config (~/.claude.json, or $CLAUDE_CONFIG_DIR/
+// .claude.json) holds hasCompletedOnboarding, theme,
+// bypassPermissionsModeAccepted (read by older releases, moved to settings
+// by newer ones) and projects[dir].hasTrustDialogAccepted; its user
+// settings (~/.claude/settings.json) hold skipDangerousModePermissionPrompt,
+// which current releases check before the bypass-permissions dialog.
+// Codex reads projects."<dir>".trust_level from $CODEX_HOME/config.toml.
+// {{dir}} is replaced by the trusted directory.
+const agentConfigTemplate = `set -eu
+dir='{{dir}}'
+claude_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+claude_json="${CLAUDE_CONFIG_DIR:-$HOME}/.claude.json"
+codex_dir="${CODEX_HOME:-$HOME/.codex}"
+mkdir -p "$claude_dir" "$codex_dir"
+
+merge() {
+  file="$1"
+  filter="$2"
+  if [ ! -s "$file" ]
+  then
+    echo '{}' > "$file"
+  fi
+  jq --arg dir "$dir" "$filter" "$file" > "$file.agc"
+  mv "$file.agc" "$file"
+}
+
+merge "$claude_json" '.hasCompletedOnboarding = true | .theme = "dark" | .bypassPermissionsModeAccepted = true | .projects[$dir].hasTrustDialogAccepted = true'
+merge "$claude_dir/settings.json" '.skipDangerousModePermissionPrompt = true'
+
+codex_config="$codex_dir/config.toml"
+touch "$codex_config"
+if ! grep -qxF "[projects.\"$dir\"]" "$codex_config"
+then
+  {
+    echo
+    echo "[projects.\"$dir\"]"
+    echo 'trust_level = "trusted"'
+  } >> "$codex_config"
+fi
+`
+
+// agentConfigScript renders the bash script that marks Claude Code's
+// onboarding done with the dark theme, accepts its bypass-permissions
+// dialog and trusts dir in Claude Code and Codex, so an agent started in
+// the Task begins working without a human answering first-run prompts.
+// dir is written inside shell, JSON and TOML quotes, so a path with a
+// quote, a backslash or a control character is rejected.
+func agentConfigScript(dir string) (string, error) {
+	if !path.IsAbs(dir) || strings.ContainsAny(dir, `"'\`) || strings.IndexFunc(dir, unicode.IsControl) >= 0 {
+		msg := fmt.Sprintf("directory %q cannot be marked trusted: it must be absolute, without quotes, backslashes or control characters", dir)
+		return "", ez.New(ez.EINVALID, msg, nil)
+	}
+
+	return strings.Replace(agentConfigTemplate, "{{dir}}", dir, 1), nil
 }
 
 // run runs cmd and turns a non-zero exit into an error carrying the tail

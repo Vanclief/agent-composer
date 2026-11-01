@@ -1423,7 +1423,7 @@ components:
           description: Branch, tag or commit checked out after the clone.
         setup:
           type: string
-          description: Bash script run once after the clone, in the repo.
+          description: Bash script run once after the clone, in the repo. Before it runs, agc marks the Claude Code and Codex first-run prompts (onboarding, theme, folder trust, bypass permissions) as answered.
         secrets:
           type: array
           items:

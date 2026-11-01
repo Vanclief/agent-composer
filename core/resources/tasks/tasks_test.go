@@ -245,9 +245,15 @@ func TestCreate(t *testing.T) {
 		t.Fatalf("no listener socket at %s", socket)
 	}
 
+	script, err := agentConfigScript("/home/agent/agent-composer")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	wantCalls := []string{
 		"create review-42",
 		"run git clone https://github.com/vanclief/agent-composer.git /home/agent/agent-composer in ",
+		"run bash -c " + script + " in ",
 		"run bash -lc go mod download in /home/agent/agent-composer",
 		"detach",
 	}
@@ -401,6 +407,69 @@ func TestCreateWithRef(t *testing.T) {
 	calls := env.rt.Calls()
 	if calls[2] != "run git -C /home/agent/n checkout v1.2.0 in " {
 		t.Fatalf("calls = %q", calls)
+	}
+}
+
+func TestCreateWithoutRepoTrustsHome(t *testing.T) {
+	env := newTestEnv(t)
+
+	_, err := env.api.Create(context.Background(), nil, &CreateRequest{Name: "scratch", Spec: task.Spec{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	calls := env.rt.Calls()
+	if !strings.HasPrefix(calls[1], "run bash -c ") || !strings.Contains(calls[1], "dir='/home/agent'\n") {
+		t.Fatalf("calls = %q", calls)
+	}
+}
+
+func TestAgentConfigScript(t *testing.T) {
+	cases := []struct {
+		dir     string
+		wantErr bool
+	}{
+		{"/home/agent/agent-composer", false},
+		{"/home/agent", false},
+		{"/home/agent/my repo.v2", false},
+		{`/home/agent/a"b`, true},
+		{"/home/agent/a'b", true},
+		{`/home/agent/a\b`, true},
+		{"/home/agent/a\nb", true},
+		{"relative/repo", true},
+	}
+
+	for _, tc := range cases {
+		script, err := agentConfigScript(tc.dir)
+		if tc.wantErr {
+			if ez.ErrorCode(err) != ez.EINVALID {
+				t.Errorf("%q: expected EINVALID, got %v", tc.dir, err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%q: %v", tc.dir, err)
+			continue
+		}
+
+		wants := []string{
+			"dir='" + tc.dir + "'\n",
+			".hasCompletedOnboarding = true",
+			`.theme = "dark"`,
+			".bypassPermissionsModeAccepted = true",
+			".projects[$dir].hasTrustDialogAccepted = true",
+			".skipDangerousModePermissionPrompt = true",
+			`echo "[projects.\"$dir\"]"`,
+			`echo 'trust_level = "trusted"'`,
+		}
+		for _, want := range wants {
+			if !strings.Contains(script, want) {
+				t.Errorf("%q: script lacks %q", tc.dir, want)
+			}
+		}
+		if strings.Contains(script, "{{dir}}") {
+			t.Errorf("%q: placeholder left in script", tc.dir)
+		}
 	}
 }
 
