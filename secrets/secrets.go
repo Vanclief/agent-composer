@@ -17,7 +17,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/vanclief/agent-composer/workflow"
 	"github.com/vanclief/ez"
 )
 
@@ -34,11 +33,18 @@ var (
 	hostRe = regexp.MustCompile(`^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
 )
 
-// DefaultPath returns the secrets file path for this agc home.
+// DefaultPath returns the secrets file path for this agc home: the
+// AGENT_COMPOSER_HOME directory, or ~/.agent_composer. The same rule as
+// workflow.ResolveHomeDir, repeated here so this package stays free of the
+// workflow dependency tree.
 func DefaultPath() (string, error) {
-	home, err := workflow.ResolveHomeDir()
-	if err != nil {
-		return "", ez.Wrap(err)
+	home := strings.TrimSpace(os.Getenv("AGENT_COMPOSER_HOME"))
+	if home == "" {
+		userHome, err := os.UserHomeDir()
+		if err != nil {
+			return "", ez.Wrap(err)
+		}
+		home = filepath.Join(userHome, ".agent_composer")
 	}
 
 	return filepath.Join(home, "config", "secrets.env"), nil
