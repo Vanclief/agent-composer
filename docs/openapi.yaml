@@ -772,12 +772,22 @@ paths:
     get:
       tags: [Knowledge]
       operationId: listKnowledge
-      summary: List evidence, beliefs, decisions and rules
+      summary: List evidence, beliefs, decisions, rules and actions
       description: >
-        Loads evidence/, beliefs/, decisions/ and rules/ under the knowledge directory
+        Loads evidence/, beliefs/, decisions/, rules/ and actions/ under the knowledge directory
         (~/.agent_composer/knowledge, or AGC_KNOWLEDGE_DIR) on every request, so edits show
         live. A missing directory lists nothing. A file that does not validate is a 400 whose
         message is the validation error, naming the file and the id.
+      parameters:
+        - name: without
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >
+            Comma-separated evidence and belief ids. Everything is judged as if those were
+            retracted or absent (a what-if; nothing is written), and the ids are echoed in
+            `without`. An id that is not loaded evidence or a belief is a 404.
       responses:
         '200':
           description: Everything in the knowledge directory, in load order.
@@ -787,18 +797,22 @@ paths:
                 $ref: '#/components/schemas/KnowledgeSet'
         '400':
           $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
   /knowledge/why/{id}:
     get:
       tags: [Knowledge]
       operationId: knowledgeWhy
-      summary: Follow a belief down to its evidence
+      summary: Follow a belief, decision, rule or action down to its evidence
       parameters:
         - $ref: '#/components/parameters/KnowledgeIdParam'
       responses:
         '200':
-          description: The belief, the evidence it cites and the beliefs it rests on.
+          description: >
+            The node, the evidence it cites, what it rests on and its alternative sets of
+            reasons, each a tree of Reasons down to the evidence.
           content:
             application/json:
               schema:
@@ -813,10 +827,12 @@ paths:
     get:
       tags: [Knowledge]
       operationId: knowledgeDoubt
-      summary: List what rests on a belief or a piece of evidence
+      summary: List what rests on a belief, decision, rule or piece of evidence
       description: >
-        Everything that falls if the belief or evidence is wrong, directly or through other
-        beliefs and decisions. For evidence, the beliefs citing it come first. Nothing is changed.
+        Everything that falls if the belief, decision, rule or evidence is wrong, directly or
+        through other beliefs and decisions, and apart, in `standing`, what rests on it but
+        still stands on another set of reasons. Only open actions are listed. Nothing rests on
+        a rule, so its listing is empty. Nothing is changed.
       parameters:
         - $ref: '#/components/parameters/KnowledgeIdParam'
       responses:
@@ -829,6 +845,25 @@ paths:
         '400':
           $ref: '#/components/responses/Error'
         '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /knowledge/conflicts:
+    get:
+      tags: [Knowledge]
+      operationId: knowledgeConflicts
+      summary: List contested contradictions
+      description: >
+        Every contradiction where at least one side is contested, in the order declared, with
+        the live evidence and opinions each side rests on. No side is picked.
+      responses:
+        '200':
+          description: The contested contradictions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeConflictSet'
+        '400':
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
@@ -899,7 +934,9 @@ components:
       name: id
       in: path
       required: true
-      description: A belief id, or for doubt also a piece of evidence's id.
+      description: >
+        A belief, decision, rule or action id for why; a belief, decision, rule or evidence id
+        for doubt.
       schema:
         type: string
   responses:
@@ -1485,13 +1522,15 @@ components:
     KnowledgeLabel:
       type: string
       description: >
-        How what a belief, decision or rule rests on is grounded: grounded (live evidence under
-        every leaf), opinion (a leaf with no evidence) or in_doubt (a leaf whose evidence is all
-        retracted; wins over opinion).
+        How what a belief, decision, rule or action rests on is grounded: grounded (live evidence
+        under every leaf of some set of reasons), opinion (a leaf with no evidence), in_doubt (a
+        leaf whose evidence is all retracted or set aside; wins over the others) or contested
+        (beliefs only: something grounded contradicts it or its evidence; wins over opinion).
       enum:
         - grounded
         - opinion
         - in_doubt
+        - contested
     Retraction:
       type: object
       properties:
@@ -1511,6 +1550,11 @@ components:
         dir:
           type: string
           description: The knowledge directory loaded.
+        without:
+          type: array
+          description: The ids set aside with ?without=, [] normally.
+          items:
+            type: string
         evidence:
           type: array
           items:
@@ -1527,12 +1571,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Rule'
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeAction'
       required:
         - dir
+        - without
         - evidence
         - beliefs
         - decisions
         - rules
+        - actions
     Evidence:
       type: object
       description: Something seen. Retracted evidence stays in its file but grounds nothing.
@@ -1548,10 +1598,18 @@ components:
         source:
           type: string
           description: A URL, a file path or a command whose output was seen; empty when unset.
+        translated_by:
+          type: string
+          description: The model that wrote the record from the source; empty when none did.
         retracted:
           allOf:
             - $ref: '#/components/schemas/Retraction'
           nullable: true
+        contradicts:
+          type: array
+          description: Ids of the beliefs and evidence this evidence says it contradicts.
+          items:
+            type: string
         cited_by:
           type: array
           description: Ids of the beliefs citing this evidence.
@@ -1565,7 +1623,9 @@ components:
         - who
         - when
         - source
+        - translated_by
         - retracted
+        - contradicts
         - cited_by
         - file
     Belief:
@@ -1585,6 +1645,15 @@ components:
           description: Ids of the evidence this belief cites.
           items:
             type: string
+        or:
+          type: array
+          description: >
+            Alternative sets of reasons, each the ids of its beliefs then its evidence; the
+            belief is grounded if its own set or any of these is. [] when none.
+          items:
+            type: array
+            items:
+              type: string
         label:
           $ref: '#/components/schemas/KnowledgeLabel'
         opinions:
@@ -1602,6 +1671,13 @@ components:
           description: The retracted evidence of the doubted leaves.
           items:
             type: string
+        contested_by:
+          type: array
+          description: >
+            The grounded beliefs and live evidence contradicting this belief or the evidence it
+            cites, when it is contested.
+          items:
+            type: string
         file:
           type: string
       required:
@@ -1609,10 +1685,12 @@ components:
         - text
         - because
         - evidence
+        - or
         - label
         - opinions
         - doubted
         - retracted
+        - contested_by
         - file
     Decision:
       type: object
@@ -1709,14 +1787,40 @@ components:
         - file
     Reason:
       type: object
-      description: A belief, the evidence it cites and the beliefs it rests on, each a Reason.
+      description: >
+        A belief, decision, rule or action, the evidence it cites (beliefs only), what it rests
+        on and its alternative sets of reasons, each a Reason. A piece of evidence inside an
+        alternative is a Reason of kind evidence, with who, when, translated_by and retracted
+        set and nothing under it.
       properties:
         id:
           type: string
+        kind:
+          type: string
+          enum:
+            - belief
+            - decision
+            - rule
+            - action
+            - evidence
         text:
           type: string
+        who:
+          type: string
+          description: Kind evidence only.
+        when:
+          type: string
+          description: Kind evidence only.
+        translated_by:
+          type: string
+          description: Kind evidence only; absent when no model wrote the record.
+        retracted:
+          allOf:
+            - $ref: '#/components/schemas/Retraction'
+          description: Kind evidence only; absent when live.
         evidence:
           type: array
+          description: The evidence the node's own set of reasons cites.
           items:
             type: object
             properties:
@@ -1728,6 +1832,9 @@ components:
                 type: string
               when:
                 type: string
+              translated_by:
+                type: string
+                description: The model that wrote the record from its source; empty when none did.
               retracted:
                 allOf:
                   - $ref: '#/components/schemas/Retraction'
@@ -1737,16 +1844,29 @@ components:
               - text
               - who
               - when
+              - translated_by
               - retracted
         because:
           type: array
+          description: What the node's own set of reasons rests on.
           items:
             $ref: '#/components/schemas/Reason'
+        or:
+          type: array
+          description: >
+            Alternative sets of reasons, each a list of nodes: the beliefs and decisions it rests
+            on, then its evidence. [] when none.
+          items:
+            type: array
+            items:
+              $ref: '#/components/schemas/Reason'
       required:
         - id
+        - kind
         - text
         - evidence
         - because
+        - or
     Doubted:
       type: object
       properties:
@@ -1762,10 +1882,168 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Rule'
+        actions:
+          type: array
+          description: Open actions only.
+          items:
+            $ref: '#/components/schemas/KnowledgeAction'
+        standing:
+          $ref: '#/components/schemas/KnowledgeStandingSet'
       required:
         - beliefs
         - decisions
         - rules
+        - actions
+        - standing
+    KnowledgeAction:
+      type: object
+      description: Something to do because of a decision, with the status of what it rests on.
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        because:
+          type: array
+          description: Ids of the decisions and beliefs this action rests on.
+          items:
+            type: string
+        opened:
+          $ref: '#/components/schemas/KnowledgeObservation'
+        done:
+          allOf:
+            - $ref: '#/components/schemas/KnowledgeObservation'
+          nullable: true
+          description: Null while the action is open.
+        label:
+          $ref: '#/components/schemas/KnowledgeLabel'
+        opinions:
+          type: array
+          items:
+            type: string
+        doubted:
+          type: array
+          items:
+            type: string
+        file:
+          type: string
+      required:
+        - id
+        - text
+        - because
+        - opened
+        - done
+        - label
+        - opinions
+        - doubted
+        - file
+    KnowledgeObservation:
+      type: object
+      description: Who did something, and when.
+      properties:
+        who:
+          type: string
+        when:
+          type: string
+      required:
+        - who
+        - when
+    KnowledgeStandingSet:
+      type: object
+      description: >
+        What rests on the doubted id in some sets of its reasons but still stands on another,
+        by kind. Only open actions are listed.
+      properties:
+        beliefs:
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeStanding'
+        decisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeStanding'
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeStanding'
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeStanding'
+      required:
+        - beliefs
+        - decisions
+        - rules
+        - actions
+    KnowledgeStanding:
+      type: object
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        other:
+          type: array
+          description: The sets of reasons that do not reach the doubted id, each as its ids.
+          items:
+            type: array
+            items:
+              type: string
+        file:
+          type: string
+      required:
+        - id
+        - text
+        - other
+        - file
+    KnowledgeConflictSet:
+      type: object
+      properties:
+        conflicts:
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeConflict'
+      required:
+        - conflicts
+    KnowledgeConflict:
+      type: object
+      description: >
+        A contradiction where at least one side is contested. a_rests_on and b_rests_on are the
+        leaves under each side, live evidence then opinions; a piece of evidence rests on itself.
+      properties:
+        a:
+          $ref: '#/components/schemas/KnowledgeConflictSide'
+        b:
+          $ref: '#/components/schemas/KnowledgeConflictSide'
+        a_rests_on:
+          type: array
+          items:
+            type: string
+        b_rests_on:
+          type: array
+          items:
+            type: string
+      required:
+        - a
+        - b
+        - a_rests_on
+        - b_rests_on
+    KnowledgeConflictSide:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum:
+            - belief
+            - evidence
+        text:
+          type: string
+      required:
+        - id
+        - kind
+        - text
     DeleteTaskResponse:
       type: object
       properties:

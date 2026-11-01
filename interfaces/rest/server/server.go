@@ -189,6 +189,8 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.KnowledgeAPI.Why(request.GetContext(), nil, body)
 	case *knowledgeapi.DoubtRequest:
 		return s.KnowledgeAPI.Doubt(request.GetContext(), nil, body)
+	case *knowledgeapi.ConflictsRequest:
+		return s.KnowledgeAPI.Conflicts(request.GetContext(), nil, body)
 
 	default:
 		return nil, ez.New(ez.EINVALID, "Unsupported request type", nil)

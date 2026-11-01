@@ -365,8 +365,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List evidence, beliefs, decisions and rules
-         * @description Loads evidence/, beliefs/, decisions/ and rules/ under the knowledge directory (~/.agent_composer/knowledge, or AGC_KNOWLEDGE_DIR) on every request, so edits show live. A missing directory lists nothing. A file that does not validate is a 400 whose message is the validation error, naming the file and the id.
+         * List evidence, beliefs, decisions, rules and actions
+         * @description Loads evidence/, beliefs/, decisions/, rules/ and actions/ under the knowledge directory (~/.agent_composer/knowledge, or AGC_KNOWLEDGE_DIR) on every request, so edits show live. A missing directory lists nothing. A file that does not validate is a 400 whose message is the validation error, naming the file and the id.
          */
         get: operations["listKnowledge"];
         put?: never;
@@ -384,7 +384,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Follow a belief down to its evidence */
+        /** Follow a belief, decision, rule or action down to its evidence */
         get: operations["knowledgeWhy"];
         put?: never;
         post?: never;
@@ -402,10 +402,30 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List what rests on a belief or a piece of evidence
-         * @description Everything that falls if the belief or evidence is wrong, directly or through other beliefs and decisions. For evidence, the beliefs citing it come first. Nothing is changed.
+         * List what rests on a belief, decision, rule or piece of evidence
+         * @description Everything that falls if the belief, decision, rule or evidence is wrong, directly or through other beliefs and decisions, and apart, in `standing`, what rests on it but still stands on another set of reasons. Only open actions are listed. Nothing rests on a rule, so its listing is empty. Nothing is changed.
          */
         get: operations["knowledgeDoubt"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge/conflicts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List contested contradictions
+         * @description Every contradiction where at least one side is contested, in the order declared, with the live evidence and opinions each side rests on. No side is picked.
+         */
+        get: operations["knowledgeConflicts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -684,10 +704,10 @@ export interface components {
             hosts: string[];
         };
         /**
-         * @description How what a belief, decision or rule rests on is grounded: grounded (live evidence under every leaf), opinion (a leaf with no evidence) or in_doubt (a leaf whose evidence is all retracted; wins over opinion).
+         * @description How what a belief, decision, rule or action rests on is grounded: grounded (live evidence under every leaf of some set of reasons), opinion (a leaf with no evidence), in_doubt (a leaf whose evidence is all retracted or set aside; wins over the others) or contested (beliefs only: something grounded contradicts it or its evidence; wins over opinion).
          * @enum {string}
          */
-        KnowledgeLabel: "grounded" | "opinion" | "in_doubt";
+        KnowledgeLabel: "grounded" | "opinion" | "in_doubt" | "contested";
         Retraction: {
             who: string;
             when: string;
@@ -696,10 +716,13 @@ export interface components {
         KnowledgeSet: {
             /** @description The knowledge directory loaded. */
             dir: string;
+            /** @description The ids set aside with ?without=, [] normally. */
+            without: string[];
             evidence: components["schemas"]["Evidence"][];
             beliefs: components["schemas"]["Belief"][];
             decisions: components["schemas"]["Decision"][];
             rules: components["schemas"]["Rule"][];
+            actions: components["schemas"]["KnowledgeAction"][];
         };
         /** @description Something seen. Retracted evidence stays in its file but grounds nothing. */
         Evidence: {
@@ -709,7 +732,11 @@ export interface components {
             when: string;
             /** @description A URL, a file path or a command whose output was seen; empty when unset. */
             source: string;
+            /** @description The model that wrote the record from the source; empty when none did. */
+            translated_by: string;
             retracted: components["schemas"]["Retraction"] | null;
+            /** @description Ids of the beliefs and evidence this evidence says it contradicts. */
+            contradicts: string[];
             /** @description Ids of the beliefs citing this evidence. */
             cited_by: string[];
             file: string;
@@ -721,6 +748,8 @@ export interface components {
             because: string[];
             /** @description Ids of the evidence this belief cites. */
             evidence: string[];
+            /** @description Alternative sets of reasons, each the ids of its beliefs then its evidence; the belief is grounded if its own set or any of these is. [] when none. */
+            or: string[][];
             label: components["schemas"]["KnowledgeLabel"];
             /** @description Leaf beliefs with no evidence. */
             opinions: string[];
@@ -728,6 +757,8 @@ export interface components {
             doubted: string[];
             /** @description The retracted evidence of the doubted leaves. */
             retracted: string[];
+            /** @description The grounded beliefs and live evidence contradicting this belief or the evidence it cites, when it is contested. */
+            contested_by: string[];
             file: string;
         };
         Decision: {
@@ -764,23 +795,91 @@ export interface components {
             doubted: string[];
             file: string;
         };
-        /** @description A belief, the evidence it cites and the beliefs it rests on, each a Reason. */
+        /** @description A belief, decision, rule or action, the evidence it cites (beliefs only), what it rests on and its alternative sets of reasons, each a Reason. A piece of evidence inside an alternative is a Reason of kind evidence, with who, when, translated_by and retracted set and nothing under it. */
         Reason: {
             id: string;
+            /** @enum {string} */
+            kind: "belief" | "decision" | "rule" | "action" | "evidence";
             text: string;
+            /** @description Kind evidence only. */
+            who?: string;
+            /** @description Kind evidence only. */
+            when?: string;
+            /** @description Kind evidence only; absent when no model wrote the record. */
+            translated_by?: string;
+            /** @description Kind evidence only; absent when live. */
+            retracted?: components["schemas"]["Retraction"];
+            /** @description The evidence the node's own set of reasons cites. */
             evidence: {
                 id: string;
                 text: string;
                 who: string;
                 when: string;
+                /** @description The model that wrote the record from its source; empty when none did. */
+                translated_by: string;
                 retracted: components["schemas"]["Retraction"] | null;
             }[];
+            /** @description What the node's own set of reasons rests on. */
             because: components["schemas"]["Reason"][];
+            /** @description Alternative sets of reasons, each a list of nodes: the beliefs and decisions it rests on, then its evidence. [] when none. */
+            or: components["schemas"]["Reason"][][];
         };
         Doubted: {
             beliefs: components["schemas"]["Belief"][];
             decisions: components["schemas"]["Decision"][];
             rules: components["schemas"]["Rule"][];
+            /** @description Open actions only. */
+            actions: components["schemas"]["KnowledgeAction"][];
+            standing: components["schemas"]["KnowledgeStandingSet"];
+        };
+        /** @description Something to do because of a decision, with the status of what it rests on. */
+        KnowledgeAction: {
+            id: string;
+            text: string;
+            /** @description Ids of the decisions and beliefs this action rests on. */
+            because: string[];
+            opened: components["schemas"]["KnowledgeObservation"];
+            /** @description Null while the action is open. */
+            done: components["schemas"]["KnowledgeObservation"] | null;
+            label: components["schemas"]["KnowledgeLabel"];
+            opinions: string[];
+            doubted: string[];
+            file: string;
+        };
+        /** @description Who did something, and when. */
+        KnowledgeObservation: {
+            who: string;
+            when: string;
+        };
+        /** @description What rests on the doubted id in some sets of its reasons but still stands on another, by kind. Only open actions are listed. */
+        KnowledgeStandingSet: {
+            beliefs: components["schemas"]["KnowledgeStanding"][];
+            decisions: components["schemas"]["KnowledgeStanding"][];
+            rules: components["schemas"]["KnowledgeStanding"][];
+            actions: components["schemas"]["KnowledgeStanding"][];
+        };
+        KnowledgeStanding: {
+            id: string;
+            text: string;
+            /** @description The sets of reasons that do not reach the doubted id, each as its ids. */
+            other: string[][];
+            file: string;
+        };
+        KnowledgeConflictSet: {
+            conflicts: components["schemas"]["KnowledgeConflict"][];
+        };
+        /** @description A contradiction where at least one side is contested. a_rests_on and b_rests_on are the leaves under each side, live evidence then opinions; a piece of evidence rests on itself. */
+        KnowledgeConflict: {
+            a: components["schemas"]["KnowledgeConflictSide"];
+            b: components["schemas"]["KnowledgeConflictSide"];
+            a_rests_on: string[];
+            b_rests_on: string[];
+        };
+        KnowledgeConflictSide: {
+            id: string;
+            /** @enum {string} */
+            kind: "belief" | "evidence";
+            text: string;
         };
         DeleteTaskResponse: {
             deleted: boolean;
@@ -850,7 +949,7 @@ export interface components {
         WorkflowSlugParam: string;
         /** @description Task UUID or task name. A value that parses as a UUID is looked up by id. */
         TaskIdParam: string;
-        /** @description A belief id, or for doubt also a piece of evidence's id. */
+        /** @description A belief, decision, rule or action id for why; a belief, decision, rule or evidence id for doubt. */
         KnowledgeIdParam: string;
     };
     requestBodies: never;
@@ -1680,7 +1779,10 @@ export interface operations {
     };
     listKnowledge: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Comma-separated evidence and belief ids. Everything is judged as if those were retracted or absent (a what-if; nothing is written), and the ids are echoed in `without`. An id that is not loaded evidence or a belief is a 404. */
+                without?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1697,6 +1799,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };
     };
@@ -1705,14 +1808,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description A belief id, or for doubt also a piece of evidence's id. */
+                /** @description A belief, decision, rule or action id for why; a belief, decision, rule or evidence id for doubt. */
                 id: components["parameters"]["KnowledgeIdParam"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description The belief, the evidence it cites and the beliefs it rests on. */
+            /** @description The node, the evidence it cites, what it rests on and its alternative sets of reasons, each a tree of Reasons down to the evidence. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1731,7 +1834,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description A belief id, or for doubt also a piece of evidence's id. */
+                /** @description A belief, decision, rule or action id for why; a belief, decision, rule or evidence id for doubt. */
                 id: components["parameters"]["KnowledgeIdParam"];
             };
             cookie?: never;
@@ -1749,6 +1852,28 @@ export interface operations {
             };
             400: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    knowledgeConflicts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The contested contradictions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeConflictSet"];
+                };
+            };
+            400: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };
     };

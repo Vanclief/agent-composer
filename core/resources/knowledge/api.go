@@ -1,6 +1,7 @@
-// Package knowledge serves the evidence, beliefs, decisions and rules of
-// package knowledge read only, with each belief's label computed when asked
-// (docs/decisions/0006-rules-and-beliefs.md). Checks are never run here.
+// Package knowledge serves the evidence, beliefs, decisions, rules and
+// actions of package knowledge read only, with each label computed when
+// asked (docs/decisions/0006-rules-and-beliefs.md). Checks are never run
+// here.
 package knowledge
 
 import (
@@ -15,14 +16,14 @@ import (
 
 // kinds are the subdirectories of the knowledge directory, the same ones
 // the agc CLI loads by default.
-var kinds = []string{"evidence", "beliefs", "decisions", "rules"}
+var kinds = []string{"evidence", "beliefs", "decisions", "rules", "actions"}
 
 type API struct {
 	dir string
 }
 
 // NewAPI returns the knowledge API over dir, which holds evidence/,
-// beliefs/, decisions/ and rules/.
+// beliefs/, decisions/, rules/ and actions/.
 func NewAPI(dir string) *API {
 	return &API{dir: dir}
 }
@@ -48,28 +49,37 @@ func (api *API) load() (*kb.Set, error) {
 }
 
 // Evidence is a piece of evidence with the beliefs citing it.
+// TranslatedBy names the model that wrote the record from its source, if
+// one did, and Contradicts the beliefs and evidence it says it
+// contradicts.
 type Evidence struct {
-	ID        string         `json:"id"`
-	Text      string         `json:"text"`
-	Who       string         `json:"who"`
-	When      string         `json:"when"`
-	Source    string         `json:"source"`
-	Retracted *kb.Retraction `json:"retracted"`
-	CitedBy   []string       `json:"cited_by"`
-	File      string         `json:"file"`
+	ID           string         `json:"id"`
+	Text         string         `json:"text"`
+	Who          string         `json:"who"`
+	When         string         `json:"when"`
+	Source       string         `json:"source"`
+	TranslatedBy string         `json:"translated_by"`
+	Retracted    *kb.Retraction `json:"retracted"`
+	Contradicts  []string       `json:"contradicts"`
+	CitedBy      []string       `json:"cited_by"`
+	File         string         `json:"file"`
 }
 
-// Belief is a belief with its computed status.
+// Belief is a belief with its computed status. Or lists its alternative
+// sets of reasons as ids, and ContestedBy what stands against it when it
+// is contested.
 type Belief struct {
-	ID        string   `json:"id"`
-	Text      string   `json:"text"`
-	Because   []string `json:"because"`
-	Evidence  []string `json:"evidence"`
-	Label     string   `json:"label"`
-	Opinions  []string `json:"opinions"`
-	Doubted   []string `json:"doubted"`
-	Retracted []string `json:"retracted"`
-	File      string   `json:"file"`
+	ID          string     `json:"id"`
+	Text        string     `json:"text"`
+	Because     []string   `json:"because"`
+	Evidence    []string   `json:"evidence"`
+	Or          [][]string `json:"or"`
+	Label       string     `json:"label"`
+	Opinions    []string   `json:"opinions"`
+	Doubted     []string   `json:"doubted"`
+	Retracted   []string   `json:"retracted"`
+	ContestedBy []string   `json:"contested_by"`
+	File        string     `json:"file"`
 }
 
 // Decision is a decision with the status of what it rests on.
@@ -100,7 +110,23 @@ type Rule struct {
 	File     string   `json:"file"`
 }
 
-// label is the package's label as an identifier: "in doubt" is in_doubt.
+// Action is something to do because of a decision, with the status of
+// what it rests on. Done is null while it is open.
+type Action struct {
+	ID       string          `json:"id"`
+	Text     string          `json:"text"`
+	Because  []string        `json:"because"`
+	Opened   kb.Observation  `json:"opened"`
+	Done     *kb.Observation `json:"done"`
+	Label    string          `json:"label"`
+	Opinions []string        `json:"opinions"`
+	Doubted  []string        `json:"doubted"`
+	File     string          `json:"file"`
+}
+
+// label is the package's label as an identifier, its spaces replaced by
+// underscores: grounded, opinion, in_doubt or contested. Every label in
+// the API goes through here.
 func label(status kb.Status) string {
 	return strings.ReplaceAll(string(status.Label), " ", "_")
 }
@@ -114,6 +140,17 @@ func list(ids []string) []string {
 	return ids
 }
 
+// alternatives lists each alternative set of reasons as its ids: the
+// beliefs and decisions it rests on, then the evidence it cites.
+func alternatives(sets []kb.Support) [][]string {
+	ids := [][]string{}
+	for _, set := range sets {
+		ids = append(ids, append(append([]string{}, set.Because...), set.Evidence...))
+	}
+
+	return ids
+}
+
 func evidenceView(set *kb.Set, evidence kb.Evidence) Evidence {
 	citedBy := []string{}
 	for _, belief := range set.Citing(evidence.ID) {
@@ -121,14 +158,16 @@ func evidenceView(set *kb.Set, evidence kb.Evidence) Evidence {
 	}
 
 	return Evidence{
-		ID:        evidence.ID,
-		Text:      evidence.Evidence,
-		Who:       evidence.Who,
-		When:      evidence.When,
-		Source:    evidence.Source,
-		Retracted: evidence.Retracted,
-		CitedBy:   citedBy,
-		File:      evidence.File,
+		ID:           evidence.ID,
+		Text:         evidence.Evidence,
+		Who:          evidence.Who,
+		When:         evidence.When,
+		Source:       evidence.Source,
+		TranslatedBy: evidence.TranslatedBy,
+		Retracted:    evidence.Retracted,
+		Contradicts:  list(evidence.Contradicts),
+		CitedBy:      citedBy,
+		File:         evidence.File,
 	}
 }
 
@@ -139,15 +178,17 @@ func beliefView(set *kb.Set, belief kb.Belief) (Belief, error) {
 	}
 
 	return Belief{
-		ID:        belief.ID,
-		Text:      belief.Belief,
-		Because:   list(belief.Because),
-		Evidence:  list(belief.Evidence),
-		Label:     label(status),
-		Opinions:  list(status.Opinions),
-		Doubted:   list(status.Doubted),
-		Retracted: list(status.Retracted),
-		File:      belief.File,
+		ID:          belief.ID,
+		Text:        belief.Belief,
+		Because:     list(belief.Because),
+		Evidence:    list(belief.Evidence),
+		Or:          alternatives(belief.Or),
+		Label:       label(status),
+		Opinions:    list(status.Opinions),
+		Doubted:     list(status.Doubted),
+		Retracted:   list(status.Retracted),
+		ContestedBy: list(status.ContestedBy),
+		File:        belief.File,
 	}, nil
 }
 
@@ -193,6 +234,26 @@ func ruleView(set *kb.Set, subject string, rule kb.Rule) Rule {
 	}
 }
 
+func actionView(set *kb.Set, action kb.Action) Action {
+	status := set.StatusOf(action.Supports())
+
+	view := Action{
+		ID:       action.ID,
+		Text:     action.Action,
+		Because:  list(action.Because),
+		Done:     action.Done,
+		Label:    label(status),
+		Opinions: list(status.Opinions),
+		Doubted:  list(status.Doubted),
+		File:     action.File,
+	}
+	if action.Opened != nil {
+		view.Opened = *action.Opened
+	}
+
+	return view
+}
+
 func beliefViews(set *kb.Set, beliefs []kb.Belief) ([]Belief, error) {
 	views := []Belief{}
 	for _, belief := range beliefs {
@@ -213,4 +274,26 @@ func decisionViews(set *kb.Set, decisions []kb.Decision) []Decision {
 	}
 
 	return views
+}
+
+func actionViews(set *kb.Set, actions []kb.Action) []Action {
+	views := []Action{}
+	for _, action := range actions {
+		views = append(views, actionView(set, action))
+	}
+
+	return views
+}
+
+// subjects maps each rule id to the subject of its ruleset. Rule ids are
+// unique across the set.
+func subjects(set *kb.Set) map[string]string {
+	found := map[string]string{}
+	for _, ruleset := range set.Rulesets {
+		for _, rule := range ruleset.Rules {
+			found[rule.ID] = ruleset.Subject
+		}
+	}
+
+	return found
 }

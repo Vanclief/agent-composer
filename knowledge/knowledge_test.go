@@ -1264,3 +1264,134 @@ func TestEmbed(t *testing.T) {
 		t.Fatalf("joinAnd with commas = %q", joinAnd([]string{"a, x", "b"}))
 	}
 }
+
+func TestKind(t *testing.T) {
+	set := loadGood(t)
+
+	tests := map[string]string{
+		"seen-a":      "evidence",
+		"observed-a":  "belief",
+		"choice":      "decision",
+		"passes":      "rule",
+		"open-action": "action",
+	}
+	for id, want := range tests {
+		got, found := set.Kind(id)
+		if !found || got != want {
+			t.Fatalf("Kind(%q) = %q, %v, want %q", id, got, found, want)
+		}
+	}
+
+	got, found := set.Kind("missing")
+	if found || got != "" {
+		t.Fatalf("Kind(missing) = %q, %v", got, found)
+	}
+}
+
+func TestWhyAny(t *testing.T) {
+	set := loadGood(t)
+
+	// A rule follows down through decisions to beliefs and evidence.
+	node, err := set.WhyAny("manual-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if node.Kind != "rule" || node.Text != "Must be read by a human." || len(node.Because) != 1 {
+		t.Fatalf("manual-one = %+v", node)
+	}
+	later := node.Because[0]
+	if later.Kind != "decision" || later.ID != "later-choice" || len(later.Because) != 1 || later.Because[0].ID != "choice" {
+		t.Fatalf("later-choice = %+v", later)
+	}
+	derived := later.Because[0].Because[0]
+	if derived.Kind != "belief" || derived.ID != "derived" || len(derived.Because) != 2 {
+		t.Fatalf("derived = %+v", derived)
+	}
+	leaf := derived.Because[0]
+	if leaf.ID != "observed-a" || !reflect.DeepEqual(ids(leaf.Evidence), []string{"seen-a"}) || leaf.Evidence[0].Who != "franco" {
+		t.Fatalf("observed-a = %+v", leaf)
+	}
+
+	node, err = set.WhyAny("open-action")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if node.Kind != "action" || node.File != filepath.Join("testdata", "good", "actions.yaml") || len(node.Because) != 1 || node.Because[0].Kind != "decision" {
+		t.Fatalf("open-action = %+v", node)
+	}
+
+	// A rule resting on nothing has no reasons.
+	node, err = set.WhyAny("fails")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(node.Because) != 0 || len(node.Evidence) != 0 || len(node.Or) != 0 {
+		t.Fatalf("fails = %+v", node)
+	}
+
+	// Alternatives are kept apart from the node's own reasons.
+	alternatives := load(t, "testdata/alternatives")
+	node, err = alternatives.WhyAny("either")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if node.Kind != "belief" || len(node.Because) != 1 || node.Because[0].ID != "by-x" || len(node.Or) != 1 || !reflect.DeepEqual(ids(node.Or[0].Evidence), []string{"seen-y"}) {
+		t.Fatalf("either = %+v", node)
+	}
+	node, err = alternatives.WhyAny("rule-or")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if node.Because[0].ID != "only-x" || len(node.Or) != 1 || node.Or[0].Because[0].ID != "by-y" || node.Or[0].Because[0].Evidence[0].Who != "ana" {
+		t.Fatalf("rule-or = %+v", node)
+	}
+
+	for _, id := range []string{"seen-a", "missing"} {
+		_, err = set.WhyAny(id)
+		if ez.ErrorCode(err) != ez.ENOTFOUND {
+			t.Fatalf("WhyAny(%s): err = %v, want not found", id, err)
+		}
+	}
+}
+
+func TestDoubtDecisionAndRule(t *testing.T) {
+	set := loadGood(t)
+
+	doubted, err := set.Doubt("choice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doubted.Beliefs) != 0 || !reflect.DeepEqual(ids(doubted.Decisions), []string{"later-choice"}) {
+		t.Fatalf("choice beliefs = %v, decisions = %v", ids(doubted.Beliefs), ids(doubted.Decisions))
+	}
+	if !reflect.DeepEqual(ids(doubted.Rules), []string{"manual-one"}) || !reflect.DeepEqual(ids(doubted.Actions), []string{"open-action"}) {
+		t.Fatalf("choice rules = %v, actions = %v", ids(doubted.Rules), ids(doubted.Actions))
+	}
+
+	doubted, err = set.Doubt("passes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doubted.Beliefs)+len(doubted.Decisions)+len(doubted.Rules)+len(doubted.Actions)+len(doubted.Standing) != 0 {
+		t.Fatalf("passes = %+v, want nothing resting on a rule", doubted)
+	}
+
+	// act-stands rests on decide-x but has choose-either too.
+	alternatives := load(t, "testdata/alternatives")
+	doubted, err = alternatives.Doubt("decide-x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doubted.Decisions) != 0 || !reflect.DeepEqual(ids(doubted.Actions), []string{"act-falls"}) {
+		t.Fatalf("decide-x decisions = %v, actions = %v", ids(doubted.Decisions), ids(doubted.Actions))
+	}
+	want := []Standing{{Kind: "action", ID: "act-stands", Text: "Do V or W.", File: filepath.Join("testdata", "alternatives", "actions.yaml"), Other: []Support{{Because: []string{"choose-either"}}}}}
+	if !reflect.DeepEqual(doubted.Standing, want) {
+		t.Fatalf("decide-x standing = %+v", doubted.Standing)
+	}
+
+	_, err = set.Doubt("open-action")
+	if ez.ErrorCode(err) != ez.ENOTFOUND {
+		t.Fatalf("Doubt of an action: err = %v, want not found", err)
+	}
+}
