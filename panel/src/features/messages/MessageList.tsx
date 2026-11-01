@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowDown } from 'lucide-react'
 
 import type { Message } from '@/api/msg'
-import { conceptIcons } from '@/components/concept-icons'
+import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { cn } from '@/lib/utils'
 
 // How close to the bottom (px) still counts as at the bottom.
@@ -61,14 +61,16 @@ function AuthorChip({ message }: { message: Message }) {
       title={human ? 'Human' : `Agent in task ${message.task}`}
       className={cn(
         'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium',
+        // A human is lit in the messaging color; an agent's chip stays
+        // neutral with its task icon in the task color.
         human
-          ? 'border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300'
-          : 'border-zinc-200 text-zinc-800 dark:border-zinc-800 dark:text-zinc-200',
+          ? [conceptColors.human.bg, conceptColors.human.border, conceptColors.human.text]
+          : 'border-border text-zinc-800 dark:text-zinc-200',
       )}
     >
-      <Icon aria-hidden className={cn('size-3.5', human ? 'text-sky-600 dark:text-sky-400' : 'text-zinc-500')} />@
+      <Icon aria-hidden className={cn('size-3.5', human ? conceptColors.human.text : conceptColors.task.text)} />@
       {message.from}
-      {!human && <span className="font-mono font-normal text-zinc-500">{message.task}</span>}
+      {!human && <span className="font-mono font-normal text-muted-foreground">{message.task}</span>}
     </span>
   )
 }
@@ -119,7 +121,7 @@ export function MessageList({ messages }: { messages: Message[] }) {
                 <AuthorChip message={group[0]} />
                 <span
                   title={new Date(group[0].created_at).toLocaleString()}
-                  className="rounded-md border border-zinc-200 px-1.5 py-0.5 font-mono text-xs text-zinc-500 dark:border-zinc-800"
+                  className="rounded-md border border-border px-1.5 py-0.5 font-mono text-xs text-muted-foreground"
                 >
                   {relativeTime(group[0].created_at, now)}
                 </span>
@@ -130,7 +132,7 @@ export function MessageList({ messages }: { messages: Message[] }) {
                   title={`#${m.id} · ${new Date(m.created_at).toLocaleString()}`}
                   className={cn(
                     'border-l-2 pl-2 break-words whitespace-pre-wrap',
-                    m.task ? 'border-zinc-200 dark:border-zinc-800' : 'border-sky-500/50',
+                    m.task ? 'border-border' : 'border-pink-500/60',
                   )}
                 >
                   {m.body}
@@ -144,7 +146,10 @@ export function MessageList({ messages }: { messages: Message[] }) {
         <button
           type="button"
           onClick={toBottom}
-          className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-sky-600 px-3 py-1 text-xs font-medium text-white shadow-md hover:bg-sky-500"
+          className={cn(
+            'absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full px-3 py-1 text-xs font-medium',
+            conceptColors.message.solid,
+          )}
         >
           New messages <ArrowDown className="size-3.5" />
         </button>

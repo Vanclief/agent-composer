@@ -3,7 +3,7 @@
 import { useState, type KeyboardEvent } from 'react'
 
 import { usePostMessage } from '@/api/hooks'
-import { conceptIcons } from '@/components/concept-icons'
+import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { ErrorText } from '@/components/error-text'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -34,7 +34,7 @@ function IdentityChip({
           onEdit(false)
         }}
       >
-        <Human aria-hidden className="size-4 text-sky-600 dark:text-sky-400" />
+        <Human aria-hidden className={cn('size-4', conceptColors.human.text)} />
         <Input
           autoFocus
           aria-label="Name"
@@ -68,8 +68,8 @@ function IdentityChip({
       className={cn(
         'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-xs',
         joined
-          ? 'border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300'
-          : 'border-dashed border-zinc-400 text-zinc-500 dark:border-zinc-600',
+          ? [conceptColors.human.bg, conceptColors.human.border, conceptColors.human.text]
+          : 'border-dashed border-zinc-400 text-muted-foreground dark:border-zinc-600',
         identity.joining && 'animate-pulse',
       )}
     >
@@ -129,7 +129,7 @@ export function Composer({ channel, identity }: { channel: string; identity: Ide
   }
 
   return (
-    <div className="flex shrink-0 flex-col gap-2 border-t border-zinc-200 p-3 dark:border-zinc-800">
+    <div className="flex shrink-0 flex-col gap-2 border-t border-border p-3">
       {identity.error && (
         <div className="flex items-start gap-2">
           <ErrorText error={identity.error} className="flex-1" />
@@ -152,7 +152,7 @@ export function Composer({ channel, identity }: { channel: string; identity: Ide
       />
       <div className="flex items-center gap-2">
         <IdentityChip key={identity.name} identity={identity} editing={editing} onEdit={setEditing} />
-        <Button className="ml-auto" size="sm" disabled={disabled} onClick={send}>
+        <Button className={cn('ml-auto', conceptColors.message.solid)} size="sm" disabled={disabled} onClick={send}>
           <Send /> {label}
         </Button>
       </div>

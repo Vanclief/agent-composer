@@ -166,8 +166,8 @@ export function TerminalPane({ task, job, visible, onExited }: TerminalPaneProps
       data-connection={connection.state}
       className={cn('min-h-0 flex-1 flex-col', visible ? 'flex' : 'hidden')}
     >
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-zinc-200 px-3 dark:border-zinc-800">
-        <IconChip icon={conceptIcons.terminal} title={job.id} className="text-sm">
+      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
+        <IconChip icon={conceptIcons.terminal} concept="terminal" title={job.id} className="text-sm">
           {job.command.join(' ')}
         </IconChip>
         <JobShape running={job.running} />
