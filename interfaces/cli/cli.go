@@ -13,7 +13,6 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"github.com/uptrace/bun/dialect"
 	"github.com/uptrace/bun/migrate"
 	cli "github.com/urfave/cli/v2"
 	"golang.org/x/sync/errgroup"
@@ -607,13 +606,9 @@ func runMigrationByName(ctx context.Context, name string) error {
 	}
 	defer ctrl.DB.Close() // nolint:errcheck // Close errors are not actionable here.
 
-	// Registered migrations contain PostgreSQL-specific SQL. A SQLite
-	// database is always created from the current model schema, so it has
-	// nothing to migrate.
-	if ctrl.DB.Dialect().Name() != dialect.PG {
-		return ez.New(ez.EINVALID, "Migrations only apply to PostgreSQL. SQLite databases are created with the current schema and never need them", nil)
-	}
-
+	// Startup already applied every pending migration, so this mostly
+	// reports a migration as applied. It shares bun's migration tables with
+	// the startup run.
 	fullMigrator := migrate.NewMigrator(ctrl.DB.DB, appmigrations.Migrations)
 	err = fullMigrator.Init(ctx)
 	if err != nil {
