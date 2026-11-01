@@ -1,6 +1,6 @@
 // "New task": title with its live #slug, saved-spec tiles to start from,
 // and the spec as six cards (or raw YAML behind the </> toggle). Ported
-// from the Alpine modal in control_panel/.
+// from the previous Alpine modal (control_panel/ in git history before 2026-11-02).
 import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { File, Loader2, Play, Trash2, X } from 'lucide-react'
 import { useNavigate } from 'react-router'

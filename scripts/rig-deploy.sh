@@ -101,7 +101,7 @@ cd "$RUN"
 for _ in $(seq 20); do
   if curl -fsS -o /dev/null "127.0.0.1:$PORT/api/tasks" 2>/dev/null; then
     echo "==> ok $(git -C "$SRC" rev-parse --short HEAD) on $HOST"
-    agc version
+    agc --version
     exit 0
   fi
   sleep 1

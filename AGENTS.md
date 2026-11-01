@@ -39,7 +39,7 @@
 - `secrets`: secret placeholders bound to hosts.
 - `messaging`: messaging transport and identity.
 - `images/agc-agent`: the agent image that runs inside sandboxes.
-- `panel/`: React control panel, see `panel/CLAUDE.md`. `control_panel/` is the old static panel being retired.
+- `panel/`: React control panel, see `panel/CLAUDE.md`. `web/` is the older workflow builder UI.
 - `docs/decisions`: ADRs 0001–0005; read the relevant one before changing that area.
 - `docs/openapi.yaml`: REST API spec.
 

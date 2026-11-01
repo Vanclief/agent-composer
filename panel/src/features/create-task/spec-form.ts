@@ -1,6 +1,6 @@
 // The create dialog edits a SpecForm; the TaskSpec sent to the server and
 // saved as YAML is always derived from it with formToSpec. Ported from the
-// Alpine panel (control_panel/app.js).
+// previous Alpine panel (control_panel/app.js in git history before 2026-11-02).
 import { dump, load } from 'js-yaml'
 
 import type { TaskSpec } from '@/api/client'
