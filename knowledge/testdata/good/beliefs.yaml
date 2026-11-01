@@ -1,10 +1,10 @@
 beliefs:
   - id: observed-a
     belief: A was seen.
-    observed: { who: franco, when: 2026-11-01 }
+    evidence: [seen-a]
   - id: observed-b
     belief: B was seen.
-    observed: { who: franco, when: 2026-10-30 }
+    evidence: [seen-b]
   - id: derived
     belief: C follows from A and B.
     because: [observed-a, observed-b]
@@ -13,4 +13,12 @@ beliefs:
     because: [derived]
   - id: unrelated
     belief: E stands alone.
-    observed: { who: franco, when: 2026-11-01 }
+    evidence: [seen-e-first, seen-e-again]
+  - id: hunch
+    belief: F is true, though nobody saw it.
+  - id: retracted-only
+    belief: G is there.
+    evidence: [seen-g]
+  - id: mixed
+    belief: H follows from F and G.
+    because: [hunch, retracted-only]

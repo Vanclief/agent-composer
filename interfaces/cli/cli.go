@@ -87,6 +87,7 @@ func Run(ctx context.Context, args []string) error {
 			taskCommand(),
 			rulesCommand(),
 			beliefsCommand(),
+			evidenceCommand(),
 			decisionsCommand(),
 			{
 				Name:  "mcp",

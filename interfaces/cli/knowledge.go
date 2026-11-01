@@ -12,13 +12,15 @@ import (
 	"github.com/vanclief/agent-composer/knowledge"
 )
 
-// The rules, beliefs and decisions commands
+// The evidence, rules, beliefs and decisions commands
 // (docs/decisions/0006-rules-and-beliefs.md). Output is plain markdown so
-// it can be pasted into an agent's context. Nothing is ever written.
+// it can be pasted into an agent's context. Nothing is ever written, and
+// whether a belief is grounded, an opinion or in doubt is computed as it is
+// printed.
 
 var beliefsFlag = &cli.StringSliceFlag{
 	Name:  "beliefs",
-	Usage: "Beliefs and decisions the rules rest on (default beliefs/ decisions/ when they exist)",
+	Usage: "Evidence, beliefs and decisions the rules rest on (default evidence/ beliefs/ decisions/ when they exist)",
 }
 
 func rulesCommand() *cli.Command {
@@ -50,16 +52,37 @@ func beliefsCommand() *cli.Command {
 		Usage: "Beliefs: what we hold true, and why (ADR 0006)",
 		Subcommands: []*cli.Command{
 			{
+				Name:      "show",
+				Usage:     "Print every belief as grounded, an opinion or in doubt, computed from its evidence",
+				ArgsUsage: "[path...]",
+				Action:    beliefsShow,
+			},
+			{
 				Name:      "why",
-				Usage:     "Follow a belief down to the observations it rests on",
+				Usage:     "Follow a belief down to the evidence it rests on",
 				ArgsUsage: "<id> [path...]",
 				Action:    beliefsWhy,
 			},
 			{
 				Name:      "doubt",
-				Usage:     "List the beliefs, decisions and rules that fall if a belief is wrong",
+				Usage:     "List the beliefs, decisions and rules that fall if a belief or a piece of evidence is wrong",
 				ArgsUsage: "<id> [path...]",
 				Action:    beliefsDoubt,
+			},
+		},
+	}
+}
+
+func evidenceCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "evidence",
+		Usage: "Evidence: what was seen, by whom and when (ADR 0006)",
+		Subcommands: []*cli.Command{
+			{
+				Name:      "show",
+				Usage:     "Print the evidence and how many beliefs cite each piece",
+				ArgsUsage: "[path...]",
+				Action:    evidenceShow,
 			},
 		},
 	}
@@ -93,14 +116,14 @@ func existing(paths ...string) []string {
 	return found
 }
 
-// loadDefault loads paths, or beliefs/ decisions/ rules/ when none are
-// given.
+// loadDefault loads paths, or evidence/ beliefs/ decisions/ rules/ when
+// none are given.
 func loadDefault(paths []string) (*knowledge.Set, error) {
 	if len(paths) == 0 {
-		paths = existing("beliefs", "decisions", "rules")
+		paths = existing("evidence", "beliefs", "decisions", "rules")
 	}
 	if len(paths) == 0 {
-		return nil, ez.New(ez.EINVALID, "no beliefs/, decisions/ or rules/ here: pass the files or directories", nil)
+		return nil, ez.New(ez.EINVALID, "no evidence/, beliefs/, decisions/ or rules/ here: pass the files or directories", nil)
 	}
 
 	return knowledge.Load(paths...)
@@ -133,7 +156,7 @@ func loadRules(c *cli.Context) (*knowledge.Set, error) {
 		return nil, ez.New(ez.EINVALID, "no rules/ here: pass the rule files or directories", nil)
 	}
 	if len(beliefs) == 0 {
-		beliefs = existing("beliefs", "decisions")
+		beliefs = existing("evidence", "beliefs", "decisions")
 	}
 
 	return knowledge.Load(append(paths, beliefs...)...)
@@ -158,7 +181,7 @@ func rulesCheck(c *cli.Context) error {
 			return err
 		}
 
-		printChecklist(ruleset, results, false)
+		printChecklist(set, ruleset, results, false)
 		for _, result := range results {
 			counts[mark(result)]++
 		}
@@ -184,7 +207,7 @@ func rulesShow(c *cli.Context) error {
 		for _, rule := range ruleset.Rules {
 			results = append(results, knowledge.Result{Rule: rule})
 		}
-		printChecklist(ruleset, results, true)
+		printChecklist(set, ruleset, results, true)
 	}
 
 	return nil
@@ -202,8 +225,9 @@ func mark(result knowledge.Result) string {
 }
 
 // printChecklist prints a ruleset under its subject, one line per rule,
-// with a failed check's output indented under it.
-func printChecklist(ruleset knowledge.Ruleset, results []knowledge.Result, withChecks bool) {
+// with a failed check's output indented under it. A rule resting on an
+// opinion or a doubted belief says so; its check status is unchanged.
+func printChecklist(set *knowledge.Set, ruleset knowledge.Ruleset, results []knowledge.Result, withChecks bool) {
 	fmt.Printf("## %s\n\n", oneLine(ruleset.Subject))
 	for _, result := range results {
 		rule := result.Rule
@@ -211,7 +235,7 @@ func printChecklist(ruleset knowledge.Ruleset, results []knowledge.Result, withC
 		if withChecks && rule.Check != "" {
 			line += " [check: `" + rule.Check + "`]"
 		}
-		fmt.Println(line + because(rule.Because))
+		fmt.Println(line + because(rule.Because) + restsOn(set.StatusOf(rule.Because)))
 
 		if result.Passed != nil && !*result.Passed {
 			for _, outputLine := range strings.Split(result.Output, "\n") {
@@ -228,6 +252,38 @@ func because(ids []string) string {
 	}
 
 	return " (because: " + strings.Join(ids, ", ") + ")"
+}
+
+// restsOn names the opinions and doubted beliefs under a rule or a
+// decision, if any.
+func restsOn(status knowledge.Status) string {
+	text := ""
+	if len(status.Opinions) > 0 {
+		text += " (rests on opinion: " + strings.Join(status.Opinions, ", ") + ")"
+	}
+	if len(status.Doubted) > 0 {
+		text += " (rests on doubted belief: " + strings.Join(status.Doubted, ", ") + ")"
+	}
+
+	return text
+}
+
+// statusLabel prints a belief's status in brackets, with the leaves behind
+// each reason it is not grounded.
+func statusLabel(status knowledge.Status) string {
+	if status.Label == knowledge.Grounded {
+		return " [grounded]"
+	}
+
+	text := ""
+	if len(status.Opinions) > 0 {
+		text += " [opinion: missing evidence on " + strings.Join(status.Opinions, ", ") + "]"
+	}
+	if len(status.Doubted) > 0 {
+		text += " [in doubt: retracted evidence " + strings.Join(status.Retracted, ", ") + " under " + strings.Join(status.Doubted, ", ") + "]"
+	}
+
+	return text
 }
 
 // oneLine folds a YAML block of text onto one line.
@@ -256,12 +312,20 @@ func beliefsWhy(c *cli.Context) error {
 	return nil
 }
 
-// printReason prints a belief and, indented under it, what it rests on.
+// printReason prints a belief with the evidence it cites and, indented
+// under it, what it rests on. A leaf citing nothing is an opinion.
 func printReason(reason knowledge.Reason, depth int) {
 	belief := reason.Belief
 	line := fmt.Sprintf("%s- %s: %s", strings.Repeat("  ", depth), belief.ID, oneLine(belief.Belief))
-	if belief.Observed != nil {
-		line += fmt.Sprintf(" — observed by %s on %s", belief.Observed.Who, belief.Observed.When)
+	for _, evidence := range reason.Evidence {
+		if evidence.Retracted != nil {
+			line += fmt.Sprintf(" — evidence: %s (retracted %s: %s)", evidence.ID, evidence.Retracted.When, oneLine(evidence.Retracted.Why))
+			continue
+		}
+		line += fmt.Sprintf(" — evidence: %s (%s, %s)", evidence.ID, evidence.Who, evidence.When)
+	}
+	if len(reason.Evidence) == 0 && len(reason.Because) == 0 {
+		line += " — opinion: no evidence"
 	}
 	fmt.Println(line)
 
@@ -286,7 +350,12 @@ func beliefsDoubt(c *cli.Context) error {
 		return err
 	}
 
-	fmt.Printf("If %s is wrong, recheck what rests on it.\n\n", id)
+	_, isBelief := findBelief(set, id)
+	if isBelief {
+		fmt.Printf("If %s is wrong, recheck what rests on it.\n\n", id)
+	} else {
+		fmt.Printf("If %s no longer holds, recheck what rests on it.\n\n", id)
+	}
 
 	lines := []string{}
 	for _, belief := range doubted.Beliefs {
@@ -337,7 +406,83 @@ func decisionsShow(c *cli.Context) error {
 	fmt.Printf("## Decisions\n\n")
 	for _, decision := range set.Decisions {
 		decided := fmt.Sprintf(" — decided by %s on %s", decision.Decided.Who, decision.Decided.When)
-		fmt.Println("- " + decision.ID + ": " + oneLine(decision.Decision) + because(decision.Because) + adr(decision) + decided)
+		fmt.Println("- " + decision.ID + ": " + oneLine(decision.Decision) + because(decision.Because) + adr(decision) + decided + restsOn(set.StatusOf(decision.Because)))
+	}
+
+	return nil
+}
+
+func findBelief(set *knowledge.Set, id string) (knowledge.Belief, bool) {
+	for _, belief := range set.Beliefs {
+		if belief.ID == id {
+			return belief, true
+		}
+	}
+
+	return knowledge.Belief{}, false
+}
+
+// beliefsShow prints every belief with its status, computed now from the
+// evidence under it, grouped by file.
+func beliefsShow(c *cli.Context) error {
+	set, err := loadDefault(c.Args().Slice())
+	if err != nil {
+		return err
+	}
+
+	file := ""
+	for _, belief := range set.Beliefs {
+		if belief.File != file {
+			if file != "" {
+				fmt.Println()
+			}
+			file = belief.File
+			fmt.Printf("## %s\n\n", file)
+		}
+
+		status, err := set.Status(belief.ID)
+		if err != nil {
+			return err
+		}
+		fmt.Println("- " + belief.ID + ": " + oneLine(belief.Belief) + statusLabel(status))
+	}
+
+	return nil
+}
+
+// evidenceShow prints every piece of evidence with how many beliefs cite
+// it, so unused evidence is visible, grouped by file.
+func evidenceShow(c *cli.Context) error {
+	set, err := loadDefault(c.Args().Slice())
+	if err != nil {
+		return err
+	}
+
+	file := ""
+	for _, evidence := range set.Evidence {
+		if evidence.File != file {
+			if file != "" {
+				fmt.Println()
+			}
+			file = evidence.File
+			fmt.Printf("## %s\n\n", file)
+		}
+
+		line := fmt.Sprintf("- %s: %s — %s, %s", evidence.ID, oneLine(evidence.Evidence), evidence.Who, evidence.When)
+		if evidence.Source != "" {
+			line += " [source: " + evidence.Source + "]"
+		}
+		if evidence.Retracted != nil {
+			retracted := evidence.Retracted
+			line += fmt.Sprintf(" [retracted by %s on %s: %s]", retracted.Who, retracted.When, oneLine(retracted.Why))
+		}
+
+		cited := len(set.Citing(evidence.ID))
+		noun := "beliefs"
+		if cited == 1 {
+			noun = "belief"
+		}
+		fmt.Printf("%s (cited by %d %s)\n", line, cited, noun)
 	}
 
 	return nil
