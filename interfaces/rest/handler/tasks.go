@@ -11,8 +11,10 @@ import (
 // taskRef reads the :id path segment, which is a task UUID or a task name.
 // Task names can never parse as UUIDs, so the two cannot be confused.
 func taskRef(c echo.Context) (uuid.UUID, string) {
-	param := c.Param("id")
+	return parseTaskRef(c.Param("id"))
+}
 
+func parseTaskRef(param string) (uuid.UUID, string) {
 	id, err := uuid.Parse(param)
 	if err == nil {
 		return id, ""

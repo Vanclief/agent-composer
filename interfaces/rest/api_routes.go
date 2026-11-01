@@ -61,6 +61,9 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	tasks.POST("/:id/stop", h.StopTask)
 	tasks.POST("/:id/start", h.StartTask)
 	tasks.DELETE("/:id", h.DeleteTask)
+	tasks.GET("/:id/terminals", h.ListTerminals)
+	tasks.POST("/:id/terminals", h.StartTerminal)
+	tasks.GET("/:id/terminals/:job/ws", h.TerminalSocket)
 
 	api.Any("/msg/*", echo.WrapHandler(h.Messaging()))
 }

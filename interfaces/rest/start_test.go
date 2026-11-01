@@ -1,12 +1,15 @@
 package rest
 
 import (
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
+
+	controlpanel "github.com/vanclief/agent-composer/control_panel"
 )
 
 func TestSPADeepLinks(t *testing.T) {
@@ -162,5 +165,53 @@ func TestSPADoesNotRewriteMissingAPIRoutes(t *testing.T) {
 	}
 	if strings.Contains(response.Body.String(), `<div id="root"></div>`) {
 		t.Error("missing API route was rewritten to the SPA")
+	}
+}
+
+func TestPanel(t *testing.T) {
+	t.Parallel()
+
+	index, err := fs.ReadFile(controlpanel.FS, "index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e := echo.New()
+	e.GET("/api/tasks", func(c echo.Context) error {
+		return c.JSON(http.StatusOK, map[string]bool{"ok": true})
+	})
+	err = useSPA(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usePanel(e)
+
+	testCases := []struct {
+		path     string
+		status   int
+		body     string
+		location string
+	}{
+		{path: "/panel", status: http.StatusMovedPermanently, location: "/panel/"},
+		{path: "/panel/", status: http.StatusOK, body: string(index)},
+		{path: "/panel/index.html", status: http.StatusOK, body: string(index)},
+		{path: "/panel/no/such/page", status: http.StatusOK, body: string(index)},
+		{path: "/api/tasks", status: http.StatusOK, body: `{"ok":true}` + "\n"},
+	}
+	for _, testCase := range testCases {
+		request := httptest.NewRequest(http.MethodGet, testCase.path, nil)
+		response := httptest.NewRecorder()
+		e.ServeHTTP(response, request)
+
+		if response.Code != testCase.status {
+			t.Fatalf("%s: status = %d, want %d", testCase.path, response.Code, testCase.status)
+		}
+		if response.Body.String() != testCase.body && testCase.body != "" {
+			t.Fatalf("%s: body is not the expected %d bytes, got %.80q", testCase.path, len(testCase.body), response.Body.String())
+		}
+		location := response.Header().Get(echo.HeaderLocation)
+		if location != testCase.location {
+			t.Fatalf("%s: location = %q, want %q", testCase.path, location, testCase.location)
+		}
 	}
 }

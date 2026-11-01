@@ -3,6 +3,7 @@ module github.com/vanclief/agent-composer
 go 1.26.1
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/go-ozzo/ozzo-validation v3.6.0+incompatible
 	github.com/google/uuid v1.6.0
 	github.com/labstack/echo/v4 v4.15.4
