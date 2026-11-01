@@ -3,227 +3,170 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sandboxes · Control Panel</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Tasks · agc</title>
+  <link rel="stylesheet" href="vendor/xterm/xterm.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="vendor/tailwindcss/tailwindcss-play-3.4.17.js"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
       theme: {
         extend: {
-          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'], mono: ['JetBrains Mono', 'ui-monospace', 'monospace'] },
+          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'], mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'] },
         },
       },
     }
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet" />
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <style>
-    [x-cloak] { display: none !important; }
-    svg.lucide { width: 16px; height: 16px; stroke-width: 1.5; }
-  </style>
+  <script src="vendor/lucide/lucide.min.js"></script>
+  <script src="vendor/js-yaml/js-yaml.min.js"></script>
+  <script src="vendor/xterm/xterm.js"></script>
+  <script src="vendor/xterm/addon-fit.js"></script>
+  <script src="app.js"></script>
+  <script defer src="vendor/alpinejs/cdn.min.js"></script>
 </head>
 
-<body class="h-full bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 font-sans antialiased" x-data="app()" x-init="init()">
+<body class="h-full bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 font-sans antialiased" x-data="panel()">
 <div class="flex h-screen overflow-hidden">
 
   <!-- ============ Sidebar ============ -->
-  <aside :class="sidebarOpen ? 'w-60' : 'w-14'" class="flex shrink-0 flex-col border-r border-zinc-200 bg-zinc-50 transition-all duration-200 dark:border-zinc-800 dark:bg-zinc-900/60">
-    <!-- Logo + collapse -->
+  <aside :class="sidebarOpen ? 'w-56' : 'w-14'" class="flex shrink-0 flex-col border-r border-zinc-200 bg-zinc-50 transition-all duration-200 dark:border-zinc-800 dark:bg-zinc-900/60">
     <div class="flex h-[54px] items-center px-2" :class="sidebarOpen ? 'justify-between' : 'justify-center'">
       <div x-show="sidebarOpen" class="flex items-center gap-2 pl-1 font-semibold tracking-tight">
         <div class="grid h-6 w-6 place-items-center rounded bg-zinc-900 text-white dark:bg-white dark:text-zinc-900">
           <i data-lucide="hexagon"></i>
         </div>
-        Control Panel
+        agc
       </div>
-      <button @click="sidebarOpen = !sidebarOpen" class="rounded-md p-2 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800">
+      <button @click="sidebarOpen = !sidebarOpen" class="rounded-md p-2 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800" title="Collapse sidebar">
         <i data-lucide="panel-left"></i>
       </button>
     </div>
     <div class="h-px bg-zinc-200 dark:bg-zinc-800"></div>
 
-    <div class="flex flex-1 flex-col overflow-hidden pt-4">
-      <div class="flex flex-col gap-2 px-2 pb-2">
-        <!-- Organization picker -->
-        <button class="flex items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-sm hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-800" :class="!sidebarOpen && 'justify-center'">
-          <span class="grid h-5 w-5 shrink-0 place-items-center rounded bg-emerald-600 text-[10px] font-semibold text-white">P</span>
-          <span x-show="sidebarOpen" class="flex-1 truncate text-left">Personal</span>
-          <span x-show="sidebarOpen" class="text-zinc-500"><i data-lucide="chevrons-up-down"></i></span>
-        </button>
-        <!-- Search -->
-        <button class="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-100/50 px-2 py-1.5 text-sm text-zinc-500 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800/40 dark:hover:bg-zinc-800" :class="!sidebarOpen && 'justify-center'">
-          <span class="flex items-center gap-2"><i data-lucide="search"></i><span x-show="sidebarOpen">Search</span></span>
-          <kbd x-show="sidebarOpen" class="rounded border border-zinc-300 px-1.5 text-[10px] dark:border-zinc-700">⌘ K</kbd>
-        </button>
-      </div>
+    <nav class="flex-1 overflow-y-auto">
+      <ul class="flex flex-col gap-0.5 p-2">
+        <li>
+          <a href="#/tasks" title="Tasks"
+             class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors"
+             :class="[view !== 'messages' ? 'bg-zinc-200 font-medium text-zinc-900 dark:bg-zinc-800 dark:text-white' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100', !sidebarOpen && 'justify-center']">
+            <i data-lucide="container"></i>
+            <span x-show="sidebarOpen">Tasks</span>
+          </a>
+        </li>
+        <li>
+          <a href="#/messages" title="Messages"
+             class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors"
+             :class="[view === 'messages' ? 'bg-zinc-200 font-medium text-zinc-900 dark:bg-zinc-800 dark:text-white' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100', !sidebarOpen && 'justify-center']">
+            <i data-lucide="messages-square"></i>
+            <span x-show="sidebarOpen">Messages</span>
+          </a>
+        </li>
+      </ul>
+    </nav>
 
-      <!-- Nav groups -->
-      <nav class="flex-1 overflow-y-auto">
-        <template x-for="(group, gi) in nav" :key="group.label">
-          <div>
-            <div x-show="gi > 0" class="mx-2 my-1 h-px bg-zinc-200 dark:bg-zinc-800"></div>
-            <ul class="flex flex-col gap-0.5 p-2">
-              <template x-for="item in group.items" :key="item.label">
-                <li>
-                  <a href="#" @click.prevent="active = item.label" :title="item.label"
-                     class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors"
-                     :class="[active === item.label ? 'bg-zinc-200 font-medium text-zinc-900 dark:bg-zinc-800 dark:text-white' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100', !sidebarOpen && 'justify-center']">
-                    <i :data-lucide="item.icon"></i>
-                    <span x-show="sidebarOpen" x-text="item.label"></span>
-                  </a>
-                </li>
-              </template>
-            </ul>
-          </div>
-        </template>
-      </nav>
-
-      <div class="flex items-center justify-between px-4 pb-4 pt-2 text-xs text-zinc-500">
-        <span x-show="sidebarOpen">Version 0.1.0</span>
-        <button @click="toggleTheme()" class="rounded p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800" title="Toggle theme">
-          <i data-lucide="sun-moon"></i>
-        </button>
-      </div>
+    <div class="flex items-center justify-between px-4 pb-4 pt-2 text-xs text-zinc-500">
+      <span x-show="sidebarOpen">Tasks panel</span>
+      <button @click="toggleTheme()" class="rounded p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800" title="Toggle theme">
+        <i data-lucide="sun-moon"></i>
+      </button>
     </div>
   </aside>
 
   <!-- ============ Main ============ -->
   <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
-    <!-- Breadcrumb header -->
-    <header class="flex h-[54px] shrink-0 items-center justify-between border-b border-zinc-200 px-6 text-sm dark:border-zinc-800">
-      <div class="flex items-center gap-2 text-zinc-500">
-        <span>Personal</span><i data-lucide="chevron-right"></i><span class="text-zinc-900 dark:text-zinc-100" x-text="active"></span>
-      </div>
-      <div class="flex items-center gap-3 text-zinc-500">
-        <a href="#" class="hover:text-zinc-900 dark:hover:text-zinc-100">Docs</a>
-        <div class="grid h-7 w-7 place-items-center rounded-full bg-zinc-200 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">FV</div>
+    <header class="flex h-[54px] shrink-0 items-center border-b border-zinc-200 px-6 text-sm dark:border-zinc-800">
+      <div class="flex min-w-0 items-center gap-2 text-zinc-500">
+        <template x-for="(c, i) in crumbs" :key="c.href">
+          <span class="flex min-w-0 items-center gap-2">
+            <span x-show="i > 0">/</span>
+            <a :href="c.href" x-text="c.label" class="truncate hover:text-zinc-900 dark:hover:text-zinc-100" :class="i === crumbs.length - 1 && 'text-zinc-900 dark:text-zinc-100'"></a>
+          </span>
+        </template>
       </div>
     </header>
 
-    <!-- Non-Sandboxes pages: placeholder -->
-    <section x-show="active !== 'Sandboxes'" x-cloak class="grid flex-1 place-items-center text-sm text-zinc-500">
-      <p><span x-text="active"></span> isn't mocked yet.</p>
-    </section>
+    <!-- Action errors (start/stop/delete), shown in place on every page -->
+    <div x-show="actionError" x-cloak class="mx-6 mt-4 flex items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+      <span class="whitespace-pre-wrap" x-text="actionError"></span>
+      <button @click="actionError = ''" class="shrink-0 text-xs underline">Dismiss</button>
+    </div>
 
-    <!-- Sandboxes page -->
-    <section x-show="active === 'Sandboxes'" class="flex min-h-0 flex-1 flex-col gap-4 px-6 py-6">
-      <!-- Page intro -->
+    <!-- ================= Tasks list ================= -->
+    <section x-show="view === 'tasks'" class="flex min-h-0 flex-1 flex-col gap-4 px-6 py-6">
       <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-semibold tracking-tight">Sandboxes</h1>
-        <div class="flex items-center gap-2">
-          <button x-show="sandboxes.length === 0" class="text-sm text-zinc-500 hover:underline">Onboarding guide</button>
-          <button @click="openCreate()" class="flex items-center gap-1.5 rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
-            <i data-lucide="plus"></i> Create Sandbox
-          </button>
-        </div>
+        <h1 class="text-2xl font-semibold tracking-tight">Tasks</h1>
+        <button @click="openCreate()" class="flex items-center gap-1.5 rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+          <i data-lucide="plus"></i> New task
+        </button>
       </div>
 
-      <!-- Toolbar -->
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-3">
         <div class="relative w-full max-w-sm">
-          <i data-lucide="search" class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500"></i>
-          <input x-model="query" placeholder="Search by Name"
+          <span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500"><i data-lucide="search"></i></span>
+          <input x-model="query" placeholder="Search by name"
                  class="w-full rounded-md border border-zinc-200 bg-transparent py-1.5 pl-8 pr-3 text-sm outline-none placeholder:text-zinc-500 focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600" />
         </div>
-
-        <!-- Filter dropdown (State) -->
-        <div class="relative" x-data="{ open: false }" @click.outside="open = false">
-          <button @click="open = !open" class="flex items-center gap-1.5 rounded-md border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">
-            <i data-lucide="list-filter"></i> Filter
-            <span x-show="stateFilter.length" x-text="stateFilter.length" class="rounded bg-zinc-200 px-1.5 text-xs dark:bg-zinc-700"></span>
-          </button>
-          <div x-show="open" x-cloak class="absolute left-0 z-20 mt-1 w-56 rounded-md border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
-            <div class="px-2 py-1.5 text-xs font-medium text-zinc-500">State</div>
-            <template x-for="s in states" :key="s">
-              <label class="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800">
-                <input type="checkbox" :value="s" x-model="stateFilter" class="accent-zinc-900 dark:accent-white" />
-                <span class="h-2 w-2 rounded-full" :class="stateDot(s)"></span>
-                <span x-text="s"></span>
-              </label>
-            </template>
-            <button x-show="stateFilter.length" @click="stateFilter = []" class="mt-1 w-full rounded px-2 py-1.5 text-left text-sm text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800">Clear filters</button>
-          </div>
-        </div>
-
-        <!-- Bulk actions -->
-        <div x-show="selected.length" x-cloak class="ml-auto flex items-center gap-2 text-sm">
-          <span class="text-zinc-500"><span x-text="selected.length"></span> selected</span>
-          <button @click="bulk('started')" class="rounded-md border border-zinc-200 px-3 py-1.5 hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">Start</button>
-          <button @click="bulk('stopped')" class="rounded-md border border-zinc-200 px-3 py-1.5 hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">Stop</button>
-          <button @click="bulkDelete()" class="rounded-md border border-red-300 px-3 py-1.5 text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950">Delete</button>
-        </div>
+        <span class="text-xs text-zinc-500">Refreshes every 5s</span>
       </div>
 
-      <!-- Table -->
+      <div x-show="tasksError" x-cloak class="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+        Could not load tasks: <span x-text="tasksError"></span>. Retrying every 5s.
+      </div>
+
       <div class="min-h-0 flex-1 overflow-auto rounded-md border border-zinc-200 dark:border-zinc-800">
         <table class="w-full text-sm">
           <thead class="sticky top-0 whitespace-nowrap bg-zinc-50 text-left text-xs font-medium text-zinc-500 dark:bg-zinc-900">
             <tr class="border-b border-zinc-200 dark:border-zinc-800">
-              <th class="w-10 px-3 py-2"><input type="checkbox" :checked="allSelected" @change="toggleAll($event.target.checked)" class="accent-zinc-900 dark:accent-white" /></th>
               <th class="px-3 py-2">Name</th>
-              <th class="px-3 py-2">UUID</th>
-              <th class="px-3 py-2">State</th>
-              <th class="px-3 py-2">Snapshot</th>
-              <th class="px-3 py-2">Region</th>
+              <th class="px-3 py-2">Status</th>
+              <th class="px-3 py-2">Image</th>
               <th class="px-3 py-2">Resources</th>
-              <th class="px-3 py-2">Labels</th>
-              <th class="px-3 py-2">Last Event</th>
+              <th class="px-3 py-2">Repo</th>
               <th class="px-3 py-2">Created</th>
-              <th class="w-10 px-3 py-2"></th>
+              <th class="px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
-            <template x-for="sb in filtered" :key="sb.id">
-              <tr class="border-b border-zinc-100 hover:bg-zinc-50 dark:border-zinc-800/70 dark:hover:bg-zinc-900/50" :class="selected.includes(sb.id) && 'bg-zinc-50 dark:bg-zinc-900/50'">
-                <td class="px-3 py-2.5"><input type="checkbox" :value="sb.id" x-model="selected" class="accent-zinc-900 dark:accent-white" /></td>
-                <td class="whitespace-nowrap px-3 py-2.5 font-medium" x-text="sb.name"></td>
-                <td class="px-3 py-2.5">
-                  <button @click="copy(sb.id)" class="group flex items-center gap-1.5 font-mono text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100" :title="sb.id">
-                    <span x-text="sb.id.slice(0, 8) + '…'"></span>
-                    <span x-text="copied === sb.id ? 'copied' : ''" class="text-emerald-500"></span>
-                  </button>
+            <template x-for="t in filteredTasks" :key="t.id || t.name">
+              <tr class="border-b border-zinc-100 align-top hover:bg-zinc-50 dark:border-zinc-800/70 dark:hover:bg-zinc-900/50">
+                <td class="whitespace-nowrap px-3 py-2.5 font-medium">
+                  <a :href="taskHref(t.name)" class="hover:underline" x-text="t.name"></a>
                 </td>
                 <td class="px-3 py-2.5">
-                  <span class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs capitalize" :class="stateBadge(sb.state)">
-                    <span class="h-1.5 w-1.5 rounded-full" :class="stateDot(sb.state)"></span>
-                    <span x-text="sb.state"></span>
-                  </span>
+                  <div class="flex items-center gap-2 whitespace-nowrap">
+                    <span class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs" :class="pillClass(t.status)">
+                      <span class="h-1.5 w-1.5 rounded-full" :class="dotClass(t.status)"></span>
+                      <span x-text="t.status || '(no status)'"></span>
+                    </span>
+                    <span x-show="t.status === 'stopped'" class="text-xs text-zinc-500">saved, disk kept</span>
+                  </div>
+                  <div x-show="t.status_error" class="mt-1 max-w-xs truncate text-xs text-red-600 dark:text-red-400" :title="t.status_error" x-text="t.status_error"></div>
                 </td>
-                <td class="px-3 py-2.5 font-mono text-xs text-zinc-600 dark:text-zinc-400" x-text="sb.snapshot"></td>
-                <td class="px-3 py-2.5 uppercase text-zinc-600 dark:text-zinc-400" x-text="sb.region"></td>
+                <td class="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-zinc-600 dark:text-zinc-400" x-text="(t.spec && t.spec.image) || 'agc-agent'"></td>
                 <td class="whitespace-nowrap px-3 py-2.5">
                   <div class="flex items-center gap-2">
-                    <span><span x-text="sb.cpu"></span> <span class="text-zinc-500">vCPU</span></span>
+                    <span><span x-text="(t.spec && t.spec.cpus) || '–'"></span> <span class="text-zinc-500">vCPU</span></span>
                     <span class="h-5 w-px bg-zinc-300 dark:bg-zinc-700"></span>
-                    <span><span x-text="sb.memory"></span> <span class="text-zinc-500">GiB</span></span>
-                    <span class="h-5 w-px bg-zinc-300 dark:bg-zinc-700"></span>
-                    <span><span x-text="sb.disk"></span> <span class="text-zinc-500">GiB</span></span>
+                    <span><span x-text="(t.spec && t.spec.memory) || '–'"></span> <span class="text-zinc-500">MiB</span></span>
                   </div>
                 </td>
-                <td class="px-3 py-2.5">
-                  <div class="flex flex-wrap gap-1">
-                    <template x-for="l in sb.labels" :key="l">
-                      <span class="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400" x-text="l"></span>
+                <td class="px-3 py-2.5 font-mono text-xs text-zinc-600 dark:text-zinc-400">
+                  <span x-text="(t.spec && t.spec.repo) || '—'"></span><span x-show="t.spec && t.spec.ref" class="text-zinc-500" x-text="'@' + (t.spec && t.spec.ref)"></span>
+                </td>
+                <td class="whitespace-nowrap px-3 py-2.5 text-zinc-600 dark:text-zinc-400" :title="fullTime(t.created_at)" x-text="ago(t.created_at)"></td>
+                <td class="whitespace-nowrap px-3 py-2.5">
+                  <div class="flex justify-end gap-1.5">
+                    <template x-if="busy[t.name]">
+                      <span class="rounded-md border border-zinc-200 px-2.5 py-1 text-xs text-zinc-500 dark:border-zinc-800" x-text="busy[t.name]"></span>
                     </template>
-                    <span x-show="!sb.labels.length" class="text-zinc-400">—</span>
-                  </div>
-                </td>
-                <td class="whitespace-nowrap px-3 py-2.5 text-zinc-600 dark:text-zinc-400" x-text="ago(sb.lastEvent)"></td>
-                <td class="whitespace-nowrap px-3 py-2.5 text-zinc-600 dark:text-zinc-400" x-text="ago(sb.createdAt)"></td>
-                <td class="relative px-3 py-2.5" x-data="{ open: false }" @click.outside="open = false">
-                  <button @click="open = !open" class="rounded p-1 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-                  </button>
-                  <div x-show="open" x-cloak class="absolute right-3 z-20 mt-1 w-44 rounded-md border border-zinc-200 bg-white p-1 text-sm shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
-                    <button x-show="sb.state !== 'started'" @click="setState(sb, 'started'); open = false" class="w-full rounded px-2 py-1.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800">Start</button>
-                    <button x-show="sb.state === 'started'" @click="setState(sb, 'stopped'); open = false" class="w-full rounded px-2 py-1.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800">Stop</button>
-                    <button x-show="sb.state === 'stopped'" @click="setState(sb, 'archived'); open = false" class="w-full rounded px-2 py-1.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800">Archive</button>
-                    <button @click="open = false" class="w-full rounded px-2 py-1.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800">Create SSH Access</button>
-                    <button @click="open = false" class="w-full rounded px-2 py-1.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800">Create Snapshot</button>
-                    <div class="my-1 h-px bg-zinc-200 dark:bg-zinc-800"></div>
-                    <button @click="remove(sb.id)" class="w-full rounded px-2 py-1.5 text-left text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950">Delete</button>
+                    <template x-if="!busy[t.name]">
+                      <div class="flex gap-1.5">
+                        <a x-show="canOpen(t)" :href="taskHref(t.name)" class="rounded-md border border-zinc-200 px-2.5 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">Open</a>
+                        <button x-show="canStop(t)" @click="taskAction(t.name, 'stop')" class="rounded-md border border-zinc-200 px-2.5 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">Stop</button>
+                        <button x-show="canStart(t)" @click="taskAction(t.name, 'start')" class="rounded-md border border-zinc-200 px-2.5 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">Start</button>
+                        <button x-show="canDelete(t)" @click="askDelete(t.name)" class="rounded-md border border-red-300 px-2.5 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950">Delete</button>
+                      </div>
+                    </template>
                   </div>
                 </td>
               </tr>
@@ -231,235 +174,271 @@
           </tbody>
         </table>
 
-        <!-- Empty state -->
-        <div x-show="filtered.length === 0" x-cloak class="flex flex-col items-center gap-2 py-16 text-center text-sm text-zinc-500">
+        <div x-show="tasksLoaded && filteredTasks.length === 0" x-cloak class="flex flex-col items-center gap-2 py-16 text-center text-sm text-zinc-500">
           <i data-lucide="container"></i>
-          <p x-show="sandboxes.length === 0">No sandboxes yet. Create one to get started.</p>
-          <p x-show="sandboxes.length > 0">No sandboxes match the current search or filters.</p>
+          <p x-show="tasks.length === 0 && !tasksError">No tasks yet. Create one to get a VM with Claude and Codex installed.</p>
+          <p x-show="tasks.length > 0">No tasks match "<span x-text="query"></span>".</p>
+        </div>
+        <div x-show="!tasksLoaded" class="py-16 text-center text-sm text-zinc-500">Loading tasks…</div>
+      </div>
+
+      <div class="text-sm text-zinc-500">
+        Showing <span x-text="filteredTasks.length"></span> of <span x-text="tasks.length"></span> tasks
+      </div>
+    </section>
+
+    <!-- ================= Task page ================= -->
+    <div x-show="view === 'task'" x-cloak class="flex flex-col" :class="tab !== 'messages' && 'min-h-0 flex-1'">
+      <div class="flex flex-col gap-3 px-6 pt-6">
+        <div x-show="taskError" class="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+          <span x-text="taskError"></span> · <a href="#/tasks" class="underline">Back to tasks</a>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex min-w-0 items-center gap-3">
+            <h1 class="truncate text-2xl font-semibold tracking-tight" x-text="taskName"></h1>
+            <template x-if="task">
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs" :class="pillClass(task.status)">
+                  <span class="h-1.5 w-1.5 rounded-full" :class="dotClass(task.status)"></span>
+                  <span x-text="task.status || '(no status)'"></span>
+                </span>
+                <span x-show="task.status === 'stopped'" class="text-xs text-zinc-500">saved: disk kept, CPU and memory freed</span>
+              </div>
+            </template>
+            <span x-show="!task && !taskError" class="text-xs text-zinc-500">loading…</span>
+          </div>
+          <template x-if="task">
+            <div class="flex items-center gap-2 text-sm">
+              <span x-show="busy[task.name]" class="rounded-md border border-zinc-200 px-3 py-1.5 text-zinc-500 dark:border-zinc-800" x-text="busy[task.name]"></span>
+              <button x-show="!busy[task.name] && canStop(task)" @click="taskAction(task.name, 'stop')" class="flex items-center gap-1.5 rounded-md border border-zinc-200 px-3 py-1.5 hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900"><i data-lucide="square"></i> Stop</button>
+              <button x-show="!busy[task.name] && canStart(task)" @click="taskAction(task.name, 'start')" class="flex items-center gap-1.5 rounded-md border border-zinc-200 px-3 py-1.5 hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900"><i data-lucide="play"></i> Start</button>
+              <button x-show="!busy[task.name] && canDelete(task)" @click="askDelete(task.name)" class="flex items-center gap-1.5 rounded-md border border-red-300 px-3 py-1.5 text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"><i data-lucide="trash-2"></i> Delete</button>
+            </div>
+          </template>
+        </div>
+
+        <div x-show="task && task.status_error" class="flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+          <span class="mt-0.5 shrink-0"><i data-lucide="circle-alert"></i></span>
+          <span class="whitespace-pre-wrap" x-text="task && task.status_error"></span>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex gap-1 border-b border-zinc-200 text-sm dark:border-zinc-800">
+          <a :href="taskHref(taskName)" class="-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2" :class="tab === 'terminals' ? 'border-zinc-900 font-medium dark:border-white' : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'"><i data-lucide="square-terminal"></i> Terminals</a>
+          <a :href="taskHref(taskName, 'messages')" class="-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2" :class="tab === 'messages' ? 'border-zinc-900 font-medium dark:border-white' : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'"><i data-lucide="hash"></i> Messages</a>
+          <a :href="taskHref(taskName, 'spec')" class="-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2" :class="tab === 'spec' ? 'border-zinc-900 font-medium dark:border-white' : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'"><i data-lucide="file-code"></i> Spec</a>
         </div>
       </div>
 
-      <!-- Footer / pagination -->
-      <div class="flex items-center justify-between text-sm text-zinc-500">
-        <span>Showing <span x-text="filtered.length"></span> of <span x-text="sandboxes.length"></span> sandboxes</span>
-        <div class="flex items-center gap-1">
-          <button disabled class="rounded-md border border-zinc-200 px-2 py-1 opacity-50 dark:border-zinc-800">Prev · first page</button>
-          <span class="px-2">Page 1 of 1</span>
-          <button disabled class="rounded-md border border-zinc-200 px-2 py-1 opacity-50 dark:border-zinc-800">Next · last page</button>
+      <!-- Terminals tab -->
+      <div x-show="tab === 'terminals'" class="flex min-h-0 flex-1 gap-4 px-6 py-4">
+        <div class="flex w-72 shrink-0 flex-col gap-3 overflow-y-auto">
+          <div class="text-xs font-medium uppercase tracking-wide text-zinc-500">Terminals</div>
+          <div x-show="terminalsError" class="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300" x-text="terminalsError"></div>
+          <ul class="flex flex-col gap-1">
+            <template x-for="j in terminals" :key="j.id">
+              <li>
+                <a :href="terminalHref(j.id)" class="flex flex-col gap-0.5 rounded-md border px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                   :class="terminalId === j.id ? 'border-zinc-400 bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900' : 'border-zinc-200 dark:border-zinc-800'">
+                  <span class="truncate font-mono" x-text="commandText(j.command)"></span>
+                  <span class="flex items-center gap-2 text-xs text-zinc-500">
+                    <span class="h-1.5 w-1.5 rounded-full" :class="j.running ? 'bg-emerald-500' : 'bg-zinc-500'"></span>
+                    <span x-text="j.running ? 'running' : 'exited'"></span>
+                    <span class="truncate font-mono" x-text="j.id"></span>
+                  </span>
+                </a>
+              </li>
+            </template>
+          </ul>
+          <p x-show="terminalsLoaded && !terminalsError && terminals.length === 0" class="text-xs text-zinc-500">No terminals yet. Start one below; it keeps running when you close this page.</p>
+
+          <div class="mt-1 flex flex-col gap-2 rounded-md border border-zinc-200 p-3 text-sm dark:border-zinc-800">
+            <div class="font-medium">New terminal</div>
+            <template x-if="task && task.status !== 'running'">
+              <p class="text-xs text-zinc-500">Terminals need a running task. This task is <span class="font-mono" x-text="task.status"></span><span x-show="task.status === 'stopped'">; press Start above</span>.</p>
+            </template>
+            <template x-if="task && task.status === 'running'">
+              <form @submit.prevent="newTerminal()" class="flex flex-col gap-2">
+                <label class="flex flex-col gap-1">
+                  <span class="text-xs text-zinc-500">Command</span>
+                  <input x-model="newTerm.command" class="rounded-md border border-zinc-200 bg-transparent px-2 py-1 font-mono text-xs outline-none focus:border-zinc-400 dark:border-zinc-800" />
+                </label>
+                <label class="flex flex-col gap-1">
+                  <span class="text-xs text-zinc-500">Directory</span>
+                  <input x-model="newTerm.dir" class="rounded-md border border-zinc-200 bg-transparent px-2 py-1 font-mono text-xs outline-none focus:border-zinc-400 dark:border-zinc-800" />
+                </label>
+                <button type="submit" :disabled="newTerm.busy || !newTerm.command.trim()"
+                        class="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                        x-text="newTerm.busy ? 'Starting…' : (newTerm.command.trim() ? 'Start ' + newTerm.command.trim() : 'Type a command to start')"></button>
+                <div class="flex items-center gap-1.5 text-xs">
+                  <span class="text-zinc-500">Quick:</span>
+                  <template x-for="q in ['claude', 'codex', 'bash']" :key="q">
+                    <button type="button" :disabled="newTerm.busy" @click="newTerminal(q)" class="rounded border border-zinc-200 px-2 py-0.5 font-mono hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-800 dark:hover:bg-zinc-900" x-text="q"></button>
+                  </template>
+                </div>
+                <div x-show="newTerm.error" class="whitespace-pre-wrap text-xs text-red-600 dark:text-red-400" x-text="newTerm.error"></div>
+              </form>
+            </template>
+          </div>
         </div>
+
+        <!-- Terminal viewport. Kept in the DOM (x-show) so xterm can mount into it. -->
+        <div class="flex min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-800">
+          <div x-show="terminalId" class="flex items-center justify-between gap-3 border-b border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs dark:border-zinc-800 dark:bg-zinc-900">
+            <div class="flex min-w-0 items-center gap-2">
+              <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="termAttached ? 'bg-emerald-500' : 'bg-zinc-500'"></span>
+              <span class="font-mono" x-text="terminalId"></span>
+              <span class="truncate text-zinc-500" x-text="termStatus"></span>
+              <span x-show="termAttached" class="truncate text-zinc-500">· leaving this view detaches; the job keeps running</span>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+              <button x-show="termAttached" @click="detachTerminal()" class="rounded border border-zinc-200 px-2 py-0.5 hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-800">Detach</button>
+              <button x-show="termStatus && !termAttached && termStatus !== 'connecting…'" @click="reattachTerminal()" class="rounded border border-zinc-200 px-2 py-0.5 hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-800">Reattach</button>
+            </div>
+          </div>
+          <div x-show="terminalId" x-ref="term" class="term-host min-h-0 flex-1"></div>
+          <div x-show="!terminalId" class="grid flex-1 place-items-center p-6 text-center text-sm text-zinc-500">
+            <div class="flex flex-col items-center gap-2">
+              <i data-lucide="square-terminal"></i>
+              <p>No terminal open. Pick one on the left or start a new one.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Spec tab -->
+      <div x-show="tab === 'spec'" class="min-h-0 flex-1 overflow-auto px-6 py-4">
+        <p class="mb-2 text-xs text-zinc-500">Read-only. The spec the task was created from.</p>
+        <pre class="rounded-md border border-zinc-200 bg-zinc-50 p-4 font-mono text-xs leading-relaxed dark:border-zinc-800 dark:bg-zinc-900" x-text="task ? specYAML(task.spec) : 'loading…'"></pre>
+      </div>
+    </div>
+
+    <!-- ================= Messages (global page and task tab share this) ================= -->
+    <section x-show="view === 'messages' || (view === 'task' && tab === 'messages')" x-cloak class="flex min-h-0 flex-1 gap-4 px-6 py-4">
+      <!-- Channel list: global page only -->
+      <div x-show="view === 'messages'" class="flex w-60 shrink-0 flex-col gap-3 overflow-y-auto">
+        <h1 class="text-2xl font-semibold tracking-tight">Messages</h1>
+        <form @submit.prevent="goToChannel()" class="flex gap-1.5">
+          <input x-model="gotoChannel" placeholder="#channel" class="min-w-0 flex-1 rounded-md border border-zinc-200 bg-transparent px-2 py-1 font-mono text-xs outline-none focus:border-zinc-400 dark:border-zinc-800" />
+          <button type="submit" class="rounded-md border border-zinc-200 px-2 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">Open</button>
+        </form>
+        <div x-show="channelsError" class="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300" x-text="channelsError"></div>
+        <ul class="flex flex-col gap-0.5">
+          <template x-for="c in channels" :key="c.channel">
+            <li>
+              <a :href="channelHref(c.channel)" class="flex items-center justify-between rounded-md px-2 py-1.5 text-sm"
+                 :class="msgChannel === c.channel ? 'bg-zinc-200 font-medium dark:bg-zinc-800' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900'">
+                <span class="truncate font-mono" x-text="c.channel"></span>
+                <span class="flex shrink-0 items-center gap-1.5 text-xs text-zinc-500">
+                  <span x-show="c.read_only">read-only</span>
+                  <span x-show="c.count !== null" x-text="c.count"></span>
+                </span>
+              </a>
+            </li>
+          </template>
+        </ul>
+        <p x-show="channelsLoaded && !channelsError && channels.length === 0" class="text-xs text-zinc-500">No channels yet. Every task gets #&lt;task name&gt;; type a channel above to open one.</p>
+      </div>
+
+      <!-- Stream -->
+      <div class="flex min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-800">
+        <div x-show="chat.channel" class="flex items-center justify-between gap-3 border-b border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs dark:border-zinc-800 dark:bg-zinc-900">
+          <span class="font-mono font-medium" x-text="chat.channel"></span>
+          <span class="text-zinc-500" x-text="chat.loading ? 'loading…' : 'live'"></span>
+        </div>
+        <div x-show="chat.error" class="border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-700 dark:text-red-300" x-text="chat.error"></div>
+
+        <div x-ref="stream" class="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <div x-show="!chat.channel" class="grid h-full place-items-center text-sm text-zinc-500">Pick a channel on the left.</div>
+          <div x-show="chat.channel && !chat.loading && chat.messages.length === 0" class="grid h-full place-items-center text-sm text-zinc-500">
+            <p>No messages in <span class="font-mono" x-text="chat.channel"></span> yet.</p>
+          </div>
+          <template x-for="m in chat.messages" :key="m.id">
+            <div class="group flex flex-col gap-0.5 rounded px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900/60">
+              <div class="flex items-baseline gap-2 text-xs">
+                <span class="font-medium text-zinc-900 dark:text-zinc-100" x-text="'@' + (m.from || '?')"></span>
+                <span x-show="m.task" class="text-zinc-500" x-text="m.task"></span>
+                <span class="text-zinc-500" :title="fullTime(m.created_at)" x-text="clock(m.created_at)"></span>
+                <span class="font-mono text-zinc-500" x-text="'#' + m.id"></span>
+                <button @click="chat.replyTo = m.id; $refs.draft.focus()" class="text-zinc-500 opacity-0 hover:text-zinc-900 group-hover:opacity-100 dark:hover:text-zinc-100">reply</button>
+              </div>
+              <div x-show="m.reply_to" class="text-xs text-zinc-500">
+                ↪ reply to <span class="font-mono" x-text="'#' + m.reply_to"></span><span x-show="messageById(m.reply_to)" x-text="' @' + ((messageById(m.reply_to) || {}).from || '')"></span>
+              </div>
+              <div class="whitespace-pre-wrap break-words text-sm" x-text="m.body"></div>
+            </div>
+          </template>
+        </div>
+
+        <form x-show="chat.channel" @submit.prevent="post()" class="flex flex-col gap-1.5 border-t border-zinc-200 p-2 dark:border-zinc-800">
+          <div x-show="chat.replyTo" class="flex items-center gap-2 text-xs text-zinc-500">
+            Replying to <span class="font-mono" x-text="'#' + chat.replyTo"></span>
+            <button type="button" @click="chat.replyTo = null" class="underline">cancel</button>
+          </div>
+          <textarea x-ref="draft" x-model="chat.draft" @keydown="postKey($event)" rows="2" :placeholder="'Message ' + chat.channel + ' (Enter to post, Shift+Enter for a new line)'"
+                    class="w-full resize-y rounded-md border border-zinc-200 bg-transparent px-2 py-1.5 text-sm outline-none focus:border-zinc-400 dark:border-zinc-800"></textarea>
+          <div class="flex items-center justify-between gap-2 text-xs">
+            <label class="flex items-center gap-1 text-zinc-500">
+              Post as @
+              <input :value="me.name" @change="setName($event.target.value); $event.target.value = me.name" class="w-28 rounded border border-zinc-200 bg-transparent px-1.5 py-0.5 font-mono text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:text-zinc-100" />
+            </label>
+            <button type="submit" :disabled="chat.posting || !chat.draft.trim()"
+                    class="rounded-md bg-zinc-900 px-3 py-1 font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                    x-text="chat.posting ? 'Posting…' : (chat.draft.trim() ? 'Post' : 'Type to post')"></button>
+          </div>
+          <div x-show="chat.postError" class="whitespace-pre-wrap text-xs text-red-600 dark:text-red-400" x-text="chat.postError"></div>
+        </form>
       </div>
     </section>
   </main>
 </div>
 
-<!-- ============ Create Sandbox sheet ============ -->
-<div x-show="createOpen" x-cloak class="fixed inset-0 z-40">
-  <div @click="createOpen = false" class="absolute inset-0 bg-black/50"></div>
-  <div class="absolute right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
-       x-transition:enter="transition duration-200" x-transition:enter-start="translate-x-full">
-    <div class="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
-      <h2 class="font-semibold">Create Sandbox</h2>
-      <button @click="createOpen = false" class="rounded p-1 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800"><i data-lucide="x"></i></button>
+<!-- ============ New task modal ============ -->
+<div x-show="create.open" x-cloak class="fixed inset-0 z-40 grid place-items-center p-4" @keydown.escape.window="create.open = false">
+  <div @click="create.open = false" class="absolute inset-0 bg-black/60"></div>
+  <form @submit.prevent="submitCreate()" class="relative flex max-h-full w-full max-w-2xl flex-col rounded-lg border border-zinc-200 bg-white text-sm shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+    <div class="flex items-center justify-between border-b border-zinc-200 px-5 py-3 dark:border-zinc-800">
+      <h2 class="font-semibold">New task</h2>
+      <button type="button" @click="create.open = false" class="rounded p-1 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800"><i data-lucide="x"></i></button>
     </div>
-    <form @submit.prevent="create()" class="flex flex-1 flex-col gap-4 overflow-y-auto px-5 py-5 text-sm">
+    <div class="flex min-h-0 flex-col gap-4 overflow-y-auto px-5 py-4">
       <label class="flex flex-col gap-1.5">
         <span class="font-medium">Name</span>
-        <input x-model="form.name" placeholder="my-sandbox" class="rounded-md border border-zinc-200 bg-transparent px-3 py-1.5 outline-none focus:border-zinc-400 dark:border-zinc-800" />
+        <input x-ref="createName" x-model="create.name" placeholder="review-42" class="rounded-md border border-zinc-200 bg-transparent px-3 py-1.5 font-mono outline-none focus:border-zinc-400 dark:border-zinc-800" />
+        <span class="text-xs text-zinc-500">Also the VM name and the task's channel (<span class="font-mono" x-text="'#' + (create.name.trim() || 'name')"></span>).</span>
       </label>
       <label class="flex flex-col gap-1.5">
-        <span class="font-medium">Snapshot</span>
-        <select x-model="form.snapshot" class="rounded-md border border-zinc-200 bg-transparent px-3 py-1.5 dark:border-zinc-800 dark:bg-zinc-950">
-          <template x-for="s in snapshots" :key="s"><option :value="s" x-text="s"></option></template>
-        </select>
+        <span class="flex items-center justify-between">
+          <span class="font-medium">Spec (YAML)</span>
+          <button type="button" @click="resetCreateYAML()" class="text-xs text-zinc-500 underline">Reset to example</button>
+        </span>
+        <textarea x-model="create.yaml" rows="22" spellcheck="false" class="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-xs leading-relaxed outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900"></textarea>
       </label>
-      <label class="flex flex-col gap-1.5">
-        <span class="font-medium">Region</span>
-        <select x-model="form.region" class="rounded-md border border-zinc-200 bg-transparent px-3 py-1.5 dark:border-zinc-800 dark:bg-zinc-950">
-          <option value="us">US</option><option value="eu">EU</option>
-        </select>
-      </label>
-      <div class="grid grid-cols-3 gap-3">
-        <label class="flex flex-col gap-1.5"><span class="font-medium">vCPU</span><input type="number" min="1" x-model.number="form.cpu" class="rounded-md border border-zinc-200 bg-transparent px-3 py-1.5 dark:border-zinc-800" /></label>
-        <label class="flex flex-col gap-1.5"><span class="font-medium">Memory (GiB)</span><input type="number" min="1" x-model.number="form.memory" class="rounded-md border border-zinc-200 bg-transparent px-3 py-1.5 dark:border-zinc-800" /></label>
-        <label class="flex flex-col gap-1.5"><span class="font-medium">Disk (GiB)</span><input type="number" min="1" x-model.number="form.disk" class="rounded-md border border-zinc-200 bg-transparent px-3 py-1.5 dark:border-zinc-800" /></label>
-      </div>
-      <label class="flex flex-col gap-1.5">
-        <span class="font-medium">Labels <span class="font-normal text-zinc-500">(comma separated, key=value)</span></span>
-        <input x-model="form.labels" placeholder="env=dev, team=core" class="rounded-md border border-zinc-200 bg-transparent px-3 py-1.5 font-mono outline-none focus:border-zinc-400 dark:border-zinc-800" />
-      </label>
-      <div class="mt-auto flex justify-end gap-2 border-t border-zinc-200 pt-4 dark:border-zinc-800">
-        <button type="button" @click="createOpen = false" class="rounded-md border border-zinc-200 px-3 py-1.5 hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">Cancel</button>
-        <button type="submit" class="rounded-md bg-zinc-900 px-3 py-1.5 font-medium text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">Create</button>
-      </div>
-    </form>
-  </div>
+      <div x-show="create.error" class="whitespace-pre-wrap rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-red-700 dark:text-red-300" x-text="create.error"></div>
+    </div>
+    <div class="flex justify-end gap-2 border-t border-zinc-200 px-5 py-3 dark:border-zinc-800">
+      <button type="button" @click="create.open = false" class="rounded-md border border-zinc-200 px-3 py-1.5 hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">Cancel</button>
+      <button type="submit" :disabled="create.busy || !create.name.trim()"
+              class="rounded-md bg-zinc-900 px-3 py-1.5 font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+              x-text="create.busy ? 'Creating…' : (create.name.trim() ? 'Create task' : 'Enter a name to create')"></button>
+    </div>
+  </form>
 </div>
 
-<script>
-  const now = Date.now()
-  const min = 60 * 1000
-  const uuid = () => crypto.randomUUID()
-
-  function app() {
-    return {
-      sidebarOpen: true,
-      active: 'Sandboxes',
-      query: '',
-      stateFilter: [],
-      selected: [],
-      copied: null,
-      createOpen: false,
-      form: {},
-
-      states: ['started', 'stopped', 'creating', 'error', 'archived'],
-      snapshots: ['daytonaio/sandbox:0.4.3', 'python:3.12-slim', 'node:22-alpine', 'ubuntu:24.04'],
-
-      nav: [
-        { label: 'Sandboxes', items: [
-          { label: 'Sandboxes', icon: 'container' },
-          { label: 'Snapshots', icon: 'box' },
-          { label: 'Registries', icon: 'package-open' },
-          { label: 'Volumes', icon: 'hard-drive' },
-          { label: 'Audit Logs', icon: 'text-search' },
-        ] },
-        { label: 'Misc', items: [
-          { label: 'Playground', icon: 'joystick' },
-        ] },
-        { label: 'Settings', items: [
-          { label: 'API Keys', icon: 'key-round' },
-          { label: 'Webhooks', icon: 'mail' },
-          { label: 'Limits', icon: 'lock-keyhole' },
-          { label: 'Members', icon: 'users' },
-          { label: 'Settings', icon: 'settings' },
-        ] },
-        { label: 'Billing', items: [
-          { label: 'Spending', icon: 'chart-column' },
-          { label: 'Wallet', icon: 'credit-card' },
-        ] },
-      ],
-
-      sandboxes: [
-        { id: uuid(), name: 'agent-run-7f2a', state: 'started', snapshot: 'daytonaio/sandbox:0.4.3', region: 'us', cpu: 1, memory: 1, disk: 3, labels: ['env=dev'], lastEvent: now - 2 * min, createdAt: now - 40 * min },
-        { id: uuid(), name: 'data-pipeline', state: 'started', snapshot: 'python:3.12-slim', region: 'eu', cpu: 4, memory: 8, disk: 10, labels: ['team=data', 'tier=prod'], lastEvent: now - 15 * min, createdAt: now - 3 * 24 * 60 * min },
-        { id: uuid(), name: 'pr-review-1182', state: 'stopped', snapshot: 'node:22-alpine', region: 'us', cpu: 2, memory: 4, disk: 5, labels: ['pr=1182'], lastEvent: now - 3 * 60 * min, createdAt: now - 26 * 60 * min },
-        { id: uuid(), name: 'scratch', state: 'creating', snapshot: 'ubuntu:24.04', region: 'us', cpu: 1, memory: 2, disk: 3, labels: [], lastEvent: now - 10 * 1000, createdAt: now - 10 * 1000 },
-        { id: uuid(), name: 'eval-harness', state: 'error', snapshot: 'python:3.12-slim', region: 'eu', cpu: 2, memory: 4, disk: 10, labels: ['env=ci'], lastEvent: now - 55 * min, createdAt: now - 2 * 60 * min },
-        { id: uuid(), name: 'legacy-demo', state: 'archived', snapshot: 'daytonaio/sandbox:0.4.3', region: 'us', cpu: 1, memory: 1, disk: 3, labels: ['demo'], lastEvent: now - 9 * 24 * 60 * min, createdAt: now - 30 * 24 * 60 * min },
-      ],
-
-      init() {
-        this.renderIcons()
-        this.$watch('filtered', () => this.renderIcons())
-        this.$watch('active', () => this.renderIcons())
-        this.$watch('sidebarOpen', () => this.renderIcons())
-      },
-
-      renderIcons() {
-        this.$nextTick(() => lucide.createIcons())
-      },
-
-      get filtered() {
-        const q = this.query.trim().toLowerCase()
-        return this.sandboxes.filter((sb) => {
-          if (q && !sb.name.toLowerCase().includes(q)) return false
-          if (this.stateFilter.length && !this.stateFilter.includes(sb.state)) return false
-          return true
-        })
-      },
-
-      get allSelected() {
-        return this.filtered.length > 0 && this.filtered.every((sb) => this.selected.includes(sb.id))
-      },
-
-      toggleAll(checked) {
-        this.selected = checked ? this.filtered.map((sb) => sb.id) : []
-      },
-
-      setState(sb, state) {
-        sb.state = state
-        sb.lastEvent = Date.now()
-      },
-
-      bulk(state) {
-        this.sandboxes.filter((sb) => this.selected.includes(sb.id)).forEach((sb) => this.setState(sb, state))
-        this.selected = []
-      },
-
-      bulkDelete() {
-        this.sandboxes = this.sandboxes.filter((sb) => !this.selected.includes(sb.id))
-        this.selected = []
-      },
-
-      remove(id) {
-        this.sandboxes = this.sandboxes.filter((sb) => sb.id !== id)
-        this.selected = this.selected.filter((s) => s !== id)
-      },
-
-      openCreate() {
-        this.form = { name: '', snapshot: this.snapshots[0], region: 'us', cpu: 1, memory: 1, disk: 3, labels: '' }
-        this.createOpen = true
-        this.renderIcons()
-      },
-
-      create() {
-        const sb = {
-          id: uuid(),
-          name: this.form.name.trim() || 'sandbox-' + Math.random().toString(36).slice(2, 6),
-          state: 'creating',
-          snapshot: this.form.snapshot,
-          region: this.form.region,
-          cpu: this.form.cpu,
-          memory: this.form.memory,
-          disk: this.form.disk,
-          labels: this.form.labels.split(',').map((l) => l.trim()).filter(Boolean),
-          lastEvent: Date.now(),
-          createdAt: Date.now(),
-        }
-        this.sandboxes.unshift(sb)
-        this.createOpen = false
-        // Fake provisioning
-        setTimeout(() => this.setState(this.sandboxes.find((s) => s.id === sb.id) ?? sb, 'started'), 2000)
-      },
-
-      copy(id) {
-        navigator.clipboard?.writeText(id)
-        this.copied = id
-        setTimeout(() => (this.copied = null), 1200)
-      },
-
-      toggleTheme() {
-        document.documentElement.classList.toggle('dark')
-      },
-
-      ago(ts) {
-        const s = Math.floor((Date.now() - ts) / 1000)
-        if (s < 60) return 'just now'
-        if (s < 3600) return Math.floor(s / 60) + 'm ago'
-        if (s < 86400) return Math.floor(s / 3600) + 'h ago'
-        return Math.floor(s / 86400) + 'd ago'
-      },
-
-      stateDot(state) {
-        return {
-          started: 'bg-emerald-500',
-          stopped: 'bg-zinc-400',
-          creating: 'bg-sky-500 animate-pulse',
-          error: 'bg-red-500',
-          archived: 'bg-amber-500',
-        }[state]
-      },
-
-      stateBadge(state) {
-        return {
-          started: 'border-emerald-500/30 text-emerald-700 dark:text-emerald-400',
-          stopped: 'border-zinc-400/40 text-zinc-600 dark:text-zinc-400',
-          creating: 'border-sky-500/30 text-sky-700 dark:text-sky-400',
-          error: 'border-red-500/30 text-red-700 dark:text-red-400',
-          archived: 'border-amber-500/30 text-amber-700 dark:text-amber-400',
-        }[state]
-      },
-    }
-  }
-</script>
+<!-- ============ Delete confirmation ============ -->
+<div x-show="confirmDelete" x-cloak class="fixed inset-0 z-50 grid place-items-center p-4" @keydown.escape.window="confirmDelete = null">
+  <div @click="confirmDelete = null" class="absolute inset-0 bg-black/60"></div>
+  <div class="relative w-full max-w-md rounded-lg border border-zinc-200 bg-white p-5 text-sm shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+    <h2 class="font-semibold">Delete <span class="font-mono" x-text="confirmDelete"></span>?</h2>
+    <p class="mt-2 text-zinc-600 dark:text-zinc-300">Deletes the VM disk and any uncommitted work. Volumes and message history are kept.</p>
+    <p class="mt-1 text-zinc-500">A new task with the same name continues the <span class="font-mono" x-text="'#' + confirmDelete"></span> channel.</p>
+    <div class="mt-5 flex justify-end gap-2">
+      <button @click="confirmDelete = null" class="rounded-md border border-zinc-200 px-3 py-1.5 hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">Cancel</button>
+      <button @click="deleteTask()" :disabled="busy[confirmDelete]" class="rounded-md bg-red-600 px-3 py-1.5 font-medium text-white hover:bg-red-700 disabled:opacity-60"
+              x-text="busy[confirmDelete] ? 'Deleting…' : 'Delete ' + confirmDelete"></button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
