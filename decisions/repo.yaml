@@ -1,0 +1,34 @@
+# Choices made once on beliefs, one per ADR. A decision is revisited only
+# when what it rests on is in doubt (`agc beliefs doubt <id>`); changing
+# its outcome needs a review (ADR 0006).
+decisions:
+  - id: git-and-plain-text-for-all-artifacts
+    decision: Git versions every artifact, and artifacts that matter are authored in plain text.
+    because: [agents-know-git-best, git-merges-text-not-binaries]
+    adr: docs/decisions/0001-git-and-plain-text-for-all-artifacts.md
+    decided: { who: franco, when: 2026-07-25 }
+  - id: binary-artifacts-stored-by-file-class
+    decision: Small stable binaries are committed, generated ones are gitignored and regenerated, and large source binaries stay out of git behind a text manifest.
+    because: [git-and-plain-text-for-all-artifacts, some-artifacts-are-binary]
+    adr: docs/decisions/0002-binary-artifact-storage.md
+    decided: { who: franco, when: 2026-07-25 }
+  - id: tasks-run-in-microsandbox-vms
+    decision: A Task is one microsandbox VM, and agc reads its state live from the runtime.
+    because: [host-subprocesses-share-the-host, microsandbox-spike-passed]
+    adr: docs/decisions/0003-tasks-run-in-microsandbox-vms.md
+    decided: { who: franco, when: 2026-11-01 }
+  - id: secrets-are-placeholders-bound-to-hosts
+    decision: Task specs name secrets without values, and each reaches the Task as a placeholder swapped in only for its allowed hosts.
+    because: [agents-can-exfiltrate-what-they-read, placeholder-secrets-work, tasks-run-in-microsandbox-vms]
+    adr: docs/decisions/0004-secrets-are-placeholders-bound-to-hosts.md
+    decided: { who: franco, when: 2026-11-01 }
+  - id: messaging-over-per-task-vsock
+    decision: agc serves one message space over a per-Task vsock socket and assigns every sender's identity itself.
+    because: [task-vms-have-no-path-to-agc, vsock-has-nothing-to-firewall, tasks-run-in-microsandbox-vms]
+    adr: docs/decisions/0005-messaging-transport-and-identity.md
+    decided: { who: franco, when: 2026-11-01 }
+  - id: rules-beliefs-and-decisions-as-yaml
+    decision: Rules, beliefs and decisions are YAML files in the repo that chain by because, and doubt only lists what to recheck.
+    because: [rules-and-beliefs-fail-differently, git-and-plain-text-for-all-artifacts]
+    adr: docs/decisions/0006-rules-and-beliefs.md
+    decided: { who: franco, when: 2026-11-01 }

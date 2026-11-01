@@ -1,0 +1,80 @@
+# What we hold true about agent-composer and where it runs. A belief rests
+# on an observation (who saw it, when), on other beliefs, or on both. When
+# reality disagrees, the belief is wrong: fix it here, then run
+# `agc beliefs doubt <id>` to see what rests on it (ADR 0006).
+beliefs:
+  # Go and agents
+  - id: go-has-one-formatting
+    belief: Go has one canonical format, enforced by gofmt.
+    observed: { who: franco, when: 2026-11-01 }
+  - id: go-syntax-is-small
+    belief: Go's syntax is small, so there are few ways to write the same thing.
+    observed: { who: franco, when: 2026-11-01 }
+  - id: agents-write-go-well
+    belief: Go is better than Rust in general for writing code with agents.
+    because: [go-has-one-formatting, go-syntax-is-small]
+  - id: strict-style-makes-agent-output-reviewable
+    belief: A strict, uniform Go style makes code written by agents quick to review.
+    because: [agents-write-go-well]
+
+  # Storage
+  - id: sqlite-is-enough-for-a-local-tool
+    belief: A local SQLite file is enough storage for agc; it needs no external services.
+    observed: { who: franco, when: 2026-11-01 }
+
+  # The rig
+  - id: rig-is-only-kvm-host
+    belief: The rig at 192.168.0.45 is the only machine we have with KVM.
+    observed: { who: franco, when: 2026-11-01 }
+  - id: rig-is-on-home-lan-without-firewall
+    belief: The rig sits on the home LAN with no firewall in front of its ports.
+    observed: { who: franco, when: 2026-11-01 }
+  - id: rig-holds-real-secrets
+    belief: The rig holds real secret values in ~/.agent_composer/config/secrets.env.
+    observed: { who: franco, when: 2026-11-01 }
+  - id: pkill-f-kills-the-ssh-shell
+    belief: Over SSH, pkill -f matches and kills the session's own shell.
+    observed: { who: franco, when: 2026-11-01 }
+  - id: agent-shells-have-no-tty-for-sudo
+    belief: An agent's shell has no TTY, so it cannot answer a sudo password prompt.
+    observed: { who: franco, when: 2026-11-01 }
+
+  # ADR 0001, 0002: artifacts
+  - id: agents-know-git-best
+    belief: Git is the only version control system LLM agents are deeply trained on.
+    observed: { who: franco, when: 2026-07-25 }
+  - id: git-merges-text-not-binaries
+    belief: Git diffs and merges text well and binary files badly.
+    observed: { who: franco, when: 2026-07-25 }
+  - id: some-artifacts-are-binary
+    belief: Some artifacts are inherently binary, such as images, PDFs and video.
+    observed: { who: franco, when: 2026-07-25 }
+
+  # ADR 0003: tasks
+  - id: host-subprocesses-share-the-host
+    belief: Harnesses run as host subprocesses share the host's network, credentials, tools and process table.
+    observed: { who: franco, when: 2026-11-01 }
+  - id: microsandbox-spike-passed
+    belief: On the rig, a microsandbox VM with Claude Code and Codex boots in under two seconds and keeps a detached terminal across disconnects.
+    observed: { who: franco, when: 2026-11-01 }
+
+  # ADR 0004: secrets
+  - id: agents-can-exfiltrate-what-they-read
+    belief: An agent that runs arbitrary code can read and send out any credential it can see.
+    observed: { who: franco, when: 2026-11-01 }
+  - id: placeholder-secrets-work
+    belief: microsandbox placeholder secrets swap in the real value only for allow-listed hosts, for Claude Code, the GitHub API and git over HTTPS.
+    observed: { who: franco, when: 2026-11-01 }
+
+  # ADR 0005: messaging
+  - id: task-vms-have-no-path-to-agc
+    belief: An agent in a Task VM has no network path to agc and no identity agc can trust.
+    observed: { who: franco, when: 2026-11-01 }
+  - id: vsock-has-nothing-to-firewall
+    belief: vsock is a host-to-VM pipe with no IP address, no DNS and nothing to firewall.
+    observed: { who: franco, when: 2026-11-01 }
+
+  # ADR 0006: rules, beliefs and decisions
+  - id: rules-and-beliefs-fail-differently
+    belief: When reality disagrees with a rule the actor is wrong; when it disagrees with a belief the belief is wrong.
+    observed: { who: franco, when: 2026-11-01 }

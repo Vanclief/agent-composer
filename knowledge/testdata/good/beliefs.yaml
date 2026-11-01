@@ -1,0 +1,16 @@
+beliefs:
+  - id: observed-a
+    belief: A was seen.
+    observed: { who: franco, when: 2026-11-01 }
+  - id: observed-b
+    belief: B was seen.
+    observed: { who: franco, when: 2026-10-30 }
+  - id: derived
+    belief: C follows from A and B.
+    because: [observed-a, observed-b]
+  - id: top
+    belief: D follows from C.
+    because: [derived]
+  - id: unrelated
+    belief: E stands alone.
+    observed: { who: franco, when: 2026-11-01 }

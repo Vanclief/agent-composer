@@ -1,0 +1,10 @@
+decisions:
+  - id: choice
+    decision: We chose X because of C.
+    because: [derived]
+    adr: docs/decisions/x.md
+    decided: { who: franco, when: 2026-11-01 }
+  - id: later-choice
+    decision: We chose Y on top of X.
+    because: [choice]
+    decided: { who: franco, when: 2026-11-01 }

@@ -26,6 +26,10 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test ./...
+      # rules/*.yaml (ADR 0006). Its go vet and go test rules hit the
+      # cache from the steps above.
+      - name: Rules
+        run: go run . rules check rules/
 
   web-dist:
     runs-on: ubuntu-latest

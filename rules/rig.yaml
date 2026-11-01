@@ -1,0 +1,19 @@
+# The rules for working on the Linux rig over SSH. All manual: they govern
+# what an agent or a human does there (ADR 0006).
+subject: the Linux rig
+rules:
+  - id: rig-services-bind-localhost
+    rule: Services on the rig bind to 127.0.0.1 and are reached over an SSH tunnel, never on 0.0.0.0.
+    because: [rig-is-on-home-lan-without-firewall]
+  - id: rig-never-read-credentials
+    rule: Never read credential files on the rig or print secret values; Franco sets them and agents only source them.
+    because: [rig-holds-real-secrets, agents-can-exfiltrate-what-they-read]
+  - id: rig-no-rm-rf
+    rule: Never run `rm -rf` on the rig.
+    because: [rig-is-only-kvm-host]
+  - id: rig-pkill-exact
+    rule: Over SSH, stop processes with `pkill -x <name>`, never `pkill -f`.
+    because: [pkill-f-kills-the-ssh-shell]
+  - id: rig-sudo-by-franco
+    rule: Commands that need sudo are run by Franco in a real terminal, never by an agent.
+    because: [agent-shells-have-no-tty-for-sudo]
