@@ -4,20 +4,26 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	cli "github.com/urfave/cli/v2"
 	"github.com/vanclief/ez"
 
+	"github.com/vanclief/agent-composer/executor/host"
 	"github.com/vanclief/agent-composer/knowledge"
+	"github.com/vanclief/agent-composer/models/agent"
+	"github.com/vanclief/agent-composer/runtime/harnesses"
 )
 
 // The evidence, rules, beliefs, decisions and actions commands
 // (docs/decisions/0006-rules-and-beliefs.md). Each item prints as a
 // sentence, with the ids behind it in a dim trailer; --ids prints the
-// compact id form for scripts and agents. Nothing is ever written, and
-// whether a belief is grounded, an opinion, contested or in doubt is
-// computed as it is printed.
+// compact id form for scripts and agents. Nothing is written except by
+// rules judge --record, which appends opinions, and whether a belief is
+// grounded, an opinion, contested or in doubt is computed as it is
+// printed.
 
 var beliefsFlag = &cli.StringSliceFlag{
 	Name:  "beliefs",
@@ -52,6 +58,19 @@ func rulesCommand() *cli.Command {
 				ArgsUsage: "[path...] [--beliefs <path>] [--without <id>] [--ids]",
 				Flags:     []cli.Flag{beliefsFlag, withoutFlag, idsFlag},
 				Action:    rulesShow,
+			},
+			{
+				Name:      "judge",
+				Usage:     "Ask a trusted agent whether the judged rules hold on a diff or a file; fails on a fail or an unclear answer",
+				ArgsUsage: "--as <agent> [--on <path|git ref|->] [--model <model>] [--record] [path...] [--beliefs <path>]",
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "as", Usage: "The judge: a harness id (claude_code, codex_cli, pi) trusted by the rules"},
+					&cli.StringFlag{Name: "on", Usage: "What to judge: a file or directory, a git ref to diff against, or - for stdin (default: git diff origin/master...HEAD)"},
+					&cli.StringFlag{Name: "model", Usage: "The judge's model (default: the first in the harness catalog)"},
+					&cli.BoolFlag{Name: "record", Usage: "Append the verdicts to beliefs/judgments.yaml as opinions by the judge, never evidence"},
+					beliefsFlag,
+				},
+				Action: rulesJudge,
 			},
 		},
 	}
@@ -150,18 +169,37 @@ type knowledgeArgs struct {
 	ids     bool
 	without []string
 	beliefs []string
+
+	// rules judge only.
+	as     string
+	on     string
+	model  string
+	record bool
 }
 
 func parseArgs(args []string, c *cli.Context) knowledgeArgs {
 	parsed := knowledgeArgs{ids: c.Bool("ids"), without: c.StringSlice("without"), beliefs: c.StringSlice("beliefs")}
+	parsed.as = c.String("as")
+	parsed.on = c.String("on")
+	parsed.model = c.String("model")
+	parsed.record = c.Bool("record")
 	values := map[string]*[]string{"--without": &parsed.without, "--beliefs": &parsed.beliefs}
+	singles := map[string]*string{"--as": &parsed.as, "--on": &parsed.on, "--model": &parsed.model}
 
 	for i := 0; i < len(args); i++ {
 		name, value, hasValue := strings.Cut(args[i], "=")
 		target, isValueFlag := values[name]
+		single, isSingle := singles[name]
 		switch {
 		case args[i] == "--ids":
 			parsed.ids = true
+		case args[i] == "--record":
+			parsed.record = true
+		case isSingle && hasValue:
+			*single = value
+		case isSingle && i+1 < len(args):
+			*single = args[i+1]
+			i++
 		case isValueFlag && hasValue:
 			*target = append(*target, value)
 		case isValueFlag && i+1 < len(args):
@@ -331,20 +369,26 @@ func mark(result knowledge.Result) string {
 
 // printChecklist prints a ruleset under its subject, one line per rule,
 // with a failed check's output indented under it. A rule resting on an
-// opinion or a doubted belief says so; its check status is unchanged.
+// opinion or a doubted belief says so; its check status is unchanged. A
+// rule with no check says who it needs: its trusted judges, or a human.
 func printChecklist(set *knowledge.Set, ruleset knowledge.Ruleset, results []knowledge.Result, withChecks bool, ids bool) {
 	fmt.Printf("## %s\n\n", oneLine(ruleset.Subject))
 	for _, result := range results {
 		rule := result.Rule
+		needs := knowledge.JudgeNote(rule)
+		if needs != "" {
+			needs = " — " + needs
+		}
+
 		if ids {
 			line := fmt.Sprintf("- %s %s: %s", mark(result), rule.ID, oneLine(rule.Rule))
 			if withChecks && rule.Check != "" {
 				line += " [check: `" + rule.Check + "`]"
 			}
-			fmt.Println(line + because(rule.Supports()) + restsOn(set.StatusOf(rule.Supports())))
+			fmt.Println(line + because(rule.Supports()) + restsOn(set.StatusOf(rule.Supports())) + needs)
 		} else {
 			line := set.RuleLine(rule, withChecks)
-			fmt.Println("- " + mark(result) + " " + line.Text + " " + dim(line.Trailer))
+			fmt.Println("- " + mark(result) + " " + line.Text + needs + " " + dim(line.Trailer))
 		}
 
 		if result.Passed != nil && !*result.Passed {
@@ -715,6 +759,13 @@ func beliefsShow(c *cli.Context) error {
 			if err != nil {
 				return err
 			}
+
+			if knowledge.IsAgent(belief.By) {
+				line, err = agentBeliefLine(set, belief, line)
+				if err != nil {
+					return ez.Wrap(err)
+				}
+			}
 			printLine(line)
 		}
 		return nil
@@ -734,10 +785,229 @@ func beliefsShow(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println("- " + belief.ID + ": " + oneLine(belief.Belief) + statusLabel(status))
+
+		by := ""
+		if belief.By != "" {
+			by = " [by " + belief.By + on(belief.When) + "]"
+		}
+		fmt.Println("- " + belief.ID + ": " + oneLine(belief.Belief) + by + statusLabel(status))
 	}
 
 	return nil
+}
+
+// agentBeliefLine says a belief held by an agent as the agent's thought,
+// "<agent> thinks …", never as mine, with its label: an agent's verdict
+// with no evidence under it is an opinion.
+func agentBeliefLine(set *knowledge.Set, belief knowledge.Belief, line knowledge.Line) (knowledge.Line, error) {
+	status, err := set.Status(belief.ID)
+	if err != nil {
+		return line, ez.Wrap(err)
+	}
+
+	held := string(status.Label)
+	if belief.When != "" {
+		held += ", " + belief.When
+	}
+	line.Text = belief.By + " thinks " + set.Phrase(belief.ID) + " (" + held + ")."
+
+	return line, nil
+}
+
+func on(when string) string {
+	if when == "" {
+		return ""
+	}
+
+	return " on " + when
+}
+
+// rulesJudge asks the agent named by --as about every rule that trusts it,
+// prints each verdict, and with --record appends them to
+// beliefs/judgments.yaml as the agent's opinions. It fails on any fail or
+// unclear verdict.
+func rulesJudge(c *cli.Context) error {
+	parsed := parseArgs(c.Args().Slice(), c)
+	if parsed.as == "" {
+		return ez.New(ez.EINVALID, "usage: agc rules judge --as <agent> [--on <path|git ref|->] [--record] [path...]", nil)
+	}
+
+	set, err := loadRules(parsed)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	subject, err := knowledge.ReadSubject(c.Context, parsed.on, os.Stdin)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	ask, err := harnessAsker(c.Context, parsed.as, parsed.model)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	judgments, err := set.Judge(c.Context, parsed.as, subject, ask)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	fmt.Printf("## Judged by %s on %s\n\n", parsed.as, subject.Name)
+	counts := map[knowledge.Verdict]int{}
+	skipped := 0
+	for _, judgment := range judgments {
+		rule := strings.TrimSuffix(oneLine(judgment.Rule.Rule), ".")
+		trailer := " " + dim("("+judgment.Rule.ID+")")
+		if judgment.Skipped {
+			skipped++
+			fmt.Printf("- skipped: %s is not trusted for this rule: %s%s\n", parsed.as, rule, trailer)
+			continue
+		}
+
+		counts[judgment.Verdict]++
+		switch judgment.Verdict {
+		case knowledge.Pass:
+			fmt.Printf("- ✓ judged by %s: %s — %s%s\n", parsed.as, rule, judgment.Reason, trailer)
+		case knowledge.Fail:
+			fmt.Printf("- ✗ judged by %s: %s — %s%s\n", parsed.as, rule, judgment.Reason, trailer)
+		default:
+			fmt.Printf("- ? unclear from %s: %s%s\n", parsed.as, rule, trailer)
+			printUnclear(judgment)
+		}
+	}
+	fmt.Printf("\n%d passed, %d failed, %d unclear, %d skipped\n", counts[knowledge.Pass], counts[knowledge.Fail], counts[knowledge.Unclear], skipped)
+
+	if parsed.record {
+		err = recordJudgments(c.Context, set, parsed.as, judgments, subject)
+		if err != nil {
+			return ez.Wrap(err)
+		}
+	}
+
+	bad := counts[knowledge.Fail] + counts[knowledge.Unclear]
+	if bad > 0 {
+		return ez.New(ez.EINVALID, fmt.Sprintf("judged rules failed or unclear: %d", bad), nil)
+	}
+
+	return nil
+}
+
+// printUnclear shows why a verdict is unclear: the judge's error, or the
+// start of an answer with no verdict line agc could read.
+func printUnclear(judgment knowledge.Judgment) {
+	text := judgment.Reason
+	if text == "" {
+		text = judgment.Answer
+	}
+	if text == "" {
+		text = "(empty answer)"
+	}
+
+	lines := strings.Split(text, "\n")
+	if len(lines) > 5 {
+		lines = append(lines[:5], "…")
+	}
+	for _, line := range lines {
+		fmt.Println("      " + line)
+	}
+}
+
+// harnessAsker runs the judge through the same harness code workflows use,
+// on this machine, read only (the harnesses' default permissions). A
+// person has no asker: knowledge.Judge says so.
+func harnessAsker(ctx context.Context, as string, model string) (knowledge.Asker, error) {
+	if !knowledge.IsHarness(as) {
+		return nil, nil
+	}
+
+	kind := agent.Harness(as)
+	for _, info := range harnesses.ListHarnessInfo(ctx) {
+		if info.ID != kind {
+			continue
+		}
+		if !info.Available {
+			return nil, ez.New(ez.EINVALID, as+" cannot judge here: "+info.Binary+" is not on PATH", nil)
+		}
+		if model == "" && len(info.Models) > 0 {
+			model = info.Models[0]
+		}
+	}
+	if model == "" {
+		return nil, ez.New(ez.EINVALID, "no model known for "+as+": pass --model", nil)
+	}
+
+	harness, err := harnesses.New(kind, host.New())
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	ask := func(ctx context.Context, rule knowledge.Rule, prompt string) (string, error) {
+		fmt.Fprintf(os.Stderr, "  ⏵ %s (%s) judging %s…\n", as, model, rule.ID)
+		conversation := &agent.Conversation{Harness: kind, Model: model, Instructions: prompt}
+		result, err := harness.Run(ctx, conversation, prompt)
+		if err != nil {
+			if result != nil && strings.TrimSpace(result.HarnessError) != "" {
+				return "", ez.New(ez.EINTERNAL, strings.TrimSpace(result.HarnessError), err)
+			}
+			return "", ez.Wrap(err)
+		}
+
+		return result.LastAssistantMessage, nil
+	}
+
+	return ask, nil
+}
+
+// recordJudgments appends the pass and fail verdicts to
+// beliefs/judgments.yaml as opinions by the judge, ids ending in the short
+// sha of HEAD, or today's date outside git.
+func recordJudgments(ctx context.Context, set *knowledge.Set, by string, judgments []knowledge.Judgment, subject knowledge.Subject) error {
+	today := time.Now().Format("2006-01-02")
+	suffix := knowledge.ShortHead(ctx)
+	if suffix == "" {
+		suffix = today
+	}
+
+	path := filepath.Join("beliefs", "judgments.yaml")
+	written, err := knowledge.Record(path, judgments, subject, suffix, today, loadedIDs(set))
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	noun := "opinions"
+	if len(written) == 1 {
+		noun = "opinion"
+	}
+	fmt.Printf("Recorded %d %s by %s in %s, never evidence.\n", len(written), noun, by, path)
+	for _, belief := range written {
+		fmt.Println("  " + dim(belief.ID))
+	}
+
+	return nil
+}
+
+// loadedIDs is every id loaded, so recorded ids do not collide.
+func loadedIDs(set *knowledge.Set) map[string]bool {
+	ids := map[string]bool{}
+	for _, evidence := range set.Evidence {
+		ids[evidence.ID] = true
+	}
+	for _, belief := range set.Beliefs {
+		ids[belief.ID] = true
+	}
+	for _, decision := range set.Decisions {
+		ids[decision.ID] = true
+	}
+	for _, action := range set.Actions {
+		ids[action.ID] = true
+	}
+	for _, ruleset := range set.Rulesets {
+		for _, rule := range ruleset.Rules {
+			ids[rule.ID] = true
+		}
+	}
+
+	return ids
 }
 
 // beliefsConflicts prints every contested contradiction with what each

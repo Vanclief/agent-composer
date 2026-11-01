@@ -603,7 +603,7 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
     } else if (parts[1] === 'msg' && parts.length === 3) {
       body = await msgAPI(state, method, parts[2], url, req)
     } else if (parts[1] === 'knowledge' && method === 'GET') {
-      body = knowledgeAPI(parts.slice(2))
+      body = knowledgeAPI(parts.slice(2), url)
     } else {
       throw apiError(404, 'no such endpoint')
     }
@@ -731,11 +731,15 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
 
 // ---------- knowledge (ADR 0006) ----------
 //
-// GET /api/knowledge, /api/knowledge/why/:id and /api/knowledge/doubt/:id.
-// A subset of the repo's evidence/, beliefs/, decisions/ and rules/ files,
-// with real ids and text. because lists keep only seeded ids, and the
+// GET /api/knowledge[?without=a,b], /api/knowledge/why/:id,
+// /api/knowledge/doubt/:id and /api/knowledge/conflicts. A subset of the
+// repo's evidence/, beliefs/, decisions/, rules/ and actions/ files, with
+// real ids and text, plus knowledge/testdata/contradictions (two contested
+// pairs) and the belief `either` from knowledge/testdata/alternatives (two
+// independent reasons). because lists keep only seeded ids, and the
 // microsandbox spike evidence is retracted here so one belief is in doubt.
-// Labels, opinions and doubted are computed like knowledge/graph.go.
+// Labels, opinions, doubted and contested_by are computed like
+// knowledge/graph.go, per set of reasons.
 // Only function declarations below: they are hoisted, so a request that
 // arrives while this module finishes loading still finds them.
 
@@ -747,18 +751,40 @@ type KEvidence = {
   when: string
   source: string
   retracted: KRetraction | null
+  translated_by?: string
+  contradicts?: string[]
   file: string
 }
-type KBelief = { id: string; text: string; because: string[]; evidence: string[]; file: string }
+// One other set of reasons under or:.
+type KOr = { because?: string[]; evidence?: string[] }
+type KBelief = {
+  id: string
+  text: string
+  because: string[]
+  evidence: string[]
+  or?: KOr[]
+  contradicts?: string[]
+  file: string
+}
 type KDecision = {
   id: string
   text: string
   because: string[]
+  or?: KOr[]
   adr: string
   decided: { who: string; when: string }
   file: string
 }
-type KRule = { subject: string; id: string; text: string; check: string; because: string[]; file: string }
+type KRule = { subject: string; id: string; text: string; check: string; because: string[]; or?: KOr[]; file: string }
+type KAction = {
+  id: string
+  text: string
+  because: string[]
+  or?: KOr[]
+  opened: { who: string; when: string }
+  done?: { who: string; when: string }
+  file: string
+}
 
 function knowledgeSeed() {
   const ev = 'evidence/repo.yaml'
@@ -907,6 +933,99 @@ function knowledgeSeed() {
       decided: { who: 'franco', when: '2026-11-01' },
       file: df,
     },
+    {
+      id: 'secrets-are-placeholders-bound-to-hosts',
+      text: 'Task specs name secrets without values, and each reaches the Task as a placeholder swapped in only for its allowed hosts.',
+      because: ['tasks-run-in-microsandbox-vms'],
+      adr: 'docs/decisions/0004-secrets-are-placeholders-bound-to-hosts.md',
+      decided: { who: 'franco', when: '2026-11-01' },
+      file: df,
+    },
+    {
+      id: 'rules-beliefs-and-decisions-as-yaml',
+      text: 'Rules, beliefs and decisions are YAML files in the repo that chain by because, and doubt only lists what to recheck.',
+      because: [],
+      adr: 'docs/decisions/0006-rules-and-beliefs.md',
+      decided: { who: 'franco', when: '2026-11-01' },
+      file: df,
+    },
+  ]
+  // knowledge/testdata/contradictions and alternatives.
+  const cev = 'evidence/contradictions.yaml'
+  const aev = 'evidence/alternatives.yaml'
+  evidence.push(
+    {
+      id: 'rig-has-kvm',
+      text: 'The rig has KVM.',
+      who: 'franco',
+      when: '2026-11-01',
+      source: '',
+      retracted: null,
+      file: cev,
+    },
+    {
+      id: 'rig-lacks-kvm',
+      text: 'The rig has no KVM.',
+      who: 'ana',
+      when: '2026-11-02',
+      source: 'lsmod on the rig',
+      translated_by: 'codex-cli',
+      retracted: null,
+      contradicts: ['rig-has-kvm'],
+      file: cev,
+    },
+    { id: 'seen-b', text: 'B was seen.', who: 'franco', when: '2026-11-01', source: '', retracted: null, file: cev },
+    { id: 'seen-x', text: 'X was seen.', who: 'franco', when: '2026-11-01', source: '', retracted: null, file: aev },
+    { id: 'seen-y', text: 'Y was seen.', who: 'ana', when: '2026-11-02', source: '', retracted: null, file: aev },
+  )
+  const cbf = 'beliefs/contradictions.yaml'
+  const abf = 'beliefs/alternatives.yaml'
+  beliefs.push(
+    { id: 'claim-a', text: 'The rig can run sandboxes.', because: [], evidence: ['rig-has-kvm'], file: cbf },
+    { id: 'claim-b', text: 'B is true.', because: [], evidence: ['seen-b'], contradicts: ['claim-c'], file: cbf },
+    { id: 'claim-c', text: 'C is true.', because: ['hunch-c'], evidence: [], file: cbf },
+    { id: 'hunch-c', text: 'C seems likely.', because: [], evidence: [], file: cbf },
+    { id: 'by-x', text: 'X holds.', because: [], evidence: ['seen-x'], file: abf },
+    { id: 'either', text: 'W holds.', because: ['by-x'], evidence: [], or: [{ evidence: ['seen-y'] }], file: abf },
+  )
+  const af = 'actions/repo.yaml'
+  const actions: KAction[] = [
+    {
+      id: 'attach-rulesets-to-task-specs',
+      text: "Let a task spec name rulesets, beliefs and decisions so agents in its sandbox receive them, for example in the sandbox's AGENTS.md.",
+      because: ['rules-beliefs-and-decisions-as-yaml', 'tasks-run-in-microsandbox-vms'],
+      opened: { who: 'franco', when: '2026-11-01' },
+      file: af,
+    },
+    {
+      id: 'release-builds-with-cgo',
+      text: 'Build the release binaries with cgo so Tasks can run sandboxes from a released agc.',
+      because: ['tasks-run-in-microsandbox-vms'],
+      opened: { who: 'franco', when: '2026-11-01' },
+      file: af,
+    },
+    {
+      id: 'workflow-nodes-name-their-environment',
+      text: 'Let a workflow spec embed a Task spec under `environment:` so its nodes say where they run.',
+      because: ['tasks-run-in-microsandbox-vms'],
+      opened: { who: 'franco', when: '2026-11-01' },
+      file: af,
+    },
+    {
+      id: 'task-delete-says-what-is-lost',
+      text: "Make the panel's Task delete control say that uncommitted work is deleted and mounted volumes are kept.",
+      because: ['tasks-run-in-microsandbox-vms'],
+      opened: { who: 'franco', when: '2026-11-01' },
+      file: af,
+    },
+    {
+      id: 'gitignore-the-local-data-dir',
+      text: 'Exclude .agent_composer/ in .gitignore so a project-local secrets.env never enters git.',
+      because: ['secrets-are-placeholders-bound-to-hosts'],
+      opened: { who: 'franco', when: '2026-11-01' },
+      done: { who: 'franco', when: '2026-11-01' },
+      file: af,
+    },
   ]
   const repo = 'agent-composer code and pull requests'
   const rig = 'the Linux rig'
@@ -960,128 +1079,358 @@ function knowledgeSeed() {
       file: 'rules/rig.yaml',
     },
   ]
-  return { dir: '/home/franco/agent-composer', evidence, beliefs, decisions, rules }
+  return { dir: '/home/franco/agent-composer', evidence, beliefs, decisions, rules, actions }
 }
 
 type KSeed = ReturnType<typeof knowledgeSeed>
+type KSet = { because: string[]; evidence: string[] }
+type KItem = { id: string; because: string[]; evidence?: string[]; or?: KOr[] }
+type KStatus = { label: string; opinions: string[]; doubted: string[]; retracted: string[]; without: string[] }
 
-// Judged on the leaves under because: the beliefs resting on no other
-// belief. A leaf with no evidence is an opinion; one whose evidence is all
-// retracted is doubted.
-function knowledgeStatus(k: KSeed, because: string[]) {
-  const opinions: string[] = []
-  const doubted: string[] = []
-  const retracted: string[] = []
-  const seen = new Set<string>()
-  const walk = (ids: string[]) => {
-    for (const id of ids) {
-      if (seen.has(id)) {
-        continue
-      }
-      seen.add(id)
-      const belief = k.beliefs.find((b) => b.id === id)
-      if (belief && belief.because.length === 0) {
-        const cited = k.evidence.filter((e) => belief.evidence.includes(e.id))
-        if (cited.length === 0) {
-          opinions.push(id)
-        } else if (cited.every((e) => e.retracted)) {
-          doubted.push(id)
-          retracted.push(...cited.map((e) => e.id).filter((e) => !retracted.includes(e)))
-        }
-        continue
-      }
-      walk(belief?.because ?? k.decisions.find((d) => d.id === id)?.because ?? [])
-    }
-  }
-  walk(because)
-  const label = doubted.length > 0 ? 'in_doubt' : opinions.length > 0 ? 'opinion' : 'grounded'
-  return { label, opinions, doubted, retracted }
+// The sets of reasons of an item: its own, then each under or:.
+function knowledgeSets(item: KItem): KSet[] {
+  return [
+    { because: item.because, evidence: item.evidence ?? [] },
+    ...(item.or ?? []).map((set) => ({ because: set.because ?? [], evidence: set.evidence ?? [] })),
+  ]
 }
 
-function knowledgeViews(k: KSeed) {
-  const belief = (b: KBelief) => ({ ...b, ...knowledgeStatus(k, [b.id]) })
-  const decision = (d: KDecision) => {
-    const { label, opinions, doubted } = knowledgeStatus(k, d.because)
-    return { ...d, label, opinions, doubted }
+function knowledgeAdd(list: string[], ids: string[]) {
+  for (const id of ids) {
+    if (!list.includes(id)) {
+      list.push(id)
+    }
   }
-  const rule = (r: KRule) => {
-    const { label, opinions, doubted } = knowledgeStatus(k, r.because)
-    return { ...r, kind: r.check ? 'mechanical' : 'manual', label, opinions, doubted }
+}
+
+// The seed judged as the files say, or with the beliefs and evidence in
+// without set aside (?without=, a what-if). Each set of reasons is judged
+// on the leaves under it; a thing is grounded if one of its sets is.
+function knowledgeJudge(k: KSeed, without: string[]) {
+  const evidenceByID = new Map(k.evidence.map((e) => [e.id, e]))
+  const beliefByID = new Map(k.beliefs.map((b) => [b.id, b]))
+  const decisionByID = new Map(k.decisions.map((d) => [d.id, d]))
+  const live = (id: string) => !evidenceByID.get(id)?.retracted && !without.includes(id)
+  const empty = (): KStatus => ({ label: 'grounded', opinions: [], doubted: [], retracted: [], without: [] })
+  const merge = (into: KStatus, from: KStatus) => {
+    knowledgeAdd(into.opinions, from.opinions)
+    knowledgeAdd(into.doubted, from.doubted)
+    knowledgeAdd(into.retracted, from.retracted)
+    knowledgeAdd(into.without, from.without)
   }
-  return { belief, decision, rule }
+  const labelFor = (s: KStatus) => (s.doubted.length > 0 ? 'in_doubt' : s.opinions.length > 0 ? 'opinion' : 'grounded')
+
+  const judgeSet = (owner: string, set: KSet, isBelief: boolean): KStatus => {
+    const status = empty()
+    if (isBelief && set.because.length === 0 && set.evidence.length === 0) {
+      status.opinions.push(owner)
+    }
+    if (set.evidence.length > 0 && !set.evidence.some(live)) {
+      status.doubted.push(owner)
+      for (const id of set.evidence) {
+        knowledgeAdd(without.includes(id) ? status.without : status.retracted, [id])
+      }
+    }
+    for (const next of set.because) {
+      merge(status, judge(next))
+    }
+    status.label = labelFor(status)
+    return status
+  }
+  const judgeSets = (owner: string, sets: KSet[], isBelief: boolean): KStatus => {
+    const merged = empty()
+    for (const set of sets) {
+      const status = judgeSet(owner, set, isBelief)
+      if (status.label === 'grounded') {
+        return empty()
+      }
+      merge(merged, status)
+    }
+    merged.label = labelFor(merged)
+    return merged
+  }
+  const judge = (id: string): KStatus => {
+    if (without.includes(id)) {
+      return { ...empty(), label: 'in_doubt', doubted: [id], without: [id] }
+    }
+    const belief = beliefByID.get(id)
+    if (belief) {
+      return judgeSets(id, knowledgeSets(belief), true)
+    }
+    const decision = decisionByID.get(id)
+    return decision ? judgeSets(id, knowledgeSets(decision), false) : empty()
+  }
+
+  // Contradictions count from either side.
+  const contradicts = new Map<string, string[]>()
+  for (const item of [...k.evidence, ...k.beliefs]) {
+    for (const other of item.contradicts ?? []) {
+      contradicts.set(item.id, [...(contradicts.get(item.id) ?? []), other])
+      contradicts.set(other, [...(contradicts.get(other) ?? []), item.id])
+    }
+  }
+  // Live evidence or a grounded belief can contest; live evidence or a
+  // belief not in doubt can be contested.
+  const stands = (id: string) => (evidenceByID.has(id) ? live(id) : judge(id).label === 'grounded')
+  const holds = (id: string) => (evidenceByID.has(id) ? live(id) : judge(id).label !== 'in_doubt')
+  const contestedBy = (belief: KBelief) => {
+    const targets = [belief.id]
+    knowledgeAdd(
+      targets,
+      knowledgeSets(belief).flatMap((set) => set.evidence.filter(live)),
+    )
+    const found: string[] = []
+    for (const target of targets) {
+      for (const other of contradicts.get(target) ?? []) {
+        if (other !== belief.id && stands(other)) {
+          knowledgeAdd(found, [other])
+        }
+      }
+    }
+    return found
+  }
+  // The live evidence and the opinions a belief comes down to, in every
+  // set; a piece of evidence comes down to itself.
+  const restsOn = (id: string, seen = new Set<string>()): string[] => {
+    if (evidenceByID.has(id)) {
+      return [id]
+    }
+    const belief = beliefByID.get(id)
+    if (!belief || seen.has(id)) {
+      return []
+    }
+    seen.add(id)
+    const found: string[] = []
+    for (const set of knowledgeSets(belief)) {
+      if (set.because.length === 0 && set.evidence.length === 0) {
+        knowledgeAdd(found, [id])
+      }
+      knowledgeAdd(found, set.evidence.filter(live))
+      for (const next of set.because) {
+        knowledgeAdd(found, restsOn(next, seen))
+      }
+    }
+    return found
+  }
+
+  const orIDs = (item: KItem) => (item.or ?? []).map((set) => [...(set.because ?? []), ...(set.evidence ?? [])])
+  const statusOf = (item: KItem) => {
+    const { label, opinions, doubted } = judgeSets(item.id, knowledgeSets(item), false)
+    return { label, opinions, doubted }
+  }
+  const belief = (b: KBelief) => {
+    const { label, opinions, doubted, retracted } = judge(b.id)
+    const contested_by = label === 'in_doubt' ? [] : contestedBy(b)
+    return {
+      ...b,
+      or: orIDs(b),
+      contradicts: b.contradicts ?? [],
+      label: contested_by.length > 0 ? 'contested' : label,
+      opinions,
+      doubted,
+      retracted,
+      contested_by,
+    }
+  }
+  // Decisions, rules and actions are judged on or: too, but the API does
+  // not list it for them.
+  const withoutOr = <T extends { or?: KOr[] }>(item: T) => {
+    const copy = { ...item }
+    delete copy.or
+    return copy
+  }
+  const decision = (d: KDecision) => ({ ...withoutOr(d), ...statusOf(d) })
+  const rule = (r: KRule) => ({ ...withoutOr(r), kind: r.check ? 'mechanical' : 'manual', ...statusOf(r) })
+  const action = (a: KAction) => ({ ...withoutOr(a), done: a.done ?? null, ...statusOf(a) })
+  return { belief, decision, rule, action, holds, stands, restsOn }
 }
 
 type KWhy = {
   id: string
+  kind: string
   text: string
-  evidence: { id: string; text: string; who: string; when: string; retracted: KRetraction | null }[]
+  evidence: {
+    id: string
+    text: string
+    who: string
+    when: string
+    translated_by: string
+    retracted: KRetraction | null
+  }[]
   because: KWhy[]
+  or: KWhy[][]
+  who?: string
+  when?: string
+  translated_by?: string
+  retracted?: KRetraction
 }
 
+// id followed down every set of its reasons. Alternatives are lists of
+// nodes, beliefs and decisions then evidence; evidence in one is a node of
+// kind evidence, with translated_by and retracted only when set.
 function knowledgeWhy(k: KSeed, id: string): KWhy {
-  const item =
-    k.beliefs.find((b) => b.id === id) ?? k.decisions.find((d) => d.id === id) ?? k.rules.find((r) => r.id === id)
-  if (!item) {
-    throw apiError(404, `belief ${id} not found`)
+  const evidence = k.evidence.find((e) => e.id === id)
+  if (evidence) {
+    const { text, who, when, retracted, translated_by } = evidence
+    return {
+      id,
+      kind: 'evidence',
+      text,
+      who,
+      when,
+      ...(translated_by ? { translated_by } : {}),
+      ...(retracted ? { retracted } : {}),
+      evidence: [],
+      because: [],
+      or: [],
+    }
   }
-  const cited = 'evidence' in item ? item.evidence : []
+  const found =
+    [
+      { kind: 'belief', item: k.beliefs.find((b) => b.id === id) },
+      { kind: 'decision', item: k.decisions.find((d) => d.id === id) },
+      { kind: 'rule', item: k.rules.find((r) => r.id === id) },
+      { kind: 'action', item: k.actions.find((a) => a.id === id) },
+    ].find((f) => f.item) ?? null
+  if (!found?.item) {
+    throw apiError(404, `belief, decision, rule or action ${id} not found`)
+  }
+  const [first, ...rest] = knowledgeSets(found.item)
+  const cited = (ids: string[]) => ids.filter((e) => k.evidence.some((x) => x.id === e))
   return {
-    id: item.id,
-    text: item.text,
+    id,
+    kind: found.kind,
+    text: found.item.text,
     evidence: k.evidence
-      .filter((e) => cited.includes(e.id))
-      .map(({ id, text, who, when, retracted }) => ({ id, text, who, when, retracted })),
-    because: item.because.map((next) => knowledgeWhy(k, next)),
+      .filter((e) => first.evidence.includes(e.id))
+      .map(({ id, text, who, when, translated_by, retracted }) => ({
+        id,
+        text,
+        who,
+        when,
+        translated_by: translated_by ?? '',
+        retracted,
+      })),
+    because: first.because.map((next) => knowledgeWhy(k, next)),
+    or: rest.map((set) => [...set.because, ...cited(set.evidence)].map((next) => knowledgeWhy(k, next))),
   }
 }
 
-// What rests on id, directly or through other beliefs and decisions. For a
-// piece of evidence, the beliefs citing it come first. Decision ids work
-// here too, so a decision's detail can show what rests on it.
+// What rests on id in every set of its reasons, directly or through other
+// beliefs and decisions, and apart what rests on it in some sets but still
+// has another. id is a belief, a piece of evidence, a decision or a rule.
 function knowledgeDoubt(k: KSeed, id: string) {
-  const falls = new Set<string>()
-  if (k.beliefs.some((b) => b.id === id) || k.decisions.some((d) => d.id === id)) {
-    falls.add(id)
-  } else if (k.evidence.some((e) => e.id === id)) {
-    for (const b of k.beliefs.filter((b) => b.evidence.includes(id))) {
-      falls.add(b.id)
-    }
-  } else {
-    throw apiError(404, `belief or evidence ${id} not found`)
+  const known = [...k.beliefs, ...k.evidence, ...k.decisions, ...k.rules].some((x) => x.id === id)
+  if (!known) {
+    throw apiError(404, `belief, evidence, decision or rule ${id} not found`)
   }
-  const restsOn = (because: string[]) => because.some((b) => falls.has(b))
+  const falls = new Set([id])
+  const reaches = (set: KSet) => set.evidence.includes(id) || set.because.some((b) => falls.has(b))
   let added = true
   while (added) {
     added = false
     for (const node of [...k.beliefs, ...k.decisions]) {
-      if (!falls.has(node.id) && restsOn(node.because)) {
+      if (!falls.has(node.id) && knowledgeSets(node).every(reaches)) {
         falls.add(node.id)
         added = true
       }
     }
   }
-  const view = knowledgeViews(k)
+  const view = knowledgeJudge(k, [])
+  const all = (item: KItem) => knowledgeSets(item).every(reaches)
+  const some = (item: KItem) => knowledgeSets(item).some(reaches)
+  const others = <T extends KItem>(items: T[]) => items.filter((x) => x.id !== id)
+  // A standing item with the sets that do not reach id, each as its ids.
+  const standing = (item: KItem & { text: string; file: string }) => ({
+    id: item.id,
+    text: item.text,
+    other: knowledgeSets(item)
+      .filter((set) => !reaches(set))
+      .map((set) => [...set.because, ...set.evidence]),
+    file: item.file,
+  })
+  const open = k.actions.filter((a) => !a.done)
   return {
-    beliefs: k.beliefs.filter((b) => falls.has(b.id) && b.id !== id).map(view.belief),
-    decisions: k.decisions.filter((d) => falls.has(d.id) && d.id !== id).map(view.decision),
-    rules: k.rules.filter((r) => restsOn(r.because)).map(view.rule),
+    beliefs: others(k.beliefs)
+      .filter((b) => falls.has(b.id))
+      .map(view.belief),
+    decisions: others(k.decisions)
+      .filter((d) => falls.has(d.id))
+      .map(view.decision),
+    rules: k.rules.filter(all).map(view.rule),
+    actions: open.filter(all).map(view.action),
+    standing: {
+      beliefs: others(k.beliefs)
+        .filter((b) => !falls.has(b.id) && some(b))
+        .map(standing),
+      decisions: others(k.decisions)
+        .filter((d) => !falls.has(d.id) && some(d))
+        .map(standing),
+      rules: k.rules.filter((r) => some(r) && !all(r)).map(standing),
+      actions: open.filter((a) => some(a) && !all(a)).map(standing),
+    },
   }
 }
 
-function knowledgeAPI(rest: string[]) {
+// Every contested contradiction, once, in the order declared.
+function knowledgeConflicts(k: KSeed) {
+  const view = knowledgeJudge(k, [])
+  const side = (id: string) => {
+    const e = k.evidence.find((x) => x.id === id)
+    if (e) {
+      return { id, kind: 'evidence', text: e.text }
+    }
+    return { id, kind: 'belief', text: k.beliefs.find((b) => b.id === id)?.text ?? id }
+  }
+  const seen = new Set<string>()
+  const conflicts = []
+  for (const item of [...k.evidence, ...k.beliefs]) {
+    for (const other of item.contradicts ?? []) {
+      if (seen.has(`${item.id} ${other}`) || seen.has(`${other} ${item.id}`)) {
+        continue
+      }
+      seen.add(`${item.id} ${other}`)
+      const contested = (view.holds(item.id) && view.stands(other)) || (view.holds(other) && view.stands(item.id))
+      if (contested) {
+        conflicts.push({
+          a: side(item.id),
+          b: side(other),
+          a_rests_on: view.restsOn(item.id),
+          b_rests_on: view.restsOn(other),
+        })
+      }
+    }
+  }
+  return { conflicts }
+}
+
+function knowledgeAPI(rest: string[], url: URL) {
   const k = knowledgeSeed()
   if (rest.length === 0) {
-    const view = knowledgeViews(k)
+    const without = (url.searchParams.get('without') ?? '').split(',').filter(Boolean)
+    for (const id of without) {
+      if (![...k.beliefs, ...k.evidence].some((x) => x.id === id)) {
+        throw apiError(404, `without: ${id} is not a loaded belief or evidence`)
+      }
+    }
+    const view = knowledgeJudge(k, without)
     return {
       dir: k.dir,
       evidence: k.evidence.map((e) => ({
         ...e,
-        cited_by: k.beliefs.filter((b) => b.evidence.includes(e.id)).map((b) => b.id),
+        translated_by: e.translated_by ?? '',
+        contradicts: e.contradicts ?? [],
+        cited_by: k.beliefs.filter((b) => knowledgeSets(b).some((set) => set.evidence.includes(e.id))).map((b) => b.id),
       })),
       beliefs: k.beliefs.map(view.belief),
       decisions: k.decisions.map(view.decision),
       rules: k.rules.map(view.rule),
+      actions: k.actions.map(view.action),
+      without,
     }
+  }
+  if (rest.length === 1 && rest[0] === 'conflicts') {
+    return knowledgeConflicts(k)
   }
   if (rest.length === 2 && rest[0] === 'why') {
     return knowledgeWhy(k, rest[1])

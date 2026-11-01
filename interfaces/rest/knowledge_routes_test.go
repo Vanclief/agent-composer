@@ -216,9 +216,6 @@ func TestKnowledgeRoutesList(t *testing.T) {
 	if strings.Contains(stripped, "null") {
 		t.Fatalf("body has a null list: %s", body)
 	}
-	if !strings.Contains(string(body), `"by":"","because":[]`) {
-		t.Fatalf("body %s has no empty by", body)
-	}
 	if !strings.Contains(string(body), `"opinions":[]`) || !strings.Contains(string(body), `"because":[]`) {
 		t.Fatalf("body %s has no empty lists", body)
 	}

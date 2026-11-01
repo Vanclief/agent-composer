@@ -13,13 +13,28 @@ import (
 type Kind string
 
 const (
-	// Mechanical rules have a check command.
+	// Mechanical rules have a check command, and may also be judged.
 	Mechanical Kind = "mechanical"
-	// Manual rules are checked by a human or an agent reading them.
+	// Judged rules have no check but name who is trusted to judge them.
+	Judged Kind = "judged"
+	// Manual rules have neither: a human reads them.
 	Manual Kind = "manual"
 )
 
-// Result is one rule's outcome. Passed is nil for manual rules.
+// Kind says how the rule is checked: mechanical when it has a check,
+// judged when it has only a judge block, manual otherwise.
+func (rule Rule) Kind() Kind {
+	if strings.TrimSpace(rule.Check) != "" {
+		return Mechanical
+	}
+	if rule.Judge != nil {
+		return Judged
+	}
+
+	return Manual
+}
+
+// Result is one rule's outcome. Passed is nil for judged and manual rules.
 type Result struct {
 	Rule   Rule   `json:"rule"`
 	Kind   Kind   `json:"kind"`
@@ -38,7 +53,7 @@ func Shell(ctx context.Context, command string) (string, error) {
 }
 
 // Check runs the rules of the ruleset named by its subject or its file, in
-// order. Manual rules are listed, not run.
+// order. Judged and manual rules are listed, not run.
 func (s *Set) Check(ctx context.Context, ruleset string, run Runner) ([]Result, error) {
 	found, exists := s.ruleset(ruleset)
 	if !exists {
@@ -54,8 +69,9 @@ func (s *Set) Check(ctx context.Context, ruleset string, run Runner) ([]Result, 
 }
 
 func checkRule(ctx context.Context, rule Rule, run Runner) Result {
-	if strings.TrimSpace(rule.Check) == "" {
-		return Result{Rule: rule, Kind: Manual}
+	kind := rule.Kind()
+	if kind != Mechanical {
+		return Result{Rule: rule, Kind: kind}
 	}
 
 	output, err := run(ctx, rule.Check)

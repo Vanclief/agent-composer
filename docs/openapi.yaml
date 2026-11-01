@@ -1638,9 +1638,6 @@ components:
           type: string
         text:
           type: string
-        by:
-          type: string
-          description: Who holds the belief, a person or an agent id; empty for the repo owner.
         because:
           type: array
           description: Ids of the beliefs this one rests on.
@@ -1700,10 +1697,17 @@ components:
             type: string
         file:
           type: string
+        by:
+          type: string
+          description: >
+            Who holds or stated the belief, a person or an agent; empty for the repo owner.
+            Never grounds it: an agent's verdict recorded by agc rules judge is an opinion.
+        when:
+          type: string
+          description: When by held or stated it; empty when unset.
       required:
         - id
         - text
-        - by
         - because
         - evidence
         - or
@@ -1714,6 +1718,8 @@ components:
         - retracted
         - contested_by
         - file
+        - by
+        - when
     Decision:
       type: object
       properties:
@@ -1780,9 +1786,12 @@ components:
             type: string
         kind:
           type: string
-          description: mechanical when the rule has a check, manual otherwise.
+          description: >
+            mechanical when the rule has a check (it may also be judged), judged when it has
+            only a judge block, manual when it has neither.
           enum:
             - mechanical
+            - judged
             - manual
         label:
           $ref: '#/components/schemas/KnowledgeLabel'
@@ -1796,6 +1805,16 @@ components:
             type: string
         file:
           type: string
+        trusted:
+          type: array
+          description: >
+            Who is trusted to judge the rule (agc rules judge): harness ids or people. [] when
+            the rule has no judge block.
+          items:
+            type: string
+        ask:
+          type: string
+          description: The question put to a judge; empty means the rule text.
       required:
         - subject
         - id
@@ -1807,6 +1826,8 @@ components:
         - opinions
         - doubted
         - file
+        - trusted
+        - ask
     Reason:
       type: object
       description: >

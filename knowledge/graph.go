@@ -165,11 +165,11 @@ const (
 	// Grounded beliefs have live evidence under every leaf of some set of
 	// reasons.
 	Grounded Label = "grounded"
-	// Judgment beliefs rest, in some set of reasons, on a leaf that comes
+	// ExpertJudgment beliefs, labeled judgment, rest on a leaf that comes
 	// from someone's experience and cites no evidence, and on no opinion
 	// or doubted leaf: expert testimony, stronger than an opinion and
-	// weaker than evidence.
-	Judgment Label = "judgment"
+	// weaker than evidence. Not to be confused with a rule's Judgment.
+	ExpertJudgment Label = "judgment"
 	// Opinion beliefs have, in every set of reasons, a leaf with no
 	// evidence at all.
 	Opinion Label = "opinion"
@@ -322,7 +322,7 @@ func labelFor(status Status) Label {
 	case len(status.Opinions) > 0:
 		return Opinion
 	case len(status.Judgments) > 0:
-		return Judgment
+		return ExpertJudgment
 	}
 
 	return Grounded

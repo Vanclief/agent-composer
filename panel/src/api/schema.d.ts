@@ -744,8 +744,6 @@ export interface components {
         Belief: {
             id: string;
             text: string;
-            /** @description Who holds the belief, a person or an agent id; empty for the repo owner. */
-            by: string;
             /** @description Ids of the beliefs this one rests on. */
             because: string[];
             /** @description Ids of the evidence this belief cites. */
@@ -767,6 +765,10 @@ export interface components {
             /** @description The grounded beliefs and live evidence contradicting this belief or the evidence it cites, when it is contested. */
             contested_by: string[];
             file: string;
+            /** @description Who holds or stated the belief, a person or an agent; empty for the repo owner. Never grounds it: an agent's verdict recorded by agc rules judge is an opinion. */
+            by: string;
+            /** @description When by held or stated it; empty when unset. */
+            when: string;
         };
         Decision: {
             id: string;
@@ -793,14 +795,18 @@ export interface components {
             check: string;
             because: string[];
             /**
-             * @description mechanical when the rule has a check, manual otherwise.
+             * @description mechanical when the rule has a check (it may also be judged), judged when it has only a judge block, manual when it has neither.
              * @enum {string}
              */
-            kind: "mechanical" | "manual";
+            kind: "mechanical" | "judged" | "manual";
             label: components["schemas"]["KnowledgeLabel"];
             opinions: string[];
             doubted: string[];
             file: string;
+            /** @description Who is trusted to judge the rule (agc rules judge): harness ids or people. [] when the rule has no judge block. */
+            trusted: string[];
+            /** @description The question put to a judge; empty means the rule text. */
+            ask: string;
         };
         /** @description A belief, decision, rule or action, the evidence it cites (beliefs only), what it rests on and its alternative sets of reasons, each a Reason. A piece of evidence inside an alternative is a Reason of kind evidence, with who, when, translated_by and retracted set and nothing under it. */
         Reason: {

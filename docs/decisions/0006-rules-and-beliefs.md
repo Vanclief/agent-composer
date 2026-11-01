@@ -1,8 +1,9 @@
 # ADR 0006: Rules, beliefs and decisions
 
 **Status:** Accepted — 2026-11-01; amended the same day with actions,
-alternative support, contradictions, what-if, sentence output,
-translated evidence, provenance and judgments (decisions 7–13)
+alternative support, contradictions, what-if, sentence output and
+translated evidence (decisions 7–12), then with judged rules (decision 13)
+and provenance and judgments (decision 14)
 **Builds on:** [0001 — git + plain text for all artifacts](0001-git-and-plain-text-for-all-artifacts.md)
 
 ## Context
@@ -185,10 +186,44 @@ Franco's framing:
     requires `source`, and output says "…, written up by codex-cli".
     Anything a model concludes without a source is an opinion: a belief
     with no evidence.
-13. **Provenance and judgments.** A belief may say `by:`, who holds it, a
-    person or an agent id; omitted means the repo owner, and sentences
-    read "ana believes …" instead of "I believe …". `by` is free text and
-    changes no label. A leaf belief (no `because`, `evidence` or `or`) may
+13. **Judged rules, with trust per rule.** "In each rule that requires an
+    inference-based agent to make the check, we should have a way to know
+    which agents we trust to do that job." A rule may carry a `judge:`
+    block next to, or instead of, `check:`:
+
+    ```yaml
+    - id: go-err-naming
+      rule: Name error variables `err` ...
+      judge:
+        trusted: [claude_code, codex_cli]   # harness ids, or people
+        ask: In the added Go lines, is every error variable named err ...?   # optional, defaults to the rule text
+    ```
+
+    `trusted` is required and non-empty; a name that looks like a model
+    but is not a harness id in `runtime/harnesses/catalog.go` is rejected.
+    A rule is `mechanical` (has a check, and may also be judged), `judged`
+    (a judge block, no check) or `manual` (neither). `rules show|check`
+    print who an unchecked rule needs ("— needs claude_code or codex_cli",
+    "— needs a human"); `rules check` keeps its counts, summary line and
+    exit status, counting judged rules with the manual ones.
+    `agc rules judge --as <agent> [--on <path|git ref|->] [--record]` asks
+    the agent, through the same harness code workflows use and read only,
+    about each rule that trusts it, on the diff of the branch against
+    `origin/master` by default, and reads one `VERDICT: pass|fail — …`
+    line; anything else is `unclear`, and a fail or an unclear answer
+    fails the command. Rules that do not trust the agent are listed as
+    skipped. A model's verdict is an opinion, never evidence: `--record`
+    appends it to `beliefs/judgments.yaml` as a belief with `by:` the
+    agent and `when:`, no evidence under it, so it always reads as an
+    opinion ("claude_code thinks …"). `by:` names who holds or stated a
+    belief and never grounds it. Trust is written per rule, not per agent
+    globally: which agent can judge a rule depends on the rule (agents can
+    read a diff, only Franco can say what happened on the rig). A shared
+    `judges.yaml` registry is left out until trusted lists start repeating.
+14. **Provenance and judgments.** A belief's `by:` (decision 13) is who
+    holds it, a person or an agent id; omitted means the repo owner, and
+    sentences read "ana believes …" instead of "I believe …". `by` is free
+    text and changes no label. A leaf belief (no `because`, `evidence` or `or`) may
     say `experience: { of, in }`, both required, whose experience it comes
     from and in what; `of` passes the same not-a-model check as evidence
     `who`. Such a leaf is a `judgment`: expert testimony, stronger than an

@@ -1,12 +1,25 @@
-// How a belief, decision or rule is grounded, as color AND shape
+// How a belief, decision, rule or action is grounded, as color AND shape
 // (rtsdesign 6): grounded is a filled green circle, opinion a hollow amber
-// circle, in doubt a filled red triangle. The word next to the shape is the
+// circle, in doubt a filled red triangle, contested two overlapping rose
+// circles, one filled and one hollow. The word next to the shape is the
 // server's label, verbatim; an unknown word gets a neutral question mark.
-import { Circle, CircleHelp, Triangle, type LucideIcon } from 'lucide-react'
+import type { ComponentType, SVGProps } from 'react'
+import { Circle, CircleHelp, Triangle } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
-type MarkStyle = { icon: LucideIcon; shape: string; text: string; tip: string }
+type Shape = ComponentType<{ className?: string; strokeWidth?: number; 'aria-hidden'?: boolean }>
+type MarkStyle = { icon: Shape; shape: string; text: string; tip: string }
+
+// Two sides that disagree: a filled circle overlapped by a hollow one.
+export function TwoCircles({ strokeWidth = 2, ...props }: SVGProps<SVGSVGElement> & { strokeWidth?: number }) {
+  return (
+    <svg viewBox="0 0 32 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} {...props}>
+      <circle cx="10" cy="12" r="7.5" fill="currentColor" />
+      <circle cx="22" cy="12" r="7.5" />
+    </svg>
+  )
+}
 
 const GROUNDED: MarkStyle = {
   icon: Circle,
@@ -26,6 +39,12 @@ const IN_DOUBT: MarkStyle = {
   text: 'text-red-700 dark:text-red-400',
   tip: 'A leaf cites only retracted evidence',
 }
+const CONTESTED: MarkStyle = {
+  icon: TwoCircles,
+  shape: 'w-4 text-rose-500',
+  text: 'text-rose-700 dark:text-rose-400',
+  tip: 'Something grounded contradicts it',
+}
 const UNKNOWN: MarkStyle = {
   icon: CircleHelp,
   shape: 'text-zinc-500',
@@ -39,6 +58,7 @@ const STYLES: Record<string, MarkStyle> = {
   opinion: OPINION,
   in_doubt: IN_DOUBT,
   'in doubt': IN_DOUBT,
+  contested: CONTESTED,
 }
 
 type LabelMarkProps = {

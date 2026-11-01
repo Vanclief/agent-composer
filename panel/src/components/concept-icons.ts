@@ -21,6 +21,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Brain, Eye, FileText, Hammer, Library, Lightbulb, Scale, Signpost } from 'lucide-react'
+import { ListTodo } from 'lucide-react'
 
 export const conceptIcons = {
   // A Task: a VM agents work in.
@@ -57,6 +58,8 @@ export const conceptIcons = {
   file: FileText,
   // A ruleset's subject, e.g. "the Linux rig".
   subject: Library,
+  // Something to do because of a decision (ADR 0006).
+  action: ListTodo,
 } satisfies Record<string, LucideIcon>
 
 export type Concept = keyof typeof conceptIcons
@@ -239,4 +242,6 @@ export const conceptColors = {
   evidence: teal,
   file: zinc,
   subject: zinc,
+  // lime is env's in Work; the two never meet on one screen.
+  action: lime,
 } satisfies Record<Concept, ConceptColor>
