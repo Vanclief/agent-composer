@@ -34,7 +34,7 @@ test('/ honors a stored think mode and /think goes to beliefs', async ({ page })
 test('beliefs page lists the seeded beliefs with their marks', async ({ page }) => {
   await page.goto('/panel/think/beliefs')
   await expect(page.getByTestId('page-title')).toHaveText('Think · Beliefs')
-  await expect(page.getByTestId('think-card')).toHaveCount(14)
+  await expect(page.getByTestId('think-card')).toHaveCount(16)
 
   await expect(card(page, 'go-has-one-formatting').locator('[data-label="grounded"]')).toHaveText('grounded')
   await expect(card(page, 'workflows-will-take-large-media').locator('[data-label="opinion"]')).toHaveText('opinion')
@@ -337,4 +337,41 @@ test('doubt lists open actions and what still stands on other support', async ({
   await expect(standing).toContainText('W holds.')
   await expect(standing).toHaveCSS('opacity', '0.6')
   await expect(byX.getByRole('region', { name: 'Beliefs' })).toContainText('0')
+})
+
+test('a judgment shows its half-filled mark, the experience it comes from and its sentence', async ({ page }) => {
+  const id = 'icon-and-shape-ui-reduces-operator-mistakes'
+  const sentence =
+    "I believe an interface that speaks in icons and shapes reduces operator mistakes, from franco's experience in years of using strategy-game and operator UIs."
+  await page.goto('/panel/think/beliefs')
+  const judged = card(page, id)
+  await expect(judged.locator('[data-label="judgment"]')).toHaveText('judgment')
+  await expect(judged.getByTestId('card-text')).toHaveText(sentence)
+  await expect(judged.getByTestId('by')).toHaveCount(0)
+
+  await judged.click()
+  const pane = page.getByRole('complementary', { name: 'Detail' })
+  await expect(pane.locator('[data-label="judgment"]').first()).toHaveText('judgment')
+  await expect(pane.getByTestId('detail-text')).toHaveText(sentence)
+  await expect(pane.getByTestId('detail-note')).toHaveText(
+    "franco's experience in years of using strategy-game and operator UIs",
+  )
+})
+
+test('a belief held by an agent shows who holds it', async ({ page }) => {
+  const id = 'diff-has-no-explicit-semicolons'
+  const sentence =
+    'codex_cli thinks the diff writes no explicit semicolons in Go outside a 3-clause for header, but has no evidence yet.'
+  await page.goto('/panel/think/beliefs')
+  const held = card(page, id)
+  await expect(held.locator('[data-label="opinion"]')).toHaveText('opinion')
+  await expect(held.getByTestId('card-text')).toHaveText(sentence)
+  await expect(held.getByTestId('by')).toHaveText('codex_cli')
+  await expect(card(page, 'go-has-one-formatting').getByTestId('by')).toHaveCount(0)
+
+  await held.click()
+  const pane = page.getByRole('complementary', { name: 'Detail' })
+  await expect(pane.getByTestId('detail-text')).toHaveText(sentence)
+  await expect(pane.getByTestId('by')).toHaveText('codex_cli')
+  await expect(pane.getByTestId('detail-note')).toHaveCount(0)
 })

@@ -159,6 +159,20 @@ export function Section({
   )
 }
 
+// Who holds a belief when it is not the repo owner (by), as a person chip.
+export function ByChip({ belief }: { belief: Belief }) {
+  if (!belief.by) {
+    return null
+  }
+  return (
+    <span data-testid="by" className="contents">
+      <IconChip icon={conceptIcons.human} title={belief.when ? `Held by, on ${belief.when}` : 'Held by'}>
+        {belief.by}
+      </IconChip>
+    </span>
+  )
+}
+
 // Retracted evidence: a red chip with who, when and why in the tooltip.
 export function RetractedChip({ retracted }: { retracted: Retraction }) {
   return (
