@@ -1,37 +1,72 @@
-// PLACEHOLDER owned by the messages feature: replace freely, keep the
-// export. The :channel param is the channel without its #.
-import { Link, useParams } from 'react-router'
+// Every channel: a rail of channel tiles and the selected channel's feed.
+// The :channel param is the channel without its #.
+import { NavLink, useParams } from 'react-router'
 
-import { useChannelMessages, useChannels } from '@/api/hooks'
+import { useChannels } from '@/api/hooks'
 import { conceptIcons } from '@/components/concept-icons'
+import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
-import { IconChip } from '@/components/icon-chip'
+import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/shell/page-title'
 
-import { MessageList } from './MessageList'
+import { ChannelView } from './ChannelView'
+
+function ChannelRail() {
+  const channels = useChannels()
+  const Channel = conceptIcons.channel
+
+  return (
+    <nav
+      aria-label="Channels"
+      className="flex w-56 shrink-0 flex-col gap-1 overflow-y-auto border-r border-zinc-200 p-2 dark:border-zinc-800"
+    >
+      <ErrorText error={channels.error} />
+      {channels.data?.length === 0 && <EmptySlot reason="No channels" />}
+      {channels.data?.map((c) => (
+        <NavLink
+          key={c.channel}
+          to={`/messages/${encodeURIComponent(c.channel.slice(1))}`}
+          title={`${c.count} messages`}
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm transition-colors',
+              isActive
+                ? 'border-zinc-300 bg-zinc-200 font-medium text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white'
+                : 'border-transparent text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100',
+            )
+          }
+        >
+          <Channel aria-hidden className="size-4 shrink-0 text-zinc-500" />
+          <span className="truncate font-mono">{c.channel.slice(1)}</span>
+          <span
+            data-testid="channel-count"
+            className="ml-auto rounded border border-zinc-300 px-1.5 font-mono text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
+          >
+            {c.count}
+          </span>
+        </NavLink>
+      ))}
+    </nav>
+  )
+}
 
 export function MessagesPage() {
   const { channel: slug } = useParams()
   const channel = slug ? `#${slug}` : undefined
   usePageTitle(channel ? `Messages ${channel}` : 'Messages')
-  const channels = useChannels()
-  const feed = useChannelMessages(channel)
 
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <h2 className="text-2xl font-semibold tracking-tight">MessagesPage</h2>
-      <ErrorText error={channels.error} />
-      <div className="flex flex-wrap gap-1.5">
-        {channels.data?.map((c) => (
-          <Link key={c.channel} to={`/messages/${encodeURIComponent(c.channel.slice(1))}`}>
-            <IconChip icon={conceptIcons.channel}>
-              {c.channel.slice(1)} · {c.count}
-            </IconChip>
-          </Link>
-        ))}
+    <div className="flex h-full min-h-0">
+      <ChannelRail />
+      <div className="flex min-w-0 flex-1 flex-col">
+        {channel ? (
+          <ChannelView key={channel} channel={channel} />
+        ) : (
+          <div className="flex flex-1 items-center justify-center p-6">
+            <EmptySlot reason="Pick a channel" />
+          </div>
+        )}
       </div>
-      <ErrorText error={feed.error} />
-      {channel && <MessageList messages={feed.messages} />}
     </div>
   )
 }

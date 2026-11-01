@@ -1,19 +1,154 @@
-// PLACEHOLDER owned by the messages feature: replace freely.
+// A channel's messages, newest at the bottom. Sticks to the bottom while the
+// reader is there; otherwise a "New messages" pill appears when more arrive.
+// Consecutive messages from one participant form a group under one header.
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { ArrowDown } from 'lucide-react'
+
 import type { Message } from '@/api/msg'
 import { conceptIcons } from '@/components/concept-icons'
+import { cn } from '@/lib/utils'
+
+// How close to the bottom (px) still counts as at the bottom.
+const BOTTOM_SLACK = 32
+// How often relative times refresh.
+const TICK_MS = 30_000
+
+function groupByAuthor(messages: Message[]) {
+  const groups: Message[][] = []
+  for (const m of messages) {
+    const last = groups.at(-1)
+    if (last && last[0].participant_id === m.participant_id) {
+      last.push(m)
+    } else {
+      groups.push([m])
+    }
+  }
+  return groups
+}
+
+function relativeTime(iso: string, now: number) {
+  const seconds = Math.max(0, Math.round((now - Date.parse(iso)) / 1000))
+  if (seconds < 60) {
+    return 'now'
+  }
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) {
+    return `${minutes}m`
+  }
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) {
+    return `${hours}h`
+  }
+  return `${Math.round(hours / 24)}d`
+}
+
+function useNow() {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), TICK_MS)
+    return () => window.clearInterval(id)
+  }, [])
+  return now
+}
+
+function AuthorChip({ message }: { message: Message }) {
+  const human = !message.task
+  const Icon = human ? conceptIcons.human : conceptIcons.task
+  return (
+    <span
+      data-testid="author"
+      data-kind={human ? 'human' : 'agent'}
+      title={human ? 'Human' : `Agent in task ${message.task}`}
+      className={cn(
+        'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium',
+        human
+          ? 'border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300'
+          : 'border-zinc-200 text-zinc-800 dark:border-zinc-800 dark:text-zinc-200',
+      )}
+    >
+      <Icon aria-hidden className={cn('size-3.5', human ? 'text-sky-600 dark:text-sky-400' : 'text-zinc-500')} />@
+      {message.from}
+      {!human && <span className="font-mono font-normal text-zinc-500">{message.task}</span>}
+    </span>
+  )
+}
 
 export function MessageList({ messages }: { messages: Message[] }) {
-  const Human = conceptIcons.human
+  const now = useNow()
+  const scroller = useRef<HTMLDivElement>(null)
+  const stick = useRef(true)
+  const [atBottom, setAtBottom] = useState(true)
+  const lastID = messages.at(-1)?.id ?? 0
+  const [seenID, setSeenID] = useState(lastID)
+
+  // New messages while at the bottom: follow them.
+  useLayoutEffect(() => {
+    const el = scroller.current
+    if (el && stick.current) {
+      el.scrollTop = el.scrollHeight
+    }
+  }, [lastID])
+
+  function onScroll() {
+    const el = scroller.current
+    if (!el) {
+      return
+    }
+    const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < BOTTOM_SLACK
+    stick.current = bottom
+    setAtBottom(bottom)
+    if (bottom) {
+      setSeenID(lastID)
+    }
+  }
+
+  function toBottom() {
+    const el = scroller.current
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    }
+  }
+
   return (
-    <ul className="flex flex-col gap-2 text-sm">
-      {messages.map((m) => (
-        <li key={m.id} className="flex gap-2">
-          <span className="flex shrink-0 items-center gap-1 font-medium">
-            {!m.task && <Human className="size-3.5 text-zinc-500" />}@{m.from}
-          </span>
-          <span className="whitespace-pre-wrap">{m.body}</span>
-        </li>
-      ))}
-    </ul>
+    <div className="relative min-h-0 flex-1">
+      <div ref={scroller} onScroll={onScroll} data-testid="message-list" className="h-full overflow-y-auto px-4 py-3">
+        <ol className="flex flex-col gap-3 text-sm">
+          {groupByAuthor(messages).map((group) => (
+            <li key={group[0].id} className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <AuthorChip message={group[0]} />
+                <span
+                  title={new Date(group[0].created_at).toLocaleString()}
+                  className="rounded-md border border-zinc-200 px-1.5 py-0.5 font-mono text-xs text-zinc-500 dark:border-zinc-800"
+                >
+                  {relativeTime(group[0].created_at, now)}
+                </span>
+              </div>
+              {group.map((m) => (
+                <p
+                  key={m.id}
+                  title={`#${m.id} · ${new Date(m.created_at).toLocaleString()}`}
+                  className={cn(
+                    'border-l-2 pl-2 break-words whitespace-pre-wrap',
+                    m.task ? 'border-zinc-200 dark:border-zinc-800' : 'border-sky-500/50',
+                  )}
+                >
+                  {m.body}
+                </p>
+              ))}
+            </li>
+          ))}
+        </ol>
+      </div>
+      {!atBottom && lastID > seenID && (
+        <button
+          type="button"
+          onClick={toBottom}
+          className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-sky-600 px-3 py-1 text-xs font-medium text-white shadow-md hover:bg-sky-500"
+        >
+          New messages <ArrowDown className="size-3.5" />
+        </button>
+      )}
+    </div>
   )
 }
