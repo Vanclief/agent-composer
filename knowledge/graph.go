@@ -64,6 +64,99 @@ func (s *Set) why(set Support) (Alternative, error) {
 	return alternative, nil
 }
 
+// WhyNode is a belief, decision, rule or action, the evidence it cites
+// (only beliefs cite evidence), the beliefs and decisions it rests on and
+// its alternatives, each in Or.
+type WhyNode struct {
+	Kind     string     `json:"kind"`
+	ID       string     `json:"id"`
+	Text     string     `json:"text"`
+	File     string     `json:"file"`
+	Evidence []Evidence `json:"evidence,omitempty"`
+	Because  []WhyNode  `json:"because,omitempty"`
+	Or       []WhySet   `json:"or,omitempty"`
+}
+
+// WhySet is one other set of reasons a WhyNode can stand on.
+type WhySet struct {
+	Evidence []Evidence `json:"evidence,omitempty"`
+	Because  []WhyNode  `json:"because,omitempty"`
+}
+
+// WhyAny is Why for any kind: it follows a belief, decision, rule or
+// action down its because chains, alternatives included, to the evidence.
+func (s *Set) WhyAny(id string) (WhyNode, error) {
+	found, sets, exists := s.item(id)
+	if !exists {
+		return WhyNode{}, ez.New(ez.ENOTFOUND, "belief, decision, rule or action "+id+" not found", nil)
+	}
+
+	for i, set := range sets {
+		alternative := WhySet{}
+		for _, evidenceID := range set.Evidence {
+			alternative.Evidence = append(alternative.Evidence, s.evidenceByID[evidenceID])
+		}
+
+		for _, next := range set.Because {
+			child, err := s.WhyAny(next)
+			if err != nil {
+				return WhyNode{}, ez.Wrap(err)
+			}
+			alternative.Because = append(alternative.Because, child)
+		}
+
+		if i == 0 {
+			found.Evidence = alternative.Evidence
+			found.Because = alternative.Because
+			continue
+		}
+		found.Or = append(found.Or, alternative)
+	}
+
+	return found, nil
+}
+
+// Kind says what id is: evidence, belief, decision, rule or action.
+func (s *Set) Kind(id string) (string, bool) {
+	_, isEvidence := s.evidenceByID[id]
+	if isEvidence {
+		return "evidence", true
+	}
+
+	found, _, exists := s.item(id)
+
+	return found.Kind, exists
+}
+
+// item finds the belief, decision, rule or action id, with no reasons
+// filled in, and its sets of reasons, its own first.
+func (s *Set) item(id string) (WhyNode, []Support, bool) {
+	for _, belief := range s.Beliefs {
+		if belief.ID == id {
+			return WhyNode{Kind: "belief", ID: id, Text: belief.Belief, File: belief.File}, belief.Supports(), true
+		}
+	}
+	for _, decision := range s.Decisions {
+		if decision.ID == id {
+			return WhyNode{Kind: "decision", ID: id, Text: decision.Decision, File: decision.File}, decision.Supports(), true
+		}
+	}
+	for _, ruleset := range s.Rulesets {
+		for _, rule := range ruleset.Rules {
+			if rule.ID == id {
+				return WhyNode{Kind: "rule", ID: id, Text: rule.Rule, File: rule.File}, rule.Supports(), true
+			}
+		}
+	}
+	for _, action := range s.Actions {
+		if action.ID == id {
+			return WhyNode{Kind: "action", ID: id, Text: action.Action, File: action.File}, action.Supports(), true
+		}
+	}
+
+	return WhyNode{}, nil, false
+}
+
 // Label says how a belief is grounded. It is computed from the evidence
 // each time it is asked for and never stored.
 type Label string
@@ -304,13 +397,13 @@ type Standing struct {
 // Doubt lists the beliefs and decisions that rest on id, the rules and
 // open actions that rest on it or on any of them, and, apart, those that
 // rest on it but have another set of reasons that does not. id is a
-// belief, or a piece of evidence, in which case the beliefs citing it come
+// belief, a decision, a rule (nothing rests on a rule, so its listing is
+// empty) or a piece of evidence, in which case the beliefs citing it come
 // first.
 func (s *Set) Doubt(id string) (Doubted, error) {
-	_, isBelief := s.belief(id)
-	_, isEvidence := s.evidenceByID[id]
-	if !isBelief && !isEvidence {
-		return Doubted{}, ez.New(ez.ENOTFOUND, "belief or evidence "+id+" not found", nil)
+	kind, _ := s.Kind(id)
+	if !slices.Contains([]string{"belief", "evidence", "decision", "rule"}, kind) {
+		return Doubted{}, ez.New(ez.ENOTFOUND, "belief, evidence, decision or rule "+id+" not found", nil)
 	}
 
 	falls := map[string]bool{id: true}
@@ -365,6 +458,8 @@ func (s *Set) Doubt(id string) (Doubted, error) {
 	for _, decision := range s.Decisions {
 		rest, rests := other(decision.Supports())
 		switch {
+		case decision.ID == id:
+			// The doubted decision itself is not listed.
 		case falls[decision.ID]:
 			doubted.Decisions = append(doubted.Decisions, decision)
 		case rests:
