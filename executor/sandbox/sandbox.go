@@ -16,60 +16,32 @@ type Executor struct {
 	sb *m.Sandbox
 }
 
-// Create creates and starts a detached sandbox from spec.
+// Create creates and boots a detached sandbox from spec through the msb
+// CLI, then connects to it. Secrets reach msb only through its environment,
+// so the runtime stores references to them, never their values.
 func Create(ctx context.Context, spec Spec) (*Executor, error) {
 	err := spec.Validate()
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
-
-	opts := []m.SandboxOption{
-		m.WithImage(spec.Image),
-		m.WithCPUs(spec.CPUs),
-		m.WithMemory(spec.MemoryMiB),
-		m.WithUser(spec.User),
-		m.WithDetached(),
-	}
-	if len(spec.Env) > 0 {
-		opts = append(opts, m.WithEnv(spec.Env))
-	}
-	if len(spec.Labels) > 0 {
-		opts = append(opts, m.WithLabels(spec.Labels))
-	}
-	if spec.VsockPath != "" {
-		opts = append(opts, m.WithVsock(m.VsockRoute{HostSocket: spec.VsockPath, Port: spec.VsockPort}))
-	}
-	for _, secret := range spec.Secrets {
-		opts = append(opts, m.WithSecrets(m.Secret.Env(secret.Name, secret.Value, m.SecretEnvOptions{Allow: secret.Hosts})))
-	}
-	if len(spec.Volumes) > 0 {
-		mounts := make(map[string]m.MountConfig, len(spec.Volumes))
-		for _, v := range spec.Volumes {
-			mountOpts := m.MountOptions{Readonly: !v.ReadWrite}
-			if v.HostPath {
-				mounts[v.Dest] = m.Mount.Bind(v.Source, mountOpts)
-			} else {
-				mounts[v.Dest] = m.Mount.NamedWith(v.Source, mountOpts, m.NamedVolumeOptions{Mode: "ensure-exists"})
-			}
-		}
-		opts = append(opts, m.WithMounts(mounts))
-	}
-
-	sb, err := m.CreateSandbox(ctx, spec.Name, opts...)
+	err = runMsb(ctx, spec.Secrets, createArgs(spec)...)
 	if err != nil {
-		return nil, sdkError(err, "cannot create sandbox "+spec.Name)
+		return nil, ez.Wrap(err)
 	}
-	return &Executor{sb: sb}, nil
+	return Connect(ctx, spec.Name)
 }
 
-// Connect returns an Executor for an existing sandbox, starting it detached
-// if it is not running.
+// Connect returns an Executor for a running sandbox. It does not start a
+// stopped one, because booting needs the secrets that Start passes to msb.
 func Connect(ctx context.Context, name string) (*Executor, error) {
 	h, err := m.GetSandbox(ctx, name)
 	if err != nil {
 		return nil, sdkError(err, "cannot find sandbox "+name)
 	}
-	sb, err := h.ConnectOrStart(ctx, m.WithConnectOrStartDetached())
+	if h.Status() != m.SandboxStatusRunning {
+		return nil, ez.New(ez.EUNAVAILABLE, "sandbox "+name+" is "+string(h.Status())+", start it first", nil)
+	}
+	sb, err := h.Connect(ctx)
 	if err != nil {
 		return nil, sdkError(err, "cannot connect to sandbox "+name)
 	}
@@ -89,19 +61,12 @@ func Stop(ctx context.Context, name string) error {
 	return nil
 }
 
-// Start boots a stopped sandbox, detached.
-func Start(ctx context.Context, name string) error {
-	h, err := m.GetSandbox(ctx, name)
+// Start boots a stopped sandbox, detached, through the msb CLI. Every boot
+// needs the values of the secrets the sandbox was created with.
+func Start(ctx context.Context, name string, secrets []Secret) error {
+	err := runMsb(ctx, secrets, "start", name)
 	if err != nil {
-		return sdkError(err, "cannot find sandbox "+name)
-	}
-	sb, err := h.StartDetached(ctx)
-	if err != nil {
-		return sdkError(err, "cannot start sandbox "+name)
-	}
-	err = sb.Detach(ctx)
-	if err != nil {
-		return sdkError(err, "cannot release sandbox "+name)
+		return ez.Wrap(err)
 	}
 	return nil
 }
