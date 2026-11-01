@@ -28,8 +28,8 @@ import (
 )
 
 // newTaskRoutes serves the API routes over an in-memory database, with rt as
-// the Tasks runtime.
-func newTaskRoutes(t *testing.T, rt tasks.Runtime) (*echo.Echo, *bun.DB) {
+// the Tasks runtime and secretsPath as the secrets file.
+func newTaskRoutes(t *testing.T, rt tasks.Runtime, secretsPath string) (*echo.Echo, *bun.DB) {
 	t.Helper()
 
 	sqldb, err := sql.Open("sqlite", ":memory:")
@@ -70,7 +70,7 @@ func newTaskRoutes(t *testing.T, rt tasks.Runtime) (*echo.Echo, *bun.DB) {
 	server := &restserver.Server{
 		Ctrl:        ctrl,
 		RateLimiter: ratelimit.NewWindowCounter(10, 100),
-		TasksAPI:    tasks.NewAPI(ctrl, msg, rt, "", socketDir, specs),
+		TasksAPI:    tasks.NewAPI(ctrl, msg, rt, secretsPath, socketDir, specs),
 		Messaging:   msg,
 	}
 
@@ -81,7 +81,7 @@ func newTaskRoutes(t *testing.T, rt tasks.Runtime) (*echo.Echo, *bun.DB) {
 }
 
 func TestTaskAndMessagingRoutes(t *testing.T) {
-	e, _ := newTaskRoutes(t, tasks.SandboxRuntime{})
+	e, _ := newTaskRoutes(t, tasks.SandboxRuntime{}, "")
 
 	cases := []struct {
 		method string
@@ -118,7 +118,7 @@ func TestTaskAndMessagingRoutes(t *testing.T) {
 }
 
 func TestCreateTaskWithTitleAndSpecRoutes(t *testing.T) {
-	e, _ := newTaskRoutes(t, &fakeRuntime{sb: &fakeSandbox{}})
+	e, _ := newTaskRoutes(t, &fakeRuntime{sb: &fakeSandbox{}}, "")
 
 	cases := []struct {
 		method string
@@ -155,5 +155,34 @@ func TestCreateTaskWithTitleAndSpecRoutes(t *testing.T) {
 		if !strings.Contains(recorder.Body.String(), tc.want) {
 			t.Fatalf("%s %s: body %s does not contain %s", tc.method, tc.path, recorder.Body.String(), tc.want)
 		}
+	}
+}
+
+func TestListSecretsRoute(t *testing.T) {
+	secretsPath := filepath.Join(t.TempDir(), "secrets.env")
+	err := os.WriteFile(secretsPath, []byte("GITHUB_TOKEN=ghp_routevalue\nCUSTOM=custom-routevalue\n"), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e, _ := newTaskRoutes(t, &fakeRuntime{sb: &fakeSandbox{}}, secretsPath)
+
+	request := httptest.NewRequest(http.MethodGet, "/api/secrets", nil)
+	recorder := httptest.NewRecorder()
+
+	e.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status %d, body %s", recorder.Code, recorder.Body.String())
+	}
+
+	want := `{"secrets":[{"name":"CUSTOM","hosts":[]},{"name":"GITHUB_TOKEN","hosts":["api.github.com","github.com"]}]}`
+	body := strings.TrimSpace(recorder.Body.String())
+	if body != want {
+		t.Fatalf("body %s, want %s", body, want)
+	}
+
+	if strings.Contains(body, "routevalue") {
+		t.Fatalf("body %s contains a secret value", body)
 	}
 }

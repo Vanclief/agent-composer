@@ -177,6 +177,8 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.TasksAPI.SaveSpec(request.GetContext(), nil, body)
 	case *tasks.DeleteSpecRequest:
 		return s.TasksAPI.DeleteSpec(request.GetContext(), nil, body)
+	case *tasks.ListSecretsRequest:
+		return s.TasksAPI.ListSecrets(request.GetContext(), nil, body)
 
 	default:
 		return nil, ez.New(ez.EINVALID, "Unsupported request type", nil)

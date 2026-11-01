@@ -71,5 +71,7 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	specs.PUT("/:name", h.SaveSpec)
 	specs.DELETE("/:name", h.DeleteSpec)
 
+	api.GET("/secrets", h.ListSecrets)
+
 	api.Any("/msg/*", echo.WrapHandler(h.Messaging()))
 }
