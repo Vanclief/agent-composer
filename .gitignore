@@ -43,3 +43,6 @@ web/node_modules/
 # Local build outputs (dev-install.sh)
 bin/
 web/.vite/
+
+# agc data dir when used project-locally (holds secrets.env)
+.agent_composer/
