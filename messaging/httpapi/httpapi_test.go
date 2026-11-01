@@ -107,6 +107,12 @@ func TestJoinPostRead(t *testing.T) {
 	if status != http.StatusOK || len(channels.Channels) != 1 || channels.Channels[0].Count != 1 {
 		t.Fatalf("channels: status %d, response %+v", status, channels)
 	}
+
+	var participants ParticipantsResponse
+	status = call(t, http.MethodGet, server.URL+"/participants?channel=%23review-42", "", &participants)
+	if status != http.StatusOK || len(participants.Participants) != 1 || participants.Participants[0].ID != p.ID {
+		t.Fatalf("participants: status %d, response %+v", status, participants)
+	}
 }
 
 func TestErrors(t *testing.T) {
@@ -121,6 +127,18 @@ func TestErrors(t *testing.T) {
 	status = call(t, http.MethodGet, server.URL+"/read?channel=%23review-42&after=x", "", &failure)
 	if status != http.StatusBadRequest {
 		t.Fatalf("want 400 for a bad cursor, got %d %+v", status, failure)
+	}
+
+	failure = ErrorResponse{}
+	status = call(t, http.MethodGet, server.URL+"/participants", "", &failure)
+	if status != http.StatusBadRequest || !strings.Contains(failure.Error, "is invalid") {
+		t.Fatalf("want 400 for a missing channel, got %d %+v", status, failure)
+	}
+
+	failure = ErrorResponse{}
+	status = call(t, http.MethodGet, server.URL+"/participants?channel=review-42", "", &failure)
+	if status != http.StatusBadRequest || !strings.Contains(failure.Error, "is invalid") {
+		t.Fatalf("want 400 for a malformed channel, got %d %+v", status, failure)
 	}
 
 	status = call(t, http.MethodPost, server.URL+"/leave", `{"participant_id":"missing"}`, &failure)

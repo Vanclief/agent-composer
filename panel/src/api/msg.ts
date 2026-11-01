@@ -1,6 +1,7 @@
 // Messaging, /api/msg/*. Not in docs/openapi.yaml, so typed by hand from
 // messaging/httpapi/httpapi.go and models/messaging (ADR 0005). Errors are
 // {"error":"..."}; apiFetch turns them into ApiError with that text.
+// Routes: POST join, leave, post; GET read, wait, channels, participants.
 import { apiFetch } from './client'
 
 // A name agc handed out on join. The id is the identity; the name is only
@@ -97,5 +98,15 @@ export const msg = {
   },
   channels() {
     return apiFetch<{ channels: ChannelInfo[] }>('GET', '/msg/channels')
+  },
+  // Everyone who has posted in channel ("#name"): active first, then those
+  // who left, each by name.
+  participants(channel: string, signal?: AbortSignal) {
+    return apiFetch<{ participants: Participant[] }>(
+      'GET',
+      '/msg/participants?' + query({ channel }),
+      undefined,
+      signal,
+    )
   },
 }

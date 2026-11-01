@@ -401,3 +401,41 @@ func (s *Service) Channels(ctx context.Context, caller Caller) ([]ChannelInfo, e
 
 	return channels, nil
 }
+
+// Participants lists everyone who has posted in channel: active ones
+// first, then those who left, each by name. Access is the same as Read.
+func (s *Service) Participants(ctx context.Context, caller Caller, channel string) ([]msgmodels.Participant, error) {
+	err := checkCaller(caller)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	err = msgmodels.ValidateChannel(channel)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	err = authorize(caller, channel, false)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	posters := s.db.NewSelect().
+		Model((*msgmodels.Message)(nil)).
+		Column("participant_id").
+		Where("channel = ?", channel)
+
+	participants := []msgmodels.Participant{}
+
+	err = s.db.NewSelect().
+		Model(&participants).
+		Where("id IN (?)", posters).
+		OrderExpr("left_at IS NOT NULL").
+		Order("name ASC", "joined_at ASC").
+		Scan(ctx)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return participants, nil
+}

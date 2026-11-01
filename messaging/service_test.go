@@ -365,3 +365,66 @@ func TestReplyToValidation(t *testing.T) {
 	_, err = svc.Post(ctx, review, agent.ID, "#review-42", "answer", &missing)
 	wantCode(t, err, ez.EINVALID)
 }
+
+func TestParticipantsActiveFirstThenDeparted(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+
+	zed := join(t, svc, review, "zed")
+	franco := join(t, svc, human, "franco")
+	alice := join(t, svc, review, "alice")
+	quiet := join(t, svc, review, "quiet")
+
+	post(t, svc, review, zed, "#review-42", "on it")
+	post(t, svc, review, zed, "#review-42", "still on it")
+	post(t, svc, human, franco, "#review-42", "thanks")
+	post(t, svc, review, alice, "#review-42", "done here")
+	post(t, svc, review, quiet, "#releases", "elsewhere only")
+
+	err := svc.Leave(ctx, review, alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := svc.Participants(ctx, review, "#review-42")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{"franco", "zed", "alice"}
+	if len(got) != len(want) {
+		t.Fatalf("want %v, got %+v", want, got)
+	}
+	for i, name := range want {
+		if got[i].Name != name {
+			t.Fatalf("participant %d: want %s, got %+v", i, name, got)
+		}
+	}
+
+	if !got[0].Human || got[0].Task != "" || got[0].LeftAt != nil {
+		t.Fatalf("franco should be an active human: %+v", got[0])
+	}
+	if got[1].Human || got[1].Task != "review-42" || got[1].LeftAt != nil {
+		t.Fatalf("zed should be an active agent of review-42: %+v", got[1])
+	}
+	if got[2].LeftAt == nil {
+		t.Fatalf("alice should have left: %+v", got[2])
+	}
+
+	empty, err := svc.Participants(ctx, human, "#nobody")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if empty == nil || len(empty) != 0 {
+		t.Fatalf("want empty non-nil slice, got %#v", empty)
+	}
+
+	_, err = svc.Participants(ctx, review, "#build-7")
+	wantCode(t, err, ez.ENOTAUTHORIZED)
+
+	_, err = svc.Participants(ctx, human, "")
+	wantCode(t, err, ez.EINVALID)
+
+	_, err = svc.Participants(ctx, human, "review-42")
+	wantCode(t, err, ez.EINVALID)
+}

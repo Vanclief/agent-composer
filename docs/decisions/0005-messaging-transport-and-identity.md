@@ -82,6 +82,8 @@ able to read or disrupt everything.
    logged-in user (`@franco`), with the same verbs over REST. First UI: a
    channel list, a message stream with Task shown next to each sender, and a
    post box. The Task view shows the channels that Task's agents have joined.
+   `GET /api/msg/participants?channel=%23name` lists who has posted in a
+   channel, active first, then those who left.
 
 ## Rationale
 

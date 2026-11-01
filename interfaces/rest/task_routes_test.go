@@ -98,6 +98,8 @@ func TestTaskAndMessagingRoutes(t *testing.T) {
 		{http.MethodPost, "/api/tasks", `{"name":"a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d","spec":{}}`, http.StatusBadRequest, "looks like a UUID"},
 		{http.MethodPost, "/api/msg/join", `{"name":"franco"}`, http.StatusOK, `"human":true`},
 		{http.MethodGet, "/api/msg/channels", "", http.StatusOK, `"channels"`},
+		{http.MethodGet, "/api/msg/participants?channel=%23review-42", "", http.StatusOK, `{"participants":[]}`},
+		{http.MethodGet, "/api/msg/participants", "", http.StatusBadRequest, `"error"`},
 	}
 
 	for _, tc := range cases {
