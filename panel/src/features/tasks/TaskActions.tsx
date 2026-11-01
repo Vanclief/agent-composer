@@ -69,7 +69,7 @@ export function TaskActions({ task, actions, onDeleted, className }: TaskActions
       <div className="flex w-20 justify-end">
         {task.status === 'running' && (
           <Button variant="outline" size="sm" disabled={busy} onClick={() => run('stop')}>
-            {stop.isPending ? <Loader2 className="animate-spin" /> : <Square />}
+            {stop.isPending ? <Loader2 className="animate-spin" /> : <Square fill="currentColor" />}
             Stop
           </Button>
         )}
