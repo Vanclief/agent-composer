@@ -22,6 +22,7 @@ import { DetailPane } from './DetailPane'
 import { LabelMark } from './LabelMark'
 import {
   ActionMark,
+  ByChip,
   ContestedBy,
   DoneMark,
   indexKnowledge,
@@ -244,6 +245,7 @@ function BeliefCard({ belief, view, selected }: { belief: Belief; view: View; se
       trailer={
         <>
           <IdChips icon={conceptIcons.belief} id={belief.id} file={belief.file} />
+          <ByChip belief={belief} />
           <RestsOn item={belief} />
           <ContestedBy ids={belief.contested_by ?? []} found={view.found} nested />
         </>

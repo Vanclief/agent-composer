@@ -778,6 +778,11 @@ type KBelief = {
   or?: KOr[]
   contradicts?: string[]
   file: string
+  // Who holds it (empty: the repo owner) and when; experience makes a
+  // leaf a judgment.
+  by?: string
+  when?: string
+  experience?: { of: string; in: string }
 }
 type KDecision = {
   id: string
@@ -1001,6 +1006,26 @@ function knowledgeSeed() {
     { id: 'by-x', text: 'X holds.', because: [], evidence: ['seen-x'], file: abf },
     { id: 'either', text: 'W holds.', because: ['by-x'], evidence: [], or: [{ evidence: ['seen-y'] }], file: abf },
   )
+  // A judgment (expert testimony) and a verdict recorded by agc rules judge.
+  beliefs.push(
+    {
+      id: 'icon-and-shape-ui-reduces-operator-mistakes',
+      text: 'An interface that speaks in icons and shapes reduces operator mistakes.',
+      because: [],
+      evidence: [],
+      experience: { of: 'franco', in: 'years of using strategy-game and operator UIs' },
+      file: bf,
+    },
+    {
+      id: 'diff-has-no-explicit-semicolons',
+      text: 'The diff writes no explicit semicolons in Go outside a 3-clause for header.',
+      because: [],
+      evidence: [],
+      by: 'codex_cli',
+      when: '2026-11-01',
+      file: 'beliefs/judgments.yaml',
+    },
+  )
   const af = 'actions/repo.yaml'
   const actions: KAction[] = [
     {
@@ -1098,7 +1123,14 @@ function knowledgeSeed() {
 type KSeed = ReturnType<typeof knowledgeSeed>
 type KSet = { because: string[]; evidence: string[] }
 type KItem = { id: string; because: string[]; evidence?: string[]; or?: KOr[] }
-type KStatus = { label: string; opinions: string[]; doubted: string[]; retracted: string[]; without: string[] }
+type KStatus = {
+  label: string
+  opinions: string[]
+  doubted: string[]
+  retracted: string[]
+  without: string[]
+  judgments: string[]
+}
 
 // The sets of reasons of an item: its own, then each under or:.
 function knowledgeSets(item: KItem): KSet[] {
@@ -1124,19 +1156,40 @@ function knowledgeJudge(k: KSeed, without: string[]) {
   const beliefByID = new Map(k.beliefs.map((b) => [b.id, b]))
   const decisionByID = new Map(k.decisions.map((d) => [d.id, d]))
   const live = (id: string) => !evidenceByID.get(id)?.retracted && !without.includes(id)
-  const empty = (): KStatus => ({ label: 'grounded', opinions: [], doubted: [], retracted: [], without: [] })
+  const empty = (): KStatus => ({
+    label: 'grounded',
+    opinions: [],
+    doubted: [],
+    retracted: [],
+    without: [],
+    judgments: [],
+  })
   const merge = (into: KStatus, from: KStatus) => {
     knowledgeAdd(into.opinions, from.opinions)
     knowledgeAdd(into.doubted, from.doubted)
     knowledgeAdd(into.retracted, from.retracted)
     knowledgeAdd(into.without, from.without)
+    knowledgeAdd(into.judgments, from.judgments)
   }
-  const labelFor = (s: KStatus) => (s.doubted.length > 0 ? 'in_doubt' : s.opinions.length > 0 ? 'opinion' : 'grounded')
+  // The weakest leaf wins: in doubt > opinion > judgment > grounded
+  // (contested is applied on top, below in doubt).
+  const labelFor = (s: KStatus) =>
+    s.doubted.length > 0
+      ? 'in_doubt'
+      : s.opinions.length > 0
+        ? 'opinion'
+        : s.judgments.length > 0
+          ? 'judgment'
+          : 'grounded'
 
   const judgeSet = (owner: string, set: KSet, isBelief: boolean): KStatus => {
     const status = empty()
     if (isBelief && set.because.length === 0 && set.evidence.length === 0) {
-      status.opinions.push(owner)
+      if (beliefByID.get(owner)?.experience) {
+        status.judgments.push(owner)
+      } else {
+        status.opinions.push(owner)
+      }
     }
     if (set.evidence.length > 0 && !set.evidence.some(live)) {
       status.doubted.push(owner)
@@ -1238,6 +1291,9 @@ function knowledgeJudge(k: KSeed, without: string[]) {
       ...b,
       or: orIDs(b),
       contradicts: b.contradicts ?? [],
+      by: b.by ?? '',
+      when: b.when ?? '',
+      experience: b.experience ?? null,
       label: contested_by.length > 0 ? 'contested' : label,
       opinions,
       doubted,

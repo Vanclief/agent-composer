@@ -1,7 +1,8 @@
 // How a belief, decision, rule or action is grounded, as color AND shape
 // (rtsdesign 6): grounded is a filled green circle, opinion a hollow amber
 // circle, in doubt a filled red triangle, contested two overlapping rose
-// circles, one filled and one hollow. The word next to the shape is the
+// circles, one filled and one hollow, judgment a half-filled indigo circle
+// (someone's experience, between an opinion and evidence). The word next to the shape is the
 // server's label, verbatim; an unknown word gets a neutral question mark.
 import type { ComponentType, SVGProps } from 'react'
 import { Circle, CircleHelp, Triangle } from 'lucide-react'
@@ -21,11 +22,28 @@ export function TwoCircles({ strokeWidth = 2, ...props }: SVGProps<SVGSVGElement
   )
 }
 
+// Someone's experience: a circle with its left half filled, between the
+// hollow opinion and the filled grounded circle.
+export function HalfCircle({ strokeWidth = 2, ...props }: SVGProps<SVGSVGElement> & { strokeWidth?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} {...props}>
+      <path d="M12 2a10 10 0 0 0 0 20z" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="10" />
+    </svg>
+  )
+}
+
 const GROUNDED: MarkStyle = {
   icon: Circle,
   shape: 'fill-emerald-500 text-emerald-500',
   text: 'text-emerald-700 dark:text-emerald-400',
   tip: 'Every leaf cites live evidence',
+}
+const JUDGMENT: MarkStyle = {
+  icon: HalfCircle,
+  shape: 'text-indigo-500',
+  text: 'text-indigo-700 dark:text-indigo-400',
+  tip: "A leaf comes from someone's experience, not evidence",
 }
 const OPINION: MarkStyle = {
   icon: Circle,
@@ -55,6 +73,7 @@ const UNKNOWN: MarkStyle = {
 // knowledge/graph.go spells it "in doubt"; the API contract "in_doubt".
 const STYLES: Record<string, MarkStyle> = {
   grounded: GROUNDED,
+  judgment: JUDGMENT,
   opinion: OPINION,
   in_doubt: IN_DOUBT,
   'in doubt': IN_DOUBT,

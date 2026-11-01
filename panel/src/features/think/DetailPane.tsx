@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 import { LabelMark } from './LabelMark'
 import {
   ActionMark,
+  ByChip,
   ContestedBy,
   indexKnowledge,
   ItemRow,
@@ -75,6 +76,7 @@ function Detail({ kind, id, data, without, found, proper }: Ctx) {
             mark={<LabelMark label={belief.label} />}
             text={beliefSentence(belief, proper, data.without ?? [])}
             raw={belief.text}
+            note={belief.experience && `${belief.experience.of}'s experience in ${belief.experience.in}`}
           >
             <IconChip icon={conceptIcons.belief} title="Id">
               {belief.id}
@@ -82,6 +84,7 @@ function Detail({ kind, id, data, without, found, proper }: Ctx) {
             <IconChip icon={conceptIcons.file} title="File">
               {belief.file}
             </IconChip>
+            <ByChip belief={belief} />
             <RestsOn item={belief} />
             <ContestedBy ids={belief.contested_by ?? []} found={found} />
           </Header>
@@ -240,6 +243,7 @@ function Header({
   text,
   raw,
   struck,
+  note,
   children,
 }: {
   mark: ReactNode
@@ -247,6 +251,9 @@ function Header({
   // The text as written in the file, in a tooltip over the sentence.
   raw?: string
   struck?: boolean
+  // A dimmed line under the sentence, e.g. whose experience a judgment
+  // comes from.
+  note?: string | null
   children: ReactNode
 }) {
   return (
@@ -259,6 +266,11 @@ function Header({
       >
         {text}
       </p>
+      {note && (
+        <p data-testid="detail-note" className="text-xs text-zinc-500 dark:text-zinc-400">
+          {note}
+        </p>
+      )}
       <div className="flex flex-wrap gap-1.5">{children}</div>
     </div>
   )
