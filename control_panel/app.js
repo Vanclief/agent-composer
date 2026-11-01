@@ -8,25 +8,11 @@ const WAIT_TIMEOUT = '25s'
 const NAME_KEY = 'agc.panel.name'
 const PARTICIPANT_KEY = 'agc.panel.participant'
 
-const SPEC_EXAMPLE = `# Task spec. Only image is required; delete what you do not need.
-image: agc-agent              # any OCI image works
-cpus: 2
-memory: 4096                  # MiB
-repo: github.com/vanclief/agent-composer   # cloned to /home/agent/<repo name>
-ref: master                   # branch, tag or sha
-setup: |                      # runs once after the clone
-  go mod download
-secrets:                      # names only; NAME@host1,host2 limits where it may be sent
-  - CLAUDE_CODE_OAUTH_TOKEN
-  - GITHUB_TOKEN
-env:
-  GOFLAGS: -mod=mod
-volumes:                      # NAME:DEST[:rw] or host:PATH:DEST[:rw]; read-only unless :rw
-  - go-mod-cache:/home/agent/go/pkg/mod:rw
-channels:                     # #<task name> is always available
-  - "#releases"
-  - "#alerts:read"
-`
+// Create form presets. Memory is stored in MiB (the spec unit) and shown
+// in GB.
+const DEFAULT_IMAGE = 'agc-agent'
+const CPU_CHOICES = [1, 2, 4, 8]
+const MEMORY_CHOICES = [1, 2, 4, 8, 16].map((gb) => gb * 1024)
 
 // Pill colors by status word. Unknown words get the neutral style; the
 // word itself is always printed as sent.
@@ -101,6 +87,122 @@ function repoDir(spec) {
   return last ? '/home/agent/' + last : '/home/agent'
 }
 
+// ---------- create form <-> spec ----------
+// The create modal edits a form object; the spec sent to the server and
+// saved as YAML is always derived from it with formToSpec.
+
+// Keys for env and volume rows, which have no natural identity.
+let lastRowId = 0
+function rowId() {
+  lastRowId++
+  return lastRowId
+}
+
+function blankForm() {
+  return { image: DEFAULT_IMAGE, cpus: 2, memory: 4096, repo: '', ref: '', setup: '', secrets: [], env: [], volumes: [], channels: [] }
+}
+
+function asText(v) {
+  return v == null ? '' : String(v)
+}
+
+function asTextList(v) {
+  return Array.isArray(v) ? v.map(asText).filter((x) => x.trim()) : []
+}
+
+function asCount(v) {
+  const n = Number(v)
+  return v == null || v === '' || !Number.isFinite(n) || n <= 0 ? null : n
+}
+
+function memoryLabel(mib) {
+  return mib % 1024 === 0 ? mib / 1024 + ' GB' : mib + ' MiB'
+}
+
+// NAME or NAME@host1,host2. custom marks a loaded host list, so its input
+// stays visible even when the server knows hosts for that secret.
+function parseSecret(entry) {
+  const at = entry.indexOf('@')
+  if (at < 0) return { name: entry.trim(), hosts: '', custom: false }
+  const hosts = entry.slice(at + 1).split(',').map((h) => h.trim()).filter(Boolean)
+  return { name: entry.slice(0, at).trim(), hosts: hosts.join(', '), custom: true }
+}
+
+function secretEntry(s) {
+  const hosts = s.hosts.split(',').map((h) => h.trim()).filter(Boolean)
+  return hosts.length ? s.name + '@' + hosts.join(',') : s.name
+}
+
+// NAME:DEST[:rw] or host:PATH:DEST[:rw]; read-only unless :rw.
+function parseVolume(entry) {
+  const parts = entry.split(':')
+  let rw = false
+  if (parts.length > 2 && (parts[parts.length - 1] === 'rw' || parts[parts.length - 1] === 'ro')) rw = parts.pop() === 'rw'
+  if (parts[0] === 'host' && parts.length >= 3) return { kind: 'host', source: parts[1], dest: parts.slice(2).join(':'), rw }
+  return { kind: 'named', source: parts[0], dest: parts.slice(1).join(':'), rw }
+}
+
+function volumeEntry(v) {
+  const source = v.source.trim()
+  const head = v.kind === 'host' ? 'host:' + source : source
+  return head + ':' + v.dest.trim() + (v.rw ? ':rw' : '')
+}
+
+// #name or #name:read.
+function parseChannel(entry) {
+  let name = entry.trim()
+  const read = name.endsWith(':read')
+  if (read) name = name.slice(0, -':read'.length)
+  if (!name.startsWith('#')) name = '#' + name
+  return { name, read }
+}
+
+// Throws when the spec is not a mapping. Unknown keys are dropped.
+function specToForm(spec) {
+  let s = spec == null ? {} : spec
+  if (typeof s !== 'object' || Array.isArray(s)) throw new Error('The spec must be a YAML mapping (key: value lines).')
+  // Accept the workflow form too: a single top-level environment block.
+  if (Object.keys(s).length === 1 && s.environment && typeof s.environment === 'object') s = s.environment
+  const env = s.env && typeof s.env === 'object' && !Array.isArray(s.env) ? s.env : {}
+  return {
+    image: asText(s.image).trim() || DEFAULT_IMAGE,
+    cpus: asCount(s.cpus),
+    memory: asCount(s.memory),
+    repo: asText(s.repo),
+    ref: asText(s.ref),
+    setup: asText(s.setup),
+    secrets: firstByName(asTextList(s.secrets).map(parseSecret)),
+    env: Object.entries(env).map(([key, value]) => ({ id: rowId(), key, value: asText(value) })),
+    volumes: asTextList(s.volumes).map((v) => ({ id: rowId(), ...parseVolume(v) })),
+    channels: firstByName(asTextList(s.channels).map(parseChannel)),
+  }
+}
+
+// Secrets and channels are keyed by name in the modal.
+function firstByName(list) {
+  return list.filter((x, i) => list.findIndex((y) => y.name === x.name) === i)
+}
+
+// Empty fields are omitted.
+function formToSpec(f) {
+  const spec = { image: f.image.trim() || DEFAULT_IMAGE }
+  if (f.cpus) spec.cpus = f.cpus
+  if (f.memory) spec.memory = f.memory
+  if (f.repo.trim()) spec.repo = f.repo.trim()
+  if (f.ref.trim()) spec.ref = f.ref.trim()
+  if (f.setup.trim()) spec.setup = f.setup
+  if (f.secrets.length) spec.secrets = f.secrets.map(secretEntry)
+  const env = {}
+  for (const e of f.env) {
+    if (e.key.trim()) env[e.key.trim()] = e.value
+  }
+  if (Object.keys(env).length) spec.env = env
+  const volumes = f.volumes.filter((v) => v.source.trim() || v.dest.trim()).map(volumeEntry)
+  if (volumes.length) spec.volumes = volumes
+  if (f.channels.length) spec.channels = f.channels.map((c) => c.name + (c.read ? ':read' : ''))
+  return spec
+}
+
 function channelFromHash(part) {
   if (!part) return ''
   return part.startsWith('#') ? part : '#' + part
@@ -157,8 +259,13 @@ function panel() {
     me: { name: localStorage.getItem(NAME_KEY) || 'franco', id: localStorage.getItem(PARTICIPANT_KEY) || '' },
 
     // Modals
-    create: { open: false, title: '', yaml: SPEC_EXAMPLE, error: '', busy: false },
+    // form is what the cards edit; yaml is the raw view's text, only
+    // meaningful while raw is on.
+    create: { open: false, title: '', form: blankForm(), raw: false, yaml: '', setupOpen: false, channelDraft: '', error: '', busy: false },
+    cpuChoices: CPU_CHOICES,
+    memoryChoices: MEMORY_CHOICES,
     specs: { list: [], loading: false, loaded: false, selected: '', confirmDelete: false, busy: false },
+    secretList: { items: [], loaded: false, error: '' }, // GET /api/secrets
     // Inline "save spec" form, shared by the create modal and the Spec tab.
     specSave: { open: false, name: '', busy: false, error: '', saved: '' },
     confirmDelete: null, // task name
@@ -388,10 +495,12 @@ function panel() {
     },
 
     openCreate() {
-      this.create = { open: true, title: '', yaml: this.create.yaml || SPEC_EXAMPLE, error: '', busy: false }
+      // The form survives Cancel, like a draft; a successful create resets it.
+      this.create = { ...this.create, open: true, title: '', raw: false, yaml: '', setupOpen: false, channelDraft: '', error: '', busy: false }
       this.specs.confirmDelete = false
       this.resetSpecSave()
       this.loadSpecs()
+      this.loadSecrets()
       this.$nextTick(() => this.$refs.createTitle && this.$refs.createTitle.focus())
     },
 
@@ -404,41 +513,159 @@ function panel() {
       return slugify(this.create.title)
     },
 
-    resetCreateYAML() {
-      this.create.yaml = SPEC_EXAMPLE
+    // The spec the form describes. In raw view the YAML is parsed into the
+    // form first; null means it did not parse and create.error says why.
+    currentSpec() {
+      if (this.create.raw && !this.applyYAML(this.create.yaml)) return null
+      return formToSpec(this.create.form)
+    },
+
+    applyYAML(yaml) {
+      try {
+        this.create.form = specToForm(jsyaml.load(yaml))
+      } catch (e) {
+        this.create.error = e.message
+        return false
+      }
+      this.create.error = ''
+      return true
+    },
+
+    toggleRaw() {
+      if (this.create.raw) {
+        if (this.applyYAML(this.create.yaml)) this.create.raw = false
+        return
+      }
+      this.create.yaml = this.specYAML(formToSpec(this.create.form))
+      this.create.error = ''
+      this.create.raw = true
     },
 
     async submitCreate() {
       const title = this.create.title.trim()
       const name = slugify(title)
       if (!name) return
-      let spec
-      try {
-        spec = jsyaml.load(this.create.yaml)
-      } catch (e) {
-        this.create.error = 'YAML: ' + e.message
-        return
-      }
-      if (spec == null) spec = {}
-      if (typeof spec !== 'object' || Array.isArray(spec)) {
-        this.create.error = 'The spec must be a YAML mapping (key: value lines).'
-        return
-      }
-      // Accept the workflow form too: a single top-level environment block.
-      if (Object.keys(spec).length === 1 && spec.environment && typeof spec.environment === 'object') spec = spec.environment
+      const spec = this.currentSpec()
+      if (!spec) return
 
       this.create.busy = true
       this.create.error = ''
       try {
         const t = await api('POST', '/api/tasks', { title, spec })
         this.closeCreate()
-        this.create.yaml = SPEC_EXAMPLE
+        this.create.form = blankForm()
         this.specs.selected = ''
         location.hash = this.taskHref(t && t.name ? t.name : name)
       } catch (e) {
         this.create.error = e.message
       }
       this.create.busy = false
+    },
+
+    // ---------- create form controls ----------
+
+    get extraCpus() {
+      const n = this.create.form.cpus
+      return n && !CPU_CHOICES.includes(n) ? n : null
+    },
+
+    get extraMemory() {
+      const n = this.create.form.memory
+      return n && !MEMORY_CHOICES.includes(n) ? n : null
+    },
+
+    // A lit chip clicked again is unset, so the server default applies.
+    pickCpus(n) {
+      this.create.form.cpus = this.create.form.cpus === n ? null : n
+    },
+
+    pickMemory(n) {
+      this.create.form.memory = this.create.form.memory === n ? null : n
+    },
+
+    memoryLabel(mib) {
+      return memoryLabel(mib)
+    },
+
+    // Toggle chips and tiles: lit when on, outlined when off.
+    chipClass(on) {
+      if (on) return 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
+      return 'border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100'
+    },
+
+    get createRepoDir() {
+      return repoDir(this.create.form)
+    },
+
+    get setupLines() {
+      const s = this.create.form.setup.replace(/\n+$/, '')
+      return s.trim() ? s.split('\n').length : 0
+    },
+
+    async loadSecrets() {
+      try {
+        const data = await api('GET', '/api/secrets')
+        this.secretList = { items: (data && data.secrets) || [], loaded: true, error: '' }
+      } catch (e) {
+        this.secretList = { items: [], loaded: true, error: e.message }
+      }
+    },
+
+    // Every secret secrets.env has, plus any the form selects that it does
+    // not (from a saved spec), so nothing selected is hidden.
+    get secretChips() {
+      const chips = this.secretList.items.map((s) => ({ name: s.name, hosts: s.hosts || [], known: true }))
+      for (const s of this.create.form.secrets) {
+        if (!chips.some((c) => c.name === s.name)) chips.push({ name: s.name, hosts: [], known: false })
+      }
+      return chips
+    },
+
+    selectedSecret(name) {
+      return this.create.form.secrets.find((s) => s.name === name)
+    },
+
+    toggleSecret(chip) {
+      if (this.selectedSecret(chip.name)) {
+        this.create.form.secrets = this.create.form.secrets.filter((s) => s.name !== chip.name)
+        return
+      }
+      this.create.form.secrets.push({ name: chip.name, hosts: '', custom: false })
+      if (!chip.hosts.length) this.focusLater('[data-secret-hosts="' + chip.name + '"]')
+    },
+
+    // Hosts are asked for when the server knows none for the secret, or the
+    // loaded spec set its own.
+    secretNeedsHosts(chip) {
+      const s = this.selectedSecret(chip.name)
+      return !!s && (!chip.hosts.length || s.custom)
+    },
+
+    addEnv() {
+      this.create.form.env.push({ id: rowId(), key: '', value: '' })
+      this.focusLater('[data-env-key]')
+    },
+
+    addVolume() {
+      this.create.form.volumes.push({ id: rowId(), kind: 'named', source: '', dest: '', rw: false })
+      this.focusLater('[data-volume-source]')
+    },
+
+    addChannel() {
+      const draft = this.create.channelDraft.trim()
+      if (!draft) return
+      const c = parseChannel(draft)
+      const taken = c.name === '#' + this.createSlug || this.create.form.channels.some((x) => x.name === c.name)
+      if (!taken) this.create.form.channels.push(c)
+      this.create.channelDraft = ''
+    },
+
+    // Focuses the last element matching selector once Alpine has rendered.
+    focusLater(selector) {
+      this.$nextTick(() => {
+        const all = document.querySelectorAll(selector)
+        if (all.length) all[all.length - 1].focus()
+      })
     },
 
     specYAML(spec) {
@@ -465,13 +692,24 @@ function panel() {
       this.specs.loading = false
     },
 
-    // A saved spec is only a starting point: editing the YAML afterwards
-    // keeps the selection.
+    // A saved spec is only a starting point: editing the form afterwards
+    // keeps the selection. '' is the Blank tile.
     pickSpec(name) {
       const s = this.specs.list.find((x) => x.name === name)
+      let form = blankForm()
+      if (s) {
+        try {
+          form = specToForm(jsyaml.load(s.yaml))
+        } catch (e) {
+          this.create.error = s.name + ': ' + e.message
+          return
+        }
+      }
       this.specs.selected = s ? s.name : ''
       this.specs.confirmDelete = false
-      this.create.yaml = s ? s.yaml : SPEC_EXAMPLE
+      this.create.form = form
+      this.create.error = ''
+      if (this.create.raw) this.create.yaml = this.specYAML(formToSpec(form))
     },
 
     async deleteSpec() {
@@ -503,13 +741,15 @@ function panel() {
       })
     },
 
-    // Saves the create modal's YAML when the modal is open, otherwise the
+    // Saves the create modal's form when the modal is open, otherwise the
     // open task's spec. Errors land in the box of whichever is on screen.
     async saveSpec() {
       const name = this.specSave.name.trim()
       if (!name || this.specSave.busy) return
       const inModal = this.create.open
-      const yaml = inModal ? this.create.yaml : this.specYAML(this.task && this.task.spec)
+      const spec = inModal ? this.currentSpec() : this.task && this.task.spec
+      if (!spec) return
+      const yaml = this.specYAML(spec)
       this.specSave.busy = true
       this.specSave.error = ''
       if (inModal) this.create.error = ''
