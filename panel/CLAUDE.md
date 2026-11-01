@@ -55,6 +55,7 @@ Each page sets the top bar title with `usePageTitle('…')` from
 - Follow `/Users/vanclief/.claude/skills/rtsdesign/SKILL.md`: icons, slots,
   chips and numbers instead of sentences; explanations go in tooltips.
 - Modes are a vertical list in the sidebar; adding a mode is one entry in `MODES`.
+  In Talk mode the sidebar lists every channel under Channels (`ChannelRows` in `src/shell/layout.tsx`), linking to `/messages/<name>`.
 - **One icon per concept:** import from `@/components/concept-icons`
   (`conceptIcons.task`, `.cpu`, `.memory`, `.image`, `.repo`, `.ref`,
   `.setup`, `.secret`, `.env`, `.volume`, `.channel`, `.savedSpec`,

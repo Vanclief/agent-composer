@@ -35,19 +35,58 @@ func (s *Set) BeliefLine(id string) (Line, error) {
 	case slices.Contains(status.Without, id):
 		sentence = "I am setting aside that " + text
 	case status.Label == InDoubt:
-		sentence = s.doubtClause(text, status)
+		sentence = s.doubtClause(belief, text, status)
 		if len(status.Opinions) > 0 {
-			sentence += ", and I " + s.noEvidence(id, status.Opinions)
+			sentence += ", and " + holder(belief, "have") + " " + s.noEvidence(id, status.Opinions)
 		}
 	case len(status.Opinions) > 0:
-		sentence = "I think " + text + ", but " + s.noEvidence(id, status.Opinions)
+		sentence = holder(belief, "think") + " " + text + ", but " + conjugate(belief, "have") + " " + s.noEvidence(id, status.Opinions)
 	default:
-		sentence = "I believe " + text
+		sentence = holder(belief, "believe") + " " + text
+		if slices.Contains(status.Judgments, id) {
+			sentence += fromExperience(belief)
+		}
 	}
 
 	sentence += s.contested(status)
 
 	return Line{Text: sentence + ".", Trailer: statusTrailer(id, status)}, nil
+}
+
+// holder says who holds a belief, followed by verb as that holder says
+// it: "I believe" when By is empty, the repo owner, or "ana believes".
+func holder(belief Belief, verb string) string {
+	if belief.By == "" {
+		return "I " + verb
+	}
+
+	return belief.By + " " + conjugate(belief, verb)
+}
+
+// conjugate says verb as the holder of a belief says it: as is for I,
+// in the third person for anyone named in By.
+func conjugate(belief Belief, verb string) string {
+	if belief.By == "" {
+		return verb
+	}
+
+	switch verb {
+	case "have":
+		return "has"
+	case "believed":
+		return verb
+	}
+
+	return verb + "s"
+}
+
+// fromExperience says whose experience a judgment comes from, and in what.
+func fromExperience(belief Belief) string {
+	if belief.Experience == nil {
+		return ""
+	}
+
+	return ", from " + belief.Experience.Of + "'s experience in " + trimPeriod(fold(belief.Experience.In))
 }
 
 // contested says what contests a belief, if anything does.
@@ -81,7 +120,7 @@ func (s *Set) seenWhat(evidence Evidence) string {
 
 // doubtClause says why a belief is in doubt: the evidence retracted under
 // it, and what --without set aside.
-func (s *Set) doubtClause(text string, status Status) string {
+func (s *Set) doubtClause(belief Belief, text string, status Status) string {
 	retracted := []string{}
 	for _, evidenceID := range status.Retracted {
 		evidence := s.evidenceByID[evidenceID]
@@ -107,7 +146,7 @@ func (s *Set) doubtClause(text string, status Status) string {
 		return "I would doubt that " + text + separator + "without " + joinAnd(setAside)
 	}
 
-	sentence := "I believed " + text + ", but " + joinAnd(retracted)
+	sentence := holder(belief, "believed") + " " + text + ", but " + joinAnd(retracted)
 	if len(setAside) > 0 {
 		sentence += ", and without " + joinAnd(setAside)
 	}
@@ -115,8 +154,8 @@ func (s *Set) doubtClause(text string, status Status) string {
 	return sentence
 }
 
-// noEvidence says which opinions a belief rests on. A belief that is the
-// opinion itself has no evidence yet.
+// noEvidence says which opinions a belief rests on, after "have". A belief
+// that is the opinion itself has no evidence yet.
 func (s *Set) noEvidence(id string, opinions []string) string {
 	others := []string{}
 	for _, opinion := range opinions {
@@ -126,10 +165,10 @@ func (s *Set) noEvidence(id string, opinions []string) string {
 	}
 
 	if len(others) == 0 {
-		return "have no evidence yet"
+		return "no evidence yet"
 	}
 
-	return "have no evidence yet that " + joinAnd(others)
+	return "no evidence yet that " + joinAnd(others)
 }
 
 // statusTrailer names the label and the ids behind it, leaving out the
@@ -151,6 +190,7 @@ func statusTrailer(id string, status Status) string {
 	add("without", status.Without)
 	add("doubted", status.Doubted)
 	add("opinion", status.Opinions)
+	add("judgment", status.Judgments)
 	add("contested by", status.ContestedBy)
 
 	label := string(status.Label)
@@ -169,18 +209,24 @@ func (s *Set) WhyLines(reason Reason, depth int) []Line {
 	status, _ := s.Status(belief.ID)
 	text := s.embed(belief.Belief)
 
-	verb := "I believe "
+	verb := "believe"
 	switch {
 	case status.Label == InDoubt:
-		verb = "I believed "
+		verb = "believed"
 	case len(status.Opinions) > 0:
-		verb = "I think "
+		verb = "think"
 	}
 
 	main := Alternative{Evidence: reason.Evidence, Because: reason.Because}
-	sentence := verb + text + because(text) + s.reasons(main)
-	if len(main.Evidence) == 0 && len(main.Because) == 0 {
-		sentence = "I think " + text + ", but have no evidence yet"
+	leaf := len(main.Evidence) == 0 && len(main.Because) == 0
+	sentence := holder(belief, verb) + " " + text + because(text) + s.reasons(main)
+	leafLabel := "opinion"
+	switch {
+	case leaf && belief.Experience != nil:
+		sentence = holder(belief, "believe") + " " + text + fromExperience(belief)
+		leafLabel = "judgment"
+	case leaf:
+		sentence = holder(belief, "think") + " " + text + ", but " + conjugate(belief, "have") + " no evidence yet"
 	}
 	sentence += s.contested(status)
 
@@ -193,7 +239,7 @@ func (s *Set) WhyLines(reason Reason, depth int) []Line {
 	for _, alternative := range reason.Or {
 		sets = append(sets, whyIDs(alternative))
 	}
-	trailer := "(" + belief.ID + ", opinion)"
+	trailer := "(" + belief.ID + ", " + leafLabel + ")"
 	if len(sets[0]) > 0 {
 		trailer = "(" + belief.ID + " ← " + joinSets(sets) + ")"
 	}
@@ -478,15 +524,16 @@ func (s *Set) claim(id string) string {
 		return s.Phrase(id)
 	}
 
+	belief, _ := s.belief(id)
 	status := s.judge(id)
 	switch {
 	case status.Label == InDoubt:
-		return "I believed " + s.Phrase(id)
+		return holder(belief, "believed") + " " + s.Phrase(id)
 	case len(status.Opinions) > 0:
-		return "I think " + s.Phrase(id)
+		return holder(belief, "think") + " " + s.Phrase(id)
 	}
 
-	return "I believe " + s.Phrase(id)
+	return holder(belief, "believe") + " " + s.Phrase(id)
 }
 
 // supportPhrase says every set of reasons, alternatives after "or

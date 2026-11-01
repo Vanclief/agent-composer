@@ -69,6 +69,7 @@
 
 - Five kinds of file (ADR 0006): `evidence/` records what was seen (who, when, source), `rules/` says what must or must not be done, `beliefs/` what we hold true and why, `decisions/` the choices made on those beliefs (one per ADR), `actions/` what to do because of a decision (`opened:`, and `done:` once done).
 - Beliefs cite evidence by id. A belief is grounded, an opinion (no evidence under it), contested (something grounded contradicts it) or in doubt (its evidence is all retracted); the label is computed when printed, never written. Retract evidence with `retracted: { who, when, why }` and keep it in the file.
+- `by:` on a belief names who holds it (omitted: the repo owner). A leaf belief with `experience: { of, in }` (`of` a person, never a model) is a judgment: stronger than an opinion, weaker than evidence; the weakest leaf wins, in doubt > contested > opinion > judgment > grounded.
 - `or:` lists alternative reasons (`{ because, evidence }` on beliefs, `{ because }` elsewhere): grounded if any set is. `contradicts: [ids]` on a belief or evidence flags a contradiction; nothing picks a side.
 - Evidence `who` is a person or a mechanical check (`ci`), never a model: agc rejects it. A model that read a real source goes in `translated_by`, with `source` set; a model's own conclusion is an opinion.
 - `go run . rules check rules/` runs the mechanical rules and lists the manual ones (CI runs it); `agc rules show` prints them as a markdown checklist. Both note rules resting on an opinion or a doubted belief.

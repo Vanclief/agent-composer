@@ -67,21 +67,23 @@ type Evidence struct {
 
 // Belief is a belief with its computed status. Or lists its alternative
 // sets of reasons as ids, and ContestedBy what stands against it when it
-// is contested.
+// is contested. By names who holds it, empty for the repo owner, and
+// Experience, null when absent, whose experience a judgment comes from.
 type Belief struct {
-	ID          string     `json:"id"`
-	Text        string     `json:"text"`
-	Because     []string   `json:"because"`
-	Evidence    []string   `json:"evidence"`
-	Or          [][]string `json:"or"`
-	Label       string     `json:"label"`
-	Opinions    []string   `json:"opinions"`
-	Doubted     []string   `json:"doubted"`
-	Retracted   []string   `json:"retracted"`
-	ContestedBy []string   `json:"contested_by"`
-	File        string     `json:"file"`
-	By          string     `json:"by"`
-	When        string     `json:"when"`
+	ID          string         `json:"id"`
+	Text        string         `json:"text"`
+	Because     []string       `json:"because"`
+	Evidence    []string       `json:"evidence"`
+	Or          [][]string     `json:"or"`
+	Experience  *kb.Experience `json:"experience"`
+	Label       string         `json:"label"`
+	Opinions    []string       `json:"opinions"`
+	Doubted     []string       `json:"doubted"`
+	Retracted   []string       `json:"retracted"`
+	ContestedBy []string       `json:"contested_by"`
+	File        string         `json:"file"`
+	By          string         `json:"by"`
+	When        string         `json:"when"`
 }
 
 // Decision is a decision with the status of what it rests on.
@@ -129,8 +131,8 @@ type Action struct {
 }
 
 // label is the package's label as an identifier, its spaces replaced by
-// underscores: grounded, opinion, in_doubt or contested. Every label in
-// the API goes through here.
+// underscores: grounded, judgment, opinion, in_doubt or contested. Every
+// label in the API goes through here.
 func label(status kb.Status) string {
 	return strings.ReplaceAll(string(status.Label), " ", "_")
 }
@@ -187,6 +189,7 @@ func beliefView(set *kb.Set, belief kb.Belief) (Belief, error) {
 		Because:     list(belief.Because),
 		Evidence:    list(belief.Evidence),
 		Or:          alternatives(belief.Or),
+		Experience:  belief.Experience,
 		Label:       label(status),
 		Opinions:    list(status.Opinions),
 		Doubted:     list(status.Doubted),

@@ -10,9 +10,9 @@
 // decision, open until it is done. Beliefs rest on other beliefs and cite
 // evidence; decisions, rules and actions rest on beliefs and decisions.
 // Any of them may list alternative reasons under or:, and beliefs and
-// evidence may name what they contradict. Whether a belief is grounded, an
-// opinion, contested or in doubt is computed from its evidence when asked,
-// never stored.
+// evidence may name what they contradict. Whether a belief is grounded, a
+// judgment, an opinion, contested or in doubt is computed from its evidence
+// when asked, never stored.
 package knowledge
 
 import (
@@ -71,23 +71,34 @@ type Support struct {
 }
 
 // Belief is something held true. It rests on other beliefs, cites
-// evidence, both or neither; one with no evidence under it is an opinion.
+// evidence, both or neither; one with no evidence under it is an opinion,
+// unless it comes from someone's Experience, which makes it a judgment.
 // Or lists alternative reasons: the belief is grounded if its own because
 // and evidence are, or if any one alternative is. Contradicts names
 // beliefs or evidence that cannot be true along with it; declaring it on
 // one side is enough. By, when set, names who holds or stated the
-// belief, a person or an agent, and When the day they did; neither grounds
-// anything, so a belief by an agent with no evidence is still an opinion.
+// belief, a person or an agent id, and When the day they did; empty By
+// means the repo owner. Neither grounds anything, so a belief by an agent
+// with no evidence is still an opinion.
 type Belief struct {
-	ID          string    `yaml:"id" json:"id"`
-	Belief      string    `yaml:"belief" json:"belief"`
-	Because     []string  `yaml:"because" json:"because,omitempty"`
-	Evidence    []string  `yaml:"evidence" json:"evidence,omitempty"`
-	Or          []Support `yaml:"or" json:"or,omitempty"`
-	Contradicts []string  `yaml:"contradicts" json:"contradicts,omitempty"`
-	By          string    `yaml:"by" json:"by,omitempty"`
-	When        string    `yaml:"when" json:"when,omitempty"`
-	File        string    `yaml:"-" json:"file"`
+	ID          string      `yaml:"id" json:"id"`
+	Belief      string      `yaml:"belief" json:"belief"`
+	Because     []string    `yaml:"because" json:"because,omitempty"`
+	Evidence    []string    `yaml:"evidence" json:"evidence,omitempty"`
+	Or          []Support   `yaml:"or" json:"or,omitempty"`
+	Experience  *Experience `yaml:"experience,omitempty" json:"experience,omitempty"`
+	Contradicts []string    `yaml:"contradicts" json:"contradicts,omitempty"`
+	By          string      `yaml:"by,omitempty" json:"by,omitempty"`
+	When        string      `yaml:"when" json:"when,omitempty"`
+	File        string      `yaml:"-" json:"file"`
+}
+
+// Experience is what a judgment comes from: the experience of a person,
+// never a model, in some field. It is expert testimony, stronger than an
+// opinion and weaker than evidence.
+type Experience struct {
+	Of string `yaml:"of" json:"of"`
+	In string `yaml:"in" json:"in"`
 }
 
 // Supports lists the belief's own reasons first, then its alternatives.

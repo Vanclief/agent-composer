@@ -1,0 +1,5 @@
+beliefs:
+  # A model has no experience to judge from: rejected.
+  - id: model-judges
+    belief: Icons help operators.
+    experience: { of: claude-code, in: reading UI reviews }

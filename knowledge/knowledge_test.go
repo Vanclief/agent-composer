@@ -1738,3 +1738,88 @@ func TestReadSubject(t *testing.T) {
 		t.Fatalf("bad --on err = %v", err)
 	}
 }
+
+func TestJudgment(t *testing.T) {
+	set := load(t, "testdata/judgment")
+
+	cases := []struct {
+		id   string
+		want Status
+	}{
+		{id: "icons-help", want: Status{Label: ExpertJudgment, Judgments: []string{"icons-help"}}},
+		{id: "panel-uses-icons", want: Status{Label: ExpertJudgment, Judgments: []string{"icons-help"}}},
+		{id: "icons-everywhere", want: Status{Label: Opinion, Opinions: []string{"hunch-screens"}, Judgments: []string{"icons-help"}}},
+		{id: "ana-thinks-slots", want: Status{Label: Grounded}},
+	}
+	for _, c := range cases {
+		got := status(t, set, c.id)
+		if !reflect.DeepEqual(got, c.want) {
+			t.Fatalf("%s = %+v, want %+v", c.id, got, c.want)
+		}
+	}
+
+	got := set.StatusOf([]Support{{Because: []string{"panel-uses-icons"}}})
+	if got.Label != ExpertJudgment || !reflect.DeepEqual(got.Judgments, []string{"icons-help"}) {
+		t.Fatalf("StatusOf over a judgment = %+v", got)
+	}
+
+	belief, _ := set.belief("ana-judges-shapes")
+	if belief.By != "ana" || belief.Experience == nil || belief.Experience.Of != "ana" || belief.Experience.In != "color-blind testing" {
+		t.Fatalf("ana-judges-shapes = %+v", belief)
+	}
+
+	if status(t, without(t, set, "icons-help"), "panel-uses-icons").Label != InDoubt {
+		t.Fatal("without icons-help, panel-uses-icons should be in doubt")
+	}
+}
+
+func TestJudgmentLines(t *testing.T) {
+	set := load(t, "testdata/judgment")
+
+	cases := []struct {
+		id   string
+		want Line
+	}{
+		{id: "icons-help", want: Line{Text: "I believe icons help operators, from franco's experience in years of operator UIs.", Trailer: "(icons-help, judgment)"}},
+		{id: "panel-uses-icons", want: Line{Text: "I believe the panel should use icons.", Trailer: "(panel-uses-icons, judgment: judgment icons-help)"}},
+		{id: "icons-everywhere", want: Line{Text: "I think every screen should use icons, but have no evidence yet that screens are read at a glance.", Trailer: "(icons-everywhere, opinion: opinion hunch-screens · judgment icons-help)"}},
+		{id: "ana-thinks-slots", want: Line{Text: "ana believes slots beat lists.", Trailer: "(ana-thinks-slots, grounded)"}},
+		{id: "ana-judges-shapes", want: Line{Text: "ana believes shapes beat colors, from ana's experience in color-blind testing.", Trailer: "(ana-judges-shapes, judgment)"}},
+		{id: "hunch-screens", want: Line{Text: "I think screens are read at a glance, but have no evidence yet.", Trailer: "(hunch-screens, opinion)"}},
+	}
+	for _, c := range cases {
+		got := beliefLine(t, set, c.id)
+		if got != c.want {
+			t.Fatalf("%s = %+v, want %+v", c.id, got, c.want)
+		}
+	}
+
+	reason, err := set.Why("panel-uses-icons")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := set.WhyLines(reason, 0)
+	if len(lines) != 3 {
+		t.Fatalf("why lines = %+v", lines)
+	}
+	leaf := Line{Depth: 1, Text: "I believe icons help operators, from franco's experience in years of operator UIs.", Trailer: "(icons-help, judgment)"}
+	if lines[1] != leaf {
+		t.Fatalf("why leaf = %+v, want %+v", lines[1], leaf)
+	}
+	if !strings.HasPrefix(lines[0].Text, "I believe the panel should use icons because icons help operators and the panel is for operators") {
+		t.Fatalf("why root = %q", lines[0].Text)
+	}
+}
+
+func TestJudgmentRejects(t *testing.T) {
+	_, err := Load("testdata/judgment/bad")
+	if err == nil || !strings.Contains(err.Error(), "model-judges") || !strings.Contains(err.Error(), "experience: of must be a person") {
+		t.Fatalf("model experience: err = %v", err)
+	}
+
+	dir := writeFiles(t, map[string]string{"beliefs.yaml": "beliefs:\n  - id: half\n    belief: Half an experience.\n    experience: { of: franco }\n"})
+	_, err = Load(dir)
+	if err == nil || !strings.Contains(err.Error(), "experience: needs of and in") {
+		t.Fatalf("experience without in: err = %v", err)
+	}
+}
