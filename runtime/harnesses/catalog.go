@@ -76,7 +76,8 @@ func ListHarnessInfo(ctx context.Context) []HarnessInfo {
 		Models:    codexModels,
 	}
 	if codex.Available {
-		if models := listCodexModels(ctx); len(models) > 0 {
+		models := listCodexModels(ctx)
+		if len(models) > 0 {
 			codex.Models = models
 		}
 	}

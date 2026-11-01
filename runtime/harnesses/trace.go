@@ -40,7 +40,8 @@ func parseCodexTrace(rawOutput string) []TraceEvent {
 			events = append(events, event)
 			return
 		}
-		if position, seen := positionByID[id]; seen {
+		position, seen := positionByID[id]
+		if seen {
 			events[position] = event
 			return
 		}
@@ -59,7 +60,8 @@ func parseCodexTrace(rawOutput string) []TraceEvent {
 			continue
 		}
 
-		if event, id, ok := codexTraceEvent(payload); ok {
+		event, id, ok := codexTraceEvent(payload)
+		if ok {
 			upsert(id, event)
 		}
 	}
@@ -71,7 +73,8 @@ func codexTraceEvent(payload map[string]any) (TraceEvent, string, bool) {
 	// The item event shape: {"type":"item.*","item":{...}}; some codex
 	// versions emit the item fields at the top level instead.
 	item := payload
-	if child, ok := payload["item"].(map[string]any); ok {
+	child, ok := payload["item"].(map[string]any)
+	if ok {
 		item = child
 	}
 

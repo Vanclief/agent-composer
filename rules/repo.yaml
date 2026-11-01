@@ -1,0 +1,67 @@
+# The rules for agent-composer code and pull requests, from AGENTS.md.
+# `agc rules check rules/` runs the checks from the repo root; rules
+# without a check are read by a human or an agent (ADR 0006).
+subject: agent-composer code and pull requests
+rules:
+  # Go style
+  - id: go-no-explicit-semicolons
+    rule: Never write an explicit `;` in Go outside a 3-clause `for` header.
+    check: scripts/check-semicolons.sh
+    because: [strict-style-makes-agent-output-reviewable]
+  - id: go-no-if-or-switch-init
+    rule: Never write `if init; cond` or `switch init;`; put the initializer on its own line above.
+    check: scripts/check-semicolons.sh
+    because: [strict-style-makes-agent-output-reviewable]
+  - id: go-one-statement-per-line
+    rule: Write one Go statement per line.
+    check: scripts/check-semicolons.sh
+    because: [strict-style-makes-agent-output-reviewable]
+  - id: go-err-naming
+    rule: Name error variables `err`, not per-call names like `parseErr`, and keep each assignment next to its check.
+    because: [strict-style-makes-agent-output-reviewable]
+  - id: go-ez-errors
+    rule: Create errors where they start with `ez.New(code, message, cause)` and pass them up with `ez.Wrap(err)`, from github.com/vanclief/ez.
+    because: [strict-style-makes-agent-output-reviewable]
+  - id: go-gofmt-clean
+    rule: Go files are gofmt clean, except core/resources/hooks/create.go, core/resources/hooks/update.go and core/resources/workflow/compose.go, which are never reformatted.
+    check: scripts/check-gofmt.sh
+    because: [go-has-one-formatting]
+  - id: go-standard-testing-only
+    rule: Go tests use the standard `testing` package only, no assertion libraries.
+    check: "! grep -nE 'stretchr/testify|onsi/gomega|onsi/ginkgo' go.mod"
+    because: [strict-style-makes-agent-output-reviewable]
+  - id: go-vet-clean
+    rule: "`go vet ./...` reports nothing."
+    check: go vet ./...
+  - id: go-tests-pass
+    rule: "`go test ./...` passes before a pull request is opened."
+    check: go test ./...
+
+  # Adding a REST endpoint
+  - id: rest-endpoint-resource-method
+    rule: A new REST endpoint has its request and response types and method in `core/resources/<x>/<verb>.go`, with `Validate()` on the request and `func (api *API) X(ctx, requester interface{}, req)`.
+  - id: rest-endpoint-handler
+    rule: A new REST endpoint has its handler in `interfaces/rest/handler/`.
+  - id: rest-endpoint-route
+    rule: A new REST endpoint has its route in `interfaces/rest/api_routes.go`.
+  - id: rest-endpoint-dispatch-case
+    rule: A new REST endpoint has a case in the dispatch type switch in `interfaces/rest/server/server.go`; long operations get their own timeout there.
+  - id: rest-endpoint-openapi
+    rule: A new REST endpoint is documented in `docs/openapi.yaml`.
+  - id: rest-endpoint-route-test
+    rule: A new REST endpoint has a route test in `interfaces/rest/*_routes_test.go`.
+  - id: rest-endpoint-make-types
+    rule: After an API change, run `make types` so the panel's generated TypeScript matches `docs/openapi.yaml`.
+
+  # Schema and data
+  - id: schema-change-has-migration
+    rule: A schema change edits the model AND adds a migration in `models/migrations` for existing databases.
+  - id: never-hand-edit-a-database
+    rule: Never hand-edit a database; change its schema or data through agc and its migrations.
+  - id: secret-values-stay-out-of-specs-and-apis
+    rule: Never put a secret value in a task spec or an API response; specs and the REST API carry secret names only.
+    because: [secrets-are-placeholders-bound-to-hosts]
+
+  # Agent workflow
+  - id: never-push-from-a-worktree
+    rule: Never push from an agent worktree; commit there and the main session merges.

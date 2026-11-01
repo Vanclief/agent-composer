@@ -212,7 +212,8 @@ func (api *API) prepareExecution(ctx context.Context, request *CreateRequest) (*
 		project = api.rt.ProjectDir()
 	}
 
-	if branch := strings.TrimSpace(request.Worktree); branch != "" {
+	branch := strings.TrimSpace(request.Worktree)
+	if branch != "" {
 		if api.worktrees == nil {
 			return nil, ez.New(ez.EINTERNAL, "Worktree manager is unavailable", nil)
 		}

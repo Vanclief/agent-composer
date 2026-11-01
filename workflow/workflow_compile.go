@@ -295,7 +295,8 @@ func rewriteBinding(binding Binding, namespace string, workflowAliases map[strin
 
 		return resolved, nil
 	case BindingKindInstance:
-		if aliasOutputs, found := workflowAliases[binding.InstanceID]; found {
+		aliasOutputs, found := workflowAliases[binding.InstanceID]
+		if found {
 			aliasBinding, found := aliasOutputs[binding.OutputName]
 			if !found {
 				return Binding{}, fmt.Errorf("workflow instance %q does not expose output %q", binding.InstanceID, binding.OutputName)

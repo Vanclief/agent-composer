@@ -215,7 +215,8 @@ func (m *Manager) worktreeDir(repo, branch string) string {
 	dir := filepath.Join(m.Root, repoKey, branchKey)
 
 	// A same-named dir left by a *different* branch gets a suffix.
-	if _, err := os.Stat(dir); err == nil {
+	_, err := os.Stat(dir)
+	if err == nil {
 		dir = dir + "-" + shortHash(branch, 6)
 	}
 	return dir

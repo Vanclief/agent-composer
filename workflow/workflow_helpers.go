@@ -140,7 +140,8 @@ func validateStrictStructuredOutputSchema(schema map[string]any, path string) er
 	sort.Strings(propertyNames)
 
 	for _, propertyName := range propertyNames {
-		if _, found := required[propertyName]; !found {
+		_, found := required[propertyName]
+		if !found {
 			return fmt.Errorf("object schema at %s marks property %q as optional; optional object fields are not supported in structured outputs", path, propertyName)
 		}
 
@@ -858,7 +859,8 @@ func validateWhileWorkflowTarget(loopNodeName string, updates string, loopShape 
 		return fmt.Errorf("while workflow target %q break output must be boolean", targetName)
 	}
 
-	if _, found := childSnapshot.Outputs[updates]; !found {
+	_, found := childSnapshot.Outputs[updates]
+	if !found {
 		return fmt.Errorf("while workflow target %q is missing output %q", targetName, updates)
 	}
 
@@ -1209,7 +1211,8 @@ func parseHarnessConfig(raw map[string]any) (agent.Harness, string, runtimetypes
 	}
 
 	effort := runtimetypes.ReasoningEffortMedium
-	if value, found := raw["reasoning_effort"]; found {
+	value, found := raw["reasoning_effort"]
+	if found {
 		text, ok := value.(string)
 		if !ok {
 			return "", "", "", nil, fmt.Errorf("config.harness.reasoning_effort must be a string")
@@ -1304,7 +1307,8 @@ func orderedPortNames[T any](declaredOrder []string, items map[string]T) []strin
 		names := make([]string, 0, len(declaredOrder))
 		seen := make(map[string]bool, len(declaredOrder))
 		for _, name := range declaredOrder {
-			if _, found := items[name]; !found {
+			_, found := items[name]
+			if !found {
 				return sortedKeys(items)
 			}
 

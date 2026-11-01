@@ -1,0 +1,15 @@
+subject: testing
+rules:
+  - id: passes
+    rule: Must pass.
+    check: echo fine
+    because: [top]
+  - id: fails
+    rule: Must fail.
+    check: echo broken && exit 3
+  - id: manual-one
+    rule: Must be read by a human.
+    because: [later-choice]
+  - id: unrelated-rule
+    rule: Must not care about A.
+    because: [unrelated]

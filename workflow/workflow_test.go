@@ -929,7 +929,8 @@ func TestCompileCompositionArticleSummaryWithBrief(t *testing.T) {
 	}
 
 	for _, nodeID := range expectedNodes {
-		if _, found := snapshot.Nodes[nodeID]; !found {
+		_, found := snapshot.Nodes[nodeID]
+		if !found {
 			t.Fatalf("expected flattened node %q to exist", nodeID)
 		}
 	}
@@ -944,7 +945,8 @@ func TestCompileCompositionArticleSummaryWithBrief(t *testing.T) {
 		t.Fatalf("unexpected structured output schema: %#v", makeBrief.StructuredOutputSchema)
 	}
 
-	if _, found := valueSchema["value"]; !found {
+	_, found := valueSchema["value"]
+	if !found {
 		t.Fatalf("expected wrapped structured output to expose value field: %#v", makeBrief.StructuredOutputSchema)
 	}
 }
@@ -1406,11 +1408,13 @@ func TestCompilePipelineParallelReviewFixCycle(t *testing.T) {
 		t.Fatalf("unexpected triage output count: %d", len(triageNode.Outputs))
 	}
 
-	if _, found := triageNode.Outputs["review_state"]; !found {
+	_, found = triageNode.Outputs["review_state"]
+	if !found {
 		t.Fatalf("expected triage_review_results.review_state output")
 	}
 
-	if _, found := triageNode.Outputs["should_stop"]; !found {
+	_, found = triageNode.Outputs["should_stop"]
+	if !found {
 		t.Fatalf("expected triage_review_results.should_stop output")
 	}
 }

@@ -85,6 +85,9 @@ func Run(ctx context.Context, args []string) error {
 			workflowCommand(),
 			msgCommand(),
 			taskCommand(),
+			rulesCommand(),
+			beliefsCommand(),
+			decisionsCommand(),
 			{
 				Name:  "mcp",
 				Usage: "Start the AGC MCP stdio server",

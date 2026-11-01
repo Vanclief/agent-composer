@@ -64,6 +64,13 @@
 - `gofmt -l .` must list only the three known unformatted files: `core/resources/hooks/create.go`, `core/resources/hooks/update.go`, `core/resources/workflow/compose.go`. Do not reformat them.
 - Panel: `make panel-check`.
 
+## Rules, beliefs and decisions
+
+- `rules/` says what must or must not be done, `beliefs/` what we hold true and why, `decisions/` the choices made on those beliefs (one per ADR). See ADR 0006.
+- `go run . rules check rules/` runs the mechanical rules and lists the manual ones; `agc rules show` prints them as markdown.
+- `agc beliefs why <id>` follows a belief down to its observations; `agc beliefs doubt <id>` lists the beliefs, decisions and rules resting on it.
+- `agc decisions show` prints the decisions with their ADRs.
+
 ## Deploying to the rig
 
 - `make rig-deploy` (wraps `scripts/rig-deploy.sh`; `--dry-run` prints the remote script, `--help` lists the env overrides).

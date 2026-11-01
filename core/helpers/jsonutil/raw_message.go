@@ -20,7 +20,8 @@ func ReorderJSONObjectByKeys(rawObject json.RawMessage, keyOrder []string) (json
 	}
 
 	var object map[string]json.RawMessage
-	if err := json.Unmarshal(trimmed, &object); err != nil {
+	err := json.Unmarshal(trimmed, &object)
+	if err != nil {
 		return nil, err
 	}
 
@@ -94,7 +95,8 @@ func NormalizeJSONSchemaPropertiesOrder(schema json.RawMessage) (json.RawMessage
 	}
 
 	var top map[string]json.RawMessage
-	if err := json.Unmarshal(trimmed, &top); err != nil {
+	err = json.Unmarshal(trimmed, &top)
+	if err != nil {
 		return schema, err
 	}
 
@@ -109,7 +111,8 @@ func NormalizeJSONSchemaPropertiesOrder(schema json.RawMessage) (json.RawMessage
 	}
 
 	var required []string
-	if err := json.Unmarshal(requiredRaw, &required); err != nil {
+	err = json.Unmarshal(requiredRaw, &required)
+	if err != nil {
 		return schema, err
 	}
 	if len(required) == 0 {
@@ -247,7 +250,8 @@ func orderedObjectKeys(raw json.RawMessage) ([]string, error) {
 		}
 		keys = append(keys, key)
 
-		if err := skipJSONValue(dec); err != nil {
+		err := skipJSONValue(dec)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -277,10 +281,12 @@ func skipJSONValueAfterToken(dec *json.Decoder, token json.Token) error {
 	switch delim {
 	case '{':
 		for dec.More() {
-			if _, err := dec.Token(); err != nil {
+			_, err := dec.Token()
+			if err != nil {
 				return err
 			}
-			if err := skipJSONValue(dec); err != nil {
+			err = skipJSONValue(dec)
+			if err != nil {
 				return err
 			}
 		}
@@ -288,7 +294,8 @@ func skipJSONValueAfterToken(dec *json.Decoder, token json.Token) error {
 		return err
 	case '[':
 		for dec.More() {
-			if err := skipJSONValue(dec); err != nil {
+			err := skipJSONValue(dec)
+			if err != nil {
 				return err
 			}
 		}
