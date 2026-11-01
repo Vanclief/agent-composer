@@ -83,9 +83,9 @@ echo "==> fetching"
 cd "$SRC"
 GIT_CONFIG_GLOBAL=/dev/null git fetch -q origin
 if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
-  git checkout -q "$BRANCH"
+  git checkout -q -f "$BRANCH"
 else
-  git checkout -q -b "$BRANCH" --track "origin/$BRANCH"
+  git checkout -q -f -b "$BRANCH" --track "origin/$BRANCH"
 fi
 GIT_CONFIG_GLOBAL=/dev/null git reset -q --hard "origin/$BRANCH"
 
