@@ -1,0 +1,94 @@
+package rest
+
+import (
+	"context"
+	"database/sql"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/labstack/echo/v4"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/sqlitedialect"
+	"github.com/vanclief/compose/components/ratelimit"
+	"github.com/vanclief/compose/drivers/databases/relational"
+	_ "modernc.org/sqlite"
+
+	"github.com/vanclief/agent-composer/core/controller"
+	"github.com/vanclief/agent-composer/core/resources/tasks"
+	"github.com/vanclief/agent-composer/interfaces/rest/handler"
+	restserver "github.com/vanclief/agent-composer/interfaces/rest/server"
+	"github.com/vanclief/agent-composer/messaging"
+	msgmodels "github.com/vanclief/agent-composer/models/messaging"
+	taskmodels "github.com/vanclief/agent-composer/models/task"
+)
+
+func TestTaskAndMessagingRoutes(t *testing.T) {
+	sqldb, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqldb.SetMaxOpenConns(1)
+	t.Cleanup(func() {
+		_ = sqldb.Close()
+	})
+
+	db := bun.NewDB(sqldb, sqlitedialect.New())
+	tables := []interface{}{
+		(*taskmodels.Task)(nil),
+		(*msgmodels.Participant)(nil),
+		(*msgmodels.Message)(nil),
+	}
+	for _, table := range tables {
+		_, err = db.NewCreateTable().Model(table).Exec(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	ctrl := &controller.Controller{DB: &relational.DB{DB: db}}
+	msg := messaging.NewService(db)
+	server := &restserver.Server{
+		Ctrl:        ctrl,
+		RateLimiter: ratelimit.NewWindowCounter(10, 100),
+		TasksAPI:    tasks.NewAPI(ctrl, msg, tasks.SandboxRuntime{}, "", t.TempDir()),
+		Messaging:   msg,
+	}
+
+	e := echo.New()
+	addAPIRoutes(e, handler.NewHandler(server))
+
+	cases := []struct {
+		method string
+		path   string
+		body   string
+		status int
+		want   string
+	}{
+		{http.MethodGet, "/api/tasks", "", http.StatusOK, `{"tasks":[]}`},
+		{http.MethodGet, "/api/tasks/review-42", "", http.StatusNotFound, "task review-42 not found"},
+		{http.MethodGet, "/api/tasks/0190a7c2-0000-7000-8000-000000000000", "", http.StatusNotFound, "task with ID"},
+		{http.MethodPost, "/api/tasks/review-42/stop", "", http.StatusNotFound, "task review-42 not found"},
+		{http.MethodPost, "/api/tasks", `{"name":"Bad Name","spec":{}}`, http.StatusBadRequest, ""},
+		{http.MethodPost, "/api/tasks", `{"name":"a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d","spec":{}}`, http.StatusBadRequest, "looks like a UUID"},
+		{http.MethodPost, "/api/msg/join", `{"name":"franco"}`, http.StatusOK, `"human":true`},
+		{http.MethodGet, "/api/msg/channels", "", http.StatusOK, `"channels"`},
+	}
+
+	for _, tc := range cases {
+		request := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+		request.Header.Set("Content-Type", "application/json")
+		recorder := httptest.NewRecorder()
+
+		e.ServeHTTP(recorder, request)
+
+		if recorder.Code != tc.status {
+			t.Fatalf("%s %s: status %d, body %s", tc.method, tc.path, recorder.Code, recorder.Body.String())
+		}
+
+		if !strings.Contains(recorder.Body.String(), tc.want) {
+			t.Fatalf("%s %s: body %s does not contain %s", tc.method, tc.path, recorder.Body.String(), tc.want)
+		}
+	}
+}

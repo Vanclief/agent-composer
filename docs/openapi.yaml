@@ -21,6 +21,10 @@ tags:
     description: Manage runtime hooks that trigger external commands.
   - name: Workflows
     description: Inspect installed workflows.
+  - name: Tasks
+    description: >
+      Tasks are microsandbox VMs agents work in (ADR 0003). Status is read live from the
+      runtime and passed through verbatim.
 paths:
   /agents/specs:
     get:
@@ -498,6 +502,141 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
+  /tasks:
+    get:
+      tags: [Tasks]
+      operationId: listTasks
+      summary: List tasks
+      description: Returns every task, newest first, each with its live status.
+      responses:
+        '200':
+          description: Tasks.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Task'
+                required:
+                  - tasks
+        '500':
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [Tasks]
+      operationId: createTask
+      summary: Create a task
+      description: >
+        Creates and boots the sandbox, clones the repo and runs setup. If clone or setup fails
+        the sandbox is removed and the error says so. Missing secrets fail before anything is
+        created, naming the secret.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '200':
+          description: The created task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /tasks/{id}:
+    get:
+      tags: [Tasks]
+      operationId: getTask
+      summary: Retrieve a task
+      parameters:
+        - $ref: '#/components/parameters/TaskIdParam'
+      responses:
+        '200':
+          description: The task with its live status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Tasks]
+      operationId: deleteTask
+      summary: Delete a task
+      description: >
+        Stops the sandbox if needed and removes it with its disk and uncommitted work. Volumes
+        and the task's channel history are kept.
+      parameters:
+        - $ref: '#/components/parameters/TaskIdParam'
+      responses:
+        '200':
+          description: The deleted task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteTaskResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /tasks/{id}/stop:
+    post:
+      tags: [Tasks]
+      operationId: stopTask
+      summary: Stop a task
+      description: Shuts the sandbox down and keeps its disk. The status becomes `stopped`.
+      parameters:
+        - $ref: '#/components/parameters/TaskIdParam'
+      responses:
+        '200':
+          description: The task with its live status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /tasks/{id}/start:
+    post:
+      tags: [Tasks]
+      operationId: startTask
+      summary: Start a stopped task
+      description: Boots the sandbox from its disk with secrets read again from the secrets file.
+      parameters:
+        - $ref: '#/components/parameters/TaskIdParam'
+      responses:
+        '200':
+          description: The task with its live status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
 components:
   parameters:
     LimitParam:
@@ -552,6 +691,13 @@ components:
       in: path
       required: true
       description: Workflow slug — the human-facing handle from the registry.
+      schema:
+        type: string
+    TaskIdParam:
+      name: id
+      in: path
+      required: true
+      description: Task UUID or task name. A value that parses as a UUID is looked up by id.
       schema:
         type: string
   responses:
@@ -1018,6 +1164,99 @@ components:
       required:
         - workflow_slug
         - spec
+    TaskSpec:
+      type: object
+      description: The task.yaml spec. Secrets are names only, never values.
+      properties:
+        image:
+          type: string
+          description: OCI image, default agc-agent.
+        cpus:
+          type: integer
+        memory:
+          type: integer
+          description: MiB.
+        repo:
+          type: string
+          description: host/owner/name or an https URL, cloned to /home/agent/<name>.
+        ref:
+          type: string
+          description: Branch, tag or commit checked out after the clone.
+        setup:
+          type: string
+          description: Bash script run once after the clone, in the repo.
+        secrets:
+          type: array
+          items:
+            type: string
+          description: NAME or NAME@host1,host2.
+        env:
+          type: object
+          additionalProperties:
+            type: string
+        volumes:
+          type: array
+          items:
+            type: string
+          description: NAME:DEST[:rw] or host:PATH:DEST[:rw].
+        channels:
+          type: array
+          items:
+            type: string
+          description: '#name or #name:read.'
+    Task:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Also the sandbox name.
+        spec:
+          $ref: '#/components/schemas/TaskSpec'
+        status:
+          type: string
+          description: >
+            The runtime's status word, verbatim (for example running or stopped), or unknown when
+            the runtime cannot be asked.
+        status_error:
+          type: string
+          description: Why the status is unknown.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - spec
+        - status
+        - created_at
+        - updated_at
+    CreateTaskRequest:
+      type: object
+      required:
+        - name
+        - spec
+      properties:
+        name:
+          type: string
+          description: 1-63 lowercase letters, digits or -, starting with a letter, and not a UUID.
+        spec:
+          $ref: '#/components/schemas/TaskSpec'
+    DeleteTaskResponse:
+      type: object
+      properties:
+        deleted:
+          type: boolean
+        name:
+          type: string
+      required:
+        - deleted
+        - name
     CreateHookRequest:
       type: object
       required:

@@ -1,0 +1,144 @@
+package task
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"regexp"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/uptrace/bun"
+	"github.com/vanclief/ez"
+)
+
+var nameRegex = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
+
+// Task is what agc keeps about a Task. Its status lives in the runtime and
+// is read live, never stored (ADR 0003).
+type Task struct {
+	bun.BaseModel `bun:"table:tasks"`
+
+	ID uuid.UUID `bun:",pk,type:uuid" json:"id"`
+	// Name is also the sandbox name.
+	Name      string          `bun:"name,notnull,unique" json:"name"`
+	Spec      json.RawMessage `bun:"type:jsonb" json:"spec"`
+	CreatedAt time.Time       `json:"created_at"`
+	UpdatedAt time.Time       `json:"updated_at"`
+}
+
+func ValidateName(name string) error {
+	if !nameRegex.MatchString(name) {
+		msg := fmt.Sprintf("task name %q is invalid: use 1-63 lowercase letters, digits or -, starting with a letter", name)
+		return ez.New(ez.EINVALID, msg, nil)
+	}
+
+	// REST paths take an id or a name, so a name must never read as an id.
+	_, err := uuid.Parse(name)
+	if err == nil {
+		return ez.New(ez.EINVALID, fmt.Sprintf("task name %q looks like a UUID: pick another name", name), nil)
+	}
+
+	return nil
+}
+
+func (t *Task) Validate() error {
+	if t == nil {
+		return ez.New(ez.EINVALID, "task is nil", nil)
+	}
+
+	err := ValidateName(t.Name)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	if len(t.Spec) == 0 {
+		return ez.New(ez.EINVALID, "task spec is required", nil)
+	}
+
+	return nil
+}
+
+func (t *Task) Insert(ctx context.Context, db bun.IDB) error {
+	if t.ID == uuid.Nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return ez.Wrap(err)
+		}
+
+		t.ID = id
+	}
+
+	now := time.Now().UTC()
+	if t.CreatedAt.IsZero() {
+		t.CreatedAt = now
+	}
+	t.UpdatedAt = now
+
+	err := t.Validate()
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	_, err = db.NewInsert().Model(t).Exec(ctx)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+func (t *Task) Delete(ctx context.Context, db bun.IDB) error {
+	if t.ID == uuid.Nil {
+		return ez.New(ez.EINVALID, "id is required", errors.New("nil uuid"))
+	}
+
+	_, err := db.NewDelete().Model(t).WherePK().Exec(ctx)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+func GetTaskByID(ctx context.Context, db bun.IDB, id uuid.UUID) (*Task, error) {
+	record := new(Task)
+
+	err := db.NewSelect().Model(record).Where("id = ?", id).Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ez.New(ez.ENOTFOUND, fmt.Sprintf("task with ID %s not found", id), err)
+	}
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return record, nil
+}
+
+func GetTaskByName(ctx context.Context, db bun.IDB, name string) (*Task, error) {
+	record := new(Task)
+
+	err := db.NewSelect().Model(record).Where("name = ?", name).Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ez.New(ez.ENOTFOUND, fmt.Sprintf("task %s not found", name), err)
+	}
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return record, nil
+}
+
+// ListTasks returns every task, newest first.
+func ListTasks(ctx context.Context, db bun.IDB) ([]Task, error) {
+	tasks := []Task{}
+
+	err := db.NewSelect().Model(&tasks).Order("created_at DESC").Scan(ctx)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return tasks, nil
+}
