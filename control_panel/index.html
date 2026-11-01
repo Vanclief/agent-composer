@@ -417,68 +417,266 @@
 </div>
 
 <!-- ============ New task modal ============ -->
+<!-- No prose in here: icons, chips and slots carry the meaning; what a
+     sentence would say lives in title= tooltips on the icons. -->
 <div x-show="create.open" x-cloak class="fixed inset-0 z-40 grid place-items-center p-4" @keydown.escape.window="create.open && closeCreate()">
   <div @click="closeCreate()" class="absolute inset-0 bg-black/60"></div>
-  <form @submit.prevent="submitCreate()" class="relative flex max-h-full w-full max-w-2xl flex-col rounded-lg border border-zinc-200 bg-white text-sm shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+  <form data-create-form @submit.prevent="submitCreate()" class="relative flex max-h-full w-full max-w-5xl flex-col rounded-lg border border-zinc-200 bg-white text-sm shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
     <div class="flex items-center justify-between border-b border-zinc-200 px-5 py-3 dark:border-zinc-800">
       <h2 class="font-semibold">New task</h2>
-      <button type="button" @click="closeCreate()" class="rounded p-1 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800"><i data-lucide="x"></i></button>
+      <div class="flex items-center gap-1">
+        <button type="button" data-raw-toggle @click="toggleRaw()" :title="create.raw ? 'Back to cards' : 'Edit as YAML'"
+                class="flex items-center gap-1 rounded-md border px-2 py-1 text-xs" :class="chipClass(create.raw)">
+          <i data-lucide="code-xml"></i> YAML
+        </button>
+        <button type="button" @click="closeCreate()" title="Close" class="rounded p-1 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800"><i data-lucide="x"></i></button>
+      </div>
     </div>
+
     <div class="flex min-h-0 flex-col gap-4 overflow-y-auto px-5 py-4">
-      <label class="flex flex-col gap-1.5">
-        <span class="font-medium">Title</span>
-        <input x-ref="createTitle" x-model="create.title" placeholder="Review facebook ads" class="rounded-md border border-zinc-200 bg-transparent px-3 py-1.5 outline-none focus:border-zinc-400 dark:border-zinc-800" />
-        <span x-show="createSlug" class="text-xs text-zinc-500">VM and channel: <span class="font-mono" x-text="'#' + createSlug"></span></span>
-        <span x-show="!createSlug" class="text-xs text-zinc-500">Title needs at least one letter or digit</span>
-      </label>
-      <div class="flex flex-col gap-1.5 text-xs">
-        <div class="flex flex-wrap items-center gap-2">
-          <label for="create-start-from" class="text-sm font-medium">Start from</label>
-          <select id="create-start-from" @change="pickSpec($event.target.value)" :disabled="specs.loading || specs.busy"
-                  class="rounded-md border border-zinc-200 bg-white px-2 py-1 text-sm outline-none focus:border-zinc-400 disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-950">
-            <option value="" :selected="!specs.selected">Blank example</option>
-            <template x-for="s in specs.list" :key="s.name">
-              <option :value="s.name" :selected="s.name === specs.selected" x-text="s.name"></option>
-            </template>
-          </select>
-          <button type="button" x-show="!specSave.open" @click="openSpecSave()" class="rounded border border-zinc-200 px-2 py-1 hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">Save spec…</button>
-          <template x-if="specSave.open">
-            <div class="flex items-center gap-1.5">
-              <input x-ref="createSpecName" x-model="specSave.name" @keydown.enter.prevent="saveSpec()" @keydown.escape.stop="resetSpecSave()" placeholder="backend-review"
-                     class="w-40 rounded border border-zinc-200 bg-transparent px-1.5 py-1 font-mono outline-none focus:border-zinc-400 dark:border-zinc-800" />
-              <button type="button" @click="saveSpec()" :disabled="specSave.busy || !specSave.name.trim()" class="rounded bg-zinc-900 px-2 py-1 font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-                      x-text="specSave.busy ? 'Saving…' : (specSave.name.trim() ? 'Save' : 'Name it to save')"></button>
-              <button type="button" @click="resetSpecSave()" class="text-zinc-500 underline">Cancel</button>
-            </div>
-          </template>
+      <!-- Title + live slug -->
+      <div class="flex flex-col gap-1.5">
+        <div class="relative">
+          <span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" title="Title"><i data-lucide="type"></i></span>
+          <input x-ref="createTitle" x-model="create.title" placeholder="Review facebook ads" class="placeholder:text-zinc-400 dark:placeholder:text-zinc-600 w-full rounded-md border border-zinc-200 bg-transparent py-1.5 pl-8 pr-3 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600" />
         </div>
-        <p x-show="specs.loading" class="text-zinc-500">Loading saved specs…</p>
-        <p x-show="!specs.loading && specs.loaded && specs.list.length === 0" class="text-zinc-500">No saved specs yet. Save the current spec to reuse it.</p>
-        <p x-show="specSave.saved && !specSave.open" class="text-zinc-500">Saved as <span class="font-mono" x-text="specSave.saved"></span>.</p>
-        <div x-show="specs.selected" class="text-zinc-500">
-          <button type="button" x-show="!specs.confirmDelete" @click="specs.confirmDelete = true" class="underline hover:text-red-600 dark:hover:text-red-400">Delete saved spec</button>
-          <span x-show="specs.confirmDelete">
-            Delete <span class="font-mono" x-text="specs.selected"></span>?
-            <button type="button" @click="deleteSpec()" :disabled="specs.busy" class="text-red-600 underline disabled:opacity-60 dark:text-red-400" x-text="specs.busy ? 'Deleting…' : 'Yes'"></button>
-            /
-            <button type="button" @click="specs.confirmDelete = false" class="underline">No</button>
+        <div class="flex items-center gap-2 text-xs">
+          <span data-slug x-show="createSlug" class="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 font-mono dark:border-zinc-800 dark:bg-zinc-900" title="VM and channel name, derived from the title">
+            <i data-lucide="hash"></i><span x-text="createSlug"></span>
+          </span>
+          <span x-show="!createSlug && !create.title" class="inline-flex items-center gap-1 rounded-md border border-dashed border-zinc-300 px-1.5 py-0.5 font-mono text-zinc-400 dark:border-zinc-700" title="VM and channel name, derived from the title">
+            <i data-lucide="hash"></i>name
+          </span>
+          <span x-show="!createSlug && create.title" class="inline-flex items-center gap-1 rounded-md border border-dashed border-red-400/60 px-1.5 py-0.5 text-red-600 dark:text-red-400">
+            <i data-lucide="hash"></i>Title needs at least one letter or digit
           </span>
         </div>
       </div>
-      <label class="flex flex-col gap-1.5">
-        <span class="flex items-center justify-between">
-          <span class="font-medium">Spec (YAML)</span>
-          <button type="button" @click="resetCreateYAML()" class="text-xs text-zinc-500 underline">Reset to example</button>
-        </span>
-        <textarea x-model="create.yaml" rows="22" spellcheck="false" class="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-xs leading-relaxed outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900"></textarea>
-      </label>
-      <div x-show="create.error" class="whitespace-pre-wrap rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-red-700 dark:text-red-300" x-text="create.error"></div>
+
+      <!-- Start from: saved spec tiles -->
+      <div class="flex flex-wrap items-center gap-2 text-xs" data-start-from>
+        <span class="flex items-center gap-1 text-zinc-500" title="Start from a saved spec. Editing afterwards does not change the saved one."><i data-lucide="bookmark"></i> Start from</span>
+        <button type="button" data-tile="" @click="pickSpec('')" class="flex items-center gap-1.5 rounded-md border px-2.5 py-1" :class="chipClass(!specs.selected)">
+          <i data-lucide="file"></i> Blank
+        </button>
+        <template x-for="s in specs.list" :key="s.name">
+          <div class="flex items-center rounded-md border" :class="[chipClass(s.name === specs.selected), s.name === specs.selected && specs.confirmDelete && 'ring-2 ring-red-500/60']">
+            <button type="button" :data-tile="s.name" @click="pickSpec(s.name)" class="flex items-center gap-1.5 py-1 pl-2.5" :class="s.name === specs.selected ? 'pr-1' : 'pr-2.5'">
+              <i data-lucide="bookmark"></i><span class="font-mono" x-text="s.name"></span>
+            </button>
+            <template x-if="s.name === specs.selected">
+              <span class="flex items-center pr-1">
+                <button type="button" data-tile-delete x-show="!specs.confirmDelete" @click="specs.confirmDelete = true" title="Delete this saved spec" class="rounded p-0.5 opacity-60 hover:opacity-100"><i data-lucide="x"></i></button>
+                <button type="button" data-tile-confirm x-show="specs.confirmDelete" @click="deleteSpec()" :disabled="specs.busy" title="Click again to delete; pick any tile to keep it"
+                        class="flex items-center gap-1 rounded bg-red-600 px-1.5 py-0.5 font-medium text-white hover:bg-red-700 disabled:opacity-60">
+                  <i data-lucide="trash-2"></i><span x-text="specs.busy ? 'Deleting…' : 'Delete'"></span>
+                </button>
+              </span>
+            </template>
+          </div>
+        </template>
+        <span x-show="specs.loading && !specs.loaded" class="rounded-md border border-dashed border-zinc-300 px-2.5 py-1 text-zinc-400 dark:border-zinc-700">Loading…</span>
+        <span x-show="specs.loaded && specs.list.length === 0" class="rounded-md border border-dashed border-zinc-300 px-2.5 py-1 text-zinc-400 dark:border-zinc-700">No saved specs</span>
+
+        <span class="mx-1 h-5 w-px bg-zinc-200 dark:bg-zinc-800"></span>
+        <button type="button" x-show="!specSave.open" @click="openSpecSave()" title="Save this form as a reusable spec"
+                class="flex items-center gap-1.5 rounded-md border border-zinc-200 px-2.5 py-1 hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">
+          <i data-lucide="bookmark-plus"></i> Save spec
+        </button>
+        <template x-if="specSave.open">
+          <div class="flex items-center gap-1.5">
+            <div class="relative">
+              <span class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500"><i data-lucide="bookmark-plus"></i></span>
+              <input x-ref="createSpecName" x-model="specSave.name" @keydown.enter.prevent="saveSpec()" @keydown.escape.stop="resetSpecSave()" placeholder="backend-review"
+                     class="placeholder:text-zinc-400 dark:placeholder:text-zinc-600 w-44 rounded-md border border-zinc-200 bg-transparent py-1 pl-7 pr-2 font-mono outline-none focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600" />
+            </div>
+            <button type="button" @click="saveSpec()" :disabled="specSave.busy || !specSave.name.trim()" class="rounded-md bg-zinc-900 px-2.5 py-1 font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                    x-text="specSave.busy ? 'Saving…' : (specSave.name.trim() ? 'Save' : 'Name it to save')"></button>
+            <button type="button" @click="resetSpecSave()" title="Cancel" class="rounded p-1 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800"><i data-lucide="x"></i></button>
+          </div>
+        </template>
+      </div>
+
+      <!-- Raw view -->
+      <textarea x-show="create.raw" data-raw x-model="create.yaml" rows="22" spellcheck="false"
+                class="placeholder:text-zinc-400 dark:placeholder:text-zinc-600 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-xs leading-relaxed outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900"></textarea>
+
+      <!-- Cards -->
+      <div x-show="!create.raw" class="grid grid-cols-1 gap-3 md:grid-cols-2">
+
+        <!-- Machine -->
+        <section data-card="machine" class="flex flex-col gap-2.5 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+          <div class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-zinc-500">
+            <span title="The VM the task runs in"><i data-lucide="server"></i></span> Machine
+          </div>
+          <div class="relative">
+            <span class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500" title="Image: any OCI image"><i data-lucide="box"></i></span>
+            <input data-image x-model="create.form.image" placeholder="agc-agent" class="placeholder:text-zinc-400 dark:placeholder:text-zinc-600 w-full rounded-md border border-zinc-200 bg-transparent py-1 pl-7 pr-2 font-mono text-xs outline-none focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600" />
+          </div>
+          <div class="flex items-center gap-1.5" data-cpus>
+            <span class="w-6 text-zinc-500" title="vCPUs. Click the lit chip again to use the server default."><i data-lucide="cpu"></i></span>
+            <template x-for="n in cpuChoices" :key="n">
+              <button type="button" @click="pickCpus(n)" class="min-w-[2.25rem] rounded-md border px-2 py-0.5 text-xs tabular-nums" :class="chipClass(create.form.cpus === n)" x-text="n"></button>
+            </template>
+            <button type="button" x-show="extraCpus" @click="pickCpus(extraCpus)" class="min-w-[2.25rem] rounded-md border px-2 py-0.5 text-xs tabular-nums" :class="chipClass(true)" x-text="extraCpus"></button>
+          </div>
+          <div class="flex items-center gap-1.5" data-memory>
+            <span class="w-6 text-zinc-500" title="Memory. Click the lit chip again to use the server default."><i data-lucide="memory-stick"></i></span>
+            <template x-for="n in memoryChoices" :key="n">
+              <button type="button" @click="pickMemory(n)" class="rounded-md border px-2 py-0.5 text-xs tabular-nums" :class="chipClass(create.form.memory === n)" x-text="memoryLabel(n)"></button>
+            </template>
+            <button type="button" x-show="extraMemory" @click="pickMemory(extraMemory)" class="rounded-md border px-2 py-0.5 text-xs tabular-nums" :class="chipClass(true)" x-text="extraMemory && memoryLabel(extraMemory)"></button>
+          </div>
+        </section>
+
+        <!-- Code -->
+        <section data-card="code" class="flex flex-col gap-2.5 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+          <div class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-zinc-500">
+            <span title="Repository cloned into the VM"><i data-lucide="folder-git-2"></i></span> Code
+          </div>
+          <div class="relative">
+            <span class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500" title="Repository: github.com/owner/name or an https URL"><i data-lucide="folder-git-2"></i></span>
+            <input data-repo x-model="create.form.repo" placeholder="github.com/owner/name" class="placeholder:text-zinc-400 dark:placeholder:text-zinc-600 w-full rounded-md border border-zinc-200 bg-transparent py-1 pl-7 pr-2 font-mono text-xs outline-none focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600" />
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="relative w-36 shrink-0">
+              <span class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500" title="Branch, tag or sha"><i data-lucide="git-branch"></i></span>
+              <input data-ref x-model="create.form.ref" placeholder="main" class="placeholder:text-zinc-400 dark:placeholder:text-zinc-600 w-full rounded-md border border-zinc-200 bg-transparent py-1 pl-7 pr-2 font-mono text-xs outline-none focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600" />
+            </div>
+            <span data-repo-dir class="inline-flex min-w-0 items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 font-mono text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400" title="Where the repo is cloned in the VM">
+              <span class="shrink-0"><i data-lucide="folder"></i></span><span class="truncate" x-text="createRepoDir"></span>
+            </span>
+          </div>
+          <button type="button" data-setup-toggle @click="create.setupOpen = !create.setupOpen" class="flex items-center gap-1.5 rounded-md border border-zinc-200 px-2 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">
+            <span class="text-zinc-500" title="Bash script, runs once after the clone"><i data-lucide="terminal"></i></span>
+            <span>Setup script</span>
+            <span x-show="setupLines" data-setup-lines class="rounded bg-zinc-200 px-1.5 font-mono text-[11px] dark:bg-zinc-800" x-text="setupLines + (setupLines === 1 ? ' line' : ' lines')"></span>
+            <span class="ml-auto text-zinc-500" x-show="!create.setupOpen"><i data-lucide="chevron-down"></i></span>
+            <span class="ml-auto text-zinc-500" x-show="create.setupOpen"><i data-lucide="chevron-up"></i></span>
+          </button>
+          <textarea x-show="create.setupOpen" data-setup x-model="create.form.setup" rows="4" spellcheck="false" placeholder="go mod download"
+                    class="placeholder:text-zinc-400 dark:placeholder:text-zinc-600 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1.5 font-mono text-xs outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900"></textarea>
+        </section>
+
+        <!-- Secrets -->
+        <section data-card="secrets" class="flex flex-col gap-2.5 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+          <div class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-zinc-500">
+            <span title="Secrets from ~/.config/agc/secrets.env. Each is sent only to its hosts."><i data-lucide="key-round"></i></span> Secrets
+            <span x-show="create.form.secrets.length" class="rounded bg-zinc-200 px-1.5 font-mono normal-case tracking-normal text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" x-text="create.form.secrets.length"></span>
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5 text-xs">
+            <template x-for="c in secretChips" :key="c.name">
+              <div class="flex items-center gap-1">
+                <button type="button" :data-secret="c.name" @click="toggleSecret(c)" class="flex items-center gap-1 rounded-md border px-2 py-0.5 font-mono"
+                        :class="[chipClass(!!selectedSecret(c.name)), !c.known && 'border-dashed !border-red-400/70']"
+                        :title="!c.known ? 'Not in secrets.env' : (c.hosts.length ? 'Sent only to ' + c.hosts.join(', ') : 'No known hosts: say where it may be sent')">
+                  <span x-show="selectedSecret(c.name)"><i data-lucide="key-round"></i></span>
+                  <span x-show="!c.known" class="text-red-500"><i data-lucide="triangle-alert"></i></span>
+                  <span x-text="c.name"></span>
+                  <span x-show="c.hosts.length" class="opacity-60"><i data-lucide="globe"></i></span>
+                </button>
+                <template x-if="secretNeedsHosts(c)">
+                  <div class="relative">
+                    <span class="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-zinc-500" title="Hosts this secret may be sent to"><i data-lucide="globe"></i></span>
+                    <input :data-secret-hosts="c.name" x-model="selectedSecret(c.name).hosts" placeholder="api.example.com, example.com"
+                           class="placeholder:text-zinc-400 dark:placeholder:text-zinc-600 w-52 rounded-md border border-zinc-200 bg-transparent py-0.5 pl-6 pr-1.5 font-mono outline-none focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600" />
+                  </div>
+                </template>
+              </div>
+            </template>
+            <span x-show="secretList.loaded && !secretList.error && secretChips.length === 0" class="rounded-md border border-dashed border-zinc-300 px-2 py-0.5 text-zinc-400 dark:border-zinc-700">No secrets in secrets.env</span>
+            <span x-show="!secretList.loaded" class="text-zinc-400">Loading…</span>
+          </div>
+          <div x-show="secretList.error" data-secrets-error class="whitespace-pre-wrap text-xs text-red-600 dark:text-red-400" x-text="secretList.error"></div>
+        </section>
+
+        <!-- Env -->
+        <section data-card="env" class="flex flex-col gap-1.5 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+          <div class="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-zinc-500">
+            <span title="Environment variables set in the VM"><i data-lucide="variable"></i></span> Env
+            <span x-show="create.form.env.length" class="rounded bg-zinc-200 px-1.5 font-mono normal-case tracking-normal text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" x-text="create.form.env.length"></span>
+          </div>
+          <template x-for="(e, i) in create.form.env" :key="e.id">
+            <div class="flex items-center gap-1.5 text-xs">
+              <input data-env-key x-model="e.key" placeholder="KEY" class="placeholder:text-zinc-400 dark:placeholder:text-zinc-600 w-2/5 min-w-0 rounded-md border border-zinc-200 bg-transparent px-2 py-1 font-mono outline-none focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600" />
+              <span class="text-zinc-400">=</span>
+              <input data-env-value x-model="e.value" placeholder="value" class="placeholder:text-zinc-400 dark:placeholder:text-zinc-600 min-w-0 flex-1 rounded-md border border-zinc-200 bg-transparent px-2 py-1 font-mono outline-none focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600" />
+              <button type="button" @click="create.form.env.splice(i, 1)" title="Remove" class="rounded p-0.5 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"><i data-lucide="x"></i></button>
+            </div>
+          </template>
+          <button type="button" data-add-env @click="addEnv()" title="Add a variable" class="grid h-7 place-items-center rounded-md border border-dashed border-zinc-300 text-zinc-400 hover:border-zinc-400 hover:text-zinc-900 dark:border-zinc-700 dark:hover:border-zinc-500 dark:hover:text-zinc-100">
+            <i data-lucide="plus"></i>
+          </button>
+        </section>
+
+        <!-- Volumes -->
+        <section data-card="volumes" class="flex flex-col gap-1.5 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+          <div class="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-zinc-500">
+            <span title="Volumes mounted into the VM. Named volumes are kept by agc across tasks; host paths come from this machine."><i data-lucide="hard-drive"></i></span> Volumes
+            <span x-show="create.form.volumes.length" class="rounded bg-zinc-200 px-1.5 font-mono normal-case tracking-normal text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" x-text="create.form.volumes.length"></span>
+          </div>
+          <template x-for="(v, i) in create.form.volumes" :key="v.id">
+            <div class="flex items-center gap-1.5 text-xs" data-volume>
+              <div class="flex shrink-0 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-800">
+                <button type="button" data-kind="named" @click="v.kind = 'named'" title="Named volume" class="px-1.5 py-1" :class="v.kind === 'named' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900'"><i data-lucide="database"></i></button>
+                <button type="button" data-kind="host" @click="v.kind = 'host'" title="Host path" class="border-l border-zinc-200 px-1.5 py-1 dark:border-zinc-800" :class="v.kind === 'host' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900'"><i data-lucide="laptop"></i></button>
+              </div>
+              <input data-volume-source x-model="v.source" :placeholder="v.kind === 'host' ? '/Users/me/data' : 'go-mod-cache'" class="placeholder:text-zinc-400 dark:placeholder:text-zinc-600 min-w-0 flex-1 rounded-md border border-zinc-200 bg-transparent px-2 py-1 font-mono outline-none focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600" />
+              <span class="shrink-0 text-zinc-400"><i data-lucide="arrow-right"></i></span>
+              <input data-volume-dest x-model="v.dest" placeholder="/home/agent/data" class="placeholder:text-zinc-400 dark:placeholder:text-zinc-600 min-w-0 flex-1 rounded-md border border-zinc-200 bg-transparent px-2 py-1 font-mono outline-none focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600" />
+              <button type="button" data-volume-rw @click="v.rw = !v.rw" :title="v.rw ? 'Read-write. Click to make read-only.' : 'Read-only. Click to allow writes.'"
+                      class="flex shrink-0 items-center gap-0.5 rounded-md border px-1.5 py-1 font-mono"
+                      :class="v.rw ? 'border-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'border-zinc-200 text-zinc-500 dark:border-zinc-800'">
+                <span x-show="!v.rw"><i data-lucide="lock"></i></span>
+                <span x-show="v.rw"><i data-lucide="lock-open"></i></span>
+                <span x-text="v.rw ? 'rw' : 'ro'"></span>
+              </button>
+              <button type="button" @click="create.form.volumes.splice(i, 1)" title="Remove" class="shrink-0 rounded p-0.5 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"><i data-lucide="x"></i></button>
+            </div>
+          </template>
+          <button type="button" data-add-volume @click="addVolume()" title="Add a volume" class="grid h-7 place-items-center rounded-md border border-dashed border-zinc-300 text-zinc-400 hover:border-zinc-400 hover:text-zinc-900 dark:border-zinc-700 dark:hover:border-zinc-500 dark:hover:text-zinc-100">
+            <i data-lucide="plus"></i>
+          </button>
+        </section>
+
+        <!-- Channels -->
+        <section data-card="channels" class="flex flex-col gap-2.5 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+          <div class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-zinc-500">
+            <span title="Message channels the task can use"><i data-lucide="hash"></i></span> Channels
+            <span class="rounded bg-zinc-200 px-1.5 font-mono normal-case tracking-normal text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" x-text="create.form.channels.length + 1"></span>
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5 text-xs">
+            <span data-own-channel class="flex items-center gap-1 rounded-md border px-2 py-0.5 font-mono" :class="createSlug ? chipClass(true) : 'border-dashed border-zinc-300 text-zinc-400 dark:border-zinc-700'" title="The task's own channel, always available">
+              <i data-lucide="hash"></i><span x-text="createSlug || 'name'"></span>
+            </span>
+            <template x-for="(c, i) in create.form.channels" :key="c.name">
+              <span :data-channel="c.name" class="flex items-center gap-1 rounded-md border py-0.5 pl-2 pr-1 font-mono" :class="chipClass(true)">
+                <i data-lucide="hash"></i><span x-text="c.name.replace(/^#/, '')"></span>
+                <button type="button" data-channel-read @click="c.read = !c.read" class="ml-0.5 rounded p-0.5 hover:bg-white/20 dark:hover:bg-black/10"
+                        :class="c.read && 'text-amber-300 dark:text-amber-600'" :title="c.read ? 'Read-only: watches, cannot post. Click to allow posting.' : 'Can read and post. Click to make read-only.'">
+                  <span x-show="c.read"><i data-lucide="eye"></i></span>
+                  <span x-show="!c.read"><i data-lucide="pencil"></i></span>
+                </button>
+                <button type="button" @click="create.form.channels.splice(i, 1)" title="Remove" class="rounded p-0.5 opacity-70 hover:bg-white/20 hover:opacity-100 dark:hover:bg-black/10"><i data-lucide="x"></i></button>
+              </span>
+            </template>
+            <div class="relative">
+              <span class="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-zinc-400"><i data-lucide="plus"></i></span>
+              <input data-channel-draft x-model="create.channelDraft" @keydown.enter.prevent="addChannel()" placeholder="#channel" title="Type a channel, Enter adds it. End with :read for read-only."
+                     class="placeholder:text-zinc-400 dark:placeholder:text-zinc-600 w-36 rounded-md border border-dashed border-zinc-300 bg-transparent py-0.5 pl-6 pr-1.5 font-mono outline-none focus:border-solid focus:border-zinc-400 dark:border-zinc-700 dark:focus:border-zinc-600" />
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div x-show="create.error" data-create-error class="whitespace-pre-wrap rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-red-700 dark:text-red-300" x-text="create.error"></div>
     </div>
     <div class="flex justify-end gap-2 border-t border-zinc-200 px-5 py-3 dark:border-zinc-800">
       <button type="button" @click="closeCreate()" class="rounded-md border border-zinc-200 px-3 py-1.5 hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">Cancel</button>
       <button type="submit" :disabled="create.busy || !createSlug"
-              class="rounded-md bg-zinc-900 px-3 py-1.5 font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-              x-text="create.busy ? 'Creating…' : (createSlug ? 'Create task' : 'Enter a title to create')"></button>
+              class="flex items-center gap-1.5 rounded-md bg-zinc-900 px-4 py-1.5 font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+        <i data-lucide="play"></i><span x-text="create.busy ? 'Creating…' : (createSlug ? 'Create task' : 'Enter a title to create')"></span>
+      </button>
     </div>
   </form>
 </div>

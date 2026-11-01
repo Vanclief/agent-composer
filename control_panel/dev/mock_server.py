@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Mock agc backend for developing the control panel without agc.
 
-Serves the panel at /panel/ and fakes the /api/tasks, /api/specs and
-/api/msg endpoints with in-memory data. No WebSocket: terminal sockets get a plain
+Serves the panel at /panel/ and fakes the /api/tasks, /api/specs,
+/api/secrets and /api/msg endpoints with in-memory data. No WebSocket: terminal sockets get a plain
 404, so the panel shows its "closed" path.
 
     python3 control_panel/dev/mock_server.py [--port 8765]
@@ -21,7 +21,14 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
 PANEL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-KNOWN_SECRETS = {"CLAUDE_CODE_OAUTH_TOKEN", "GITHUB_TOKEN"}
+# What GET /api/secrets reports: names from secrets.env with the hosts agc
+# knows for them. CUSTOM has none, so the panel asks for hosts.
+SECRETS = [
+    {"name": "CLAUDE_CODE_OAUTH_TOKEN", "hosts": ["api.anthropic.com"]},
+    {"name": "GITHUB_TOKEN", "hosts": ["api.github.com", "github.com"]},
+    {"name": "CUSTOM", "hosts": []},
+]
+KNOWN_SECRETS = {s["name"] for s in SECRETS}
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 CHANNEL_RE = re.compile(r"^#[a-z0-9][a-z0-9_-]{0,63}$")
 
@@ -236,6 +243,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.tasks_api(method, parts[1:])
         if parts and parts[0] == "specs":
             return self.specs_api(method, parts[1:])
+        if parts == ["secrets"] and method == "GET":
+            return 200, {"secrets": SECRETS}
         if parts and parts[0] == "msg":
             return self.msg_api(method, parts[1:], query)
         raise msg_error(404, "no such endpoint")
