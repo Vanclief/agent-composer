@@ -1,0 +1,27 @@
+beliefs:
+  # A judgment: no evidence, but from someone's experience.
+  - id: icons-help
+    belief: Icons help operators.
+    experience: { of: franco, in: years of operator UIs }
+  # A chain over the judgment and grounded evidence: a judgment.
+  - id: panel-uses-icons
+    belief: The panel should use icons.
+    because: [icons-help, panel-is-for-operators]
+  - id: panel-is-for-operators
+    belief: The panel is for operators.
+    evidence: [seen-operators]
+  # A chain mixing the judgment and an opinion: an opinion.
+  - id: icons-everywhere
+    belief: Every screen should use icons.
+    because: [icons-help, hunch-screens]
+  - id: hunch-screens
+    belief: Screens are read at a glance.
+  # Held by someone other than the repo owner.
+  - id: ana-thinks-slots
+    belief: Slots beat lists.
+    by: ana
+    evidence: [seen-operators]
+  - id: ana-judges-shapes
+    belief: Shapes beat colors.
+    by: ana
+    experience: { of: ana, in: color-blind testing }

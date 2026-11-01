@@ -1523,11 +1523,14 @@ components:
       type: string
       description: >
         How what a belief, decision, rule or action rests on is grounded: grounded (live evidence
-        under every leaf of some set of reasons), opinion (a leaf with no evidence), in_doubt (a
-        leaf whose evidence is all retracted or set aside; wins over the others) or contested
-        (beliefs only: something grounded contradicts it or its evidence; wins over opinion).
+        under every leaf of some set of reasons), judgment (a leaf with no evidence that comes
+        from a person's experience; wins over grounded), opinion (a leaf with no evidence and no
+        experience; wins over judgment), in_doubt (a leaf whose evidence is all retracted or set
+        aside; wins over the others) or contested (beliefs only: something grounded contradicts
+        it or its evidence; wins over opinion).
       enum:
         - grounded
+        - judgment
         - opinion
         - in_doubt
         - contested
@@ -1654,6 +1657,20 @@ components:
             type: array
             items:
               type: string
+        experience:
+          type: object
+          nullable: true
+          description: >
+            Whose experience, and in what, a leaf belief comes from, which makes it a judgment;
+            null when absent.
+          properties:
+            of:
+              type: string
+            in:
+              type: string
+          required:
+            - of
+            - in
         label:
           $ref: '#/components/schemas/KnowledgeLabel'
         opinions:
@@ -1683,8 +1700,8 @@ components:
         by:
           type: string
           description: >
-            Who holds or stated the belief, a person or an agent; empty when unset. Never
-            grounds it: an agent's verdict recorded by agc rules judge is an opinion.
+            Who holds or stated the belief, a person or an agent; empty for the repo owner.
+            Never grounds it: an agent's verdict recorded by agc rules judge is an opinion.
         when:
           type: string
           description: When by held or stated it; empty when unset.
@@ -1694,6 +1711,7 @@ components:
         - because
         - evidence
         - or
+        - experience
         - label
         - opinions
         - doubted

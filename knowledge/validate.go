@@ -11,6 +11,9 @@ type node struct {
 	kind string
 	file string
 	sets []Support
+	// judged says the belief comes from someone's experience, so as a
+	// leaf it is a judgment rather than an opinion.
+	judged bool
 }
 
 // because lists every belief and decision the node rests on, in any set.
@@ -55,7 +58,7 @@ func (s *Set) Validate() error {
 		if err != nil {
 			return err
 		}
-		s.nodes[belief.ID] = node{kind: "belief", file: belief.File, sets: belief.Supports()}
+		s.nodes[belief.ID] = node{kind: "belief", file: belief.File, sets: belief.Supports(), judged: belief.Experience != nil}
 	}
 
 	for _, decision := range s.Decisions {
@@ -167,9 +170,10 @@ func isModel(who string) bool {
 	return false
 }
 
-// validateBelief checks the text and the alternatives: a belief with no
-// because and no evidence is allowed, and shows up as an opinion, but an
-// alternative is only an alternative to reasons the belief already has.
+// validateBelief checks the text, the alternatives and the experience: a
+// belief with no because and no evidence is allowed, and shows up as an
+// opinion or, with experience, a judgment, but an alternative is only an
+// alternative to reasons the belief already has. By is free text.
 func validateBelief(belief Belief) error {
 	if strings.TrimSpace(belief.Belief) == "" {
 		return invalid(belief.File, "belief", belief.ID, "belief: text is required")
@@ -187,6 +191,16 @@ func validateBelief(belief Belief) error {
 		if len(set.Because) == 0 && len(set.Evidence) == 0 {
 			return invalid(belief.File, "belief", belief.ID, "each or: entry needs because: or evidence:")
 		}
+	}
+
+	experience := belief.Experience
+	if experience != nil && (strings.TrimSpace(experience.Of) == "" || strings.TrimSpace(experience.In) == "") {
+		return invalid(belief.File, "belief", belief.ID, "experience: needs of and in")
+	}
+
+	if experience != nil && isModel(experience.Of) {
+		msg := "experience: of must be a person, not a model; a model's own conclusion is an opinion"
+		return invalid(belief.File, "belief", belief.ID, msg)
 	}
 
 	return nil

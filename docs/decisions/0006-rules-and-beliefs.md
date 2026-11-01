@@ -3,6 +3,7 @@
 **Status:** Accepted — 2026-11-01; amended the same day with actions,
 alternative support, contradictions, what-if, sentence output and
 translated evidence (decisions 7–12), then with judged rules (decision 13)
+and provenance and judgments (decision 14)
 **Builds on:** [0001 — git + plain text for all artifacts](0001-git-and-plain-text-for-all-artifacts.md)
 
 ## Context
@@ -219,6 +220,18 @@ Franco's framing:
     globally: which agent can judge a rule depends on the rule (agents can
     read a diff, only Franco can say what happened on the rig). A shared
     `judges.yaml` registry is left out until trusted lists start repeating.
+14. **Provenance and judgments.** A belief's `by:` (decision 13) is who
+    holds it, a person or an agent id; omitted means the repo owner, and
+    sentences read "ana believes …" instead of "I believe …". `by` is free
+    text and changes no label. A leaf belief (no `because`, `evidence` or `or`) may
+    say `experience: { of, in }`, both required, whose experience it comes
+    from and in what; `of` passes the same not-a-model check as evidence
+    `who`. Such a leaf is a `judgment`: expert testimony, stronger than an
+    opinion and weaker than evidence, printed as "I believe …, from
+    franco's experience in …". The weakest leaf still wins, in the order
+    in doubt, contested, opinion, judgment, grounded, so a chain with one
+    opinion leaf is an opinion and one with judgment and grounded leaves
+    is a judgment. A rule or decision resting on a judgment gets no note.
 
 What was left out, on purpose: stored labels, probabilities or any
 confidence number, automatic retraction or relabeling, tracking several

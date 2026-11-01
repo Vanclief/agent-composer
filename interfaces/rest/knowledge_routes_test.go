@@ -209,8 +209,11 @@ func TestKnowledgeRoutesList(t *testing.T) {
 	}
 
 	// Empty lists are [] not null.
-	// Only live evidence has a null: its retracted.
-	if strings.Contains(strings.ReplaceAll(string(body), `"retracted":null`, ""), "null") {
+	// The only nulls are the retracted of live evidence and the
+	// experience of beliefs that are not judgments.
+	stripped := strings.ReplaceAll(string(body), `"retracted":null`, "")
+	stripped = strings.ReplaceAll(stripped, `"experience":null`, "")
+	if strings.Contains(stripped, "null") {
 		t.Fatalf("body has a null list: %s", body)
 	}
 	if !strings.Contains(string(body), `"opinions":[]`) || !strings.Contains(string(body), `"because":[]`) {
@@ -613,5 +616,26 @@ func TestKnowledgeRoutesConflicts(t *testing.T) {
 	body = getKnowledge(t, e, "/api/knowledge/conflicts", http.StatusOK)
 	if strings.TrimSpace(string(body)) != `{"conflicts":[]}` {
 		t.Fatalf("conflicts %s", body)
+	}
+}
+
+func TestKnowledgeRoutesListJudgment(t *testing.T) {
+	e := newKnowledgeRoutes(t, copyTestdata(t, "judgment"))
+
+	set, body := listKnowledge(t, e, "/api/knowledge")
+	labels := beliefLabels(set)
+	want := map[string]string{"icons-help": "judgment", "panel-uses-icons": "judgment", "icons-everywhere": "opinion", "ana-thinks-slots": "grounded"}
+	for id, label := range want {
+		if labels[id] != label {
+			t.Fatalf("belief %s label %q, want %q: %s", id, labels[id], label, body)
+		}
+	}
+
+	judged := set.Beliefs[0]
+	if judged.By != "" || judged.Experience == nil || judged.Experience.Of != "franco" || judged.Experience.In != "years of operator UIs" {
+		t.Fatalf("icons-help %+v", judged)
+	}
+	if !strings.Contains(body, `"by":"ana"`) || !strings.Contains(body, `"experience":{"of":"franco","in":"years of operator UIs"}`) {
+		t.Fatalf("body %s", body)
 	}
 }
