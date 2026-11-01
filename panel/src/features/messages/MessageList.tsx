@@ -1,23 +1,35 @@
 // A channel's messages, newest at the bottom. Sticks to the bottom while the
 // reader is there; otherwise a "New messages" pill appears when more arrive.
-// Consecutive messages from one participant form a group under one header.
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowDown } from 'lucide-react'
+// Reads like a chat log: consecutive messages from one participant within
+// GROUP_GAP_MS form a group under one header (icon, name, task, time); the
+// rest of the group is bodies only, their time shown in the gutter on hover.
+import { useLayoutEffect, useRef, useState } from 'react'
+import { ArrowDown, Reply } from 'lucide-react'
+import { Link } from 'react-router'
 
 import type { Message } from '@/api/msg'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
+import { IconChip } from '@/components/icon-chip'
 import { cn } from '@/lib/utils'
 
 // How close to the bottom (px) still counts as at the bottom.
 const BOTTOM_SLACK = 32
-// How often relative times refresh.
-const TICK_MS = 30_000
+// The longest pause that still continues a group.
+const GROUP_GAP_MS = 5 * 60_000
+// How much of a replied-to message its stub quotes.
+const QUOTE_CHARS = 60
 
 function groupByAuthor(messages: Message[]) {
   const groups: Message[][] = []
   for (const m of messages) {
     const last = groups.at(-1)
-    if (last && last[0].participant_id === m.participant_id) {
+    const prev = last?.at(-1)
+    if (
+      last &&
+      prev &&
+      prev.participant_id === m.participant_id &&
+      Date.parse(m.created_at) - Date.parse(prev.created_at) <= GROUP_GAP_MS
+    ) {
       last.push(m)
     } else {
       groups.push([m])
@@ -26,57 +38,75 @@ function groupByAuthor(messages: Message[]) {
   return groups
 }
 
-function relativeTime(iso: string, now: number) {
-  const seconds = Math.max(0, Math.round((now - Date.parse(iso)) / 1000))
-  if (seconds < 60) {
-    return 'now'
-  }
-  const minutes = Math.round(seconds / 60)
-  if (minutes < 60) {
-    return `${minutes}m`
-  }
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) {
-    return `${hours}h`
-  }
-  return `${Math.round(hours / 24)}d`
+function clock(iso: string) {
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-function useNow() {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), TICK_MS)
-    return () => window.clearInterval(id)
-  }, [])
-  return now
-}
-
-function AuthorChip({ message }: { message: Message }) {
+// A human or an agent (its task's icon), in the gutter left of the header.
+function SenderIcon({ message }: { message: Message }) {
   const human = !message.task
   const Icon = human ? conceptIcons.human : conceptIcons.task
   return (
-    <span
-      data-testid="author"
-      data-kind={human ? 'human' : 'agent'}
-      title={human ? 'Human' : `Agent in task ${message.task}`}
-      className={cn(
-        'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium',
-        // A human is lit in the messaging color; an agent's chip stays
-        // neutral with its task icon in the task color.
-        human
-          ? [conceptColors.human.bg, conceptColors.human.border, conceptColors.human.text]
-          : 'border-border text-zinc-800 dark:text-zinc-200',
+    <Icon
+      aria-hidden
+      data-concept={human ? 'human' : 'task'}
+      className={cn('ml-auto size-4', human ? conceptColors.human.text : conceptColors.task.text)}
+    />
+  )
+}
+
+// @name in mono, the agent's task as a link, and the first time.
+function Header({ message }: { message: Message }) {
+  const human = !message.task
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        data-testid="author"
+        data-kind={human ? 'human' : 'agent'}
+        title={human ? 'Human' : `Agent in task ${message.task}`}
+        className="font-mono text-sm font-semibold text-foreground"
+      >
+        @{message.from}
+      </span>
+      {!human && (
+        <Link to={`/tasks/${encodeURIComponent(message.task)}`} title={`Task ${message.task}`}>
+          <IconChip icon={conceptIcons.task} concept="task" className="hover:brightness-125">
+            {message.task}
+          </IconChip>
+        </Link>
       )}
+      <time
+        dateTime={message.created_at}
+        title={new Date(message.created_at).toLocaleString()}
+        className="font-mono text-xs text-muted-foreground"
+      >
+        {clock(message.created_at)}
+      </time>
+    </div>
+  )
+}
+
+// One line quoting the message replied to, or its id when not loaded.
+function ReplyStub({ id, target }: { id: number; target?: Message }) {
+  let text = `replying to #${id}`
+  if (target) {
+    const quote = target.body.length > QUOTE_CHARS ? target.body.slice(0, QUOTE_CHARS) + '…' : target.body
+    text = `replying to @${target.from}: ${quote}`
+  }
+  return (
+    <div
+      data-testid="reply-stub"
+      title={`#${id}`}
+      className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
     >
-      <Icon aria-hidden className={cn('size-3.5', human ? conceptColors.human.text : conceptColors.task.text)} />@
-      {message.from}
-      {!human && <span className="font-mono font-normal text-muted-foreground">{message.task}</span>}
-    </span>
+      <Reply aria-hidden className="size-3 shrink-0" />
+      <span className="truncate">{text}</span>
+    </div>
   )
 }
 
 export function MessageList({ messages }: { messages: Message[] }) {
-  const now = useNow()
+  const byID = new Map(messages.map((m) => [m.id, m]))
   const scroller = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
   const [atBottom, setAtBottom] = useState(true)
@@ -114,29 +144,37 @@ export function MessageList({ messages }: { messages: Message[] }) {
   return (
     <div className="relative min-h-0 flex-1">
       <div ref={scroller} onScroll={onScroll} data-testid="message-list" className="h-full overflow-y-auto px-4 py-3">
-        <ol className="flex flex-col gap-3 text-sm">
+        <ol className="flex flex-col gap-2 text-sm">
           {groupByAuthor(messages).map((group) => (
-            <li key={group[0].id} className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <AuthorChip message={group[0]} />
-                <span
-                  title={new Date(group[0].created_at).toLocaleString()}
-                  className="rounded-md border border-border px-1.5 py-0.5 font-mono text-xs text-muted-foreground"
-                >
-                  {relativeTime(group[0].created_at, now)}
-                </span>
-              </div>
-              {group.map((m) => (
-                <p
+            <li key={group[0].id} data-testid="message-group" className="flex flex-col">
+              {group.map((m, i) => (
+                <div
                   key={m.id}
-                  title={`#${m.id} · ${new Date(m.created_at).toLocaleString()}`}
-                  className={cn(
-                    'border-l-2 pl-2 break-words whitespace-pre-wrap',
-                    m.task ? 'border-border' : 'border-pink-500/60',
-                  )}
+                  data-testid="message"
+                  className="group flex gap-2 rounded-md px-1 py-0.5 hover:bg-zinc-100 dark:hover:bg-zinc-800/40"
                 >
-                  {m.body}
-                </p>
+                  {/* The gutter: the sender's icon by the header, the time on hover after. */}
+                  <div className="flex w-11 shrink-0 justify-end pt-0.5">
+                    {i === 0 ? (
+                      <SenderIcon message={m} />
+                    ) : (
+                      <time
+                        dateTime={m.created_at}
+                        title={new Date(m.created_at).toLocaleString()}
+                        className="font-mono text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100"
+                      >
+                        {clock(m.created_at)}
+                      </time>
+                    )}
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    {i === 0 && <Header message={m} />}
+                    {m.reply_to !== undefined && <ReplyStub id={m.reply_to} target={byID.get(m.reply_to)} />}
+                    <p title={`#${m.id}`} className="break-words whitespace-pre-wrap">
+                      {m.body}
+                    </p>
+                  </div>
+                </div>
               ))}
             </li>
           ))}
