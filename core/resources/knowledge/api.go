@@ -152,7 +152,7 @@ func beliefView(set *kb.Set, belief kb.Belief) (Belief, error) {
 }
 
 func decisionView(set *kb.Set, decision kb.Decision) Decision {
-	status := set.StatusOf(decision.Because)
+	status := set.StatusOf(decision.Supports())
 
 	view := Decision{
 		ID:       decision.ID,
@@ -172,7 +172,7 @@ func decisionView(set *kb.Set, decision kb.Decision) Decision {
 }
 
 func ruleView(set *kb.Set, subject string, rule kb.Rule) Rule {
-	status := set.StatusOf(rule.Because)
+	status := set.StatusOf(rule.Supports())
 
 	kind := "manual"
 	if strings.TrimSpace(rule.Check) != "" {
