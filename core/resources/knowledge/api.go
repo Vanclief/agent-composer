@@ -80,6 +80,8 @@ type Belief struct {
 	Retracted   []string   `json:"retracted"`
 	ContestedBy []string   `json:"contested_by"`
 	File        string     `json:"file"`
+	By          string     `json:"by"`
+	When        string     `json:"when"`
 }
 
 // Decision is a decision with the status of what it rests on.
@@ -108,6 +110,8 @@ type Rule struct {
 	Opinions []string `json:"opinions"`
 	Doubted  []string `json:"doubted"`
 	File     string   `json:"file"`
+	Trusted  []string `json:"trusted"`
+	Ask      string   `json:"ask"`
 }
 
 // Action is something to do because of a decision, with the status of
@@ -189,6 +193,8 @@ func beliefView(set *kb.Set, belief kb.Belief) (Belief, error) {
 		Retracted:   list(status.Retracted),
 		ContestedBy: list(status.ContestedBy),
 		File:        belief.File,
+		By:          belief.By,
+		When:        belief.When,
 	}, nil
 }
 
@@ -215,23 +221,25 @@ func decisionView(set *kb.Set, decision kb.Decision) Decision {
 func ruleView(set *kb.Set, subject string, rule kb.Rule) Rule {
 	status := set.StatusOf(rule.Supports())
 
-	kind := "manual"
-	if strings.TrimSpace(rule.Check) != "" {
-		kind = "mechanical"
-	}
-
-	return Rule{
+	view := Rule{
 		Subject:  subject,
 		ID:       rule.ID,
 		Text:     rule.Rule,
 		Check:    rule.Check,
 		Because:  list(rule.Because),
-		Kind:     kind,
+		Kind:     string(rule.Kind()),
 		Label:    label(status),
 		Opinions: list(status.Opinions),
 		Doubted:  list(status.Doubted),
 		File:     rule.File,
+		Trusted:  []string{},
 	}
+	if rule.Judge != nil {
+		view.Trusted = list(rule.Judge.Trusted)
+		view.Ask = rule.Judge.Ask
+	}
+
+	return view
 }
 
 func actionView(set *kb.Set, action kb.Action) Action {
