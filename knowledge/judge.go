@@ -156,7 +156,7 @@ func (s *Set) Judge(ctx context.Context, by string, subject Subject, ask Asker) 
 			answer, err := ask(ctx, rule, Prompt(ruleset.Subject, rule, subject))
 			if err != nil {
 				judgment.Verdict = Unclear
-				judgment.Reason = "the judge failed to answer: " + fold(err.Error())
+				judgment.Reason = "the judge failed to answer: " + fold(failure(err))
 				judgments = append(judgments, judgment)
 				continue
 			}
@@ -168,6 +168,17 @@ func (s *Set) Judge(ctx context.Context, by string, subject Subject, ask Asker) 
 	}
 
 	return judgments, nil
+}
+
+// failure says why a judge failed: an ez error's message, which carries
+// what the harness reported, rather than its stack of operations.
+func failure(err error) string {
+	_, isEz := err.(*ez.Error)
+	if isEz && ez.ErrorMessage(err) != "" {
+		return ez.ErrorMessage(err)
+	}
+
+	return err.Error()
 }
 
 // Prompt asks a judge whether rule, from the rules of about, holds on
