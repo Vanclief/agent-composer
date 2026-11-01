@@ -38,6 +38,19 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: panel/package-lock.json
+
+      # The binaries embed panel/dist, so build it before go build.
+      - name: Build control panel
+        working-directory: panel
+        run: |
+          npm ci
+          npm run build
+
       - name: Compute next version
         id: version
         run: |

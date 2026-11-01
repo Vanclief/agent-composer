@@ -6,10 +6,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/labstack/echo/v4"
 
-	controlpanel "github.com/vanclief/agent-composer/control_panel"
+	"github.com/vanclief/agent-composer/panel"
 )
 
 func TestSPADeepLinks(t *testing.T) {
@@ -171,20 +172,23 @@ func TestSPADoesNotRewriteMissingAPIRoutes(t *testing.T) {
 func TestPanel(t *testing.T) {
 	t.Parallel()
 
-	index, err := fs.ReadFile(controlpanel.FS, "index.html")
-	if err != nil {
-		t.Fatal(err)
+	index := "<!doctype html><div id=\"root\"></div>"
+	script := "console.log('panel')"
+	dist := fstest.MapFS{
+		".keep":                  {},
+		"index.html":             {Data: []byte(index)},
+		"assets/index-abc123.js": {Data: []byte(script)},
 	}
 
 	e := echo.New()
 	e.GET("/api/tasks", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]bool{"ok": true})
 	})
-	err = useSPA(e)
+	err := useSPA(e)
 	if err != nil {
 		t.Fatal(err)
 	}
-	usePanel(e)
+	servePanel(e, dist)
 
 	testCases := []struct {
 		path     string
@@ -193,9 +197,12 @@ func TestPanel(t *testing.T) {
 		location string
 	}{
 		{path: "/panel", status: http.StatusMovedPermanently, location: "/panel/"},
-		{path: "/panel/", status: http.StatusOK, body: string(index)},
-		{path: "/panel/index.html", status: http.StatusOK, body: string(index)},
-		{path: "/panel/no/such/page", status: http.StatusOK, body: string(index)},
+		{path: "/panel/", status: http.StatusOK, body: index},
+		{path: "/panel/index.html", status: http.StatusOK, body: index},
+		{path: "/panel/assets/index-abc123.js", status: http.StatusOK, body: script},
+		{path: "/panel/assets", status: http.StatusOK, body: index},
+		{path: "/panel/tasks/review-42/terminals", status: http.StatusOK, body: index},
+		{path: "/panel/no/such/page", status: http.StatusOK, body: index},
 		{path: "/api/tasks", status: http.StatusOK, body: `{"ok":true}` + "\n"},
 	}
 	for _, testCase := range testCases {
@@ -213,5 +220,59 @@ func TestPanel(t *testing.T) {
 		if location != testCase.location {
 			t.Fatalf("%s: location = %q, want %q", testCase.path, location, testCase.location)
 		}
+	}
+}
+
+func TestPanelNotBuilt(t *testing.T) {
+	t.Parallel()
+
+	// A fresh checkout embeds only dist/.keep.
+	dist := fstest.MapFS{".keep": {}}
+
+	e := echo.New()
+	servePanel(e, dist)
+
+	paths := []string{"/panel/", "/panel/tasks", "/panel/.keep"}
+	for _, path := range paths {
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		response := httptest.NewRecorder()
+		e.ServeHTTP(response, request)
+
+		if response.Code != http.StatusServiceUnavailable {
+			t.Fatalf("%s: status = %d, want %d", path, response.Code, http.StatusServiceUnavailable)
+		}
+		body := response.Body.String()
+		if body != "control panel not built: run make panel" {
+			t.Fatalf("%s: body = %q", path, body)
+		}
+	}
+}
+
+func TestUsePanelServesEmbeddedBuild(t *testing.T) {
+	t.Parallel()
+
+	e := echo.New()
+	err := usePanel(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/panel/", nil)
+	response := httptest.NewRecorder()
+	e.ServeHTTP(response, request)
+
+	// Built: the React index. Not built (only dist/.keep embedded): 503.
+	_, err = fs.Stat(panel.Dist, "dist/index.html")
+	if err != nil {
+		if response.Code != http.StatusServiceUnavailable {
+			t.Fatalf("unbuilt panel: status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+		}
+		return
+	}
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if !strings.Contains(response.Body.String(), `<div id="root"></div>`) {
+		t.Fatalf("body is not the panel index: %.80q", response.Body.String())
 	}
 }
