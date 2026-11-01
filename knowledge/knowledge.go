@@ -1,12 +1,14 @@
-// Package knowledge loads rules, beliefs and decisions: plain YAML files
-// anything can read (docs/decisions/0006-rules-and-beliefs.md).
+// Package knowledge loads evidence, rules, beliefs and decisions: plain
+// YAML files anything can read (docs/decisions/0006-rules-and-beliefs.md).
 //
-// A rule says what must or must not be done; when reality disagrees, the
-// actor is wrong. A belief is something held true; when reality disagrees,
-// the belief is wrong. A decision is a choice made once on beliefs; it is
-// reviewed when what it rests on is in doubt. Beliefs rest on other
-// beliefs or on an observation; decisions and rules rest on beliefs and
-// decisions.
+// Evidence is something seen: who saw it, when, and where. A rule says what
+// must or must not be done; when reality disagrees, the actor is wrong. A
+// belief is something held true; when reality disagrees, the belief is
+// wrong. A decision is a choice made once on beliefs; it is reviewed when
+// what it rests on is in doubt. Beliefs rest on other beliefs and cite
+// evidence; decisions and rules rest on beliefs and decisions. Whether a
+// belief is grounded, an opinion or in doubt is computed from its evidence
+// when asked, never stored.
 package knowledge
 
 import (
@@ -31,14 +33,34 @@ type Observation struct {
 	When string `yaml:"when" json:"when"`
 }
 
-// Belief is something held true. It rests on an observation, on other
-// beliefs, or on both.
+// Retraction says who withdrew a piece of evidence, when and why.
+type Retraction struct {
+	Who  string `yaml:"who" json:"who"`
+	When string `yaml:"when" json:"when"`
+	Why  string `yaml:"why" json:"why"`
+}
+
+// Evidence is something seen. Source, when set, is a URL, a file path or a
+// command whose output was seen. Retracted evidence stays in its file but
+// no longer grounds anything.
+type Evidence struct {
+	ID        string      `yaml:"id" json:"id"`
+	Evidence  string      `yaml:"evidence" json:"evidence"`
+	Who       string      `yaml:"who" json:"who"`
+	When      string      `yaml:"when" json:"when"`
+	Source    string      `yaml:"source" json:"source,omitempty"`
+	Retracted *Retraction `yaml:"retracted" json:"retracted,omitempty"`
+	File      string      `yaml:"-" json:"file"`
+}
+
+// Belief is something held true. It rests on other beliefs, cites
+// evidence, both or neither; one with no evidence under it is an opinion.
 type Belief struct {
-	ID       string       `yaml:"id" json:"id"`
-	Belief   string       `yaml:"belief" json:"belief"`
-	Observed *Observation `yaml:"observed" json:"observed,omitempty"`
-	Because  []string     `yaml:"because" json:"because,omitempty"`
-	File     string       `yaml:"-" json:"file"`
+	ID       string   `yaml:"id" json:"id"`
+	Belief   string   `yaml:"belief" json:"belief"`
+	Because  []string `yaml:"because" json:"because,omitempty"`
+	Evidence []string `yaml:"evidence" json:"evidence,omitempty"`
+	File     string   `yaml:"-" json:"file"`
 }
 
 // Decision is a choice made once on beliefs and other decisions, whose
@@ -71,25 +93,30 @@ type Ruleset struct {
 
 // Set is everything loaded from a group of files.
 type Set struct {
+	Evidence  []Evidence
 	Rulesets  []Ruleset
 	Beliefs   []Belief
 	Decisions []Decision
 
-	// nodes holds every belief and decision by id, built by Validate.
-	nodes map[string]node
+	// nodes holds every belief and decision by id, and evidenceByID every
+	// piece of evidence, both built by Validate.
+	nodes        map[string]node
+	evidenceByID map[string]Evidence
 }
 
 // file is one YAML file; exactly one of its keys says its kind.
 type file struct {
 	Subject   *string     `yaml:"subject"`
 	Rules     []Rule      `yaml:"rules"`
+	Evidence  *[]Evidence `yaml:"evidence"`
 	Beliefs   *[]Belief   `yaml:"beliefs"`
 	Decisions *[]Decision `yaml:"decisions"`
 }
 
 // Load reads and validates files and directories. A directory loads every
 // *.yaml in it, not recursing. A file with subject: is a ruleset, one with
-// beliefs: a beliefs file, one with decisions: a decisions file.
+// evidence: an evidence file, one with beliefs: a beliefs file, one with
+// decisions: a decisions file.
 func Load(paths ...string) (*Set, error) {
 	files, err := yamlFiles(paths)
 	if err != nil {
@@ -150,6 +177,11 @@ func (s *Set) loadFile(filePath string) error {
 		return ez.New(ez.EINVALID, "cannot read "+filePath, err)
 	}
 
+	err = rejectObserved(filePath, data)
+	if err != nil {
+		return err
+	}
+
 	var parsed file
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	decoder.KnownFields(true)
@@ -158,31 +190,66 @@ func (s *Set) loadFile(filePath string) error {
 		return ez.New(ez.EINVALID, filePath+": "+err.Error(), err)
 	}
 
-	isRuleset := parsed.Subject != nil
-	isBeliefs := parsed.Beliefs != nil && parsed.Rules == nil
-	isDecisions := parsed.Decisions != nil && parsed.Rules == nil
+	kinds := 0
+	for _, present := range []bool{parsed.Subject != nil, parsed.Evidence != nil, parsed.Beliefs != nil, parsed.Decisions != nil} {
+		if present {
+			kinds++
+		}
+	}
+	if kinds != 1 || (parsed.Rules != nil && parsed.Subject == nil) {
+		msg := filePath + ": a file has exactly one of subject: with rules: (a ruleset), evidence:, beliefs: or decisions:"
+		return ez.New(ez.EINVALID, msg, nil)
+	}
 
 	switch {
-	case isRuleset && parsed.Beliefs == nil && parsed.Decisions == nil:
+	case parsed.Subject != nil:
 		ruleset := Ruleset{Subject: *parsed.Subject, File: filePath}
 		for _, rule := range parsed.Rules {
 			rule.File = filePath
 			ruleset.Rules = append(ruleset.Rules, rule)
 		}
 		s.Rulesets = append(s.Rulesets, ruleset)
-	case isBeliefs && !isRuleset && parsed.Decisions == nil:
+	case parsed.Evidence != nil:
+		for _, evidence := range *parsed.Evidence {
+			evidence.File = filePath
+			s.Evidence = append(s.Evidence, evidence)
+		}
+	case parsed.Beliefs != nil:
 		for _, belief := range *parsed.Beliefs {
 			belief.File = filePath
 			s.Beliefs = append(s.Beliefs, belief)
 		}
-	case isDecisions && !isRuleset && parsed.Beliefs == nil:
+	default:
 		for _, decision := range *parsed.Decisions {
 			decision.File = filePath
 			s.Decisions = append(s.Decisions, decision)
 		}
-	default:
-		msg := filePath + ": a file has exactly one of subject: with rules: (a ruleset), beliefs: or decisions:"
-		return ez.New(ez.EINVALID, msg, nil)
+	}
+
+	return nil
+}
+
+// rejectObserved names a belief still written with observed:, which became
+// evidence files cited by id, so the error says what to do instead of
+// naming a Go type. Anything else wrong with the file is left to the strict
+// decode.
+func rejectObserved(filePath string, data []byte) error {
+	var legacy struct {
+		Beliefs []struct {
+			ID       string `yaml:"id"`
+			Observed any    `yaml:"observed"`
+		} `yaml:"beliefs"`
+	}
+	err := yaml.Unmarshal(data, &legacy)
+	if err != nil {
+		return nil
+	}
+
+	for _, belief := range legacy.Beliefs {
+		if belief.Observed != nil {
+			msg := "observed: is no longer a belief field: move it to an evidence file and cite it with evidence: [ids]"
+			return invalid(filePath, "belief", belief.ID, msg)
+		}
 	}
 
 	return nil

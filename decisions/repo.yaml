@@ -9,7 +9,7 @@ decisions:
     decided: { who: franco, when: 2026-07-25 }
   - id: binary-artifacts-stored-by-file-class
     decision: Small stable binaries are committed, generated ones are gitignored and regenerated, and large source binaries stay out of git behind a text manifest.
-    because: [git-and-plain-text-for-all-artifacts, some-artifacts-are-binary]
+    because: [git-and-plain-text-for-all-artifacts, some-artifacts-are-binary, workflows-will-take-large-media]
     adr: docs/decisions/0002-binary-artifact-storage.md
     decided: { who: franco, when: 2026-07-25 }
   - id: tasks-run-in-microsandbox-vms

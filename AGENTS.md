@@ -66,9 +66,11 @@
 
 ## Rules, beliefs and decisions
 
-- `rules/` says what must or must not be done, `beliefs/` what we hold true and why, `decisions/` the choices made on those beliefs (one per ADR). See ADR 0006.
-- `go run . rules check rules/` runs the mechanical rules and lists the manual ones; `agc rules show` prints them as markdown.
-- `agc beliefs why <id>` follows a belief down to its observations; `agc beliefs doubt <id>` lists the beliefs, decisions and rules resting on it.
+- `evidence/` records what was seen (who, when, source), `rules/` says what must or must not be done, `beliefs/` what we hold true and why, `decisions/` the choices made on those beliefs (one per ADR). See ADR 0006.
+- Beliefs cite evidence by id. A belief is grounded, an opinion (a leaf with no evidence) or in doubt (a leaf whose evidence is all retracted); the label is computed when printed, never written. Retract evidence with `retracted: { who, when, why }` and keep it in the file.
+- `go run . rules check rules/` runs the mechanical rules and lists the manual ones; `agc rules show` prints them as markdown. Both note rules resting on an opinion or a doubted belief.
+- `agc beliefs show` prints every belief with its label; `agc evidence show` prints the evidence and how many beliefs cite each piece.
+- `agc beliefs why <id>` follows a belief down to its evidence; `agc beliefs doubt <id>` lists the beliefs, decisions and rules resting on a belief or a piece of evidence.
 - `agc decisions show` prints the decisions with their ADRs.
 
 ## Deploying to the rig

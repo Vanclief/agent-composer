@@ -8,3 +8,7 @@ decisions:
     decision: We chose Y on top of X.
     because: [choice]
     decided: { who: franco, when: 2026-11-01 }
+  - id: doubted-choice
+    decision: We chose Z because G is there.
+    because: [retracted-only]
+    decided: { who: franco, when: 2026-11-01 }

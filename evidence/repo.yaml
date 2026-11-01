@@ -1,0 +1,103 @@
+# What was seen about agent-composer and where it runs: who saw it, when,
+# and where to look again (source). Beliefs cite these by id; a belief with
+# no evidence under it is an opinion. When a piece stops holding, add
+# `retracted: { who, when, why }` and keep it here, then run
+# `agc beliefs doubt <id>` to see what rests on it (ADR 0006).
+evidence:
+  # Go
+  - id: gofmt-is-the-only-go-formatter
+    evidence: gofmt ships with the Go toolchain and the ecosystem has no competing formatter.
+    who: franco
+    when: 2026-11-01
+    source: https://go.dev/blog/gofmt
+  - id: go-spec-has-a-small-syntax
+    evidence: The Go spec defines a small syntax with few ways to write the same thing.
+    who: franco
+    when: 2026-11-01
+    source: https://go.dev/ref/spec
+
+  # Storage
+  - id: agc-stores-everything-in-local-sqlite
+    evidence: agc stores everything in a local SQLite database by default, with no external services.
+    who: franco
+    when: 2026-11-01
+    source: README.md
+
+  # The rig
+  - id: rig-is-the-only-machine-with-kvm
+    evidence: The rig at 192.168.0.45 has KVM, and no other machine we have does.
+    who: franco
+    when: 2026-11-01
+  - id: rig-ports-are-open-on-the-home-lan
+    evidence: The rig sits on the home LAN with no firewall in front of its ports.
+    who: franco
+    when: 2026-11-01
+  - id: rig-secrets-env-holds-real-values
+    evidence: ~/.agent_composer/config/secrets.env on the rig holds real secret values.
+    who: franco
+    when: 2026-11-01
+  - id: pkill-f-killed-the-ssh-shell
+    evidence: Over SSH, pkill -f matched and killed the session's own shell.
+    who: franco
+    when: 2026-11-01
+  - id: agent-shells-have-no-tty
+    evidence: An agent's shell has no TTY, so it cannot answer a sudo password prompt.
+    who: franco
+    when: 2026-11-01
+
+  # ADR 0001, 0002: artifacts
+  - id: agents-are-trained-on-git
+    evidence: Git is the only version control system LLM agents are deeply trained on; they barely know alternatives such as Jujutsu.
+    who: franco
+    when: 2026-07-25
+    source: docs/decisions/0001-git-and-plain-text-for-all-artifacts.md
+  - id: git-merges-binaries-badly
+    evidence: Git diffs and merges text well and binary files badly.
+    who: franco
+    when: 2026-07-25
+    source: docs/decisions/0001-git-and-plain-text-for-all-artifacts.md
+  - id: artifacts-include-images-pdfs-and-video
+    evidence: Some artifacts are inherently binary, such as images, PDFs and video.
+    who: franco
+    when: 2026-07-25
+    source: docs/decisions/0002-binary-artifact-storage.md
+
+  # ADR 0003, 0004: tasks and secrets
+  - id: host-harnesses-share-the-host
+    evidence: Harnesses run as host subprocesses share the host's network, credentials, installed tools and process table.
+    who: franco
+    when: 2026-11-01
+    source: docs/decisions/0003-tasks-run-in-microsandbox-vms.md
+  - id: microsandbox-spike-on-the-rig
+    evidence: >
+      On the rig, a microsandbox 0.7.13 VM with Claude Code and Codex booted in
+      under two seconds and kept a detached terminal across disconnects;
+      placeholder secrets worked for Claude Code, the GitHub API and git over
+      HTTPS, and a placeholder sent to a non-allowed host was refused.
+    who: franco
+    when: 2026-11-01
+    source: docs/decisions/0003-tasks-run-in-microsandbox-vms.md
+  - id: agents-run-arbitrary-code
+    evidence: An agent that runs arbitrary code can read and send out any credential it can see.
+    who: franco
+    when: 2026-11-01
+    source: docs/decisions/0004-secrets-are-placeholders-bound-to-hosts.md
+
+  # ADR 0005: messaging
+  - id: task-vms-have-no-route-to-agc
+    evidence: An agent in a Task VM has no network path to agc and no identity agc can trust.
+    who: franco
+    when: 2026-11-01
+    source: docs/decisions/0005-messaging-transport-and-identity.md
+  - id: vsock-is-a-host-to-vm-pipe
+    evidence: vsock is a host-to-VM pipe with no IP address, no DNS and nothing to firewall.
+    who: franco
+    when: 2026-11-01
+    source: docs/decisions/0005-messaging-transport-and-identity.md
+
+  # ADR 0006: rules, beliefs and decisions
+  - id: rules-and-beliefs-framing
+    evidence: When reality disagrees with a rule the actor is wrong; when it disagrees with a belief the belief is wrong.
+    who: franco
+    when: 2026-11-01
+    source: docs/decisions/0006-rules-and-beliefs.md

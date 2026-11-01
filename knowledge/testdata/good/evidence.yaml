@@ -1,0 +1,28 @@
+evidence:
+  - id: seen-a
+    evidence: A was seen.
+    who: franco
+    when: 2026-11-01
+    source: https://example.com/a
+  - id: seen-b
+    evidence: B was seen.
+    who: franco
+    when: 2026-10-30
+  - id: seen-e-first
+    evidence: E was seen once.
+    who: franco
+    when: 2026-10-01
+    retracted: { who: franco, when: 2026-11-02, why: The first sighting was of something else. }
+  - id: seen-e-again
+    evidence: E was seen again.
+    who: franco
+    when: 2026-11-01
+  - id: seen-g
+    evidence: G was seen.
+    who: franco
+    when: 2026-10-01
+    retracted: { who: franco, when: 2026-11-02, why: G turned out not to be there. }
+  - id: unused
+    evidence: Nobody cites this.
+    who: franco
+    when: 2026-11-01

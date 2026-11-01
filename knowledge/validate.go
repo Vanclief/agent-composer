@@ -5,19 +5,35 @@ import (
 	"strings"
 )
 
-// node is a belief or a decision in the because graph.
+// node is a belief or a decision in the because graph. Only beliefs cite
+// evidence.
 type node struct {
-	kind    string
-	file    string
-	because []string
+	kind     string
+	file     string
+	because  []string
+	evidence []string
 }
 
-// Validate checks ids, required fields and that every because resolves,
-// and rejects cycles among beliefs and decisions. Errors name the file and
-// the id.
+// Validate checks ids, required fields and that every because and every
+// cited piece of evidence resolves, and rejects cycles among beliefs and
+// decisions. Errors name the file and the id.
 func (s *Set) Validate() error {
 	s.nodes = map[string]node{}
+	s.evidenceByID = map[string]Evidence{}
 	owners := map[string]string{}
+
+	for _, evidence := range s.Evidence {
+		err := claim(owners, evidence.File, "evidence", evidence.ID)
+		if err != nil {
+			return err
+		}
+
+		err = validateEvidence(evidence)
+		if err != nil {
+			return err
+		}
+		s.evidenceByID[evidence.ID] = evidence
+	}
 
 	for _, belief := range s.Beliefs {
 		err := claim(owners, belief.File, "belief", belief.ID)
@@ -29,7 +45,7 @@ func (s *Set) Validate() error {
 		if err != nil {
 			return err
 		}
-		s.nodes[belief.ID] = node{kind: "belief", file: belief.File, because: belief.Because}
+		s.nodes[belief.ID] = node{kind: "belief", file: belief.File, because: belief.Because, evidence: belief.Evidence}
 	}
 
 	for _, decision := range s.Decisions {
@@ -75,17 +91,28 @@ func claim(owners map[string]string, filePath string, kind string, id string) er
 	return nil
 }
 
+func validateEvidence(evidence Evidence) error {
+	if strings.TrimSpace(evidence.Evidence) == "" {
+		return invalid(evidence.File, "evidence", evidence.ID, "evidence: text is required")
+	}
+
+	if strings.TrimSpace(evidence.Who) == "" || strings.TrimSpace(evidence.When) == "" {
+		return invalid(evidence.File, "evidence", evidence.ID, "needs who and when")
+	}
+
+	retracted := evidence.Retracted
+	if retracted != nil && (strings.TrimSpace(retracted.Who) == "" || strings.TrimSpace(retracted.When) == "" || strings.TrimSpace(retracted.Why) == "") {
+		return invalid(evidence.File, "evidence", evidence.ID, "retracted: needs who, when and why")
+	}
+
+	return nil
+}
+
+// validateBelief checks the text only: a belief with no because and no
+// evidence is allowed, and shows up as an opinion.
 func validateBelief(belief Belief) error {
 	if strings.TrimSpace(belief.Belief) == "" {
 		return invalid(belief.File, "belief", belief.ID, "belief: text is required")
-	}
-
-	if belief.Observed == nil && len(belief.Because) == 0 {
-		return invalid(belief.File, "belief", belief.ID, "needs observed: or because:")
-	}
-
-	if belief.Observed != nil && !complete(belief.Observed) {
-		return invalid(belief.File, "belief", belief.ID, "observed: needs who and when")
 	}
 
 	return nil
@@ -130,13 +157,21 @@ func validateRuleset(owners map[string]string, ruleset Ruleset) error {
 	return nil
 }
 
-// resolveAll checks every because: beliefs rest on beliefs, decisions and
-// rules on beliefs or decisions.
+// resolveAll checks every because and every cited piece of evidence:
+// beliefs rest on beliefs and cite evidence, decisions and rules rest on
+// beliefs or decisions.
 func (s *Set) resolveAll() error {
 	for _, belief := range s.Beliefs {
 		err := s.resolve(belief.File, "belief", belief.ID, belief.Because, true)
 		if err != nil {
 			return err
+		}
+
+		for _, evidenceID := range belief.Evidence {
+			_, exists := s.evidenceByID[evidenceID]
+			if !exists {
+				return invalid(belief.File, "belief", belief.ID, "evidence names "+evidenceID+", which is not loaded evidence")
+			}
 		}
 	}
 
