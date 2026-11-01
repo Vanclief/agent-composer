@@ -25,6 +25,7 @@ export const MODES: Record<Mode, { label: string; icon: LucideIcon; nav: NavItem
       { to: '/think/beliefs', label: 'Beliefs', concept: 'belief' },
       { to: '/think/decisions', label: 'Decisions', concept: 'decision' },
       { to: '/think/rules', label: 'Rules', concept: 'rule' },
+      { to: '/think/actions', label: 'Actions', concept: 'action' },
       { to: '/think/evidence', label: 'Evidence', concept: 'evidence' },
     ],
   },

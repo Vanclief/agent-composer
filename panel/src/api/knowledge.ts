@@ -1,102 +1,53 @@
-// Knowledge (ADR 0006): evidence, beliefs, decisions and rules, read from
-// the YAML files in git. Hand-typed: /api/knowledge is not in openapi.yaml
-// yet. Everything is read-only; labels are computed by the server each time.
-import { apiFetch } from './client'
+// Knowledge (ADR 0006): evidence, beliefs, decisions, rules and actions,
+// read from the YAML files in git, typed from docs/openapi.yaml.
+// Everything is read-only; labels are computed by the server each time.
+import { api, unwrap } from './client'
+import type { components } from './schema'
 
-// How a belief, decision or rule is grounded, verbatim from the server.
-export type KnowledgeLabel = 'grounded' | 'opinion' | 'in_doubt'
+type Schemas = components['schemas']
 
-export type Retraction = { who: string; when: string; why: string }
+// How a belief, decision, rule or action is grounded, verbatim from the
+// server.
+export type KnowledgeLabel = Schemas['KnowledgeLabel']
+export type Retraction = Schemas['Retraction']
+export type Observation = Schemas['KnowledgeObservation']
+export type Evidence = Schemas['Evidence']
+export type Belief = Schemas['Belief']
+export type Decision = Schemas['Decision']
+export type Rule = Schemas['Rule']
+// Something to do because of a decision; open while done is null.
+export type Action = Schemas['KnowledgeAction']
+// Everything loaded; without echoes the ids set aside with ?without=.
+export type Knowledge = Schemas['KnowledgeSet']
 
-export type Evidence = {
-  id: string
-  text: string
-  who: string
-  when: string
-  // URL, file path or command; may be empty.
-  source: string
-  retracted: Retraction | null
-  // Ids of the beliefs that cite this evidence.
-  cited_by: string[]
-  file: string
-}
+// An item followed down its because chain to the evidence. or holds the
+// other sets of reasons; evidence in one is a node of kind evidence with
+// who, when, translated_by and retracted set.
+export type WhyNode = Schemas['Reason']
+export type WhyKind = WhyNode['kind']
+export type WhyEvidence = WhyNode['evidence'][number]
 
-export type Belief = {
-  id: string
-  text: string
-  because: string[]
-  evidence: string[]
-  label: KnowledgeLabel
-  // Leaves of the because tree with no evidence, and with only retracted
-  // evidence (and that evidence).
-  opinions: string[]
-  doubted: string[]
-  retracted: string[]
-  file: string
-}
+// Everything resting on a belief, piece of evidence, decision or rule;
+// standing rests on it in some sets of reasons but still has another.
+export type Doubted = Schemas['Doubted']
+export type Standing = Schemas['KnowledgeStanding']
 
-export type Decision = {
-  id: string
-  text: string
-  because: string[]
-  adr: string
-  decided: { who: string; when: string }
-  label: KnowledgeLabel
-  opinions: string[]
-  doubted: string[]
-  file: string
-}
-
-export type Rule = {
-  subject: string
-  id: string
-  text: string
-  // Shell command run by `agc rules check`; empty for a manual rule.
-  check: string
-  because: string[]
-  kind: 'mechanical' | 'manual'
-  label: KnowledgeLabel
-  opinions: string[]
-  doubted: string[]
-  file: string
-}
-
-export type Knowledge = {
-  // Where the files were read from.
-  dir: string
-  evidence: Evidence[]
-  beliefs: Belief[]
-  decisions: Decision[]
-  rules: Rule[]
-}
-
-export type WhyEvidence = {
-  id: string
-  text: string
-  who: string
-  when: string
-  retracted: Retraction | null
-}
-
-// An item followed down its because chain to the evidence.
-export type WhyNode = {
-  id: string
-  text: string
-  evidence: WhyEvidence[]
-  because: WhyNode[]
-}
-
-// Everything resting on a belief or a piece of evidence.
-export type Doubted = {
-  beliefs: Belief[]
-  decisions: Decision[]
-  rules: Rule[]
-}
+// A contested contradiction, with the live evidence and opinions each side
+// comes down to. The server never picks a side.
+export type Conflict = Schemas['KnowledgeConflict']
+export type ConflictSide = Schemas['KnowledgeConflictSide']
 
 export const knowledge = {
-  get: (signal?: AbortSignal) => apiFetch<Knowledge>('GET', '/knowledge', undefined, signal),
+  get: (signal?: AbortSignal, without?: string[]) =>
+    unwrap(
+      api.GET('/knowledge', {
+        params: { query: without && without.length > 0 ? { without: without.join(',') } : {} },
+        signal,
+      }),
+    ),
   why: (id: string, signal?: AbortSignal) =>
-    apiFetch<WhyNode>('GET', `/knowledge/why/${encodeURIComponent(id)}`, undefined, signal),
+    unwrap(api.GET('/knowledge/why/{id}', { params: { path: { id } }, signal })),
   doubt: (id: string, signal?: AbortSignal) =>
-    apiFetch<Doubted>('GET', `/knowledge/doubt/${encodeURIComponent(id)}`, undefined, signal),
+    unwrap(api.GET('/knowledge/doubt/{id}', { params: { path: { id } }, signal })),
+  conflicts: (signal?: AbortSignal) => unwrap(api.GET('/knowledge/conflicts', { signal })),
 }

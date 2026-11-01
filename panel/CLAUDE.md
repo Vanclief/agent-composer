@@ -35,17 +35,17 @@ the panel stays conflict-free.
 
 Basename `/panel`. Defined in `src/App.tsx` (foundation).
 
-| Route                             | Component                                                                     |
-| --------------------------------- | ----------------------------------------------------------------------------- |
-| `/`                               | redirects to the first page of the last used mode (Work → `/tasks`, Think → `/think/beliefs`; `src/shell/mode.tsx`) |
-| `/think`                          | redirects to `/think/beliefs`                                                 |
-| `/think/{beliefs,decisions,rules,evidence}/:id?` | Think mode pages (`src/features/think/`), read-only, `:id` opens the detail pane |
-| `/tasks`                          | `TasksPage`; "New task" opens `CreateTaskDialog`                              |
-| `/tasks/:name`                    | `TaskPage`, redirects to `terminals`                                          |
-| `/tasks/:name/terminals`          | `TerminalsTab`                                                                |
-| `/tasks/:name/messages`           | `MessagesTab` (channel `#<name>`)                                             |
-| `/tasks/:name/spec`               | `SpecTab`                                                                     |
-| `/messages`, `/messages/:channel` | `MessagesPage`; `:channel` has no `#` (`/messages/review-42` is `#review-42`) |
+| Route                                                    | Component                                                                                                                                                             |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                                                      | redirects to the first page of the last used mode (Work → `/tasks`, Think → `/think/beliefs`; `src/shell/mode.tsx`)                                                   |
+| `/think`                                                 | redirects to `/think/beliefs`                                                                                                                                         |
+| `/think/{beliefs,decisions,rules,actions,evidence}/:id?` | Think mode pages (`src/features/think/`), read-only, `:id` opens the detail pane; `?without=<id>` shows every label as if that belief or evidence were gone (what-if) |
+| `/tasks`                                                 | `TasksPage`; "New task" opens `CreateTaskDialog`                                                                                                                      |
+| `/tasks/:name`                                           | `TaskPage`, redirects to `terminals`                                                                                                                                  |
+| `/tasks/:name/terminals`                                 | `TerminalsTab`                                                                                                                                                        |
+| `/tasks/:name/messages`                                  | `MessagesTab` (channel `#<name>`)                                                                                                                                     |
+| `/tasks/:name/spec`                                      | `SpecTab`                                                                                                                                                             |
+| `/messages`, `/messages/:channel`                        | `MessagesPage`; `:channel` has no `#` (`/messages/review-42` is `#review-42`)                                                                                         |
 
 Each page sets the top bar title with `usePageTitle('…')` from
 `@/shell/page-title`.

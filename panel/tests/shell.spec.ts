@@ -39,7 +39,7 @@ test('the mode switch swaps the nav between Work and Think', async ({ page }) =>
   await mode.getByRole('link', { name: 'Think' }).click()
   await expect(page).toHaveURL(/\/panel\/think\/beliefs$/)
   await expect(mode.getByRole('link', { name: 'Think' })).toHaveAttribute('aria-current', 'page')
-  await expect(nav.getByRole('link')).toHaveText(['Beliefs', 'Decisions', 'Rules', 'Evidence'])
+  await expect(nav.getByRole('link')).toHaveText(['Beliefs', 'Decisions', 'Rules', 'Actions', 'Evidence'])
   await nav.getByRole('link', { name: 'Rules' }).click()
   await expect(page).toHaveURL(/\/panel\/think\/rules$/)
 

@@ -8,7 +8,7 @@ import { SpecTab } from '@/features/tasks/SpecTab'
 import { TaskPage } from '@/features/tasks/TaskPage'
 import { TasksPage } from '@/features/tasks/TasksPage'
 import { TerminalsTab } from '@/features/terminals/TerminalsTab'
-import { BeliefsPage, DecisionsPage, EvidencePage, RulesPage } from '@/features/think/ThinkPages'
+import { ActionsPage, BeliefsPage, DecisionsPage, EvidencePage, RulesPage } from '@/features/think/ThinkPages'
 import { Layout } from '@/shell/layout'
 import { HomeRedirect } from '@/shell/mode'
 
@@ -32,6 +32,7 @@ export function App() {
         <Route path="think/beliefs/:id?" element={<BeliefsPage />} />
         <Route path="think/decisions/:id?" element={<DecisionsPage />} />
         <Route path="think/rules/:id?" element={<RulesPage />} />
+        <Route path="think/actions/:id?" element={<ActionsPage />} />
         <Route path="think/evidence/:id?" element={<EvidencePage />} />
         <Route path="*" element={<Navigate to="/tasks" replace />} />
       </Route>

@@ -7,6 +7,7 @@ import { api, unwrap, type CreateTaskRequest, type Task } from './client'
 import { msg, type Message, type MessagesResponse, type PostRequest } from './msg'
 import { terminals, type StartTerminalRequest } from './terminals'
 import { knowledge } from './knowledge'
+import { keepPreviousData } from '@tanstack/react-query'
 
 // How often the tasks list refetches, so statuses stay live.
 export const TASKS_POLL_MS = 5000
@@ -31,6 +32,8 @@ export const queryKeys = {
   knowledge: ['knowledge'] as const,
   why: (id: string) => ['knowledge', 'why', id] as const,
   doubt: (id: string) => ['knowledge', 'doubt', id] as const,
+  knowledgeWithout: (without: string) => ['knowledge', 'without', without] as const,
+  conflicts: ['knowledge', 'conflicts'] as const,
 }
 
 // ---------- tasks ----------
@@ -267,5 +270,24 @@ export function useDoubt(id: string | undefined) {
     queryKey: queryKeys.doubt(id ?? ''),
     queryFn: ({ signal }) => knowledge.doubt(id ?? '', signal),
     enabled: Boolean(id),
+  })
+}
+
+// The knowledge as the files say, or judged as if the belief or evidence
+// without were gone (a what-if; nothing is written). The previous answer
+// stays on screen while the next one loads, so the page does not flash.
+export function useKnowledgeView(without: string | undefined) {
+  return useQuery({
+    queryKey: without ? queryKeys.knowledgeWithout(without) : queryKeys.knowledge,
+    queryFn: ({ signal }) => knowledge.get(signal, without ? [without] : undefined),
+    placeholderData: keepPreviousData,
+  })
+}
+
+// Contested contradictions, each side with what it rests on.
+export function useConflicts() {
+  return useQuery({
+    queryKey: queryKeys.conflicts,
+    queryFn: ({ signal }) => knowledge.conflicts(signal),
   })
 }
