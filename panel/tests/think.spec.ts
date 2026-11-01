@@ -15,7 +15,7 @@ test('/ opens the last used mode', async ({ page }) => {
 
   await page.goto('/panel/messages')
   await page.goto('/panel/')
-  await expect(page).toHaveURL(/\/panel\/tasks$/)
+  await expect(page).toHaveURL(/\/panel\/messages$/)
 })
 
 test('/ honors a stored think mode and /think goes to beliefs', async ({ page }) => {
