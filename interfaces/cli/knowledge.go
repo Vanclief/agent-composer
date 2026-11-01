@@ -797,7 +797,11 @@ func agentBeliefLine(set *knowledge.Set, belief knowledge.Belief, line knowledge
 		return line, ez.Wrap(err)
 	}
 
-	line.Text = belief.By + " thinks " + set.Phrase(belief.ID) + on(belief.When) + " (" + string(status.Label) + ")."
+	held := string(status.Label)
+	if belief.When != "" {
+		held += ", " + belief.When
+	}
+	line.Text = belief.By + " thinks " + set.Phrase(belief.ID) + " (" + held + ")."
 
 	return line, nil
 }
@@ -866,7 +870,7 @@ func rulesJudge(c *cli.Context) error {
 	fmt.Printf("\n%d passed, %d failed, %d unclear, %d skipped\n", counts[knowledge.Pass], counts[knowledge.Fail], counts[knowledge.Unclear], skipped)
 
 	if parsed.record {
-		err = recordJudgments(c.Context, set, judgments, subject)
+		err = recordJudgments(c.Context, set, parsed.as, judgments, subject)
 		if err != nil {
 			return ez.Wrap(err)
 		}
@@ -949,7 +953,7 @@ func harnessAsker(ctx context.Context, as string, model string) (knowledge.Asker
 // recordJudgments appends the pass and fail verdicts to
 // beliefs/judgments.yaml as opinions by the judge, ids ending in the short
 // sha of HEAD, or today's date outside git.
-func recordJudgments(ctx context.Context, set *knowledge.Set, judgments []knowledge.Judgment, subject knowledge.Subject) error {
+func recordJudgments(ctx context.Context, set *knowledge.Set, by string, judgments []knowledge.Judgment, subject knowledge.Subject) error {
 	today := time.Now().Format("2006-01-02")
 	suffix := knowledge.ShortHead(ctx)
 	if suffix == "" {
@@ -962,7 +966,11 @@ func recordJudgments(ctx context.Context, set *knowledge.Set, judgments []knowle
 		return ez.Wrap(err)
 	}
 
-	fmt.Printf("Recorded %d opinions in %s, never evidence.\n", len(written), path)
+	noun := "opinions"
+	if len(written) == 1 {
+		noun = "opinion"
+	}
+	fmt.Printf("Recorded %d %s by %s in %s, never evidence.\n", len(written), noun, by, path)
 	for _, belief := range written {
 		fmt.Println("  " + dim(belief.ID))
 	}

@@ -427,7 +427,7 @@ func Record(path string, judgments []Judgment, subject Subject, suffix string, w
 
 		record := judgedBelief{
 			ID:     uniqueID(judgment.Rule.ID, suffix, used),
-			Belief: fmt.Sprintf("%s judged that “%s” %s on %s: %s", judgment.By, trimPeriod(fold(judgment.Rule.Rule)), held, subject.Name, judgment.Reason),
+			Belief: fmt.Sprintf("“%s” %s on %s: %s", trimPeriod(fold(judgment.Rule.Rule)), held, subject.Name, judgment.Reason),
 			By:     judgment.By,
 			When:   when,
 		}

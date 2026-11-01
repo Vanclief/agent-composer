@@ -1646,7 +1646,7 @@ func TestRecordJudgmentsAsOpinions(t *testing.T) {
 	}
 
 	first := set.Beliefs[0]
-	wantText := "codex_cli judged that “Name error variables `err`” held on the diff against HEAD~1: every error is named err."
+	wantText := "“Name error variables `err`” held on the diff against HEAD~1: every error is named err."
 	if first.ID != "judged-go-err-naming-abc1234" || first.By != "codex_cli" || first.When != "2026-11-01" || first.Belief != wantText {
 		t.Fatalf("first = %+v", first)
 	}
