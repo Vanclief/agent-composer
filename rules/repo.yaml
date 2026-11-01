@@ -1,6 +1,9 @@
 # The rules for agent-composer code and pull requests, from AGENTS.md.
 # `agc rules check rules/` runs the checks from the repo root; rules
-# without a check are read by a human or an agent (ADR 0006).
+# without a check are read by a human or an agent (ADR 0006). A judge:
+# block names who is trusted to judge a rule, and
+# `agc rules judge --as <agent>` asks a trusted agent; its verdict is an
+# opinion, never evidence.
 subject: agent-composer code and pull requests
 rules:
   # Go style
@@ -15,12 +18,22 @@ rules:
   - id: go-one-statement-per-line
     rule: Write one Go statement per line.
     check: scripts/check-semicolons.sh
+    # The check is a heuristic over source lines; an agent double-checks it.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: In the added Go lines, does any line hold two statements, an `if` or `switch` with an initializer before `;`, or a `;` outside a 3-clause `for` header? Ignore semicolons inside strings, comments and SQL.
     because: [strict-style-makes-agent-output-reviewable]
   - id: go-err-naming
     rule: Name error variables `err`, not per-call names like `parseErr`, and keep each assignment next to its check.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: In the added Go lines, is every error variable that is checked right away named `err` (not `parseErr`, `readErr` and the like), with its `if err != nil` directly after the assignment? A distinct name is fine only where two errors must be alive at once.
     because: [strict-style-makes-agent-output-reviewable]
   - id: go-ez-errors
     rule: Create errors where they start with `ez.New(code, message, cause)` and pass them up with `ez.Wrap(err)`, from github.com/vanclief/ez.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: In the added Go lines of packages that already use github.com/vanclief/ez, are new errors created with `ez.New(code, message, cause)` (not `errors.New` or `fmt.Errorf`) and are errors from other calls passed up with `ez.Wrap(err)`? Returning an error inside a callback such as a WalkDir function is fine.
     because: [strict-style-makes-agent-output-reviewable]
   - id: go-gofmt-clean
     rule: Go files are gofmt clean, except core/resources/hooks/create.go, core/resources/hooks/update.go and core/resources/workflow/compose.go, which are never reformatted.
@@ -40,33 +53,69 @@ rules:
   # Adding a REST endpoint
   - id: rest-endpoint-resource-method
     rule: A new REST endpoint has its request and response types and method in `core/resources/<x>/<verb>.go`, with `Validate()` on the request and `func (api *API) X(ctx, requester interface{}, req)`.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: For each REST route the diff adds to interfaces/rest/api_routes.go, is there a `core/resources/<x>/<verb>.go` with request and response types, a `Validate()` method on the request and a method `func (api *API) X(ctx, requester interface{}, req)`?
   - id: rest-endpoint-handler
     rule: A new REST endpoint has its handler in `interfaces/rest/handler/`.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: For each REST route the diff adds to interfaces/rest/api_routes.go, is its handler function in a file under interfaces/rest/handler/?
   - id: rest-endpoint-route
     rule: A new REST endpoint has its route in `interfaces/rest/api_routes.go`.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: For each new resource method or handler the diff adds, is its route registered in interfaces/rest/api_routes.go rather than anywhere else?
   - id: rest-endpoint-dispatch-case
     rule: A new REST endpoint has a case in the dispatch type switch in `interfaces/rest/server/server.go`; long operations get their own timeout there.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: For each new request type the diff adds under core/resources/, is there a case for it in the dispatch type switch in interfaces/rest/server/server.go, and does any operation that can run long (agent runs, builds, VM boots) get its own timeout there?
   - id: rest-endpoint-openapi
     rule: A new REST endpoint is documented in `docs/openapi.yaml`.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: For each REST route the diff adds or changes, does docs/openapi.yaml describe its path, method, request and response?
   - id: rest-endpoint-route-test
     rule: A new REST endpoint has a route test in `interfaces/rest/*_routes_test.go`.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: For each REST route the diff adds, is there a test that calls it in an interfaces/rest/*_routes_test.go file?
   - id: rest-endpoint-make-types
     rule: After an API change, run `make types` so the panel's generated TypeScript matches `docs/openapi.yaml`.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: If the diff changes docs/openapi.yaml, does it also change the panel's generated TypeScript types to match? A diff that leaves docs/openapi.yaml alone holds.
 
   # Schema and data
   - id: schema-change-has-migration
     rule: A schema change edits the model AND adds a migration in `models/migrations` for existing databases.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: If the diff adds, removes or changes a bun column, table or index in models/, does it also add a migration file named YYYYMMDDHHMMSS_name.go in models/migrations that makes the same change to existing databases?
   - id: never-hand-edit-a-database
     rule: Never hand-edit a database; change its schema or data through agc and its migrations.
   - id: secret-values-stay-out-of-specs-and-apis
     rule: Never put a secret value in a task spec or an API response; specs and the REST API carry secret names only.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: Does the subject put a secret value (a token, password, private key or API key, not a secret's name or a placeholder) into a task spec, a fixture, or a field a REST response returns? Name the file and line if so.
     because: [secrets-are-placeholders-bound-to-hosts]
 
   # Knowledge (ADR 0006). agc rejects evidence whose who names a model.
   - id: evidence-who-is-never-a-model
     rule: The source is never the model. The model translates evidence from a real source (who is the witness, translated_by the model), or it writes an opinion, and those are different things.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: In the evidence files the subject adds or changes, does every record say what a person or a mechanical check saw at a real source, rather than a model's own conclusion written up as an observation? A model's conclusion belongs in a belief with no evidence.
+    because: [llms-are-parsers-not-sensors]
+  - id: model-verdicts-are-opinions
+    rule: A model's verdict on a rule is an opinion, never evidence; record it as a belief by the model with no evidence under it (agc rules judge --record), never as an evidence file.
     because: [llms-are-parsers-not-sensors]
 
   # Agent workflow
   - id: never-push-from-a-worktree
     rule: Never push from an agent worktree; commit there and the main session merges.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: Does the subject (a diff, script, transcript or instructions to an agent) run or tell an agent to run `git push`, `gh pr create` or anything else that pushes from an agent worktree?

@@ -175,6 +175,10 @@ func validateBelief(belief Belief) error {
 		return invalid(belief.File, "belief", belief.ID, "belief: text is required")
 	}
 
+	if strings.TrimSpace(belief.When) != "" && strings.TrimSpace(belief.By) == "" {
+		return invalid(belief.File, "belief", belief.ID, "when: says when by: held it, and by: is empty")
+	}
+
 	if len(belief.Or) > 0 && len(belief.Because) == 0 && len(belief.Evidence) == 0 {
 		return invalid(belief.File, "belief", belief.ID, "or: is an alternative to because: or evidence:, which are empty")
 	}
@@ -239,6 +243,30 @@ func validateOr(filePath string, kind string, id string, sets []Support) error {
 	return nil
 }
 
+// validateJudge checks a rule's judge block: someone is trusted, and each
+// name is a harness id or a person, never a model name that agc cannot run.
+func validateJudge(rule Rule) error {
+	if rule.Judge == nil {
+		return nil
+	}
+
+	if len(rule.Judge.Trusted) == 0 {
+		return invalid(rule.File, "rule", rule.ID, "judge: needs trusted: harness ids or people")
+	}
+
+	for _, name := range rule.Judge.Trusted {
+		if strings.TrimSpace(name) == "" {
+			return invalid(rule.File, "rule", rule.ID, "judge: trusted has an empty name")
+		}
+		if isModel(name) && !slices.Contains(harnessIDs, name) {
+			msg := "judge: trusted names " + name + ", a model but not a harness id; use one of " + strings.Join(harnessIDs, ", ") + ", or a person"
+			return invalid(rule.File, "rule", rule.ID, msg)
+		}
+	}
+
+	return nil
+}
+
 func complete(observation *Observation) bool {
 	return strings.TrimSpace(observation.Who) != "" && strings.TrimSpace(observation.When) != ""
 }
@@ -260,6 +288,11 @@ func validateRuleset(owners map[string]string, ruleset Ruleset) error {
 
 		if len(rule.Or) > 0 && len(rule.Because) == 0 {
 			return invalid(rule.File, "rule", rule.ID, "or: is an alternative to because:, which is empty")
+		}
+
+		err = validateJudge(rule)
+		if err != nil {
+			return err
 		}
 
 		err = validateOr(rule.File, "rule", rule.ID, rule.Or)

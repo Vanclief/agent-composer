@@ -75,7 +75,9 @@ type Support struct {
 // Or lists alternative reasons: the belief is grounded if its own because
 // and evidence are, or if any one alternative is. Contradicts names
 // beliefs or evidence that cannot be true along with it; declaring it on
-// one side is enough.
+// one side is enough. By, when set, names who holds or stated the
+// belief, a person or an agent, and When the day they did; neither grounds
+// anything, so a belief by an agent with no evidence is still an opinion.
 type Belief struct {
 	ID          string    `yaml:"id" json:"id"`
 	Belief      string    `yaml:"belief" json:"belief"`
@@ -83,6 +85,8 @@ type Belief struct {
 	Evidence    []string  `yaml:"evidence" json:"evidence,omitempty"`
 	Or          []Support `yaml:"or" json:"or,omitempty"`
 	Contradicts []string  `yaml:"contradicts" json:"contradicts,omitempty"`
+	By          string    `yaml:"by" json:"by,omitempty"`
+	When        string    `yaml:"when" json:"when,omitempty"`
 	File        string    `yaml:"-" json:"file"`
 }
 
@@ -109,11 +113,14 @@ func (decision Decision) Supports() []Support {
 }
 
 // Rule says what must or must not be done. Check, when set, is a shell
-// command whose exit status says whether the rule holds.
+// command whose exit status says whether the rule holds. Judge, when set,
+// names who is trusted to judge it by reading: a rule may have either,
+// both or neither.
 type Rule struct {
 	ID      string    `yaml:"id" json:"id"`
 	Rule    string    `yaml:"rule" json:"rule"`
 	Check   string    `yaml:"check" json:"check,omitempty"`
+	Judge   *Judge    `yaml:"judge" json:"judge,omitempty"`
 	Because []string  `yaml:"because" json:"because,omitempty"`
 	Or      []Support `yaml:"or" json:"or,omitempty"`
 	File    string    `yaml:"-" json:"file"`

@@ -1264,3 +1264,346 @@ func TestEmbed(t *testing.T) {
 		t.Fatalf("joinAnd with commas = %q", joinAnd([]string{"a, x", "b"}))
 	}
 }
+
+// judgedRules is a ruleset with every kind of rule: one judged by agents,
+// one by a person only, a manual one, and a mechanical one also judged.
+const judgedRules = `subject: judged
+rules:
+  - id: by-agents
+    rule: Errors are named err.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: Are errors named err?
+  - id: by-franco
+    rule: Never run rm -rf on the rig.
+    judge:
+      trusted: [franco]
+  - id: by-hand
+    rule: Never hand-edit a database.
+  - id: checked-and-judged
+    rule: One statement per line.
+    check: "true"
+    judge:
+      trusted: [codex_cli]
+`
+
+func TestJudgeBlockValidation(t *testing.T) {
+	tests := []struct {
+		name string
+		file string
+		want string
+	}{
+		{
+			name: "judge without trusted",
+			file: "subject: s\nrules:\n  - id: r\n    rule: R.\n    judge:\n      ask: Is it?\n",
+			want: "rule r: judge: needs trusted",
+		},
+		{
+			name: "judge with an empty name",
+			file: "subject: s\nrules:\n  - id: r\n    rule: R.\n    judge:\n      trusted: [\"\"]\n",
+			want: "rule r: judge: trusted has an empty name",
+		},
+		{
+			name: "judge trusting a model that is not a harness",
+			file: "subject: s\nrules:\n  - id: r\n    rule: R.\n    judge:\n      trusted: [gpt-5]\n",
+			want: "rule r: judge: trusted names gpt-5, a model but not a harness id",
+		},
+		{
+			name: "unknown judge field",
+			file: "subject: s\nrules:\n  - id: r\n    rule: R.\n    judge:\n      trusted: [franco]\n      who: me\n",
+			want: "field who not found",
+		},
+		{
+			name: "belief when without by",
+			file: "beliefs:\n  - id: b\n    belief: B.\n    when: 2026-11-01\n",
+			want: "belief b: when: says when by: held it",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir := writeFiles(t, map[string]string{"a.yaml": test.file})
+			_, err := Load(dir)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("err = %v, want %q", err, test.want)
+			}
+		})
+	}
+
+	dir := writeFiles(t, map[string]string{"rules.yaml": judgedRules})
+	set := load(t, dir)
+	rule := set.Rulesets[0].Rules[0]
+	if rule.Judge == nil || !reflect.DeepEqual(rule.Judge.Trusted, []string{"claude_code", "codex_cli"}) || rule.Judge.Ask != "Are errors named err?" {
+		t.Fatalf("judge = %+v", rule.Judge)
+	}
+}
+
+func TestRuleKinds(t *testing.T) {
+	set := load(t, writeFiles(t, map[string]string{"rules.yaml": judgedRules}))
+	rules := set.Rulesets[0].Rules
+
+	wantKinds := []Kind{Judged, Judged, Manual, Mechanical}
+	wantNotes := []string{
+		"needs claude_code or codex_cli",
+		"needs franco",
+		"needs a human",
+		"may also be judged by codex_cli",
+	}
+	for i, rule := range rules {
+		if rule.Kind() != wantKinds[i] {
+			t.Fatalf("%s kind = %s, want %s", rule.ID, rule.Kind(), wantKinds[i])
+		}
+		if JudgeNote(rule) != wantNotes[i] {
+			t.Fatalf("%s note = %q, want %q", rule.ID, JudgeNote(rule), wantNotes[i])
+		}
+	}
+
+	if JudgeNote(Rule{Check: "true"}) != "" {
+		t.Fatalf("plain mechanical note = %q", JudgeNote(Rule{Check: "true"}))
+	}
+
+	results, err := set.Check(context.Background(), "judged", Shell)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, result := range results {
+		if result.Kind != wantKinds[i] {
+			t.Fatalf("%s result kind = %s, want %s", result.Rule.ID, result.Kind, wantKinds[i])
+		}
+		if (result.Passed != nil) != (wantKinds[i] == Mechanical) {
+			t.Fatalf("%s passed = %v", result.Rule.ID, result.Passed)
+		}
+	}
+
+	if !reflect.DeepEqual(set.Judges(), []string{"claude_code", "codex_cli", "franco"}) {
+		t.Fatalf("judges = %v", set.Judges())
+	}
+}
+
+func TestJudgeTrustedFiltering(t *testing.T) {
+	set := load(t, writeFiles(t, map[string]string{"rules.yaml": judgedRules}))
+	subject := Subject{Name: "the diff against HEAD~1", Text: "+parseErr := parse()"}
+
+	prompts := map[string]string{}
+	answers := map[string]string{
+		"by-agents":          "VERDICT: fail — parseErr is not named err.",
+		"checked-and-judged": "VERDICT: pass — one statement per line.",
+	}
+	fake := func(ctx context.Context, rule Rule, prompt string) (string, error) {
+		prompts[rule.ID] = prompt
+		return answers[rule.ID], nil
+	}
+
+	judgments, err := set.Judge(context.Background(), "codex_cli", subject, fake)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := []string{}
+	for _, judgment := range judgments {
+		state := string(judgment.Verdict)
+		if judgment.Skipped {
+			state = "skipped"
+		}
+		got = append(got, judgment.Rule.ID+":"+state)
+	}
+	want := []string{"by-agents:fail", "by-franco:skipped", "checked-and-judged:pass"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("judgments = %v, want %v", got, want)
+	}
+	if judgments[0].Reason != "parseErr is not named err." || judgments[0].By != "codex_cli" {
+		t.Fatalf("judgment = %+v", judgments[0])
+	}
+
+	prompt := prompts["by-agents"]
+	for _, part := range []string{"Rule: Errors are named err.", "Question: Are errors named err?", "the diff against HEAD~1", "+parseErr := parse()", "VERDICT: pass", "VERDICT: fail"} {
+		if !strings.Contains(prompt, part) {
+			t.Fatalf("prompt misses %q:\n%s", part, prompt)
+		}
+	}
+	if !strings.Contains(prompts["checked-and-judged"], "Question: One statement per line.") {
+		t.Fatalf("ask does not default to the rule text:\n%s", prompts["checked-and-judged"])
+	}
+	_, asked := prompts["by-franco"]
+	if asked {
+		t.Fatal("asked an untrusted judge")
+	}
+
+	judgments, err = set.Judge(context.Background(), "pi", subject, fake)
+	if err != nil {
+		t.Fatalf("a harness trusted nowhere: %v", err)
+	}
+	for _, judgment := range judgments {
+		if !judgment.Skipped {
+			t.Fatalf("pi judged %s", judgment.Rule.ID)
+		}
+	}
+
+	_, err = set.Judge(context.Background(), "nobody", subject, fake)
+	if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(err.Error(), "unknown judge nobody") {
+		t.Fatalf("unknown judge err = %v", err)
+	}
+
+	_, err = set.Judge(context.Background(), "franco", subject, nil)
+	if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(err.Error(), "franco is a person") {
+		t.Fatalf("person err = %v", err)
+	}
+
+	failing := func(ctx context.Context, rule Rule, prompt string) (string, error) {
+		return "", ez.New(ez.EINTERNAL, "claude run failed", nil)
+	}
+	judgments, err = set.Judge(context.Background(), "claude_code", subject, failing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if judgments[0].Verdict != Unclear || !strings.Contains(judgments[0].Reason, "claude run failed") {
+		t.Fatalf("failed judge = %+v", judgments[0])
+	}
+}
+
+func TestParseVerdict(t *testing.T) {
+	tests := []struct {
+		answer  string
+		verdict Verdict
+		reason  string
+	}{
+		{"VERDICT: pass — every error is named err.", Pass, "every error is named err."},
+		{"VERDICT: fail — judge.go names one readErr.", Fail, "judge.go names one readErr."},
+		{"verdict: PASS - fine.", Pass, "fine."},
+		{"VERDICT: fail: no migration for the new column.", Fail, "no migration for the new column."},
+		{"I read the diff.\n\n**VERDICT:** pass — nothing touches REST.\n", Pass, "nothing touches REST."},
+		{"Looks fine to me.", Unclear, ""},
+		{"VERDICT: maybe — hard to say.", Unclear, ""},
+		{"VERDICT: pass —", Unclear, ""},
+		{"VERDICT: pass — a.\nVERDICT: fail — b.", Unclear, ""},
+		{"", Unclear, ""},
+	}
+
+	for _, test := range tests {
+		verdict, reason := ParseVerdict(test.answer)
+		if verdict != test.verdict || reason != test.reason {
+			t.Fatalf("ParseVerdict(%q) = %s %q, want %s %q", test.answer, verdict, reason, test.verdict, test.reason)
+		}
+	}
+}
+
+func TestRecordJudgmentsAsOpinions(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "beliefs", "judgments.yaml")
+	subject := Subject{Name: "the diff against HEAD~1"}
+	judgments := []Judgment{
+		{Rule: Rule{ID: "go-err-naming", Rule: "Name error variables `err`."}, By: "codex_cli", Verdict: Pass, Reason: "every error is named err."},
+		{Rule: Rule{ID: "rest-endpoint-openapi", Rule: "A new REST endpoint is documented."}, By: "codex_cli", Verdict: Fail, Reason: "GET /judge is missing from openapi.yaml."},
+		{Rule: Rule{ID: "go-ez-errors", Rule: "Use ez."}, By: "codex_cli", Verdict: Unclear},
+		{Rule: Rule{ID: "rig-no-rm-rf", Rule: "No rm -rf."}, By: "codex_cli", Skipped: true},
+	}
+
+	written, err := Record(path, judgments, subject, "abc1234", "2026-11-01", map[string]bool{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(written) != 2 {
+		t.Fatalf("wrote %d, want the pass and the fail only", len(written))
+	}
+
+	set := load(t, path)
+	if len(set.Evidence) != 0 {
+		t.Fatalf("recorded evidence: %+v", set.Evidence)
+	}
+	if len(set.Beliefs) != 2 {
+		t.Fatalf("beliefs = %+v", set.Beliefs)
+	}
+
+	first := set.Beliefs[0]
+	wantText := "codex_cli judged that “Name error variables `err`” held on the diff against HEAD~1: every error is named err."
+	if first.ID != "judged-go-err-naming-abc1234" || first.By != "codex_cli" || first.When != "2026-11-01" || first.Belief != wantText {
+		t.Fatalf("first = %+v", first)
+	}
+	if len(first.Evidence) != 0 || len(first.Because) != 0 {
+		t.Fatalf("a judgment cites something: %+v", first)
+	}
+	if !strings.Contains(set.Beliefs[1].Belief, "did not hold on the diff against HEAD~1: GET /judge is missing") {
+		t.Fatalf("fail = %q", set.Beliefs[1].Belief)
+	}
+
+	for _, belief := range set.Beliefs {
+		label := status(t, set, belief.ID).Label
+		if label != Opinion {
+			t.Fatalf("%s is %s, want opinion", belief.ID, label)
+		}
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(data), "# Verdicts of agents") {
+		t.Fatalf("header lost:\n%s", data)
+	}
+
+	taken := map[string]bool{"judged-go-err-naming-abc1234-2": true}
+	written, err = Record(path, judgments[:1], subject, "abc1234", "2026-11-02", taken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if written[0].ID != "judged-go-err-naming-abc1234-3" {
+		t.Fatalf("repeated id = %s", written[0].ID)
+	}
+
+	set = load(t, path)
+	if len(set.Beliefs) != 3 || len(set.Evidence) != 0 {
+		t.Fatalf("after a second record: %d beliefs, %d evidence", len(set.Beliefs), len(set.Evidence))
+	}
+
+	written, err = Record(filepath.Join(dir, "none.yaml"), judgments[2:], subject, "abc1234", "2026-11-01", nil)
+	if err != nil || len(written) != 0 {
+		t.Fatalf("unclear and skipped wrote %v, %v", written, err)
+	}
+	_, err = os.Stat(filepath.Join(dir, "none.yaml"))
+	if !os.IsNotExist(err) {
+		t.Fatalf("a file was written with nothing to record: %v", err)
+	}
+
+	notBeliefs := filepath.Join(dir, "rules.yaml")
+	err = os.WriteFile(notBeliefs, []byte(judgedRules), 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = Record(notBeliefs, judgments, subject, "abc1234", "2026-11-01", nil)
+	if err == nil || !strings.Contains(err.Error(), "not a beliefs file") {
+		t.Fatalf("recording into a ruleset: %v", err)
+	}
+}
+
+func TestReadSubject(t *testing.T) {
+	ctx := context.Background()
+	dir := writeFiles(t, map[string]string{"a.go": "package a\n", "b.bin": "x\x00y"})
+
+	subject, err := ReadSubject(ctx, filepath.Join(dir, "a.go"), nil)
+	if err != nil || subject.Text != "package a\n" || subject.Name != filepath.Join(dir, "a.go") {
+		t.Fatalf("file subject = %+v, %v", subject, err)
+	}
+
+	subject, err = ReadSubject(ctx, dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(subject.Text, "Files:\n") || !strings.Contains(subject.Text, "package a") || strings.Contains(subject.Text, "x\x00y") {
+		t.Fatalf("dir subject = %q", subject.Text)
+	}
+
+	subject, err = ReadSubject(ctx, "-", strings.NewReader(strings.Repeat("a", subjectCap+10)))
+	if err != nil || subject.Name != "stdin" || !strings.HasSuffix(subject.Text, "[cut at 200 KB]") {
+		t.Fatalf("stdin subject = %d bytes, %v", len(subject.Text), err)
+	}
+
+	_, err = ReadSubject(ctx, "-", strings.NewReader("  \n"))
+	if err == nil || !strings.Contains(err.Error(), "nothing to judge") {
+		t.Fatalf("empty subject err = %v", err)
+	}
+
+	_, err = ReadSubject(ctx, "no-such-path-or-ref-xyz", nil)
+	if err == nil || !strings.Contains(err.Error(), "neither a path nor a git ref") {
+		t.Fatalf("bad --on err = %v", err)
+	}
+}
