@@ -26,7 +26,7 @@ blocked when sent to a non-allowed host.
 ## Decision
 
 1. **A Task is one microsandbox sandbox.** Task name = sandbox name. The
-   sandbox carries the label `agc.task=<id>`. There is no second
+   sandbox carries the label `agc.task=<name>`. There is no second
    environment type in v1.
 2. **The Task spec is one small YAML block**, usable on its own
    (`agc task create -f task.yaml`) or embedded in a workflow spec under
