@@ -26,7 +26,8 @@ const (
 
 // Secret is a placeholder secret (docs/decisions/0004-secrets-are-placeholders-bound-to-hosts.md).
 // The guest sees a placeholder in the environment variable Name, and the runtime
-// swaps in Value only in request headers sent to Hosts.
+// swaps in Value only in request headers sent to Hosts. Value is passed to
+// msb through its environment and never stored by the runtime.
 type Secret struct {
 	Name  string
 	Value string

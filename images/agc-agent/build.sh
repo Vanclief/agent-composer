@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Builds the agc agent image with docker and loads it into microsandbox.
-# Usage: images/agc-agent/build.sh [tag]   (default tag: dev)
+# Usage: images/agc-agent/build.sh [tag]   (default tag: latest)
 set -euo pipefail
 
-TAG=${1:-dev}
+TAG=${1:-latest}
 cd "$(dirname "$0")/../.."
 
 MSB=$(command -v msb || true)

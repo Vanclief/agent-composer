@@ -28,7 +28,7 @@ func Stop(ctx context.Context, name string) error {
 	return unavailable()
 }
 
-func Start(ctx context.Context, name string) error {
+func Start(ctx context.Context, name string, secrets []Secret) error {
 	return unavailable()
 }
 
