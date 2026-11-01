@@ -12,6 +12,7 @@ require (
 	github.com/pariz/gountries v0.1.6
 	github.com/pkoukk/tiktoken-go v0.1.8
 	github.com/rs/zerolog v1.34.0
+	github.com/superradcompany/microsandbox/sdk/go v0.7.13
 	github.com/uptrace/bun v1.2.18
 	github.com/uptrace/bun/dialect/sqlitedialect v1.2.18
 	github.com/urfave/cli/v2 v2.27.1
