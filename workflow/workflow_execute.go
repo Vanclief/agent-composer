@@ -126,7 +126,8 @@ func (e *Executor) runSnapshot(ctx context.Context, snapshot *Snapshot, input ma
 	// conditionals, composed targets) always run in full.
 	if scope == (NodeExecutionScope{}) {
 		for instanceID, outputs := range e.SeedOutputs {
-			if _, exists := snapshot.Nodes[instanceID]; exists {
+			_, exists := snapshot.Nodes[instanceID]
+			if exists {
 				instanceOutputs[instanceID] = cloneMap(outputs)
 				completed[instanceID] = true
 			}
@@ -306,7 +307,8 @@ func materializeNodeOutputs(node NodeSnapshot, value any) (map[string]any, error
 	}
 
 	for outputName := range node.Outputs {
-		if _, found := outputs[outputName]; !found {
+		_, found := outputs[outputName]
+		if !found {
 			return nil, ez.New(ez.EINVALID, fmt.Sprintf("node output %q is missing", outputName), nil)
 		}
 	}

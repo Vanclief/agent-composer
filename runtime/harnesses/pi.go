@@ -158,8 +158,10 @@ func parsePiRunSummary(rawOutput string) piRunSummary {
 			continue
 		}
 
-		if message := findAssistantMessage(payload); message != nil {
-			if text := assistantText(message); text != "" {
+		message := findAssistantMessage(payload)
+		if message != nil {
+			text := assistantText(message)
+			if text != "" {
 				summary.LastAssistantMessage = text
 			}
 			stopReason := findFirstString(message, "stopReason")
@@ -172,7 +174,8 @@ func parsePiRunSummary(rawOutput string) piRunSummary {
 			} else if stopReason != "" {
 				summary.Error = ""
 			}
-			if usage, ok := message["usage"].(map[string]any); ok {
+			usage, ok := message["usage"].(map[string]any)
+			if ok {
 				summary.InputTokens = int64(numberValue(usage["input"]))
 				summary.OutputTokens = int64(numberValue(usage["output"]))
 				summary.CachedTokens = int64(numberValue(usage["cacheRead"]))
@@ -188,19 +191,23 @@ func parsePiRunSummary(rawOutput string) piRunSummary {
 func findAssistantMessage(value any) map[string]any {
 	switch typed := value.(type) {
 	case map[string]any:
-		if role, _ := typed["role"].(string); role == "assistant" {
-			if _, hasContent := typed["content"]; hasContent {
+		role, _ := typed["role"].(string)
+		if role == "assistant" {
+			_, hasContent := typed["content"]
+			if hasContent {
 				return typed
 			}
 		}
 		for _, child := range typed {
-			if found := findAssistantMessage(child); found != nil {
+			found := findAssistantMessage(child)
+			if found != nil {
 				return found
 			}
 		}
 	case []any:
 		for _, child := range typed {
-			if found := findAssistantMessage(child); found != nil {
+			found := findAssistantMessage(child)
+			if found != nil {
 				return found
 			}
 		}
@@ -219,8 +226,10 @@ func assistantText(message map[string]any) string {
 		if !ok {
 			continue
 		}
-		if blockType, _ := block["type"].(string); blockType == "text" {
-			if text, _ := block["text"].(string); text != "" {
+		blockType, _ := block["type"].(string)
+		if blockType == "text" {
+			text, _ := block["text"].(string)
+			if text != "" {
 				parts = append(parts, text)
 			}
 		}

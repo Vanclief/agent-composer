@@ -82,7 +82,8 @@ func Save(data Data) error {
 	tempPath := tempFile.Name()
 
 	_, err = tempFile.Write(raw)
-	if closeErr := tempFile.Close(); err == nil {
+	closeErr := tempFile.Close()
+	if err == nil {
 		err = closeErr
 	}
 	if err != nil {

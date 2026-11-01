@@ -47,7 +47,8 @@ func (api *API) prepareResume(ctx context.Context, request *CreateRequest) (*pre
 		}
 	}
 
-	if _, exists := snapshot.Nodes[target]; !exists {
+	_, exists := snapshot.Nodes[target]
+	if !exists {
 		return nil, ez.New(
 			ez.EINVALID,
 			"Node "+target+" does not exist in the workflow snapshot",
@@ -82,7 +83,8 @@ func (api *API) prepareResume(ctx context.Context, request *CreateRequest) (*pre
 		if row.Status != executionmodels.NodeExecutionStatusSucceeded {
 			continue
 		}
-		if _, exists := snapshot.Nodes[nodeID]; !exists {
+		_, exists := snapshot.Nodes[nodeID]
+		if !exists {
 			// The current spec no longer has this node; it re-runs.
 			continue
 		}
@@ -106,7 +108,8 @@ func (api *API) prepareResume(ctx context.Context, request *CreateRequest) (*pre
 		project = api.rt.ProjectDir()
 	}
 
-	if branch := strings.TrimSpace(request.Worktree); branch != "" {
+	branch := strings.TrimSpace(request.Worktree)
+	if branch != "" {
 		if api.worktrees == nil {
 			return nil, ez.New(ez.EINTERNAL, "Worktree manager is unavailable", nil)
 		}

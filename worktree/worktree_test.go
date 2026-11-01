@@ -52,7 +52,8 @@ func TestRepoRoot(t *testing.T) {
 	}
 
 	subdir := filepath.Join(repo, "sub")
-	if err := os.Mkdir(subdir, 0o755); err != nil {
+	err = os.Mkdir(subdir, 0o755)
+	if err != nil {
 		t.Fatal(err)
 	}
 	root, ok, _ = manager.RepoRoot(ctx, subdir)
@@ -131,7 +132,8 @@ func TestRemoteOnlyBranch(t *testing.T) {
 	// A bare origin with a branch that exists only remotely.
 	origin := t.TempDir()
 	cmd := exec.Command("git", "init", "--bare", origin)
-	if output, err := cmd.CombinedOutput(); err != nil {
+	output, err := cmd.CombinedOutput()
+	if err != nil {
 		t.Fatalf("bare init: %v\n%s", err, output)
 	}
 	run("remote", "add", "origin", origin)
