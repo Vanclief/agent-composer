@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/vanclief/agent-composer/executor/host"
 	"github.com/vanclief/agent-composer/models/agent"
 	"github.com/vanclief/agent-composer/runtime/harnesses"
 	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
@@ -227,7 +228,9 @@ type compiledNodeShape struct {
 
 func NewExecutor(project string) *Executor {
 	return &Executor{
-		NewHarness: harnesses.New,
+		NewHarness: func(kind agent.Harness) (harnesses.Harness, error) {
+			return harnesses.New(kind, host.New())
+		},
 		ProjectDir: strings.TrimSpace(project),
 	}
 }

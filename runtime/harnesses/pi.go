@@ -1,22 +1,21 @@
 package harnesses
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"os/exec"
 	"strings"
-	"syscall"
 
 	"github.com/google/uuid"
+	"github.com/vanclief/agent-composer/executor"
 	"github.com/vanclief/agent-composer/models/agent"
 	"github.com/vanclief/ez"
 )
 
 // PiCLI runs conversations through the pi coding agent
 // (`pi -p --mode json`), which emits a JSONL event stream.
-type PiCLI struct{}
+type PiCLI struct {
+	exec executor.Executor
+}
 
 type piConfig struct {
 	// Provider forces a provider (pi also accepts "provider/id" models).
@@ -97,32 +96,19 @@ func (c *PiCLI) Run(ctx context.Context, conversation *agent.Conversation, promp
 		args = append(args, prompt)
 	}
 
-	cmd := exec.CommandContext(ctx, "pi", args...)
-	cmd.Dir = workdir
+	run, runErr := runCommand(ctx, c.exec, executor.Command{
+		Name: "pi",
+		Args: args,
+		Dir:  workdir,
+	})
+	exitCode := run.ExitCode
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	runErr := cmd.Run()
-
-	exitCode := 0
-	if runErr != nil {
-		var exitErr *exec.ExitError
-		if errors.As(runErr, &exitErr) {
-			if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
-				exitCode = status.ExitStatus()
-			}
-		}
-	}
-
-	rawOutput := stdout.String()
+	rawOutput := string(run.Stdout)
 	summary := parsePiRunSummary(rawOutput)
 
 	harnessError := summary.Error
 	if harnessError == "" {
-		harnessError = strings.TrimSpace(stderr.String())
+		harnessError = strings.TrimSpace(string(run.Stderr))
 	}
 
 	result := &RunResult{
