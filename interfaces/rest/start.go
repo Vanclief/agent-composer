@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/rs/zerolog"
 
+	controlpanel "github.com/vanclief/agent-composer/control_panel"
 	"github.com/vanclief/agent-composer/interfaces/rest/handler"
 	"github.com/vanclief/agent-composer/interfaces/rest/server"
 	"github.com/vanclief/agent-composer/web"
@@ -57,6 +59,7 @@ func Start(ctx context.Context, s *server.Server, log zerolog.Logger) error {
 	if err != nil {
 		return err
 	}
+	usePanel(e)
 
 	// Config
 	e.HideBanner = true
@@ -135,11 +138,36 @@ func useSPA(e *echo.Echo) error {
 			path := c.Request().URL.Path
 			isAPI := path == "/api" || strings.HasPrefix(path, "/api/")
 			isLegacyRedirect := path == "/index.html" || path == "/workflow.html"
-			return isAPI || isLegacyRedirect
+			isPanel := path == "/panel" || strings.HasPrefix(path, "/panel/")
+			return isAPI || isLegacyRedirect || isPanel
 		},
 		HTML5:      true,
 		Filesystem: http.FS(dist),
 	}))
 
 	return nil
+}
+
+// usePanel serves the control panel at /panel/. Unknown paths get
+// index.html. For development, set AGC_PANEL_DIR to the control_panel
+// directory to serve it from disk, so edits show without rebuilding.
+func usePanel(e *echo.Echo) {
+	var panel fs.FS = controlpanel.FS
+	dir := os.Getenv("AGC_PANEL_DIR")
+	if dir != "" {
+		panel = os.DirFS(dir)
+	}
+
+	e.GET("/panel", func(c echo.Context) error {
+		return c.Redirect(http.StatusMovedPermanently, "/panel/")
+	})
+	e.GET("/panel/*", func(c echo.Context) error {
+		name := c.Param("*")
+		_, err := fs.Stat(panel, name)
+		if err != nil {
+			name = "index.html"
+		}
+
+		return echo.StaticFileHandler(name, panel)(c)
+	})
 }

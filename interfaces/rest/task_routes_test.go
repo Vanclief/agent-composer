@@ -24,7 +24,11 @@ import (
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 )
 
-func TestTaskAndMessagingRoutes(t *testing.T) {
+// newTaskRoutes serves the API routes over an in-memory database, with rt as
+// the Tasks runtime.
+func newTaskRoutes(t *testing.T, rt tasks.Runtime) (*echo.Echo, *bun.DB) {
+	t.Helper()
+
 	sqldb, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -52,12 +56,18 @@ func TestTaskAndMessagingRoutes(t *testing.T) {
 	server := &restserver.Server{
 		Ctrl:        ctrl,
 		RateLimiter: ratelimit.NewWindowCounter(10, 100),
-		TasksAPI:    tasks.NewAPI(ctrl, msg, tasks.SandboxRuntime{}, "", t.TempDir()),
+		TasksAPI:    tasks.NewAPI(ctrl, msg, rt, "", t.TempDir()),
 		Messaging:   msg,
 	}
 
 	e := echo.New()
 	addAPIRoutes(e, handler.NewHandler(server))
+
+	return e, db
+}
+
+func TestTaskAndMessagingRoutes(t *testing.T) {
+	e, _ := newTaskRoutes(t, tasks.SandboxRuntime{})
 
 	cases := []struct {
 		method string

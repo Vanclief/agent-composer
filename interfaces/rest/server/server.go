@@ -161,6 +161,10 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
 		defer cancel()
 		return s.TasksAPI.Start(ctx, nil, body)
+	case *tasks.ListTerminalsRequest:
+		return s.TasksAPI.ListTerminals(request.GetContext(), nil, body)
+	case *tasks.StartTerminalRequest:
+		return s.TasksAPI.StartTerminal(request.GetContext(), nil, body)
 	case *tasks.DeleteRequest:
 		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
 		defer cancel()
