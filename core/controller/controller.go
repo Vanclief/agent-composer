@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -10,7 +11,10 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/migrate"
 	"github.com/vanclief/agent-composer/models"
+	"github.com/vanclief/agent-composer/models/migrations"
 	"github.com/vanclief/compose/components/configurator"
 	"github.com/vanclief/compose/components/ctrl"
 	"github.com/vanclief/compose/drivers/databases/relational"
@@ -160,7 +164,7 @@ func (controller *Controller) Setup() error {
 
 		controller.DB = db
 
-		return nil
+		return controller.migrateDB()
 	}
 
 	sqliteConfig := &controller.Config.SQLite
@@ -179,6 +183,43 @@ func (controller *Controller) Setup() error {
 	}
 
 	controller.DB = db
+
+	return controller.migrateDB()
+}
+
+// migrateDB brings an existing database up to the current models. Tables
+// are created from the models only when missing, which never changes a table
+// that is already there, so models/migrations does that.
+func (controller *Controller) migrateDB() error {
+	err := runMigrations(context.Background(), controller.DB.DB, migrations.Migrations)
+	if err != nil {
+		controller.DB.Close() // nolint:errcheck // The migration error is the one that matters
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// runMigrations applies the pending migrations in set. Each one is marked
+// applied only once it succeeds, so a failed one runs again on the next start.
+func runMigrations(ctx context.Context, db *bun.DB, set *migrate.Migrations) error {
+	migrator := migrate.NewMigrator(db, set, migrate.WithMarkAppliedOnSuccess(true))
+
+	err := migrator.Init(ctx)
+	if err != nil {
+		msg := fmt.Sprintf("Could not create the database migrations tables: %s", err)
+		return ez.New(ez.EINTERNAL, msg, nil)
+	}
+
+	group, err := migrator.Migrate(ctx)
+	if err != nil {
+		msg := fmt.Sprintf("Database migration failed, agc cannot start until it applies: %s", err)
+		return ez.New(ez.EINTERNAL, msg, nil)
+	}
+
+	if !group.IsZero() {
+		log.Info().Str("Group", group.String()).Msg("Applied database migrations")
+	}
 
 	return nil
 }
