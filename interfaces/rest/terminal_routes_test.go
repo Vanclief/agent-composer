@@ -53,14 +53,19 @@ func (f *fakeRuntime) Status(ctx context.Context, name string) (string, error) {
 	return "stopped", nil
 }
 
-// fakeSandbox implements the terminal methods and Detach. Any other method
-// panics on the nil embedded interface.
+// fakeSandbox implements Run, the terminal methods and Detach. Any other
+// method panics on the nil embedded interface.
 type fakeSandbox struct {
 	executor.TerminalExecutor
 
 	mu       sync.Mutex
 	started  []executor.Command
 	detaches int
+}
+
+// Run succeeds, so task creation can write the agent config.
+func (s *fakeSandbox) Run(ctx context.Context, cmd executor.Command) (*executor.Result, error) {
+	return &executor.Result{}, nil
 }
 
 func (s *fakeSandbox) StartTerminal(ctx context.Context, cmd executor.Command) (*executor.Terminal, error) {

@@ -5,6 +5,13 @@ git, tmux, ripgrep, jq and a few shell tools, plus Claude Code and Codex CLI.
 It runs as user `agent` in `/home/agent`, and git authenticates over HTTPS
 through a credential helper that reads `GITHUB_TOKEN` (ADR 0004).
 
+When agc prepares a Task it merges first-run answers into the `agent` user's
+config after the clone and before `setup` (onboarding done, dark theme,
+bypass-permissions accepted, the repo or `/home/agent` trusted, in
+`~/.claude.json`, `~/.claude/settings.json` and `~/.codex/config.toml`), so
+`claude` and `codex` start working without waiting for a key press; the image
+needs `jq` for this.
+
 Build it with `images/agc-agent/build.sh [tag]`. The default tag is `latest`,
 which is what the Task default image `agc-agent` resolves to. The script needs
 `go`, `docker` and the microsandbox `msb` CLI, on `PATH` or at
