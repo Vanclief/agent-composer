@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Mock agc backend for developing the control panel without agc.
 
-Serves the panel at /panel/ and fakes the /api/tasks and /api/msg
-endpoints with in-memory data. No WebSocket: terminal sockets get a plain
+Serves the panel at /panel/ and fakes the /api/tasks, /api/specs and
+/api/msg endpoints with in-memory data. No WebSocket: terminal sockets get a plain
 404, so the panel shows its "closed" path.
 
     python3 control_panel/dev/mock_server.py [--port 8765]
@@ -37,11 +37,20 @@ def iso(t):
     return t.isoformat().replace("+00:00", "Z")
 
 
-def new_task(name, spec, status, age, status_error=""):
+def slugify(title):
+    # Same rule as the server (and slugify in app.js).
+    s = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+    if s[:1].isdigit():
+        s = "task-" + s
+    return s[:63].rstrip("-")
+
+
+def new_task(name, spec, status, age, status_error="", title=""):
     t = now() - age
     return {
         "id": "task_" + secrets.token_hex(6),
         "name": name,
+        "title": title or name,
         "spec": spec,
         "status": status,
         "status_error": status_error,
@@ -55,6 +64,7 @@ TASKS = {}
 TERMINALS = {}  # task name -> list of {id, command, running}
 MESSAGES = []
 PARTICIPANTS = {}  # id -> {id, name, task, human, active}
+SPECS = {}  # name -> yaml
 NEXT_ID = [1]
 
 
@@ -71,7 +81,8 @@ def seed():
         "volumes": ["go-mod-cache:/home/agent/go/pkg/mod:rw"],
         "channels": ["#releases", "#alerts:read"],
     }
-    TASKS["review-42"] = new_task("review-42", base, "running", timedelta(minutes=40))
+    TASKS["review-42"] = new_task("review-42", base, "running", timedelta(minutes=40), title="Review 42")
+    # A task from before titles existed: title equals name.
     TASKS["docs-pass"] = new_task("docs-pass", dict(base, cpus=1, memory=2048, ref="docs"), "stopped", timedelta(days=2))
     TASKS["flaky-ci"] = new_task(
         "flaky-ci",
@@ -79,7 +90,9 @@ def seed():
         "crashed",
         timedelta(hours=3),
         "vm exited with status 137 (out of memory)",
+        title="Flaky CI",
     )
+    SPECS["backend-review"] = "image: agc-agent\ncpus: 2\nmemory: 4096\nrepo: github.com/vanclief/agent-composer\nref: master\n"
     TERMINALS["review-42"] = [
         {"id": "job_" + secrets.token_hex(4), "command": ["claude"], "running": True},
         {"id": "job_" + secrets.token_hex(4), "command": ["bash"], "running": False},
@@ -210,6 +223,9 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         self.dispatch("POST")
 
+    def do_PUT(self):
+        self.dispatch("PUT")
+
     def do_DELETE(self):
         self.dispatch("DELETE")
 
@@ -218,6 +234,8 @@ class Handler(SimpleHTTPRequestHandler):
     def api(self, method, parts, query):
         if parts and parts[0] == "tasks":
             return self.tasks_api(method, parts[1:])
+        if parts and parts[0] == "specs":
+            return self.specs_api(method, parts[1:])
         if parts and parts[0] == "msg":
             return self.msg_api(method, parts[1:], query)
         raise msg_error(404, "no such endpoint")
@@ -245,9 +263,37 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.terminals_api(method, task, rest[2:], body)
         raise task_error(404, "no such endpoint")
 
+    def specs_api(self, method, rest):
+        body = self.read_json() if method == "PUT" else {}
+        with lock:
+            if not rest and method == "GET":
+                return 200, {"specs": [{"name": n, "yaml": SPECS[n]} for n in sorted(SPECS)]}
+            if len(rest) != 1:
+                raise task_error(404, "no such endpoint")
+            name = slugify(rest[0])
+            if method == "PUT":
+                text = str(body.get("yaml") or "")
+                # Stand-in for the server's YAML validation.
+                if not re.search(r"^image:\s*\S", text, re.M):
+                    raise task_error(400, "spec is invalid: image is required")
+                if not name:
+                    raise task_error(400, "spec name %r needs at least one letter or digit" % rest[0])
+                SPECS[name] = text
+                return 200, {"name": name, "yaml": text}
+            if name not in SPECS:
+                raise task_error(404, 'spec "%s" not found' % rest[0])
+            if method == "GET":
+                return 200, {"name": name, "yaml": SPECS[name]}
+            if method == "DELETE":
+                return 200, {"name": name, "yaml": SPECS.pop(name)}
+        raise task_error(404, "no such endpoint")
+
     def create_task(self, body):
-        name = str(body.get("name") or "")
+        title = str(body.get("title") or "").strip()
+        name = str(body.get("name") or "") or slugify(title)
         spec = body.get("spec") or {}
+        if not name:
+            raise task_error(400, "title %r needs at least one letter or digit" % title)
         if not NAME_RE.match(name):
             raise task_error(400, "name %r is invalid: use 1-64 lowercase letters, digits, _ or -" % name)
         if name in TASKS:
@@ -264,7 +310,7 @@ class Handler(SimpleHTTPRequestHandler):
         for ch in spec.get("channels") or []:
             if not CHANNEL_RE.match(str(ch).removesuffix(":read")):
                 raise task_error(400, 'channel "%s" is invalid: start with # and use lowercase letters, digits, _ or -' % ch)
-        task = new_task(name, spec, "starting", timedelta(0))
+        task = new_task(name, spec, "starting", timedelta(0), title=title)
         task["_ready_at"] = time.time() + 2
         TASKS[name] = task
         TERMINALS[name] = []

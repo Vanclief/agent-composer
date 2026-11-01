@@ -103,7 +103,7 @@
       <div class="flex items-center gap-3">
         <div class="relative w-full max-w-sm">
           <span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500"><i data-lucide="search"></i></span>
-          <input x-model="query" placeholder="Search by name"
+          <input x-model="query" placeholder="Search by title or name"
                  class="w-full rounded-md border border-zinc-200 bg-transparent py-1.5 pl-8 pr-3 text-sm outline-none placeholder:text-zinc-500 focus:border-zinc-400 dark:border-zinc-800 dark:focus:border-zinc-600" />
         </div>
         <span class="text-xs text-zinc-500">Refreshes every 5s</span>
@@ -117,7 +117,7 @@
         <table class="w-full text-sm">
           <thead class="sticky top-0 whitespace-nowrap bg-zinc-50 text-left text-xs font-medium text-zinc-500 dark:bg-zinc-900">
             <tr class="border-b border-zinc-200 dark:border-zinc-800">
-              <th class="px-3 py-2">Name</th>
+              <th class="px-3 py-2">Task</th>
               <th class="px-3 py-2">Status</th>
               <th class="px-3 py-2">Image</th>
               <th class="px-3 py-2">Resources</th>
@@ -129,8 +129,9 @@
           <tbody>
             <template x-for="t in filteredTasks" :key="t.id || t.name">
               <tr class="border-b border-zinc-100 align-top hover:bg-zinc-50 dark:border-zinc-800/70 dark:hover:bg-zinc-900/50">
-                <td class="whitespace-nowrap px-3 py-2.5 font-medium">
-                  <a :href="taskHref(t.name)" class="hover:underline" x-text="t.name"></a>
+                <td class="whitespace-nowrap px-3 py-2.5">
+                  <a :href="taskHref(t.name)" class="font-medium hover:underline" x-text="taskTitle(t)"></a>
+                  <div class="font-mono text-xs text-zinc-500" x-text="t.name"></div>
                 </td>
                 <td class="px-3 py-2.5">
                   <div class="flex items-center gap-2 whitespace-nowrap">
@@ -195,18 +196,25 @@
         </div>
 
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="flex min-w-0 items-center gap-3">
-            <h1 class="truncate text-2xl font-semibold tracking-tight" x-text="taskName"></h1>
-            <template x-if="task">
-              <div class="flex items-center gap-2">
-                <span class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs" :class="pillClass(task.status)">
-                  <span class="h-1.5 w-1.5 rounded-full" :class="dotClass(task.status)"></span>
-                  <span x-text="task.status || '(no status)'"></span>
-                </span>
-                <span x-show="task.status === 'stopped'" class="text-xs text-zinc-500">saved: disk kept, CPU and memory freed</span>
-              </div>
-            </template>
-            <span x-show="!task && !taskError" class="text-xs text-zinc-500">loading…</span>
+          <div class="flex min-w-0 flex-col gap-0.5">
+            <div class="flex min-w-0 items-center gap-3">
+              <h1 class="truncate text-2xl font-semibold tracking-tight" x-text="task && task.name === taskName ? taskTitle(task) : taskName"></h1>
+              <template x-if="task">
+                <div class="flex items-center gap-2">
+                  <span class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs" :class="pillClass(task.status)">
+                    <span class="h-1.5 w-1.5 rounded-full" :class="dotClass(task.status)"></span>
+                    <span x-text="task.status || '(no status)'"></span>
+                  </span>
+                  <span x-show="task.status === 'stopped'" class="text-xs text-zinc-500">saved: disk kept, CPU and memory freed</span>
+                </div>
+              </template>
+              <span x-show="!task && !taskError" class="text-xs text-zinc-500">loading…</span>
+            </div>
+            <div class="flex min-w-0 items-center gap-1.5 font-mono text-xs text-zinc-500">
+              <span class="truncate" x-text="taskName"></span>
+              <span>·</span>
+              <a :href="taskHref(taskName, 'messages')" class="truncate hover:text-zinc-900 hover:underline dark:hover:text-zinc-100" x-text="'#' + taskName"></a>
+            </div>
           </div>
           <template x-if="task">
             <div class="flex items-center gap-2 text-sm">
@@ -309,7 +317,21 @@
 
       <!-- Spec tab -->
       <div x-show="tab === 'spec'" class="min-h-0 flex-1 overflow-auto px-6 py-4">
-        <p class="mb-2 text-xs text-zinc-500">Read-only. The spec the task was created from.</p>
+        <div class="mb-2 flex flex-wrap items-center gap-2 text-xs">
+          <p class="text-zinc-500">Read-only. The spec the task was created from.</p>
+          <button type="button" x-show="task && !specSave.open" @click="openSpecSave()" class="rounded border border-zinc-200 px-2 py-0.5 hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">Save as spec…</button>
+          <template x-if="specSave.open">
+            <div class="flex items-center gap-1.5">
+              <input x-ref="taskSpecName" x-model="specSave.name" @keydown.enter.prevent="saveSpec()" @keydown.escape="resetSpecSave()" placeholder="backend-review"
+                     class="w-40 rounded border border-zinc-200 bg-transparent px-1.5 py-0.5 font-mono outline-none focus:border-zinc-400 dark:border-zinc-800" />
+              <button type="button" @click="saveSpec()" :disabled="specSave.busy || !specSave.name.trim()" class="rounded bg-zinc-900 px-2 py-0.5 font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                      x-text="specSave.busy ? 'Saving…' : (specSave.name.trim() ? 'Save' : 'Name it to save')"></button>
+              <button type="button" @click="resetSpecSave()" class="text-zinc-500 underline">Cancel</button>
+            </div>
+          </template>
+          <span x-show="specSave.saved" class="text-zinc-500">Saved as <span class="font-mono" x-text="specSave.saved"></span>. Pick it under Start from when creating a task.</span>
+        </div>
+        <div x-show="specSave.error" class="mb-2 whitespace-pre-wrap rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300" x-text="specSave.error"></div>
         <pre class="rounded-md border border-zinc-200 bg-zinc-50 p-4 font-mono text-xs leading-relaxed dark:border-zinc-800 dark:bg-zinc-900" x-text="task ? specYAML(task.spec) : 'loading…'"></pre>
       </div>
     </div>
@@ -395,19 +417,54 @@
 </div>
 
 <!-- ============ New task modal ============ -->
-<div x-show="create.open" x-cloak class="fixed inset-0 z-40 grid place-items-center p-4" @keydown.escape.window="create.open = false">
-  <div @click="create.open = false" class="absolute inset-0 bg-black/60"></div>
+<div x-show="create.open" x-cloak class="fixed inset-0 z-40 grid place-items-center p-4" @keydown.escape.window="create.open && closeCreate()">
+  <div @click="closeCreate()" class="absolute inset-0 bg-black/60"></div>
   <form @submit.prevent="submitCreate()" class="relative flex max-h-full w-full max-w-2xl flex-col rounded-lg border border-zinc-200 bg-white text-sm shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
     <div class="flex items-center justify-between border-b border-zinc-200 px-5 py-3 dark:border-zinc-800">
       <h2 class="font-semibold">New task</h2>
-      <button type="button" @click="create.open = false" class="rounded p-1 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800"><i data-lucide="x"></i></button>
+      <button type="button" @click="closeCreate()" class="rounded p-1 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800"><i data-lucide="x"></i></button>
     </div>
     <div class="flex min-h-0 flex-col gap-4 overflow-y-auto px-5 py-4">
       <label class="flex flex-col gap-1.5">
-        <span class="font-medium">Name</span>
-        <input x-ref="createName" x-model="create.name" placeholder="review-42" class="rounded-md border border-zinc-200 bg-transparent px-3 py-1.5 font-mono outline-none focus:border-zinc-400 dark:border-zinc-800" />
-        <span class="text-xs text-zinc-500">Also the VM name and the task's channel (<span class="font-mono" x-text="'#' + (create.name.trim() || 'name')"></span>).</span>
+        <span class="font-medium">Title</span>
+        <input x-ref="createTitle" x-model="create.title" placeholder="Review facebook ads" class="rounded-md border border-zinc-200 bg-transparent px-3 py-1.5 outline-none focus:border-zinc-400 dark:border-zinc-800" />
+        <span x-show="createSlug" class="text-xs text-zinc-500">VM and channel: <span class="font-mono" x-text="'#' + createSlug"></span></span>
+        <span x-show="!createSlug" class="text-xs text-zinc-500">Title needs at least one letter or digit</span>
       </label>
+      <div class="flex flex-col gap-1.5 text-xs">
+        <div class="flex flex-wrap items-center gap-2">
+          <label for="create-start-from" class="text-sm font-medium">Start from</label>
+          <select id="create-start-from" @change="pickSpec($event.target.value)" :disabled="specs.loading || specs.busy"
+                  class="rounded-md border border-zinc-200 bg-white px-2 py-1 text-sm outline-none focus:border-zinc-400 disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-950">
+            <option value="" :selected="!specs.selected">Blank example</option>
+            <template x-for="s in specs.list" :key="s.name">
+              <option :value="s.name" :selected="s.name === specs.selected" x-text="s.name"></option>
+            </template>
+          </select>
+          <button type="button" x-show="!specSave.open" @click="openSpecSave()" class="rounded border border-zinc-200 px-2 py-1 hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">Save spec…</button>
+          <template x-if="specSave.open">
+            <div class="flex items-center gap-1.5">
+              <input x-ref="createSpecName" x-model="specSave.name" @keydown.enter.prevent="saveSpec()" @keydown.escape.stop="resetSpecSave()" placeholder="backend-review"
+                     class="w-40 rounded border border-zinc-200 bg-transparent px-1.5 py-1 font-mono outline-none focus:border-zinc-400 dark:border-zinc-800" />
+              <button type="button" @click="saveSpec()" :disabled="specSave.busy || !specSave.name.trim()" class="rounded bg-zinc-900 px-2 py-1 font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                      x-text="specSave.busy ? 'Saving…' : (specSave.name.trim() ? 'Save' : 'Name it to save')"></button>
+              <button type="button" @click="resetSpecSave()" class="text-zinc-500 underline">Cancel</button>
+            </div>
+          </template>
+        </div>
+        <p x-show="specs.loading" class="text-zinc-500">Loading saved specs…</p>
+        <p x-show="!specs.loading && specs.loaded && specs.list.length === 0" class="text-zinc-500">No saved specs yet. Save the current spec to reuse it.</p>
+        <p x-show="specSave.saved && !specSave.open" class="text-zinc-500">Saved as <span class="font-mono" x-text="specSave.saved"></span>.</p>
+        <div x-show="specs.selected" class="text-zinc-500">
+          <button type="button" x-show="!specs.confirmDelete" @click="specs.confirmDelete = true" class="underline hover:text-red-600 dark:hover:text-red-400">Delete saved spec</button>
+          <span x-show="specs.confirmDelete">
+            Delete <span class="font-mono" x-text="specs.selected"></span>?
+            <button type="button" @click="deleteSpec()" :disabled="specs.busy" class="text-red-600 underline disabled:opacity-60 dark:text-red-400" x-text="specs.busy ? 'Deleting…' : 'Yes'"></button>
+            /
+            <button type="button" @click="specs.confirmDelete = false" class="underline">No</button>
+          </span>
+        </div>
+      </div>
       <label class="flex flex-col gap-1.5">
         <span class="flex items-center justify-between">
           <span class="font-medium">Spec (YAML)</span>
@@ -418,10 +475,10 @@
       <div x-show="create.error" class="whitespace-pre-wrap rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-red-700 dark:text-red-300" x-text="create.error"></div>
     </div>
     <div class="flex justify-end gap-2 border-t border-zinc-200 px-5 py-3 dark:border-zinc-800">
-      <button type="button" @click="create.open = false" class="rounded-md border border-zinc-200 px-3 py-1.5 hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">Cancel</button>
-      <button type="submit" :disabled="create.busy || !create.name.trim()"
+      <button type="button" @click="closeCreate()" class="rounded-md border border-zinc-200 px-3 py-1.5 hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900">Cancel</button>
+      <button type="submit" :disabled="create.busy || !createSlug"
               class="rounded-md bg-zinc-900 px-3 py-1.5 font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-              x-text="create.busy ? 'Creating…' : (create.name.trim() ? 'Create task' : 'Enter a name to create')"></button>
+              x-text="create.busy ? 'Creating…' : (createSlug ? 'Create task' : 'Enter a title to create')"></button>
     </div>
   </form>
 </div>

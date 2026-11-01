@@ -81,6 +81,14 @@ function taskPath(name) {
   return '/api/tasks/' + enc(name)
 }
 
+// Mirrors the server's title -> name rule: the name is the VM name, the
+// task's #channel and the URL segment. Empty means no letters or digits.
+function slugify(title) {
+  let s = (title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  if (/^[0-9]/.test(s)) s = 'task-' + s
+  return s.slice(0, 63).replace(/-+$/, '')
+}
+
 function wsURL(path) {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
   return proto + '//' + location.host + path
@@ -149,7 +157,10 @@ function panel() {
     me: { name: localStorage.getItem(NAME_KEY) || 'franco', id: localStorage.getItem(PARTICIPANT_KEY) || '' },
 
     // Modals
-    create: { open: false, name: '', yaml: SPEC_EXAMPLE, error: '', busy: false },
+    create: { open: false, title: '', yaml: SPEC_EXAMPLE, error: '', busy: false },
+    specs: { list: [], loading: false, loaded: false, selected: '', confirmDelete: false, busy: false },
+    // Inline "save spec" form, shared by the create modal and the Spec tab.
+    specSave: { open: false, name: '', busy: false, error: '', saved: '' },
     confirmDelete: null, // task name
 
     init() {
@@ -226,6 +237,7 @@ function panel() {
           this.terminalsLoaded = false
           this.terminalsError = ''
           this.newTerm = { command: 'claude', dir: '/home/agent', busy: false, error: '' }
+          this.resetSpecSave()
         }
         this.loadTask(taskChanged)
         if (tab === 'terminals') this.loadTerminals()
@@ -254,7 +266,8 @@ function panel() {
       }
       const c = [{ label: 'Tasks', href: '#/tasks' }]
       if (this.view === 'task') {
-        c.push({ label: this.taskName, href: this.taskHref(this.taskName) })
+        const label = this.task && this.task.name === this.taskName ? this.taskTitle(this.task) : this.taskName
+        c.push({ label, href: this.taskHref(this.taskName) })
         if (this.terminalId) c.push({ label: this.terminalId, href: this.terminalHref(this.terminalId) })
       }
       return c
@@ -297,10 +310,14 @@ function panel() {
 
     // ---------- tasks ----------
 
+    taskTitle(t) {
+      return (t && (t.title || t.name)) || ''
+    },
+
     get filteredTasks() {
       const q = this.query.trim().toLowerCase()
       if (!q) return this.tasks
-      return this.tasks.filter((t) => (t.name || '').toLowerCase().includes(q))
+      return this.tasks.filter((t) => (t.title || '').toLowerCase().includes(q) || (t.name || '').toLowerCase().includes(q))
     },
 
     async loadTasks() {
@@ -371,8 +388,20 @@ function panel() {
     },
 
     openCreate() {
-      this.create = { open: true, name: '', yaml: this.create.yaml || SPEC_EXAMPLE, error: '', busy: false }
-      this.$nextTick(() => this.$refs.createName && this.$refs.createName.focus())
+      this.create = { open: true, title: '', yaml: this.create.yaml || SPEC_EXAMPLE, error: '', busy: false }
+      this.specs.confirmDelete = false
+      this.resetSpecSave()
+      this.loadSpecs()
+      this.$nextTick(() => this.$refs.createTitle && this.$refs.createTitle.focus())
+    },
+
+    closeCreate() {
+      this.create.open = false
+      this.resetSpecSave()
+    },
+
+    get createSlug() {
+      return slugify(this.create.title)
     },
 
     resetCreateYAML() {
@@ -380,7 +409,8 @@ function panel() {
     },
 
     async submitCreate() {
-      const name = this.create.name.trim()
+      const title = this.create.title.trim()
+      const name = slugify(title)
       if (!name) return
       let spec
       try {
@@ -400,9 +430,10 @@ function panel() {
       this.create.busy = true
       this.create.error = ''
       try {
-        const t = await api('POST', '/api/tasks', { name, spec })
-        this.create.open = false
+        const t = await api('POST', '/api/tasks', { title, spec })
+        this.closeCreate()
         this.create.yaml = SPEC_EXAMPLE
+        this.specs.selected = ''
         location.hash = this.taskHref(t && t.name ? t.name : name)
       } catch (e) {
         this.create.error = e.message
@@ -416,6 +447,86 @@ function panel() {
         return jsyaml.dump(spec, { lineWidth: -1 })
       } catch (e) {
         return JSON.stringify(spec, null, 2)
+      }
+    },
+
+    // ---------- saved specs ----------
+
+    async loadSpecs() {
+      this.specs.loading = true
+      try {
+        const data = await api('GET', '/api/specs')
+        this.specs.list = (data && data.specs) || []
+        this.specs.loaded = true
+        if (!this.specs.list.some((s) => s.name === this.specs.selected)) this.specs.selected = ''
+      } catch (e) {
+        this.create.error = e.message
+      }
+      this.specs.loading = false
+    },
+
+    // A saved spec is only a starting point: editing the YAML afterwards
+    // keeps the selection.
+    pickSpec(name) {
+      const s = this.specs.list.find((x) => x.name === name)
+      this.specs.selected = s ? s.name : ''
+      this.specs.confirmDelete = false
+      this.create.yaml = s ? s.yaml : SPEC_EXAMPLE
+    },
+
+    async deleteSpec() {
+      const name = this.specs.selected
+      if (!name) return
+      this.specs.busy = true
+      this.create.error = ''
+      try {
+        await api('DELETE', '/api/specs/' + enc(name))
+        this.specs.selected = ''
+        this.specs.confirmDelete = false
+        await this.loadSpecs()
+      } catch (e) {
+        this.create.error = e.message
+      }
+      this.specs.busy = false
+    },
+
+    resetSpecSave() {
+      this.specSave = { open: false, name: '', busy: false, error: '', saved: '' }
+    },
+
+    openSpecSave() {
+      this.resetSpecSave()
+      this.specSave.open = true
+      this.$nextTick(() => {
+        const el = this.create.open ? this.$refs.createSpecName : this.$refs.taskSpecName
+        if (el) el.focus()
+      })
+    },
+
+    // Saves the create modal's YAML when the modal is open, otherwise the
+    // open task's spec. Errors land in the box of whichever is on screen.
+    async saveSpec() {
+      const name = this.specSave.name.trim()
+      if (!name || this.specSave.busy) return
+      const inModal = this.create.open
+      const yaml = inModal ? this.create.yaml : this.specYAML(this.task && this.task.spec)
+      this.specSave.busy = true
+      this.specSave.error = ''
+      if (inModal) this.create.error = ''
+      try {
+        const s = await api('PUT', '/api/specs/' + enc(name), { yaml })
+        const saved = (s && s.name) || name
+        this.resetSpecSave()
+        this.specSave.saved = saved
+        if (inModal) {
+          await this.loadSpecs()
+          this.specs.selected = saved
+          this.specs.confirmDelete = false
+        }
+      } catch (e) {
+        this.specSave.busy = false
+        if (inModal) this.create.error = e.message
+        else this.specSave.error = e.message
       }
     },
 
