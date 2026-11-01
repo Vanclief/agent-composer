@@ -10,6 +10,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/filesystem"
 	"github.com/vanclief/agent-composer/core/resources/harnessinfo"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
+	knowledgeapi "github.com/vanclief/agent-composer/core/resources/knowledge"
 	settingsapi "github.com/vanclief/agent-composer/core/resources/settings"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
@@ -34,10 +35,11 @@ type Server struct {
 	HarnessesAPI  *harnessinfo.API
 	SettingsAPI   *settingsapi.API
 	TasksAPI      *tasks.API
+	KnowledgeAPI  *knowledgeapi.API
 	Messaging     *messaging.Service
 }
 
-func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API, tasksAPI *tasks.API, msg *messaging.Service) *Server {
+func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API, tasksAPI *tasks.API, knowledgeAPI *knowledgeapi.API, msg *messaging.Service) *Server {
 	if rootCtx == nil {
 		rootCtx = context.Background()
 	}
@@ -54,6 +56,7 @@ func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.A
 		HarnessesAPI:  harnessinfo.NewAPI(),
 		SettingsAPI:   settingsapi.NewAPI(),
 		TasksAPI:      tasksAPI,
+		KnowledgeAPI:  knowledgeAPI,
 		Messaging:     msg,
 	}
 }
@@ -179,6 +182,13 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.TasksAPI.DeleteSpec(request.GetContext(), nil, body)
 	case *tasks.ListSecretsRequest:
 		return s.TasksAPI.ListSecrets(request.GetContext(), nil, body)
+
+	case *knowledgeapi.ListRequest:
+		return s.KnowledgeAPI.List(request.GetContext(), nil, body)
+	case *knowledgeapi.WhyRequest:
+		return s.KnowledgeAPI.Why(request.GetContext(), nil, body)
+	case *knowledgeapi.DoubtRequest:
+		return s.KnowledgeAPI.Doubt(request.GetContext(), nil, body)
 
 	default:
 		return nil, ez.New(ez.EINVALID, "Unsupported request type", nil)

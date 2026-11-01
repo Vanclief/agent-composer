@@ -357,6 +357,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/knowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List evidence, beliefs, decisions and rules
+         * @description Loads evidence/, beliefs/, decisions/ and rules/ under the knowledge directory (~/.agent_composer/knowledge, or AGC_KNOWLEDGE_DIR) on every request, so edits show live. A missing directory lists nothing. A file that does not validate is a 400 whose message is the validation error, naming the file and the id.
+         */
+        get: operations["listKnowledge"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge/why/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Follow a belief down to its evidence */
+        get: operations["knowledgeWhy"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge/doubt/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List what rests on a belief or a piece of evidence
+         * @description Everything that falls if the belief or evidence is wrong, directly or through other beliefs and decisions. For evidence, the beliefs citing it come first. Nothing is changed.
+         */
+        get: operations["knowledgeDoubt"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -626,6 +683,105 @@ export interface components {
             /** @description Hosts the secret is bound to by default; empty when agc knows none. */
             hosts: string[];
         };
+        /**
+         * @description How what a belief, decision or rule rests on is grounded: grounded (live evidence under every leaf), opinion (a leaf with no evidence) or in_doubt (a leaf whose evidence is all retracted; wins over opinion).
+         * @enum {string}
+         */
+        KnowledgeLabel: "grounded" | "opinion" | "in_doubt";
+        Retraction: {
+            who: string;
+            when: string;
+            why: string;
+        };
+        KnowledgeSet: {
+            /** @description The knowledge directory loaded. */
+            dir: string;
+            evidence: components["schemas"]["Evidence"][];
+            beliefs: components["schemas"]["Belief"][];
+            decisions: components["schemas"]["Decision"][];
+            rules: components["schemas"]["Rule"][];
+        };
+        /** @description Something seen. Retracted evidence stays in its file but grounds nothing. */
+        Evidence: {
+            id: string;
+            text: string;
+            who: string;
+            when: string;
+            /** @description A URL, a file path or a command whose output was seen; empty when unset. */
+            source: string;
+            retracted: components["schemas"]["Retraction"] | null;
+            /** @description Ids of the beliefs citing this evidence. */
+            cited_by: string[];
+            file: string;
+        };
+        Belief: {
+            id: string;
+            text: string;
+            /** @description Ids of the beliefs this one rests on. */
+            because: string[];
+            /** @description Ids of the evidence this belief cites. */
+            evidence: string[];
+            label: components["schemas"]["KnowledgeLabel"];
+            /** @description Leaf beliefs with no evidence. */
+            opinions: string[];
+            /** @description Leaf beliefs whose evidence is all retracted. */
+            doubted: string[];
+            /** @description The retracted evidence of the doubted leaves. */
+            retracted: string[];
+            file: string;
+        };
+        Decision: {
+            id: string;
+            text: string;
+            /** @description Ids of the beliefs and decisions this one rests on. */
+            because: string[];
+            /** @description Path of the ADR; empty when unset. */
+            adr: string;
+            decided: {
+                who: string;
+                when: string;
+            };
+            label: components["schemas"]["KnowledgeLabel"];
+            opinions: string[];
+            doubted: string[];
+            file: string;
+        };
+        Rule: {
+            /** @description The subject of the ruleset the rule is in. */
+            subject: string;
+            id: string;
+            text: string;
+            /** @description Shell command whose exit status says whether the rule holds; never run by the API. */
+            check: string;
+            because: string[];
+            /**
+             * @description mechanical when the rule has a check, manual otherwise.
+             * @enum {string}
+             */
+            kind: "mechanical" | "manual";
+            label: components["schemas"]["KnowledgeLabel"];
+            opinions: string[];
+            doubted: string[];
+            file: string;
+        };
+        /** @description A belief, the evidence it cites and the beliefs it rests on, each a Reason. */
+        Reason: {
+            id: string;
+            text: string;
+            evidence: {
+                id: string;
+                text: string;
+                who: string;
+                when: string;
+                retracted: components["schemas"]["Retraction"] | null;
+            }[];
+            because: components["schemas"]["Reason"][];
+        };
+        Doubted: {
+            beliefs: components["schemas"]["Belief"][];
+            decisions: components["schemas"]["Decision"][];
+            rules: components["schemas"]["Rule"][];
+        };
         DeleteTaskResponse: {
             deleted: boolean;
             name: string;
@@ -694,6 +850,8 @@ export interface components {
         WorkflowSlugParam: string;
         /** @description Task UUID or task name. A value that parses as a UUID is looked up by id. */
         TaskIdParam: string;
+        /** @description A belief id, or for doubt also a piece of evidence's id. */
+        KnowledgeIdParam: string;
     };
     requestBodies: never;
     headers: never;
@@ -1517,6 +1675,80 @@ export interface operations {
             };
             400: components["responses"]["Error"];
             403: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    listKnowledge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Everything in the knowledge directory, in load order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSet"];
+                };
+            };
+            400: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    knowledgeWhy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A belief id, or for doubt also a piece of evidence's id. */
+                id: components["parameters"]["KnowledgeIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The belief, the evidence it cites and the beliefs it rests on. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reason"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    knowledgeDoubt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A belief id, or for doubt also a piece of evidence's id. */
+                id: components["parameters"]["KnowledgeIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What rests on the id. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Doubted"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };
     };

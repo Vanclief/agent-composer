@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"io"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
+	"github.com/vanclief/agent-composer/core/resources/knowledge"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
 	"github.com/vanclief/agent-composer/messaging"
@@ -25,13 +27,14 @@ const tickTime = 1 * time.Minute
 
 // Stack represents the core services required by any interface.
 type Stack struct {
-	Controller  *controller.Controller
-	Scheduler   *scheduler.Scheduler
-	Runtime     *runtime.Runtime
-	HooksAPI    *hooks.API
-	WorkflowAPI *workflowapi.API
-	Messaging   *messaging.Service
-	TasksAPI    *tasks.API
+	Controller   *controller.Controller
+	Scheduler    *scheduler.Scheduler
+	Runtime      *runtime.Runtime
+	HooksAPI     *hooks.API
+	WorkflowAPI  *workflowapi.API
+	Messaging    *messaging.Service
+	TasksAPI     *tasks.API
+	KnowledgeAPI *knowledge.API
 }
 
 type StackOptions struct {
@@ -94,14 +97,23 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		log.Warn().Err(err).Msg("task messaging resume failed")
 	}
 
+	// The knowledge directory holds evidence/, beliefs/, decisions/ and
+	// rules/ (ADR 0006).
+	knowledgeDir := os.Getenv("AGC_KNOWLEDGE_DIR")
+	if knowledgeDir == "" {
+		knowledgeDir = filepath.Join(home, "knowledge")
+	}
+	knowledgeAPI := knowledge.NewAPI(knowledgeDir)
+
 	return &Stack{
-		Controller:  ctrl,
-		Scheduler:   sch,
-		Runtime:     rt,
-		HooksAPI:    hooksAPI,
-		WorkflowAPI: workflowAPI,
-		Messaging:   msg,
-		TasksAPI:    tasksAPI,
+		Controller:   ctrl,
+		Scheduler:    sch,
+		Runtime:      rt,
+		HooksAPI:     hooksAPI,
+		WorkflowAPI:  workflowAPI,
+		Messaging:    msg,
+		TasksAPI:     tasksAPI,
+		KnowledgeAPI: knowledgeAPI,
 	}, nil
 }
 
