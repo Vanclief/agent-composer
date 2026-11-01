@@ -83,6 +83,11 @@ blocked when sent to a non-allowed host.
 8. **agc is the only daemon.** microsandbox has none; each sandbox is a child
    process with state under `~/.microsandbox`. agc restarts the sandboxes
    that were running when the host comes back.
+9. **A Task has a human title; its name is a slug.** `name` is derived from
+   the title when not given ("Review facebook ads" becomes
+   `review-facebook-ads`) and is the sandbox name, the `#name` channel and
+   the socket file. Reusable specs are saved verbatim, comments included, in
+   `~/.agent_composer/config/specs/<name>.yaml`.
 
 ## Rationale
 

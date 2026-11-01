@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	validation "github.com/go-ozzo/ozzo-validation"
 	"github.com/rs/zerolog/log"
 	"github.com/vanclief/ez"
 
@@ -18,20 +17,16 @@ import (
 // maxStderrBytes keeps the tail of a failed clone or setup in the error.
 const maxStderrBytes = 2000
 
+// CreateRequest needs a title or a name. A missing name is the title's
+// slug, a missing title is the name.
 type CreateRequest struct {
-	Name string    `json:"name"`
-	Spec task.Spec `json:"spec"`
+	Title string    `json:"title"`
+	Name  string    `json:"name"`
+	Spec  task.Spec `json:"spec"`
 }
 
 func (r CreateRequest) Validate() error {
-	err := validation.ValidateStruct(&r,
-		validation.Field(&r.Name, validation.Required),
-	)
-	if err != nil {
-		return ez.New(ez.EINVALID, err.Error(), nil)
-	}
-
-	err = taskmodels.ValidateName(r.Name)
+	_, _, err := r.resolve()
 	if err != nil {
 		return ez.Wrap(err)
 	}
@@ -44,6 +39,40 @@ func (r CreateRequest) Validate() error {
 	return nil
 }
 
+// resolve returns the title and the name the Task gets.
+func (r CreateRequest) resolve() (string, string, error) {
+	title := strings.TrimSpace(r.Title)
+	name := strings.TrimSpace(r.Name)
+
+	if title == "" && name == "" {
+		return "", "", ez.New(ez.EINVALID, "title or name is required", nil)
+	}
+
+	if name == "" {
+		slug, err := taskmodels.Slug(title)
+		if err != nil {
+			return "", "", ez.Wrap(err)
+		}
+		name = slug
+	}
+
+	if title == "" {
+		title = name
+	}
+
+	err := taskmodels.ValidateTitle(title)
+	if err != nil {
+		return "", "", ez.Wrap(err)
+	}
+
+	err = taskmodels.ValidateName(name)
+	if err != nil {
+		return "", "", ez.Wrap(err)
+	}
+
+	return title, name, nil
+}
+
 // Create boots the Task's sandbox, clones its repo and runs its setup.
 // The messaging listener starts first so the guest can use it at once.
 // A failure after the sandbox exists removes the sandbox and says so.
@@ -53,7 +82,10 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 		return nil, ez.Wrap(err)
 	}
 
-	name := request.Name
+	title, name, err := request.resolve()
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
 	spec := request.Spec
 
 	_, err = taskmodels.GetTaskByName(ctx, api.db, name)
@@ -95,7 +127,7 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 		return nil, api.discard(ctx, name, sb, err)
 	}
 
-	record := &taskmodels.Task{Name: name, Spec: encodedSpec}
+	record := &taskmodels.Task{Title: title, Name: name, Spec: encodedSpec}
 	err = record.Insert(ctx, api.db)
 	if err != nil {
 		return nil, api.discard(ctx, name, sb, err)

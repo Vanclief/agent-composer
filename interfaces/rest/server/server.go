@@ -169,6 +169,14 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
 		defer cancel()
 		return s.TasksAPI.Delete(ctx, nil, body)
+	case *tasks.ListSpecsRequest:
+		return s.TasksAPI.ListSpecs(request.GetContext(), nil, body)
+	case *tasks.GetSpecRequest:
+		return s.TasksAPI.GetSpec(request.GetContext(), nil, body)
+	case *tasks.SaveSpecRequest:
+		return s.TasksAPI.SaveSpec(request.GetContext(), nil, body)
+	case *tasks.DeleteSpecRequest:
+		return s.TasksAPI.DeleteSpec(request.GetContext(), nil, body)
 
 	default:
 		return nil, ez.New(ez.EINVALID, "Unsupported request type", nil)

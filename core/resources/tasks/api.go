@@ -57,6 +57,7 @@ type API struct {
 	rt          Runtime
 	secretsPath string
 	socketDir   string
+	specs       task.Store
 
 	mu        sync.Mutex
 	listeners map[string]*listener
@@ -69,16 +70,17 @@ type listener struct {
 }
 
 // NewAPI returns the tasks API. secretsPath is the secrets file
-// (secrets.DefaultPath()), socketDir holds one messaging socket per Task.
-func NewAPI(ctrl *controller.Controller, msg *messaging.Service, rt Runtime, secretsPath string, socketDir string) *API {
+// (secrets.DefaultPath()), socketDir holds one messaging socket per Task,
+// specs keeps the saved specs.
+func NewAPI(ctrl *controller.Controller, msg *messaging.Service, rt Runtime, secretsPath string, socketDir string, specs task.Store) *API {
 	if ctrl == nil {
 		panic("Controller reference is nil")
 	}
 
-	return newAPI(ctrl.DB, msg, rt, secretsPath, socketDir)
+	return newAPI(ctrl.DB, msg, rt, secretsPath, socketDir, specs)
 }
 
-func newAPI(db bun.IDB, msg *messaging.Service, rt Runtime, secretsPath string, socketDir string) *API {
+func newAPI(db bun.IDB, msg *messaging.Service, rt Runtime, secretsPath string, socketDir string, specs task.Store) *API {
 	if msg == nil {
 		panic("Messaging reference is nil")
 	}
@@ -92,6 +94,7 @@ func newAPI(db bun.IDB, msg *messaging.Service, rt Runtime, secretsPath string, 
 		rt:          rt,
 		secretsPath: secretsPath,
 		socketDir:   socketDir,
+		specs:       specs,
 		listeners:   map[string]*listener{},
 	}
 }
@@ -100,6 +103,7 @@ func newAPI(db bun.IDB, msg *messaging.Service, rt Runtime, secretsPath string, 
 // verbatim, or "unknown" with StatusError when the runtime cannot say.
 type TaskView struct {
 	ID          uuid.UUID `json:"id"`
+	Title       string    `json:"title"`
 	Name        string    `json:"name"`
 	Spec        task.Spec `json:"spec"`
 	Status      string    `json:"status"`
@@ -151,6 +155,7 @@ func (api *API) view(ctx context.Context, record *taskmodels.Task) (*TaskView, e
 
 	view := &TaskView{
 		ID:        record.ID,
+		Title:     record.Title,
 		Name:      record.Name,
 		Spec:      spec,
 		CreatedAt: record.CreatedAt,

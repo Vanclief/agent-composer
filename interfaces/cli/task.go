@@ -23,12 +23,41 @@ func taskCommand() *cli.Command {
 		Subcommands: []*cli.Command{
 			{
 				Name:  "create",
-				Usage: "Create and boot a task from a task.yaml",
+				Usage: "Create and boot a task from a task.yaml or a saved spec",
 				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "file", Aliases: []string{"f"}, Usage: "Path to the task.yaml", Required: true},
-					&cli.StringFlag{Name: "name", Usage: "Task name (defaults to name: in the file)"},
+					&cli.StringFlag{Name: "file", Aliases: []string{"f"}, Usage: "Path to the task.yaml"},
+					&cli.StringFlag{Name: "from", Usage: "Name of a saved spec (agc task spec ls)"},
+					&cli.StringFlag{Name: "title", Usage: "Task title (defaults to title: in the file)"},
+					&cli.StringFlag{Name: "name", Usage: "Task name (defaults to name: in the file, else made from the title)"},
 				},
 				Action: taskCreate,
+			},
+			{
+				Name:  "spec",
+				Usage: "Saved specs: reusable task.yaml files in ~/.agent_composer/config/specs",
+				Subcommands: []*cli.Command{
+					{
+						Name:    "ls",
+						Aliases: []string{"list"},
+						Usage:   "List saved specs",
+						Action:  taskSpecList,
+					},
+					{
+						Name:      "save",
+						Usage:     "Save a task.yaml as a spec, replacing one of the same name",
+						ArgsUsage: "<name> -f <file>",
+						Flags: []cli.Flag{
+							&cli.StringFlag{Name: "file", Aliases: []string{"f"}, Usage: "Path to the task.yaml"},
+						},
+						Action: taskSpecSave,
+					},
+					{
+						Name:      "rm",
+						Usage:     "Delete a saved spec",
+						ArgsUsage: "<name>",
+						Action:    taskSpecRemove,
+					},
+				},
 			},
 			{
 				Name:    "ls",
@@ -104,23 +133,105 @@ func taskArg(c *cli.Context) (string, bool, error) {
 }
 
 func taskCreate(c *cli.Context) error {
-	fileName, spec, err := task.LoadFile(c.String("file"))
-	if err != nil {
-		return err
+	filePath := c.String("file")
+	from := strings.TrimSpace(c.String("from"))
+	if (filePath == "") == (from == "") {
+		return ez.New(ez.EINVALID, "pass exactly one of -f <file> or --from <saved spec>", nil)
 	}
-
-	name := strings.TrimSpace(c.String("name"))
-	if name == "" {
-		name = fileName
-	}
-	if name == "" {
-		return ez.New(ez.EINVALID, "the task needs a name: pass --name or set name: in the file", nil)
-	}
-
-	fmt.Fprintf(os.Stderr, "Creating task %s…\n", name)
 
 	return withTasks(c, func(ctx context.Context, api *tasks.API) (any, error) {
-		return api.Create(ctx, nil, &tasks.CreateRequest{Name: name, Spec: spec})
+		parsed, err := loadTaskFile(ctx, api, filePath, from)
+		if err != nil {
+			return nil, err
+		}
+
+		title := strings.TrimSpace(c.String("title"))
+		if title == "" {
+			title = parsed.Title
+		}
+
+		name := strings.TrimSpace(c.String("name"))
+		if name == "" {
+			name = parsed.Name
+		}
+
+		if title == "" && name == "" {
+			return nil, ez.New(ez.EINVALID, "the task needs a title: pass --title or set title: in the file", nil)
+		}
+
+		label := name
+		if label == "" {
+			label = title
+		}
+		fmt.Fprintf(os.Stderr, "Creating task %s…\n", label)
+
+		return api.Create(ctx, nil, &tasks.CreateRequest{Title: title, Name: name, Spec: parsed.Spec})
+	})
+}
+
+// loadTaskFile reads the task.yaml at filePath, or the saved spec called
+// from when filePath is empty.
+func loadTaskFile(ctx context.Context, api *tasks.API, filePath string, from string) (task.File, error) {
+	if filePath != "" {
+		return task.LoadFile(filePath)
+	}
+
+	saved, err := api.GetSpec(ctx, nil, &tasks.GetSpecRequest{Name: from})
+	if err != nil {
+		return task.File{}, err
+	}
+
+	parsed, err := task.ParseFile([]byte(saved.YAML))
+	if err != nil {
+		return task.File{}, ez.New(ez.EINVALID, "saved spec "+from+": "+ez.ErrorMessage(err), err)
+	}
+
+	return parsed, nil
+}
+
+func taskSpecList(c *cli.Context) error {
+	return withTasks(c, func(ctx context.Context, api *tasks.API) (any, error) {
+		return api.ListSpecs(ctx, nil, &tasks.ListSpecsRequest{})
+	})
+}
+
+// taskSpecSave takes -f before or after the name, since urfave/cli stops
+// reading flags at the first argument.
+func taskSpecSave(c *cli.Context) error {
+	filePath := c.String("file")
+	names := []string{}
+	args := c.Args().Slice()
+	for i := 0; i < len(args); i++ {
+		if (args[i] == "-f" || args[i] == "--file") && i+1 < len(args) {
+			filePath = args[i+1]
+			i++
+			continue
+		}
+		names = append(names, args[i])
+	}
+
+	if len(names) != 1 || filePath == "" {
+		return ez.New(ez.EINVALID, "usage: agc task spec save <name> -f <file>", nil)
+	}
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return ez.New(ez.EINVALID, "cannot read task file "+filePath, err)
+	}
+
+	return withTasks(c, func(ctx context.Context, api *tasks.API) (any, error) {
+		return api.SaveSpec(ctx, nil, &tasks.SaveSpecRequest{Name: names[0], YAML: string(data)})
+	})
+}
+
+func taskSpecRemove(c *cli.Context) error {
+	if c.NArg() != 1 {
+		return ez.New(ez.EINVALID, "usage: agc task spec rm <name>", nil)
+	}
+	name := c.Args().First()
+
+	return withTasks(c, func(ctx context.Context, api *tasks.API) (any, error) {
+		return api.DeleteSpec(ctx, nil, &tasks.DeleteSpecRequest{Name: name})
 	})
 }
 
