@@ -26,3 +26,59 @@
 
 - Flag any explicit semicolon `;` usage outside `for init; condition; post { ... }` as an issue.
 - Flag any `if init; cond {}` / `switch init; {}` usage as an issue (requires rewrite to multi-line).
+
+## Repo map
+
+- `core/resources/<x>`: resource APIs (business logic), one file per verb.
+- `interfaces/rest`: echo server; routes in `api_routes.go`, handlers in `handler/`, dispatch type switch in `server/server.go`.
+- `interfaces/cli`: the `agc` command-line interface.
+- `models`: bun models; every table is registered in `ALL` in `models/db_registry.go`.
+- `models/migrations`: schema migrations as Go files named `YYYYMMDDHHMMSS_name.go`, run automatically at startup; see its README.
+- `executor`: host and sandbox executors.
+- `task`: task runtime.
+- `secrets`: secret placeholders bound to hosts.
+- `messaging`: messaging transport and identity.
+- `images/agc-agent`: the agent image that runs inside sandboxes.
+- `panel/`: React control panel, see `panel/CLAUDE.md`. `control_panel/` is the old static panel being retired.
+- `docs/decisions`: ADRs 0001–0005; read the relevant one before changing that area.
+- `docs/openapi.yaml`: REST API spec.
+
+## Adding a REST endpoint, checklist
+
+1. Request/response types and the method in `core/resources/<x>/<verb>.go`, following the existing pattern: a `Validate()` on the request and `func (api *API) X(ctx, requester interface{}, req)`.
+2. Handler in `interfaces/rest/handler/`.
+3. Route in `interfaces/rest/api_routes.go`.
+4. Case in the dispatch type switch in `interfaces/rest/server/server.go` (long operations get their own timeout there).
+5. Document it in `docs/openapi.yaml`.
+6. Route test in `interfaces/rest/*_routes_test.go`.
+7. Run `make types` so the panel's generated TypeScript matches (CI fails on drift).
+
+## Schema changes
+
+- Edit the model AND add a migration in `models/migrations` for existing databases.
+- Never hand-edit a database.
+
+## Verifying
+
+- Go: `go build ./... && go vet ./... && go test ./...`
+- `gofmt -l .` must list only the three known unformatted files: `core/resources/hooks/create.go`, `core/resources/hooks/update.go`, `core/resources/workflow/compose.go`. Do not reformat them.
+- Panel: `make panel-check`.
+
+## Deploying to the rig
+
+- `make rig-deploy` (wraps `scripts/rig-deploy.sh`; `--dry-run` prints the remote script, `--help` lists the env overrides).
+- Requires a clean tree and the branch pushed to origin at the local SHA; the rig builds `origin/<branch>`.
+- The rig is the only KVM host. Sandbox integration tests run there with `AGC_SANDBOX_TEST=1`.
+
+## Subagent workflow
+
+- Agents work in git worktrees branched from the current feature branch (not master).
+- Commit in the worktree; the main session merges.
+- Keep commits scoped to the task.
+- Never push.
+
+## Design language
+
+- UI follows the `rtsdesign` skill: icons, slots, presets; raw YAML only behind a toggle.
+- Statuses are shown verbatim from the backend; never relabel or derive them client-side.
+- Disabled controls say why in their own label, not only in a tooltip.
