@@ -73,5 +73,10 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 
 	api.GET("/secrets", h.ListSecrets)
 
+	knowledge := api.Group("/knowledge")
+	knowledge.GET("", h.ListKnowledge)
+	knowledge.GET("/why/:id", h.KnowledgeWhy)
+	knowledge.GET("/doubt/:id", h.KnowledgeDoubt)
+
 	api.Any("/msg/*", echo.WrapHandler(h.Messaging()))
 }

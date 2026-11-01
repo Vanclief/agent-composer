@@ -25,6 +25,10 @@ tags:
     description: >
       Tasks are microsandbox VMs agents work in (ADR 0003). Status is read live from the
       runtime and passed through verbatim.
+  - name: Knowledge
+    description: >
+      Evidence, beliefs, decisions and rules (ADR 0006), read only. Labels are computed on every
+      request and never stored; checks are never run.
 paths:
   /agents/specs:
     get:
@@ -764,6 +768,70 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
+  /knowledge:
+    get:
+      tags: [Knowledge]
+      operationId: listKnowledge
+      summary: List evidence, beliefs, decisions and rules
+      description: >
+        Loads evidence/, beliefs/, decisions/ and rules/ under the knowledge directory
+        (~/.agent_composer/knowledge, or AGC_KNOWLEDGE_DIR) on every request, so edits show
+        live. A missing directory lists nothing. A file that does not validate is a 400 whose
+        message is the validation error, naming the file and the id.
+      responses:
+        '200':
+          description: Everything in the knowledge directory, in load order.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeSet'
+        '400':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /knowledge/why/{id}:
+    get:
+      tags: [Knowledge]
+      operationId: knowledgeWhy
+      summary: Follow a belief down to its evidence
+      parameters:
+        - $ref: '#/components/parameters/KnowledgeIdParam'
+      responses:
+        '200':
+          description: The belief, the evidence it cites and the beliefs it rests on.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reason'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /knowledge/doubt/{id}:
+    get:
+      tags: [Knowledge]
+      operationId: knowledgeDoubt
+      summary: List what rests on a belief or a piece of evidence
+      description: >
+        Everything that falls if the belief or evidence is wrong, directly or through other
+        beliefs and decisions. For evidence, the beliefs citing it come first. Nothing is changed.
+      parameters:
+        - $ref: '#/components/parameters/KnowledgeIdParam'
+      responses:
+        '200':
+          description: What rests on the id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Doubted'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
 components:
   parameters:
     LimitParam:
@@ -825,6 +893,13 @@ components:
       in: path
       required: true
       description: Task UUID or task name. A value that parses as a UUID is looked up by id.
+      schema:
+        type: string
+    KnowledgeIdParam:
+      name: id
+      in: path
+      required: true
+      description: A belief id, or for doubt also a piece of evidence's id.
       schema:
         type: string
   responses:
@@ -1407,6 +1482,290 @@ components:
       required:
         - name
         - hosts
+    KnowledgeLabel:
+      type: string
+      description: >
+        How what a belief, decision or rule rests on is grounded: grounded (live evidence under
+        every leaf), opinion (a leaf with no evidence) or in_doubt (a leaf whose evidence is all
+        retracted; wins over opinion).
+      enum:
+        - grounded
+        - opinion
+        - in_doubt
+    Retraction:
+      type: object
+      properties:
+        who:
+          type: string
+        when:
+          type: string
+        why:
+          type: string
+      required:
+        - who
+        - when
+        - why
+    KnowledgeSet:
+      type: object
+      properties:
+        dir:
+          type: string
+          description: The knowledge directory loaded.
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/Evidence'
+        beliefs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Belief'
+        decisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Decision'
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/Rule'
+      required:
+        - dir
+        - evidence
+        - beliefs
+        - decisions
+        - rules
+    Evidence:
+      type: object
+      description: Something seen. Retracted evidence stays in its file but grounds nothing.
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        who:
+          type: string
+        when:
+          type: string
+        source:
+          type: string
+          description: A URL, a file path or a command whose output was seen; empty when unset.
+        retracted:
+          allOf:
+            - $ref: '#/components/schemas/Retraction'
+          nullable: true
+        cited_by:
+          type: array
+          description: Ids of the beliefs citing this evidence.
+          items:
+            type: string
+        file:
+          type: string
+      required:
+        - id
+        - text
+        - who
+        - when
+        - source
+        - retracted
+        - cited_by
+        - file
+    Belief:
+      type: object
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        because:
+          type: array
+          description: Ids of the beliefs this one rests on.
+          items:
+            type: string
+        evidence:
+          type: array
+          description: Ids of the evidence this belief cites.
+          items:
+            type: string
+        label:
+          $ref: '#/components/schemas/KnowledgeLabel'
+        opinions:
+          type: array
+          description: Leaf beliefs with no evidence.
+          items:
+            type: string
+        doubted:
+          type: array
+          description: Leaf beliefs whose evidence is all retracted.
+          items:
+            type: string
+        retracted:
+          type: array
+          description: The retracted evidence of the doubted leaves.
+          items:
+            type: string
+        file:
+          type: string
+      required:
+        - id
+        - text
+        - because
+        - evidence
+        - label
+        - opinions
+        - doubted
+        - retracted
+        - file
+    Decision:
+      type: object
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        because:
+          type: array
+          description: Ids of the beliefs and decisions this one rests on.
+          items:
+            type: string
+        adr:
+          type: string
+          description: Path of the ADR; empty when unset.
+        decided:
+          type: object
+          properties:
+            who:
+              type: string
+            when:
+              type: string
+          required:
+            - who
+            - when
+        label:
+          $ref: '#/components/schemas/KnowledgeLabel'
+        opinions:
+          type: array
+          items:
+            type: string
+        doubted:
+          type: array
+          items:
+            type: string
+        file:
+          type: string
+      required:
+        - id
+        - text
+        - because
+        - adr
+        - decided
+        - label
+        - opinions
+        - doubted
+        - file
+    Rule:
+      type: object
+      properties:
+        subject:
+          type: string
+          description: The subject of the ruleset the rule is in.
+        id:
+          type: string
+        text:
+          type: string
+        check:
+          type: string
+          description: Shell command whose exit status says whether the rule holds; never run by the API.
+        because:
+          type: array
+          items:
+            type: string
+        kind:
+          type: string
+          description: mechanical when the rule has a check, manual otherwise.
+          enum:
+            - mechanical
+            - manual
+        label:
+          $ref: '#/components/schemas/KnowledgeLabel'
+        opinions:
+          type: array
+          items:
+            type: string
+        doubted:
+          type: array
+          items:
+            type: string
+        file:
+          type: string
+      required:
+        - subject
+        - id
+        - text
+        - check
+        - because
+        - kind
+        - label
+        - opinions
+        - doubted
+        - file
+    Reason:
+      type: object
+      description: A belief, the evidence it cites and the beliefs it rests on, each a Reason.
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        evidence:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              text:
+                type: string
+              who:
+                type: string
+              when:
+                type: string
+              retracted:
+                allOf:
+                  - $ref: '#/components/schemas/Retraction'
+                nullable: true
+            required:
+              - id
+              - text
+              - who
+              - when
+              - retracted
+        because:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reason'
+      required:
+        - id
+        - text
+        - evidence
+        - because
+    Doubted:
+      type: object
+      properties:
+        beliefs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Belief'
+        decisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Decision'
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/Rule'
+      required:
+        - beliefs
+        - decisions
+        - rules
     DeleteTaskResponse:
       type: object
       properties:

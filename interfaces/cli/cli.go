@@ -383,7 +383,7 @@ func runServer(ctx context.Context, project string) error {
 	}
 
 	group, gctx := errgroup.WithContext(ctx)
-	app := restserver.New(gctx, stack.Controller, stack.HooksAPI, stack.WorkflowAPI, stack.TasksAPI, stack.Messaging)
+	app := restserver.New(gctx, stack.Controller, stack.HooksAPI, stack.WorkflowAPI, stack.TasksAPI, stack.KnowledgeAPI, stack.Messaging)
 
 	group.Go(func() error {
 		stack.StartScheduler(gctx)

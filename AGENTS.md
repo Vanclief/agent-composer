@@ -30,6 +30,7 @@
 ## Repo map
 
 - `core/resources/<x>`: resource APIs (business logic), one file per verb.
+- `core/resources/knowledge`: read-only REST over `knowledge/`, loading `evidence/ beliefs/ decisions/ rules/` under `<home>/knowledge` (or `AGC_KNOWLEDGE_DIR`) on every request.
 - `interfaces/rest`: echo server; routes in `api_routes.go`, handlers in `handler/`, dispatch type switch in `server/server.go`.
 - `interfaces/cli`: the `agc` command-line interface.
 - `models`: bun models; every table is registered in `ALL` in `models/db_registry.go`.
