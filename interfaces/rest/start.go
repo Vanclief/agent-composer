@@ -14,9 +14,9 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/rs/zerolog"
 
-	controlpanel "github.com/vanclief/agent-composer/control_panel"
 	"github.com/vanclief/agent-composer/interfaces/rest/handler"
 	"github.com/vanclief/agent-composer/interfaces/rest/server"
+	"github.com/vanclief/agent-composer/panel"
 	"github.com/vanclief/agent-composer/web"
 )
 
@@ -59,7 +59,10 @@ func Start(ctx context.Context, s *server.Server, log zerolog.Logger) error {
 	if err != nil {
 		return err
 	}
-	usePanel(e)
+	err = usePanel(e)
+	if err != nil {
+		return err
+	}
 
 	// Config
 	e.HideBanner = true
@@ -148,26 +151,45 @@ func useSPA(e *echo.Echo) error {
 	return nil
 }
 
-// usePanel serves the control panel at /panel/. Unknown paths get
-// index.html. For development, set AGC_PANEL_DIR to the control_panel
-// directory to serve it from disk, so edits show without rebuilding.
-func usePanel(e *echo.Echo) {
-	var panel fs.FS = controlpanel.FS
-	dir := os.Getenv("AGC_PANEL_DIR")
-	if dir != "" {
-		panel = os.DirFS(dir)
+// usePanel serves the control panel build embedded from panel/dist at
+// /panel/. For development, set AGC_PANEL_DIR to a build directory (such
+// as panel/dist) to serve it from disk, so a rebuild shows without
+// rebuilding agc.
+func usePanel(e *echo.Echo) error {
+	dist, err := fs.Sub(panel.Dist, "dist")
+	if err != nil {
+		return err
 	}
 
+	dir := os.Getenv("AGC_PANEL_DIR")
+	if dir != "" {
+		dist = os.DirFS(dir)
+	}
+
+	servePanel(e, dist)
+
+	return nil
+}
+
+// servePanel serves files from dist at /panel/. Unknown paths get
+// index.html, so the panel's router handles deep links. Without
+// index.html the panel was never built and every path answers 503.
+func servePanel(e *echo.Echo, dist fs.FS) {
 	e.GET("/panel", func(c echo.Context) error {
 		return c.Redirect(http.StatusMovedPermanently, "/panel/")
 	})
 	e.GET("/panel/*", func(c echo.Context) error {
-		name := c.Param("*")
-		_, err := fs.Stat(panel, name)
+		_, err := fs.Stat(dist, "index.html")
 		if err != nil {
+			return c.String(http.StatusServiceUnavailable, "control panel not built: run make panel")
+		}
+
+		name := c.Param("*")
+		info, err := fs.Stat(dist, name)
+		if err != nil || info.IsDir() {
 			name = "index.html"
 		}
 
-		return echo.StaticFileHandler(name, panel)(c)
+		return echo.StaticFileHandler(name, dist)(c)
 	})
 }

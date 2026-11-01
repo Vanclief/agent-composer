@@ -1,0 +1,7 @@
+dist
+playwright-report
+test-results
+package-lock.json
+# Generated: npm run types and npx shadcn add own these.
+src/api/schema.d.ts
+src/components/ui
