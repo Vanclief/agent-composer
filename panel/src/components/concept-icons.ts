@@ -20,6 +20,7 @@ import {
   Variable,
   type LucideIcon,
 } from 'lucide-react'
+import { Brain, Eye, FileText, Hammer, Library, Lightbulb, Scale, Signpost } from 'lucide-react'
 
 export const conceptIcons = {
   // A Task: a VM agents work in.
@@ -43,6 +44,19 @@ export const conceptIcons = {
   human: User,
   // The raw YAML/JSON view behind a </> toggle.
   raw: CodeXml,
+  // The two top-level modes: Think (knowledge) and Work (tasks, messages).
+  think: Brain,
+  work: Hammer,
+  // ADR 0006: something we hold true, a choice made on beliefs, a must or
+  // must not, and what was seen.
+  belief: Lightbulb,
+  decision: Signpost,
+  rule: Scale,
+  evidence: Eye,
+  // The YAML file an item lives in.
+  file: FileText,
+  // A ruleset's subject, e.g. "the Linux rig".
+  subject: Library,
 } satisfies Record<string, LucideIcon>
 
 export type Concept = keyof typeof conceptIcons
@@ -173,6 +187,33 @@ const zinc: ConceptColor = {
   solid: 'bg-zinc-900 text-white hover:bg-zinc-900/90 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-100/90',
 }
 
+// Think mode (ADR 0006). Its labels (grounded, opinion, in doubt) own
+// emerald, amber and red like statuses do, so no concept here uses them.
+//   indigo   think, belief
+//   fuchsia  decision
+//   orange   rule (shares with savedSpec: the two never meet on one screen)
+//   teal     evidence (shares with volume, same reason)
+const indigo: ConceptColor = {
+  text: 'text-indigo-700 dark:text-indigo-400',
+  bg: 'bg-indigo-500/10',
+  border: 'border-indigo-200 dark:border-indigo-900',
+  edge: 'border-t-2 border-t-indigo-400 dark:border-t-indigo-500',
+  selected:
+    'border-indigo-400 bg-indigo-500/20 text-indigo-800 hover:bg-indigo-500/30 hover:text-indigo-800 dark:border-indigo-600 dark:text-indigo-200 dark:hover:text-indigo-200',
+  on: 'data-[state=on]:border-indigo-400 data-[state=on]:bg-indigo-500/20 data-[state=on]:text-indigo-800 data-[state=on]:hover:bg-indigo-500/30 data-[state=on]:hover:text-indigo-800 dark:data-[state=on]:border-indigo-600 dark:data-[state=on]:text-indigo-200 dark:data-[state=on]:hover:text-indigo-200',
+  solid: 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25 hover:bg-indigo-600/90',
+}
+const fuchsia: ConceptColor = {
+  text: 'text-fuchsia-700 dark:text-fuchsia-400',
+  bg: 'bg-fuchsia-500/10',
+  border: 'border-fuchsia-200 dark:border-fuchsia-900',
+  edge: 'border-t-2 border-t-fuchsia-400 dark:border-t-fuchsia-500',
+  selected:
+    'border-fuchsia-400 bg-fuchsia-500/20 text-fuchsia-800 hover:bg-fuchsia-500/30 hover:text-fuchsia-800 dark:border-fuchsia-600 dark:text-fuchsia-200 dark:hover:text-fuchsia-200',
+  on: 'data-[state=on]:border-fuchsia-400 data-[state=on]:bg-fuchsia-500/20 data-[state=on]:text-fuchsia-800 data-[state=on]:hover:bg-fuchsia-500/30 data-[state=on]:hover:text-fuchsia-800 dark:data-[state=on]:border-fuchsia-600 dark:data-[state=on]:text-fuchsia-200 dark:data-[state=on]:hover:text-fuchsia-200',
+  solid: 'bg-fuchsia-600 text-white shadow-md shadow-fuchsia-500/25 hover:bg-fuchsia-600/90',
+}
+
 export const conceptColors = {
   task: violet,
   cpu: violet,
@@ -190,4 +231,12 @@ export const conceptColors = {
   message: pink,
   human: pink,
   raw: zinc,
+  think: indigo,
+  work: violet,
+  belief: indigo,
+  decision: fuchsia,
+  rule: orange,
+  evidence: teal,
+  file: zinc,
+  subject: zinc,
 } satisfies Record<Concept, ConceptColor>

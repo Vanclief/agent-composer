@@ -3,19 +3,16 @@ import { useState } from 'react'
 import { Hexagon } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router'
 
-import { conceptColors, conceptIcons, type Concept } from '@/components/concept-icons'
+import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { cn } from '@/lib/utils'
 
+import { MODES, ModeSwitch, useMode } from './mode'
 import { PageTitleContext } from './page-title'
 import { ThemeToggle } from './theme-toggle'
 
-const NAV: { to: string; label: string; concept: Concept }[] = [
-  { to: '/tasks', label: 'Tasks', concept: 'task' },
-  { to: '/messages', label: 'Messages', concept: 'message' },
-]
-
 export function Layout() {
   const [title, setTitle] = useState('')
+  const mode = useMode()
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -26,9 +23,12 @@ export function Layout() {
           </span>
           agc
         </div>
+        <div className="border-b border-border p-2">
+          <ModeSwitch mode={mode} />
+        </div>
         <nav aria-label="Main" className="flex-1 overflow-y-auto p-2">
           <ul className="flex flex-col gap-0.5">
-            {NAV.map(({ to, label, concept }) => {
+            {MODES[mode].nav.map(({ to, label, concept }) => {
               const Icon = conceptIcons[concept]
               return (
                 <li key={to}>
