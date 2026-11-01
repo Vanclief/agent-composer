@@ -29,6 +29,7 @@ func writeFile(t *testing.T, content string) string {
 func TestLoadFileWithName(t *testing.T) {
 	filePath := writeFile(t, `
 name: review-42
+title: Review PR 42
 image: agc-agent
 cpus: 2
 memory: 4096
@@ -44,13 +45,14 @@ volumes:
 channels: ["#releases", "#alerts:read"]
 `)
 
-	name, spec, err := LoadFile(filePath)
+	loaded, err := LoadFile(filePath)
 	if err != nil {
 		t.Fatal(err)
 	}
+	spec := loaded.Spec
 
-	if name != "review-42" {
-		t.Fatalf("name = %q", name)
+	if loaded.Name != "review-42" || loaded.Title != "Review PR 42" {
+		t.Fatalf("name = %q, title = %q", loaded.Name, loaded.Title)
 	}
 
 	want := Spec{
@@ -76,20 +78,41 @@ channels: ["#releases", "#alerts:read"]
 }
 
 func TestLoadFileBareSpec(t *testing.T) {
-	name, spec, err := LoadFile(writeFile(t, "image: debian\nmemory: 512\n"))
+	loaded, err := LoadFile(writeFile(t, "image: debian\nmemory: 512\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if name != "" || spec.Image != "debian" || spec.Memory != 512 {
-		t.Fatalf("got name %q spec %+v", name, spec)
+	if loaded.Name != "" || loaded.Title != "" || loaded.Spec.Image != "debian" || loaded.Spec.Memory != 512 {
+		t.Fatalf("got %+v", loaded)
 	}
 }
 
 func TestLoadFileRejectsUnknownKey(t *testing.T) {
-	_, _, err := LoadFile(writeFile(t, "image: debian\ncpu: 2\n"))
+	_, err := LoadFile(writeFile(t, "image: debian\ncpu: 2\n"))
 	if err == nil || ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), "cpu") {
 		t.Fatalf("expected EINVALID naming cpu, got %v", err)
+	}
+}
+
+func TestParseFile(t *testing.T) {
+	parsed, err := ParseFile([]byte("title: '  Review ads  '\nrepo: github.com/o/n\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if parsed.Title != "Review ads" || parsed.Name != "" || parsed.Spec.Repo != "github.com/o/n" {
+		t.Fatalf("got %+v", parsed)
+	}
+
+	parsed, err = ParseFile(nil)
+	if err != nil || !reflect.DeepEqual(parsed, File{}) {
+		t.Fatalf("empty file: got %+v, err %v", parsed, err)
+	}
+
+	_, err = ParseFile([]byte("repo: [unclosed\n"))
+	if ez.ErrorCode(err) != ez.EINVALID {
+		t.Fatalf("expected EINVALID for bad YAML, got %v", err)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,7 +15,12 @@ import (
 	"github.com/vanclief/ez"
 )
 
-var nameRegex = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
+const maxTitleLength = 120
+
+var (
+	nameRegex    = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
+	nonSlugRegex = regexp.MustCompile(`[^a-z0-9]+`)
+)
 
 // Task is what agc keeps about a Task. Its status lives in the runtime and
 // is read live, never stored (ADR 0003).
@@ -22,7 +28,9 @@ type Task struct {
 	bun.BaseModel `bun:"table:tasks"`
 
 	ID uuid.UUID `bun:",pk,type:uuid" json:"id"`
-	// Name is also the sandbox name.
+	// Title is what a human calls the Task.
+	Title string `bun:"title,notnull,default:''" json:"title"`
+	// Name is a slug, also the sandbox name, the channel and the socket file.
 	Name      string          `bun:"name,notnull,unique" json:"name"`
 	Spec      json.RawMessage `bun:"type:jsonb" json:"spec"`
 	CreatedAt time.Time       `json:"created_at"`
@@ -44,12 +52,51 @@ func ValidateName(name string) error {
 	return nil
 }
 
+// Slug turns a title into a task name: "Review facebook ads" becomes
+// "review-facebook-ads".
+func Slug(title string) (string, error) {
+	slug := nonSlugRegex.ReplaceAllString(strings.ToLower(title), "-")
+	slug = strings.Trim(slug, "-")
+
+	if slug != "" && slug[0] >= '0' && slug[0] <= '9' {
+		slug = "task-" + slug
+	}
+
+	if len(slug) > 63 {
+		slug = strings.TrimRight(slug[:63], "-")
+	}
+
+	if slug == "" {
+		return "", ez.New(ez.EINVALID, fmt.Sprintf("title %q has no letters or digits to make a name from", title), nil)
+	}
+
+	return slug, nil
+}
+
+func ValidateTitle(title string) error {
+	trimmed := strings.TrimSpace(title)
+	if trimmed == "" {
+		return ez.New(ez.EINVALID, "task title is required", nil)
+	}
+
+	if len([]rune(trimmed)) > maxTitleLength {
+		return ez.New(ez.EINVALID, fmt.Sprintf("task title is longer than %d characters", maxTitleLength), nil)
+	}
+
+	return nil
+}
+
 func (t *Task) Validate() error {
 	if t == nil {
 		return ez.New(ez.EINVALID, "task is nil", nil)
 	}
 
 	err := ValidateName(t.Name)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	err = ValidateTitle(t.Title)
 	if err != nil {
 		return ez.Wrap(err)
 	}

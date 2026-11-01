@@ -637,6 +637,103 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
+  /specs:
+    get:
+      tags: [Tasks]
+      operationId: listSavedSpecs
+      summary: List saved specs
+      description: >
+        Saved specs are reusable task.yaml files in ~/.agent_composer/config/specs/<name>.yaml,
+        sorted by name.
+      responses:
+        '200':
+          description: Saved specs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  specs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SavedSpec'
+                required:
+                  - specs
+        '500':
+          $ref: '#/components/responses/Error'
+  /specs/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        description: Saved spec name.
+        schema:
+          type: string
+    get:
+      tags: [Tasks]
+      operationId: getSavedSpec
+      summary: Retrieve a saved spec
+      responses:
+        '200':
+          description: The saved spec.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedSpec'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    put:
+      tags: [Tasks]
+      operationId: saveSpec
+      summary: Save a spec
+      description: >
+        Validates the YAML as a task.yaml and stores it verbatim, comments included, replacing a
+        saved spec of the same name. The name may be free text; it is saved as its slug
+        ("Backend review" becomes backend-review), which the response returns.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - yaml
+              properties:
+                yaml:
+                  type: string
+                  description: The task.yaml text.
+      responses:
+        '200':
+          description: The saved spec.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedSpec'
+        '400':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Tasks]
+      operationId: deleteSavedSpec
+      summary: Delete a saved spec
+      responses:
+        '200':
+          description: The deleted spec.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedSpec'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
 components:
   parameters:
     LimitParam:
@@ -1210,9 +1307,12 @@ components:
         id:
           type: string
           format: uuid
+        title:
+          type: string
+          description: What a human calls the task.
         name:
           type: string
-          description: Also the sandbox name.
+          description: Slug, also the sandbox name, the task's channel and its socket file.
         spec:
           $ref: '#/components/schemas/TaskSpec'
         status:
@@ -1231,6 +1331,7 @@ components:
           format: date-time
       required:
         - id
+        - title
         - name
         - spec
         - status
@@ -1238,15 +1339,31 @@ components:
         - updated_at
     CreateTaskRequest:
       type: object
+      description: At least one of title or name is required.
       required:
-        - name
         - spec
+      properties:
+        title:
+          type: string
+          description: Up to 120 characters. Defaults to the name.
+        name:
+          type: string
+          description: >
+            1-63 lowercase letters, digits or -, starting with a letter, and not a UUID. Defaults
+            to the title's slug ("Review facebook ads" becomes review-facebook-ads).
+        spec:
+          $ref: '#/components/schemas/TaskSpec'
+    SavedSpec:
+      type: object
       properties:
         name:
           type: string
-          description: 1-63 lowercase letters, digits or -, starting with a letter, and not a UUID.
-        spec:
-          $ref: '#/components/schemas/TaskSpec'
+        yaml:
+          type: string
+          description: The task.yaml text, verbatim.
+      required:
+        - name
+        - yaml
     DeleteTaskResponse:
       type: object
       properties:

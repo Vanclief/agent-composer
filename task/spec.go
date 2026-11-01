@@ -53,29 +53,48 @@ type Spec struct {
 	Channels []string          `yaml:"channels" json:"channels"` // "#name" or "#name:read"
 }
 
-// file is a task.yaml: the spec at top level, with an optional name.
+// file is a task.yaml: the spec at top level, with an optional name and
+// title.
 type file struct {
-	Name string `yaml:"name"`
-	Spec `yaml:",inline"`
+	Name  string `yaml:"name"`
+	Title string `yaml:"title"`
+	Spec  `yaml:",inline"`
 }
 
-// LoadFile reads a task.yaml. Unknown keys are rejected so a typo does not
-// silently fall back to a default.
-func LoadFile(filePath string) (string, Spec, error) {
+// File is a parsed task.yaml.
+type File struct {
+	Name  string
+	Title string
+	Spec  Spec
+}
+
+// LoadFile reads a task.yaml.
+func LoadFile(filePath string) (File, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return "", Spec{}, ez.New(ez.EINVALID, "cannot read task file "+filePath, err)
+		return File{}, ez.New(ez.EINVALID, "cannot read task file "+filePath, err)
 	}
 
+	parsed, err := ParseFile(data)
+	if err != nil {
+		return File{}, ez.New(ez.EINVALID, "task file "+filePath+": "+ez.ErrorMessage(err), err)
+	}
+
+	return parsed, nil
+}
+
+// ParseFile parses a task.yaml. Unknown keys are rejected so a typo does
+// not silently fall back to a default.
+func ParseFile(data []byte) (File, error) {
 	var f file
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	decoder.KnownFields(true)
-	err = decoder.Decode(&f)
+	err := decoder.Decode(&f)
 	if err != nil && !errors.Is(err, io.EOF) {
-		return "", Spec{}, ez.New(ez.EINVALID, "task file "+filePath+": "+err.Error(), err)
+		return File{}, ez.New(ez.EINVALID, err.Error(), err)
 	}
 
-	return strings.TrimSpace(f.Name), f.Spec, nil
+	return File{Name: strings.TrimSpace(f.Name), Title: strings.TrimSpace(f.Title), Spec: f.Spec}, nil
 }
 
 // Validate rejects entries the Task cannot honor and names the bad entry.

@@ -65,5 +65,11 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	tasks.POST("/:id/terminals", h.StartTerminal)
 	tasks.GET("/:id/terminals/:job/ws", h.TerminalSocket)
 
+	specs := api.Group("/specs")
+	specs.GET("", h.ListSpecs)
+	specs.GET("/:name", h.GetSpec)
+	specs.PUT("/:name", h.SaveSpec)
+	specs.DELETE("/:name", h.DeleteSpec)
+
 	api.Any("/msg/*", echo.WrapHandler(h.Messaging()))
 }

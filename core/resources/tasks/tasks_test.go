@@ -179,7 +179,8 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	db := newTestDB(t)
 	rt := newFakeRuntime()
-	api := newAPI(db, messaging.NewService(db), rt, secretsPath, socketDir)
+	specs := task.Store{Dir: filepath.Join(t.TempDir(), "specs")}
+	api := newAPI(db, messaging.NewService(db), rt, secretsPath, socketDir, specs)
 	t.Cleanup(func() {
 		for _, name := range api.listenerNames() {
 			api.stopListener(name)
@@ -286,6 +287,108 @@ func TestCreate(t *testing.T) {
 	}
 }
 
+func TestCreateTitleAndName(t *testing.T) {
+	cases := []struct {
+		title     string
+		name      string
+		wantTitle string
+		wantName  string
+	}{
+		{"Review facebook ads", "", "Review facebook ads", "review-facebook-ads"},
+		{"", "review-42", "review-42", "review-42"},
+		{" Fix login ", " login-fix ", "Fix login", "login-fix"},
+	}
+
+	for _, tc := range cases {
+		env := newTestEnv(t)
+		ctx := context.Background()
+
+		view, err := env.api.Create(ctx, nil, &CreateRequest{Title: tc.title, Name: tc.name, Spec: task.Spec{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if view.Title != tc.wantTitle || view.Name != tc.wantName {
+			t.Fatalf("title %q name %q: got title %q name %q", tc.title, tc.name, view.Title, view.Name)
+		}
+
+		if env.rt.created[0].Name != tc.wantName {
+			t.Fatalf("sandbox name = %q", env.rt.created[0].Name)
+		}
+
+		record, err := taskmodels.GetTaskByName(ctx, env.db, tc.wantName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if record.Title != tc.wantTitle {
+			t.Fatalf("stored title = %q", record.Title)
+		}
+	}
+}
+
+func TestCreateNeedsTitleOrName(t *testing.T) {
+	env := newTestEnv(t)
+
+	cases := []struct {
+		request CreateRequest
+		want    string
+	}{
+		{CreateRequest{Title: "  ", Name: ""}, "title or name is required"},
+		{CreateRequest{Title: "???"}, "has no letters or digits"},
+		{CreateRequest{Title: strings.Repeat("x", 121), Name: "long"}, "longer than 120"},
+		{CreateRequest{Title: "Fine", Name: "Not A Slug"}, "is invalid"},
+	}
+
+	for _, tc := range cases {
+		_, err := env.api.Create(context.Background(), nil, &tc.request)
+		if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), tc.want) {
+			t.Fatalf("%+v: expected EINVALID containing %q, got %v", tc.request, tc.want, err)
+		}
+	}
+
+	if len(env.rt.Calls()) != 0 {
+		t.Fatalf("runtime was called: %q", env.rt.Calls())
+	}
+}
+
+func TestSpecs(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+
+	saved, err := env.api.SaveSpec(ctx, nil, &SaveSpecRequest{Name: "Backend review", YAML: "# mine\nrepo: github.com/o/n\n"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Name != "backend-review" || saved.YAML != "# mine\nrepo: github.com/o/n\n" {
+		t.Fatalf("saved = %+v", saved)
+	}
+
+	_, err = env.api.SaveSpec(ctx, nil, &SaveSpecRequest{Name: "broken", YAML: "ref: master\n"})
+	if ez.ErrorCode(err) != ez.EINVALID {
+		t.Fatalf("expected EINVALID for an invalid spec, got %v", err)
+	}
+
+	list, err := env.api.ListSpecs(ctx, nil, &ListSpecsRequest{})
+	if err != nil || len(list.Specs) != 1 || list.Specs[0].Name != "backend-review" {
+		t.Fatalf("list = %+v, err %v", list, err)
+	}
+
+	got, err := env.api.GetSpec(ctx, nil, &GetSpecRequest{Name: "backend-review"})
+	if err != nil || got.YAML != saved.YAML {
+		t.Fatalf("get = %+v, err %v", got, err)
+	}
+
+	deleted, err := env.api.DeleteSpec(ctx, nil, &DeleteSpecRequest{Name: "backend-review"})
+	if err != nil || deleted.Name != "backend-review" || deleted.YAML != saved.YAML {
+		t.Fatalf("delete = %+v, err %v", deleted, err)
+	}
+
+	_, err = env.api.GetSpec(ctx, nil, &GetSpecRequest{Name: "backend-review"})
+	if ez.ErrorCode(err) != ez.ENOTFOUND {
+		t.Fatalf("expected ENOTFOUND after delete, got %v", err)
+	}
+}
+
 func TestCreateWithRef(t *testing.T) {
 	env := newTestEnv(t)
 
@@ -364,7 +467,7 @@ func TestCreateCloneFails(t *testing.T) {
 func insertTask(t *testing.T, db bun.IDB, name string, createdAt time.Time) {
 	t.Helper()
 
-	record := &taskmodels.Task{Name: name, Spec: json.RawMessage(`{"channels":["#releases:read"]}`), CreatedAt: createdAt}
+	record := &taskmodels.Task{Title: name, Name: name, Spec: json.RawMessage(`{"channels":["#releases:read"]}`), CreatedAt: createdAt}
 	err := record.Insert(context.Background(), db)
 	if err != nil {
 		t.Fatal(err)
@@ -558,7 +661,7 @@ func TestListenerServesMessagingAsTheTask(t *testing.T) {
 
 func TestStartListenerLeavesASocketServedElsewhere(t *testing.T) {
 	env := newTestEnv(t)
-	other := newAPI(env.db, env.api.msg, env.rt, env.api.secretsPath, env.api.socketDir)
+	other := newAPI(env.db, env.api.msg, env.rt, env.api.secretsPath, env.api.socketDir, env.api.specs)
 
 	err := env.api.startListener("shared", nil)
 	if err != nil {

@@ -15,6 +15,7 @@ import (
 	"github.com/vanclief/agent-composer/messaging"
 	"github.com/vanclief/agent-composer/runtime"
 	"github.com/vanclief/agent-composer/secrets"
+	"github.com/vanclief/agent-composer/task"
 	workflowruntime "github.com/vanclief/agent-composer/workflow"
 	"github.com/vanclief/compose/components/logger"
 	"github.com/vanclief/compose/components/scheduler"
@@ -83,7 +84,8 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		return nil, err
 	}
 
-	tasksAPI := tasks.NewAPI(ctrl, msg, tasks.SandboxRuntime{}, secretsPath, filepath.Join(home, "tasks"))
+	specs := task.Store{Dir: filepath.Join(home, "config", "specs")}
+	tasksAPI := tasks.NewAPI(ctrl, msg, tasks.SandboxRuntime{}, secretsPath, filepath.Join(home, "tasks"), specs)
 
 	// Tasks keep running while agc is down. Their messaging listeners
 	// come back here.

@@ -30,7 +30,7 @@ type fakeRuntime struct {
 }
 
 func (f *fakeRuntime) Create(ctx context.Context, spec sandbox.Spec) (tasks.Sandbox, error) {
-	return nil, ez.New(ez.EINTERNAL, "not implemented", nil)
+	return f.sb, nil
 }
 
 func (f *fakeRuntime) Connect(ctx context.Context, name string) (tasks.Sandbox, error) {
@@ -87,7 +87,7 @@ func TestTerminalRoutes(t *testing.T) {
 	sb := &fakeSandbox{}
 	e, db := newTaskRoutes(t, &fakeRuntime{sb: sb})
 
-	record := &taskmodels.Task{Name: "review-42", Spec: []byte(`{}`)}
+	record := &taskmodels.Task{Title: "Review 42", Name: "review-42", Spec: []byte(`{}`)}
 	err := record.Insert(context.Background(), db)
 	if err != nil {
 		t.Fatal(err)
