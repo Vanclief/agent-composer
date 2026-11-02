@@ -54,21 +54,26 @@ test('a harness shows the server defaults as values', async ({ page }) => {
   await expect(dialog.locator('[data-assignee="claude_code"]')).toHaveAttribute('data-state', 'on')
   await expect(dialog.locator('[data-model]')).toHaveValue('claude-opus-5-5')
   await expect(dialog.locator('[data-manager]')).toHaveValue('franco')
+  await expect(dialog.locator('[data-owner]')).toHaveValue('franco')
+  await dialog.getByRole('textbox', { name: 'Title' }).fill('Hint check')
+  await expect(dialog.locator('[data-agent-hint]')).toHaveText(
+    'The manager answers the agent in #hint-check; the agent escalates to #franco when only the owner can decide.',
+  )
   await expect(dialog.locator('[data-compute]')).toHaveAttribute('aria-checked', 'true')
   await expect(dialog.locator('[data-brief]')).toHaveAttribute('placeholder', 'What to do, and what done looks like')
   await expect(dialog.locator('[data-command]')).toHaveAttribute('placeholder', 'empty: agc runs the agent for you')
   const summary = dialog.locator('[data-summary]')
-  await expect(summary).toHaveText('claude_code (claude-opus-5-5) · manager franco · 2 cpus 4 GB')
+  await expect(summary).toHaveText('claude_code (claude-opus-5-5) · manager franco · owner franco · 2 cpus 4 GB')
 
   await dialog.locator('[data-repo]').fill('github.com/org/repo')
   await expect(summary).toHaveText(
-    'claude_code (claude-opus-5-5) · manager franco · 2 cpus 4 GB · repo github.com/org/repo',
+    'claude_code (claude-opus-5-5) · manager franco · owner franco · 2 cpus 4 GB · repo github.com/org/repo',
   )
 
   // Another harness has no default model here: the field is empty, not hidden.
   await dialog.locator('[data-assignee="codex_cli"]').click()
   await expect(dialog.locator('[data-model]')).toHaveValue('')
-  await expect(summary).toHaveText('codex_cli · manager franco · 2 cpus 4 GB · repo github.com/org/repo')
+  await expect(summary).toHaveText('codex_cli · manager franco · owner franco · 2 cpus 4 GB · repo github.com/org/repo')
 })
 
 test('a person hides the model and turns compute off', async ({ page }) => {
@@ -85,7 +90,7 @@ test('a person hides the model and turns compute off', async ({ page }) => {
   await expect(create).toHaveText("Create: needs the person's name")
   await dialog.locator('[data-person]').fill('alice')
   await expect(create).toHaveText('Create: needs a brief')
-  await expect(dialog.locator('[data-summary]')).toHaveText('alice · manager franco · no sandbox')
+  await expect(dialog.locator('[data-summary]')).toHaveText('alice · manager franco · owner franco · no sandbox')
 
   // Back to a harness: its model and the sandbox return.
   await dialog.locator('[data-assignee="claude_code"]').click()
@@ -271,6 +276,7 @@ test('Create sends the spec and opens the new task', async ({ page }) => {
       assignee: 'claude_code',
       model: 'claude-opus-5-5',
       manager: 'franco',
+      owner: 'franco',
       for: 'release-builds-with-cgo',
       sandbox: { ...spec, command: 'bash -l' },
     }),
@@ -305,6 +311,8 @@ test('a person task is created with no sandbox', async ({ page }) => {
   const body = JSON.parse((await posted).postData() ?? '{}')
   expect(body.assignee).toBe('alice')
   expect(body.model).toBe('')
+  expect(body.manager).toBe('franco')
+  expect(body.owner).toBe('franco')
   expect(body.sandbox).toBeUndefined()
 
   await expect(page).toHaveURL(new RegExp(`/panel/tasks/${name}/brief$`))

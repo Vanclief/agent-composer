@@ -1,6 +1,6 @@
 // The Agent card: who works the task (a harness or a person), with which
-// model, and who manages it (ADR 0009). The server's defaults are shown as
-// values, so the user sees who will work and who will manage before
+// model, who manages it and who owns it (ADR 0009). The defaults are shown
+// as values, so the user sees who will work and who will manage before
 // pressing Create.
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -9,10 +9,12 @@ import { cn } from '@/lib/utils'
 import { Card, chipBase, IconInput, Tip } from './bits'
 
 // ADR 0009 item 1, as the server applies them when a field is empty: the
-// harness claude_code, its model claude-opus-5-5, the manager franco.
+// harness claude_code, its model claude-opus-5-5, the owner franco. The
+// manager is the task's creator: in the panel, the signed-in person, franco.
 export const HARNESSES = ['claude_code', 'codex_cli', 'pi'] as const
 export const DEFAULT_HARNESS = 'claude_code'
 export const DEFAULT_MANAGER = 'franco'
+export const DEFAULT_OWNER = 'franco'
 const DEFAULT_MODELS: Record<string, string> = { claude_code: 'claude-opus-5-5' }
 
 // The assignee toggle's value for "a person"; the name is typed apart.
@@ -27,11 +29,20 @@ export type AgentForm = {
   worker: string
   person: string
   model: string
+  // Who created the task and runs it day to day: the signed-in person.
   manager: string
+  // The human the task answers to.
+  owner: string
 }
 
 export function blankAgent(): AgentForm {
-  return { worker: DEFAULT_HARNESS, person: '', model: defaultModel(DEFAULT_HARNESS), manager: DEFAULT_MANAGER }
+  return {
+    worker: DEFAULT_HARNESS,
+    person: '',
+    model: defaultModel(DEFAULT_HARNESS),
+    manager: DEFAULT_MANAGER,
+    owner: DEFAULT_OWNER,
+  }
 }
 
 // The assignee sent to the server: the harness id or the person's name.
@@ -47,10 +58,13 @@ const HARNESS_TIPS: Record<string, string> = {
 
 export function AgentCard({
   agent,
+  name,
   onWorker,
   update,
 }: {
   agent: AgentForm
+  // The task's name, for its channel in the hint.
+  name: string
   onWorker: (worker: string) => void
   update: (patch: Partial<AgentForm>) => void
 }) {
@@ -108,9 +122,9 @@ export function AgentCard({
           />
         ) : null}
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {person ? null : <FieldLabel text="model" />}
-        {person ? null : (
+      {person ? null : (
+        <div className="flex flex-wrap items-center gap-2">
+          <FieldLabel text="Model" />
           <IconInput
             data-model
             icon={AgentIcon}
@@ -121,18 +135,37 @@ export function AgentCard({
             onChange={(e) => update({ model: e.target.value })}
             placeholder="model"
           />
-        )}
-        <FieldLabel text="manager" />
-        <IconInput
-          data-manager
-          icon={HumanIcon}
-          concept="human"
-          tip="Manager: messaged in the task's channel when it opens"
-          wrapperClassName="w-56"
-          value={agent.manager}
-          onChange={(e) => update({ manager: e.target.value })}
-          placeholder="manager"
-        />
+        </div>
+      )}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <FieldLabel text="Manager" />
+          <IconInput
+            data-manager
+            icon={HumanIcon}
+            concept="human"
+            tip="Manager: created the task and runs it day to day"
+            wrapperClassName="w-56"
+            value={agent.manager}
+            onChange={(e) => update({ manager: e.target.value })}
+            placeholder="manager"
+          />
+          <FieldLabel text="Owner" />
+          <IconInput
+            data-owner
+            icon={HumanIcon}
+            concept="human"
+            tip="Owner: the human the task answers to"
+            wrapperClassName="w-56"
+            value={agent.owner}
+            onChange={(e) => update({ owner: e.target.value })}
+            placeholder="owner"
+          />
+        </div>
+        <p data-agent-hint className="text-xs text-muted-foreground">
+          The manager answers the agent in #{name || '<name>'}; the agent escalates to #
+          {agent.owner.trim() || '<owner>'} when only the owner can decide.
+        </p>
       </div>
     </Card>
   )

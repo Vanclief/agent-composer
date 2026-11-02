@@ -1,5 +1,5 @@
 // "New task" (ADR 0008, 0009): the order (title, name, brief, for), the
-// agent and its manager with the server's defaults filled in, and the
+// agent, its manager and owner with the defaults filled in, and the
 // compute to allocate now: saved-spec tiles to start from, the command and
 // the spec as six cards (or raw YAML behind the </> toggle). Creating
 // returns at once; a requested sandbox comes back starting.
@@ -212,6 +212,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
       assignee,
       model: person ? '' : agent.model.trim(),
       manager: agent.manager.trim(),
+      owner: agent.owner.trim(),
       for: order.for,
     }
     if (compute && current) {
@@ -249,6 +250,9 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
   }
   if (agent.manager.trim()) {
     summary.push('manager ' + agent.manager.trim())
+  }
+  if (agent.owner.trim()) {
+    summary.push('owner ' + agent.owner.trim())
   }
   if (!compute) {
     summary.push('no sandbox')
@@ -311,7 +315,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
               pickingFor={pickingFor}
               onPickingFor={setPickingFor}
             />
-            <AgentCard agent={agent} onWorker={pickWorker} update={updateAgent} />
+            <AgentCard agent={agent} name={name} onWorker={pickWorker} update={updateAgent} />
             <Card
               name="compute"
               concept="sandbox"
