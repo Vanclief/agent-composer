@@ -17,6 +17,7 @@ the panel stays conflict-free.
 | `src/features/terminals/` (`TerminalsTab`, `TerminalPane`, mounted by `SandboxPage`) + `tests/terminals.spec.ts`                                                                               | terminals feature   |
 | `src/features/messages/` (`MessagesTab`, `MessagesPage`, `ChannelRows`, `BrowsePage`, unread, follow, message toasts) + `tests/messages.spec.ts`, `tests/talk.spec.ts`, `tests/follow.spec.ts` | messages feature    |
 | `src/features/agents/` (`AgentsPage`, `AgentPage`, the New agent and Keep… dialogs) + `tests/agents.spec.ts`                                                                                   | agents feature      |
+| `src/features/accounts/` (`AccountsPage`, `ProviderCard`, the Add account and Manage Accounts… dialogs) + `tests/accounts.spec.ts`                                                             | accounts feature    |
 | everything else: `src/api/`, `src/components/`, `src/shell/`, `src/App.tsx`, `src/main.tsx`, `mock/`, `scripts/`, `tests/shell.spec.ts`, `tests/presence.spec.ts`, configs, `package.json`     | foundation (shared) |
 
 - The files in `src/features/` are placeholders. Replace them freely, but keep
@@ -51,6 +52,7 @@ Basename `/panel`. Defined in `src/App.tsx` (foundation).
 | `/compute/:name`                                         | `SandboxPage`: one sandbox (`:name` is the sandbox) with its terminals                                                                                           |
 | `/agents`                                                | `AgentsPage`: every persistent agent (Work); "New agent" makes a numbered one                                                                                    |
 | `/agents/:name`                                          | `AgentPage`: one agent, its home sandbox, tasks, conversations and identity                                                                                      |
+| `/accounts`                                              | `AccountsPage`: one card per provider (Work), its default account's usage, the switcher, Add and Manage                                                          |
 | `/messages`, `/messages/:channel`                        | Talk: `MessagesPage`; `:channel` has no `#` (`/messages/review-42` is `#review-42`); a DM keeps its `@`, encoded (`/messages/%40franco%2Fyc-pitch`)              |
 | `/messages/browse`                                       | `BrowsePage`: every channel, with Follow / Following (so a channel named `#browse` has no URL)                                                                   |
 
@@ -305,6 +307,31 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   (`/tasks/<name>`, status verbatim), Conversations (`/messages/<channel>`,
   the DM `#<owner>` first) and Identity.
 
+## Accounts (ahead of accounts-model and accounts-usage)
+
+- `@/api/accounts`: `AccountView` (`name`, `provider` anthropic|openai,
+  `kind` oauth|api_key, `secret`, `email`, `default`, `created_at`, `usage`
+  (`{updated_at, windows, error}` or `null`; a window is `{id, label, used, resets_at}`, `used` 0..1),
+  `ProviderView` (`id`, `harnesses`, `variables`), hand-typed from the
+  accounts contract. Hooks: `useAccounts` (`{accounts, providers}`),
+  `useCreateAccount` (201; the request carries the value once),
+  `useMakeDefaultAccount` / `useClearDefaultAccount` (POST and DELETE
+  `/api/accounts/{name}/default`), `useRemoveAccount` (204; 409 while a
+  running sandbox's spec names it). No route returns a value.
+- `/accounts`: a card per provider (`data-card="<provider>"`), Claude for
+  anthropic, Codex for openai: "Updated <ago>" and one bar per window of the
+  default account (`used` as a whole percent, "Resets in 4h 11m" / "1d
+  19h"), "Usage not available for this account" when `usage` is null,
+  `usage.error` verbatim; the "<Provider> Account" dropdown (label: the
+  default's email, else its name, else "System default"; "Switch to":
+  System default, then each account, the active one disabled "Active", a
+  `token rejected…` one "Sign in again to use this account"), the switch
+  error verbatim under it; Add account and Manage Accounts… (Make default,
+  Remove with a confirm, refusals verbatim). Sign in opens Add pre-filled
+  and replaces the account (DELETE, then POST, then the default back if it
+  had it); the device-flow sign-in is a follow-up. The value field is a
+  password field cleared when the request goes, success or failure.
+
 ## Task page (`/tasks/:name`)
 
 - Two columns from 1200px up. Center: one bordered box (`region` "Task
@@ -488,16 +515,16 @@ Messages tab) provides the channel context (`context.ts`) every piece reads.
 
 First time: `npm ci && npx playwright install chromium`.
 
-| Command                  | What it does                                                                                                                                                                                                                                                               |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run mock`           | Mock API on http://127.0.0.1:8790 (`-- --port N`)                                                                                                                                                                                                                          |
-| `npm run dev`            | Vite dev server at http://localhost:5173/panel/, `/api` proxied to `VITE_API_TARGET` (default the mock on 8790; a real agc is `http://127.0.0.1:1202`)                                                                                                                     |
+| Command                  | What it does                                                                                                                                                                                                                                              |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run mock`           | Mock API on http://127.0.0.1:8790 (`-- --port N`)                                                                                                                                                                                                         |
+| `npm run dev`            | Vite dev server at http://localhost:5173/panel/, `/api` proxied to `VITE_API_TARGET` (default the mock on 8790; a real agc is `http://127.0.0.1:1202`)                                                                                                    |
 | `npm run shot -- /tasks` | Screenshot a route at 1440x900 against its own fresh mock and dev server, writes and prints `/tmp/agc-panel/<route>.png`. Flags: `--out <path>`, `--wait <ms>`, `--width <px>`, `--height <px>`, `--storage key=value` (repeatable), `--click <selector>` |
-| `npm run check`          | Types drift, `tsc -b`, eslint, Playwright. Must be green before you finish                                                                                                                                                                                                 |
-| `npm run test`           | Playwright only                                                                                                                                                                                                                                                            |
-| `npm run types`          | Regenerate `src/api/schema.d.ts` from `../docs/openapi.yaml`                                                                                                                                                                                                               |
-| `npm run build`          | Typecheck and build `dist/` (what agc embeds)                                                                                                                                                                                                                              |
-| `npm run format`         | Prettier (no semicolons, single quotes, width 120)                                                                                                                                                                                                                         |
+| `npm run check`          | Types drift, `tsc -b`, eslint, Playwright. Must be green before you finish                                                                                                                                                                                |
+| `npm run test`           | Playwright only                                                                                                                                                                                                                                           |
+| `npm run types`          | Regenerate `src/api/schema.d.ts` from `../docs/openapi.yaml`                                                                                                                                                                                              |
+| `npm run build`          | Typecheck and build `dist/` (what agc embeds)                                                                                                                                                                                                             |
+| `npm run format`         | Prettier (no semicolons, single quotes, width 120)                                                                                                                                                                                                        |
 
 Look at your screen with `npm run shot` and read the PNG before you report.
 
@@ -579,6 +606,14 @@ highest ever given for that role (so the first `Reviewer` is `reviewer-3`);
 keep validates the name (lowercase letters, digits, dashes; 409 when
 taken); wake is asleep→waking and 2s later awake, sleep awake→asleep (409
 otherwise). Agent homes are not mock sandboxes, so `/compute/<home>` 404s.
+
+Accounts (`GET /api/accounts`): anthropic `franco-max` (oauth,
+`franco@example.com`, default, Session 16% resets in 4h 11m, Weekly 17%
+and Opus 20% in 1d 19h), `work-api` (api_key, usage null) and `old-max`
+(oauth, usage error `token rejected: 401 …`); openai has none. Create
+validates like the contract (409 `account <name> already exists`), drops
+the value; delete answers 204, or 409 while a running sandbox's spec names
+the account's secret.
 
 `GET /api/events` streams the live events from the mock's own
 operations (create, boot, stop/start/delete, accept, post, wake, sleep) with the 20s
