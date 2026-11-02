@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -123,12 +124,16 @@ type homeLoop struct {
 	joined func(p *msgmodels.Participant) error
 	// now is the clock, swapped in tests.
 	now func() time.Time
+	// backoff waits after a failed wait; nil waits for real, tests record.
+	backoff func(ctx context.Context, d time.Duration)
 
 	me       *msgmodels.Participant
 	role     string
 	sessions *sessionStore
 	// parents maps a message id to the id it replies to, 0 for none.
 	parents map[int64]int64
+	// dropped holds the channels already logged as left out of a wait.
+	dropped map[string]bool
 }
 
 // homeTurn is the work of one turn: the new messages of one thread.
@@ -168,6 +173,7 @@ func (l *homeLoop) run(ctx context.Context) error {
 	}
 	l.sessions = sessions
 	l.parents = map[int64]int64{}
+	l.dropped = map[string]bool{}
 
 	if l.prior != nil && l.prior.Name == l.name && l.prior.ParticipantID != "" {
 		// A run stopped with the VM still holds the name; it is ours.
@@ -204,6 +210,8 @@ func (l *homeLoop) run(ctx context.Context) error {
 	l.logf("joined as @%s (role %s), reading %s after %d", p.Name, l.role, strings.Join(info.Channels, ", "), cursor)
 
 	lastTurn := l.clock()
+	lastFailure := ""
+	delay := homeRetryMin
 
 	for {
 		if ctx.Err() != nil {
@@ -230,15 +238,28 @@ func (l *homeLoop) run(ctx context.Context) error {
 
 		timeout := min(agentWaitTimeout, idle-quiet)
 
-		res, err := l.msg.WaitChannels(ctx, info.Channels, cursor, timeout)
+		res, err := l.wait(ctx, info.Channels, cursor, timeout)
 		if ctx.Err() != nil {
 			return nil
 		}
 		if err != nil {
-			l.logf("wait failed, retrying: %s", ez.ErrorMessage(err))
-			pause(ctx)
+			// Log a failure once, not on every retry, and wait longer
+			// each time up to homeRetryMax.
+			failure := ez.ErrorMessage(err)
+			if failure != lastFailure {
+				l.logf("wait failed, retrying with a back-off: %s", failure)
+				lastFailure = failure
+			}
+			l.pauseFor(ctx, delay)
+			delay = min(delay*2, homeRetryMax)
 			continue
 		}
+
+		if lastFailure != "" {
+			l.logf("wait works again")
+			lastFailure = ""
+		}
+		delay = homeRetryMin
 
 		if len(res.Messages) == 0 {
 			continue
@@ -511,6 +532,78 @@ func writeJSONFile(path string, value any) error {
 	}
 
 	return nil
+}
+
+// wait is WaitChannels on channels, without the channels messaging
+// rejects as invalid: on an EINVALID naming one of them it leaves that
+// channel out of this cycle's list and asks again, instead of failing the
+// wait on every channel. Each dropped channel is logged once per run.
+func (l *homeLoop) wait(ctx context.Context, channels []string, after int64, timeout time.Duration) (*httpapi.MessagesResponse, error) {
+	for {
+		res, err := l.msg.WaitChannels(ctx, channels, after, timeout)
+		if err == nil || ctx.Err() != nil {
+			return res, err
+		}
+
+		bad := invalidChannel(err, channels)
+		if bad == "" {
+			return nil, err
+		}
+
+		if !l.dropped[bad] {
+			l.logf("leaving %s out of the wait: %s", bad, ez.ErrorMessage(err))
+			l.dropped[bad] = true
+		}
+
+		channels = withoutChannel(channels, bad)
+		if len(channels) == 0 {
+			return nil, err
+		}
+	}
+}
+
+// invalidChannel is the channel of channels an EINVALID error names
+// (messaging quotes it), "" for any other error.
+func invalidChannel(err error, channels []string) string {
+	if ez.ErrorCode(err) != ez.EINVALID {
+		return ""
+	}
+
+	failure := ez.ErrorMessage(err)
+	for _, channel := range channels {
+		if strings.Contains(failure, strconv.Quote(channel)) {
+			return channel
+		}
+	}
+
+	return ""
+}
+
+func withoutChannel(channels []string, drop string) []string {
+	out := []string{}
+	for _, channel := range channels {
+		if channel != drop {
+			out = append(out, channel)
+		}
+	}
+
+	return out
+}
+
+// pauseFor waits d, or until ctx is done.
+func (l *homeLoop) pauseFor(ctx context.Context, d time.Duration) {
+	if l.backoff != nil {
+		l.backoff(ctx, d)
+		return
+	}
+
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+	case <-timer.C:
+	}
 }
 
 // pause waits agentRetryDelay or until ctx is done.

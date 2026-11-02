@@ -26,6 +26,10 @@ const (
 	agentWaitTimeout = time.Minute
 	// agentRetryDelay is the pause after a failed wait before trying again.
 	agentRetryDelay = 5 * time.Second
+	// homeRetryMin and homeRetryMax bound the home loop's back-off after a
+	// failed wait: it doubles from min to max and resets on a good wait.
+	homeRetryMin = 2 * time.Second
+	homeRetryMax = 30 * time.Second
 	// deliverPrefix starts an answer that delivers the task (ADR 0010
 	// item 2); the rest of the answer is the summary.
 	deliverPrefix = "DONE:"
