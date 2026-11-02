@@ -1,2 +1,502 @@
 /* Eva look, base area (docs/design/panel.md). Rules keyed on the markup's attributes;
-   unlayered so they win over Tailwind utilities. Filled by task panel-eva-base. */
+   unlayered so they win over Tailwind utilities. Filled by task panel-eva-base.
+
+   The shadcn components in src/components/ui carry `data-slot` (and `data-variant`,
+   `data-size`, `data-state`), so the look keys on those and no component file
+   changes. Colors that the tokens already give (the primary button's orange fill
+   and ink text, a badge's fill) are left to the tokens, so a page's own utility
+   (Accept green while review) still wins. Selectors stay at two or three
+   attributes so the shell and Tasks rules in index.css and the area files, which
+   come later, still win where they style the same element.
+
+   A cut corner is drawn without a pseudo-element, so it works on any element:
+   the frame is a border or an inset shadow, clip-path cuts the corner, and a
+   one-pixel diagonal (a gradient in a cut-sized square) closes the frame along
+   the cut. --eva-f is the frame color, --eva-c the cut. */
+
+.dark {
+  --eva-plate: oklch(0.16 0.01 60);
+  --eva-hover: oklch(0.85 0.17 55);
+}
+/* The cut lines, declared on the elements that set --eva-f so the frame color
+   resolves there. */
+.dark
+  :is(
+    [data-slot='button'],
+    [data-variant][data-size],
+    [data-slot='dialog-content'],
+    [data-slot='alert-dialog-content'],
+    [data-sonner-toast]
+  ) {
+  --eva-cut-tr: linear-gradient(
+    to bottom left,
+    transparent calc(50% - 0.5px),
+    var(--eva-f) calc(50% - 0.5px) calc(50% + 0.75px),
+    transparent calc(50% + 0.75px)
+  );
+  --eva-cut-bl: linear-gradient(
+    to top right,
+    transparent calc(50% - 0.5px),
+    var(--eva-f) calc(50% - 0.5px) calc(50% + 0.75px),
+    transparent calc(50% + 0.75px)
+  );
+}
+
+/* Radius zero everywhere: every shadcn part. */
+.dark [data-slot] {
+  border-radius: 0;
+}
+
+/* ---------------------------------------------------------------- Buttons
+   Outlined orange blocks that fill on hover; the primary one filled with ink
+   text (its tokens, so a page's own fill, Accept green, still shows);
+   destructive red; all cut at the top right (6px). A button rendered through
+   an asChild trigger (DialogClose, AlertDialogTrigger, AlertDialogAction)
+   loses data-slot='button' but keeps data-variant and data-size, so both are
+   matched. Everything sits in :where() (one class of specificity) so the shell
+   and Tasks rules in index.css (New task, the acts) still win. */
+.dark :where([data-slot='button'], [data-variant][data-size]:not([data-slot='toggle-group-item'])) {
+  --eva-f: var(--eva);
+  --eva-c: 6px;
+  box-shadow: none;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: none;
+  clip-path: polygon(0 0, calc(100% - var(--eva-c)) 0, 100% var(--eva-c), 100% 100%, 0 100%);
+}
+/* Identifiers in a button stay as sent. */
+.dark :where([data-slot='button'], [data-variant][data-size]:not([data-slot='toggle-group-item'])):where([class*='font-mono'], [class*='normal-case']) {
+  text-transform: none;
+  letter-spacing: 0;
+}
+.dark :where([data-slot='button'], [data-variant][data-size]:not([data-slot='toggle-group-item'])):where([data-variant='outline'], [data-variant='secondary']) {
+  border: 0;
+  background-color: transparent;
+  color: var(--eva);
+  box-shadow: inset 0 0 0 1px var(--eva-f);
+  background-image: var(--eva-cut-tr);
+  background-size: var(--eva-c) var(--eva-c);
+  background-position: right top;
+  background-repeat: no-repeat;
+}
+.dark :where([data-slot='button'], [data-variant][data-size]:not([data-slot='toggle-group-item'])):where([data-variant='outline'], [data-variant='secondary']):hover {
+  background-color: var(--eva);
+  color: var(--eva-ink);
+}
+/* Destructive: the variant, or an outlined button a page colored red (Delete). */
+.dark :where([data-slot='button'], [data-variant][data-size]:not([data-slot='toggle-group-item'])):where([data-variant='destructive']) {
+  background-color: var(--eva-red);
+  color: var(--eva-ink);
+}
+.dark :where([data-slot='button'], [data-variant][data-size]:not([data-slot='toggle-group-item'])):where([data-variant='destructive']):hover {
+  background-color: oklch(0.7 0.22 27);
+}
+.dark :where([data-slot='button'], [data-variant][data-size]:not([data-slot='toggle-group-item'])):where([data-variant='outline'][class*='text-red-']) {
+  --eva-f: var(--eva-red);
+  color: var(--eva-red);
+}
+.dark :where([data-slot='button'], [data-variant][data-size]:not([data-slot='toggle-group-item'])):where([data-variant='outline'][class*='text-red-']):hover {
+  background-color: var(--eva-red);
+  color: var(--eva-ink);
+}
+.dark :where([data-slot='button'], [data-variant][data-size]:not([data-slot='toggle-group-item'])):where([data-variant='ghost']):hover {
+  background-color: var(--eva-faint);
+  color: var(--eva);
+}
+.dark :where([data-slot='button'], [data-variant][data-size]:not([data-slot='toggle-group-item'])):where([data-variant='ghost'][class*='hover:text-red-']):hover {
+  background-color: oklch(0.62 0.25 27 / 14%);
+  color: var(--eva-red);
+}
+.dark :where([data-slot='button'], [data-variant][data-size]:not([data-slot='toggle-group-item'])):where([data-variant='link']) {
+  clip-path: none;
+  color: var(--eva);
+  text-transform: none;
+  letter-spacing: 0;
+}
+/* Focus: clip-path would cut an outer ring, so the ring is drawn inside. */
+.dark :where([data-slot='button'], [data-variant][data-size]:not([data-slot='toggle-group-item'])):focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--eva-cyan);
+}
+
+/* ------------------------------------------------------- Inputs and labels
+   One-pixel frames on the plate color, a cyan focus ring; labels condensed,
+   uppercase, spaced. */
+.dark :is([data-slot='input'], [data-slot='textarea'], [data-slot='select-trigger']) {
+  border: 1px solid var(--eva-dim);
+  background-color: var(--eva-plate);
+  box-shadow: none;
+  transition: none;
+}
+.dark :is([data-slot='input'], [data-slot='textarea'], [data-slot='select-trigger']):hover {
+  border-color: var(--eva);
+}
+.dark :is([data-slot='input'], [data-slot='textarea'], [data-slot='select-trigger']):focus-visible {
+  outline: none;
+  border-color: var(--eva-cyan);
+  box-shadow: 0 0 0 1px var(--eva-cyan);
+}
+.dark :is([data-slot='input'], [data-slot='textarea'], [data-slot='select-trigger'])[aria-invalid='true'] {
+  border-color: var(--eva-red);
+  box-shadow: 0 0 0 1px var(--eva-red);
+}
+.dark :is([data-slot='input'], [data-slot='textarea'])::placeholder {
+  color: oklch(0.62 0.03 70 / 70%);
+}
+.dark [data-slot='select-trigger'] svg {
+  color: var(--eva);
+  opacity: 1;
+}
+.dark [data-slot='label'] {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* ------------------------------------------------------ Dialogs (and alert)
+   A chamfered plate (12px at the top right and the bottom left), the title a
+   filled orange tab, a ruler under the header. */
+.dark :is([data-slot='dialog-content'], [data-slot='alert-dialog-content']) {
+  --eva-f: var(--eva-dim);
+  --eva-c: var(--cut);
+  border: 1px solid var(--eva-f);
+  background-color: var(--eva-plate);
+  background-image: var(--eva-cut-tr), var(--eva-cut-bl);
+  background-size: var(--eva-c) var(--eva-c);
+  background-position: right top, left bottom;
+  background-repeat: no-repeat;
+  background-origin: border-box;
+  box-shadow: none;
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--eva-c)) 0,
+    100% var(--eva-c),
+    100% 100%,
+    var(--eva-c) 100%,
+    0 calc(100% - var(--eva-c))
+  );
+}
+.dark :is([data-slot='dialog-overlay'], [data-slot='alert-dialog-overlay']) {
+  background-color: oklch(0.08 0.005 60 / 75%);
+}
+/* The header is whatever holds the title: DialogHeader, or a page's own strip. */
+.dark :is([data-slot='dialog-content'], [data-slot='alert-dialog-content'])
+  :has(> :is([data-slot='dialog-title'], [data-slot='alert-dialog-title'])) {
+  position: relative;
+  border-bottom: 1px solid var(--eva-dim);
+}
+.dark :is([data-slot='dialog-header'], [data-slot='alert-dialog-header']) {
+  padding-bottom: 12px;
+}
+.dark :is([data-slot='dialog-content'], [data-slot='alert-dialog-content'])
+  :has(> :is([data-slot='dialog-title'], [data-slot='alert-dialog-title']))::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  pointer-events: none;
+  background: repeating-linear-gradient(90deg, var(--eva-dim) 0 1px, transparent 1px 12px);
+}
+.dark :is([data-slot='dialog-title'], [data-slot='alert-dialog-title']) {
+  justify-self: start;
+  align-self: flex-start;
+  width: fit-content;
+  background: var(--eva);
+  color: var(--eva-ink);
+  padding: 2px 18px 1px 10px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+}
+/* In a header strip that is a row (icon, title, close), the tab sits centered. */
+.dark :is([data-slot='dialog-content'], [data-slot='alert-dialog-content'])
+  [class*='items-center']
+  > :is([data-slot='dialog-title'], [data-slot='alert-dialog-title']) {
+  align-self: center;
+}
+.dark :is([data-slot='dialog-description'], [data-slot='alert-dialog-description']) {
+  color: var(--muted-foreground);
+}
+.dark [data-slot='dialog-close']:not([data-variant]) {
+  color: var(--eva);
+  opacity: 1;
+}
+.dark [data-slot='dialog-close']:not([data-variant]):hover {
+  background: var(--eva-faint);
+}
+
+/* ------------------------------------------------------------------- Tabs
+   Outlined blocks; the active one filled orange and cut at the top right. */
+.dark [data-slot='tabs-list'] {
+  background: transparent;
+  padding: 0;
+  gap: 4px;
+}
+.dark [data-slot='tabs-trigger'] {
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--eva-dim);
+  background: transparent;
+  color: var(--eva);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: none;
+  padding-inline: 10px;
+}
+.dark [data-slot='tabs-trigger']:hover {
+  background: var(--eva-faint);
+  color: var(--eva);
+}
+.dark [data-slot='tabs-trigger'][data-state='active'] {
+  background: var(--eva);
+  color: var(--eva-ink);
+  box-shadow: none;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+}
+.dark [data-slot='tabs-trigger']::after {
+  display: none;
+}
+.dark [data-slot='tabs-trigger']:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--eva-cyan);
+}
+
+/* ----------------------------------------------------------------- Badges
+   Square and monospace, lowercase as sent; colors from the tokens. */
+.dark [data-slot='badge'] {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding-inline: 6px;
+}
+.dark [data-slot='badge'][data-variant='outline'] {
+  border-color: var(--eva-dim);
+}
+.dark [data-slot='badge'][data-variant='destructive'] {
+  background-color: var(--eva-red);
+  color: var(--eva-ink);
+}
+
+/* ------------------------------------------------------ Switches, toggles
+   Square. A switch on is a filled orange track with an ink thumb; off is a
+   dim frame with a grey thumb. A toggle on is an orange frame on a faint tint:
+   a setting, not a state, so it stays below the filled blocks. */
+.dark [data-slot='switch'] {
+  box-shadow: inset 0 0 0 1px var(--eva-dim);
+  transition: none;
+}
+.dark [data-slot='switch'][data-state='unchecked'] {
+  background-color: var(--eva-faint);
+}
+.dark [data-slot='switch'][data-state='checked'] {
+  background-color: var(--eva);
+  box-shadow: none;
+}
+.dark [data-slot='switch-thumb'] {
+  transition: none;
+}
+.dark [data-slot='switch'][data-state='unchecked'] [data-slot='switch-thumb'] {
+  background-color: var(--muted-foreground);
+}
+.dark [data-slot='switch'][data-state='checked'] [data-slot='switch-thumb'] {
+  background-color: var(--eva-ink);
+}
+.dark [data-slot='switch']:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--eva-cyan);
+}
+.dark :is([data-slot='toggle'], [data-slot='toggle-group-item']) {
+  transition: none;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.dark :is([data-slot='toggle'], [data-slot='toggle-group-item'])[data-variant='outline'] {
+  border-color: var(--eva-dim);
+  box-shadow: none;
+}
+.dark :is([data-slot='toggle'], [data-slot='toggle-group-item']):hover {
+  background-color: var(--eva-faint);
+  color: var(--eva);
+}
+.dark :is([data-slot='toggle'], [data-slot='toggle-group-item'])[data-state='on'] {
+  background-color: var(--eva-faint);
+  border-color: var(--eva);
+  color: var(--eva);
+  box-shadow: inset 0 0 0 1px var(--eva);
+}
+.dark [data-slot='toggle-group'] {
+  box-shadow: none;
+}
+.dark :is([data-slot='toggle'], [data-slot='toggle-group-item']):focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--eva-cyan);
+}
+
+/* ---------------------------------------- Tooltips, menus, command palette
+   Plates with one-pixel frames; the highlighted item is cyan (it is you). */
+.dark [data-slot='tooltip-content'] {
+  background-color: var(--eva-plate);
+  color: var(--foreground);
+  border: 1px solid var(--eva-dim);
+  box-shadow: 0 6px 18px oklch(0 0 0 / 55%);
+}
+.dark [data-slot='tooltip-content'] > svg:last-child,
+.dark [data-slot='tooltip-content'] > span:last-child > svg {
+  display: none;
+}
+.dark :is([data-slot='dropdown-menu-content'], [data-slot='dropdown-menu-sub-content'], [data-slot='select-content']) {
+  background-color: var(--eva-plate);
+  border: 1px solid var(--eva-dim);
+  box-shadow: 0 8px 24px oklch(0 0 0 / 55%);
+}
+.dark [data-slot='command'] {
+  background-color: var(--eva-plate);
+}
+.dark [data-slot='command'][class*='border'] {
+  border-color: var(--eva-dim);
+}
+.dark [data-slot='command-input-wrapper'] {
+  border-bottom-color: var(--eva-dim);
+}
+.dark [data-slot='command-input-wrapper'] svg {
+  color: var(--eva);
+  opacity: 1;
+}
+.dark :is([data-slot='command-group']) [cmdk-group-heading],
+.dark [data-slot='dropdown-menu-label'],
+.dark [data-slot='select-label'] {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--eva);
+}
+.dark :is([data-slot='dropdown-menu-separator'], [data-slot='select-separator'], [data-slot='command-separator']) {
+  background-color: var(--eva-dim);
+}
+.dark
+  :is(
+    [data-slot='dropdown-menu-item'],
+    [data-slot='dropdown-menu-checkbox-item'],
+    [data-slot='dropdown-menu-radio-item'],
+    [data-slot='dropdown-menu-sub-trigger'],
+    [data-slot='select-item']
+  ):is([data-highlighted], [data-state='open']),
+.dark [data-slot='command-item'][data-selected='true'] {
+  background-color: oklch(0.8 0.14 200 / 10%);
+  color: var(--eva-cyan);
+  box-shadow: inset 2px 0 0 var(--eva-cyan);
+}
+.dark
+  :is([data-slot='dropdown-menu-item'], [data-slot='select-item'], [data-slot='command-item']):is(
+    [data-highlighted],
+    [data-selected='true']
+  )
+  svg {
+  color: var(--eva-cyan);
+}
+.dark [data-slot='dropdown-menu-item'][data-variant='destructive'] {
+  color: var(--eva-red);
+}
+.dark [data-slot='dropdown-menu-item'][data-variant='destructive'][data-highlighted] {
+  background-color: oklch(0.62 0.25 27 / 14%);
+  color: var(--eva-red);
+  box-shadow: inset 2px 0 0 var(--eva-red);
+}
+
+/* -------------------------------------------------------------- Skeletons
+   Dim frames, still: motion is for events. */
+.dark [data-slot='skeleton'] {
+  animation: none;
+  background-color: oklch(0.74 0.19 48 / 5%);
+  box-shadow: inset 0 0 0 1px oklch(0.74 0.19 48 / 22%);
+}
+
+/* ----------------------------------------------------------------- Toasts
+   Plates cut at the top right and the bottom left, the frame in the event's
+   color: a task started green (alive), a task done green (settled, the frame
+   only), a message for you cyan (you), an error red, a warning yellow. The
+   clip-path reaches 32px past the top and bottom edges so sonner's hover
+   bridges between stacked toasts (its ::before and ::after) stay reachable. */
+.dark [data-sonner-toast][data-styled='true'] {
+  --eva-f: var(--eva-dim);
+  --eva-c: var(--cut);
+  --normal-border: var(--eva-f);
+  background-color: var(--eva-plate);
+  background-image: var(--eva-cut-tr), var(--eva-cut-bl);
+  background-size: var(--eva-c) var(--eva-c);
+  background-position: right top, left bottom;
+  background-repeat: no-repeat;
+  background-origin: border-box;
+  border-color: var(--eva-f);
+  box-shadow: 0 8px 24px oklch(0 0 0 / 55%);
+  clip-path: polygon(
+    0 -32px,
+    calc(100% - var(--eva-c)) -32px,
+    calc(100% - var(--eva-c)) 0,
+    100% var(--eva-c),
+    100% calc(100% + 32px),
+    var(--eva-c) calc(100% + 32px),
+    var(--eva-c) 100%,
+    0 calc(100% - var(--eva-c))
+  );
+}
+/* Started has the chips line; done has only the title, or the summary. */
+.dark [data-sonner-toast][data-styled='true']:has([data-testid='toast-task'] > span:nth-child(2)) {
+  --eva-f: var(--eva-green);
+}
+.dark [data-sonner-toast][data-styled='true']:has([data-testid='toast-task']):not(:has([data-testid='toast-task'] > span:nth-child(2))) {
+  --eva-f: oklch(0.8 0.2 150 / 55%);
+}
+.dark [data-sonner-toast][data-styled='true']:has([data-testid='toast-message']) {
+  --eva-f: var(--eva-cyan);
+}
+.dark [data-sonner-toast][data-styled='true'][data-type='error'] {
+  --eva-f: var(--eva-red);
+}
+.dark [data-sonner-toast][data-styled='true'][data-type='warning'] {
+  --eva-f: var(--eva-yellow);
+}
+.dark [data-sonner-toast][data-styled='true'][data-type='success'] {
+  --eva-f: var(--eva-green);
+}
+.dark [data-sonner-toast][data-styled='true'] [data-title] {
+  color: var(--eva-f);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.dark [data-sonner-toast][data-styled='true']:has([data-testid='toast-task']):not(:has([data-testid='toast-task'] > span:nth-child(2))) [data-title] {
+  color: var(--eva-green);
+}
+/* Open: an act, a filled orange block cut at the top right. */
+.dark [data-sonner-toast][data-styled='true'] [data-button] {
+  border-radius: 0;
+  background: var(--eva);
+  color: var(--eva-ink);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+}
+.dark [data-sonner-toast][data-styled='true'] [data-button]:hover {
+  background: var(--eva-hover);
+}
+.dark [data-sonner-toast][data-styled='true'] [data-close-button] {
+  border-radius: 0;
+  border-color: var(--eva-f);
+  background: var(--eva-plate);
+  color: var(--eva-f);
+}
