@@ -1,7 +1,7 @@
 // Add account (also Sign in again, which replaces a rejected token) and
 // Manage Accounts… (Remove with a confirm, Make default) for one provider.
 import { useState, type FormEvent } from 'react'
-import { Loader2, Plus, Star, Trash2 } from 'lucide-react'
+import { Loader2, LogIn, LogOut, Plus, Star, Trash2 } from 'lucide-react'
 
 import type { AccountKind, AccountView, ProviderView } from '@/api/accounts'
 import { useClearDefaultAccount, useCreateAccount, useMakeDefaultAccount, useRemoveAccount } from '@/api/hooks'
@@ -32,7 +32,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 
-import { ACCOUNT_NAME_RE, KIND_LABELS, kindHint, providerName } from './format'
+import { ACCOUNT_NAME_RE, ago, KIND_LABELS, kindHint, providerName, useNow } from './format'
+import { signedInAt, useSignOut } from './signin'
 
 const chipBase =
   'h-7 border border-border bg-transparent px-2 text-xs font-normal text-muted-foreground shadow-none hover:bg-accent hover:text-accent-foreground'
@@ -202,10 +203,20 @@ type ManageAccountsDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onAdd: () => void
+  // Opens the sign-in dialog for an account (anthropic only).
+  onSignIn?: (account: AccountView) => void
 }
 
-// The provider's accounts as rows, each with Make default and Remove.
-export function ManageAccountsDialog({ provider, accounts, open, onOpenChange, onAdd }: ManageAccountsDialogProps) {
+// The provider's accounts as rows, each with Make default and Remove, and
+// for anthropic the sign-in state with Sign in / Sign out.
+export function ManageAccountsDialog({
+  provider,
+  accounts,
+  open,
+  onOpenChange,
+  onAdd,
+  onSignIn,
+}: ManageAccountsDialogProps) {
   const display = providerName(provider.id)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -222,7 +233,7 @@ export function ManageAccountsDialog({ provider, accounts, open, onOpenChange, o
             className="-mx-1 flex max-h-[50vh] flex-col divide-y divide-border overflow-y-auto px-1"
           >
             {accounts.map((a) => (
-              <ManageRow key={a.name} account={a} />
+              <ManageRow key={a.name} account={a} onSignIn={provider.id === 'anthropic' ? onSignIn : undefined} />
             ))}
           </ul>
         )}
@@ -243,10 +254,11 @@ export function ManageAccountsDialog({ provider, accounts, open, onOpenChange, o
   )
 }
 
-function ManageRow({ account }: { account: AccountView }) {
+function ManageRow({ account, onSignIn }: { account: AccountView; onSignIn?: (account: AccountView) => void }) {
   const makeDefault = useMakeDefaultAccount()
   const clearDefault = useClearDefaultAccount()
   const remove = useRemoveAccount()
+  const signOut = useSignOut()
   const Icon = conceptIcons.account
   return (
     <li data-account={account.name} className="flex flex-col gap-1.5 py-2">
@@ -306,7 +318,63 @@ function ManageRow({ account }: { account: AccountView }) {
           </AlertDialog>
         </div>
       </div>
-      <ErrorText error={remove.error ?? makeDefault.error ?? clearDefault.error} className="text-xs" />
+      {onSignIn && <SignInRow account={account} onSignIn={onSignIn} signOut={signOut} />}
+      <ErrorText error={remove.error ?? makeDefault.error ?? clearDefault.error ?? signOut.error} className="text-xs" />
     </li>
+  )
+}
+
+// "Signed in 3 min ago" with Sign in (again) and Sign out (confirm), or
+// "Not signed in" with Sign in.
+function SignInRow({
+  account,
+  onSignIn,
+  signOut,
+}: {
+  account: AccountView
+  onSignIn: (account: AccountView) => void
+  signOut: ReturnType<typeof useSignOut>
+}) {
+  const now = useNow()
+  const at = signedInAt(account)
+  return (
+    <div className="flex items-center gap-1.5 pl-6">
+      <span
+        data-testid="sign-in-state"
+        data-signed-in={at ? 'yes' : 'no'}
+        className="font-mono text-xs text-muted-foreground"
+        title={at ? new Date(at).toLocaleString() : 'No login: usage reads only what the token allows'}
+      >
+        {at ? `Signed in ${ago(at, now)}` : 'Not signed in'}
+      </span>
+      <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        <Button size="sm" variant="ghost" data-act="sign-in" onClick={() => onSignIn(account)}>
+          <LogIn /> {at ? 'Sign in again' : 'Sign in'}
+        </Button>
+        {at && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button size="sm" variant="ghost" data-act="sign-out" disabled={signOut.isPending}>
+                {signOut.isPending ? <Loader2 className="animate-spin" /> : <LogOut />} Sign out
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Sign out of {account.name}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Forgets its login; usage goes back to what its token allows. The token itself stays.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => signOut.mutate(account.name)}>
+                  <LogOut /> Sign out
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+      </div>
+    </div>
   )
 }
