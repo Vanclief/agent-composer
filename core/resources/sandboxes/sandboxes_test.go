@@ -3,6 +3,7 @@ package sandboxes
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"net"
 	"net/http"
 	"os"
@@ -858,27 +859,37 @@ func TestListenerServesDeliverForItsOwnTask(t *testing.T) {
 	client := socketClient(env.api.socketPath("review-42"))
 
 	out := map[string]string{}
-	err = client.Deliver(ctx, "posted the findings", &out)
+	err = client.Deliver(ctx, "posted the findings", nil, &out)
 	if ez.ErrorCode(err) != ez.EUNAVAILABLE {
 		t.Fatalf("expected EUNAVAILABLE before OnDeliver, got %v", err)
 	}
 
-	env.api.OnDeliver(func(ctx context.Context, taskName string, summary string) (any, error) {
+	env.api.OnDeliver(func(ctx context.Context, taskName string, summary string, report json.RawMessage) (any, error) {
 		if summary == "" {
 			return nil, ez.New(ez.EINVALID, "summary is required", nil)
 		}
-		return map[string]string{"task": taskName, "summary": summary}, nil
+		return map[string]string{"task": taskName, "summary": summary, "report": string(report)}, nil
 	})
 
-	err = client.Deliver(ctx, "posted the findings", &out)
+	err = client.Deliver(ctx, "posted the findings", nil, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out["task"] != "review-42" || out["summary"] != "posted the findings" {
+	if out["task"] != "review-42" || out["summary"] != "posted the findings" || out["report"] != "" {
 		t.Fatalf("delivered = %+v", out)
 	}
 
-	err = client.Deliver(ctx, "", &out)
+	// The report reaches the tasks API as it was sent.
+	report := `{"criteria":[{"met":"partly","note":"x"}],"extra":{"kept":true}}`
+	err = client.Deliver(ctx, "with a report", json.RawMessage(report), &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out["report"] != report {
+		t.Fatalf("report = %q, want %q", out["report"], report)
+	}
+
+	err = client.Deliver(ctx, "", nil, &out)
 	if ez.ErrorCode(err) != ez.EINVALID {
 		t.Fatalf("expected EINVALID, got %v", err)
 	}

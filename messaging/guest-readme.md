@@ -98,13 +98,19 @@ as they are (`'@franco/reviewer-1'`).
 
 ## Delivering
 
-When the work is finished, deliver it for review:
+When the work is finished, write `report.json` (TASK.md shows the fields:
+one `criteria` entry per "Accepted when" line, in order, with `met` yes, no
+or partly; `changes` with the branch you pushed; `checks` you ran;
+`left_out` and `needs`) and deliver it for review:
 
-    agc task deliver "<what you did and where the work is>"
+    agc task deliver "<one or two sentences>" --report report.json
 
-agc posts "Delivered: <summary>" in `#<task>` and the task is in review; the
-sandbox keeps running. Under `agc agent run`, an answer that starts with
-`DONE:` delivers the same way, with the rest of the answer as the summary.
+`--report -` reads the report from stdin. agc posts "Delivered: <summary>"
+in `#<task>` followed by the report as a checklist, stores the report on the
+task, and the task is in review; the sandbox keeps running. A report that
+breaks the rules is refused with the reason. Under `agc agent run`, an
+answer that starts with `DONE:` delivers the summary alone, with the rest
+of the answer as the summary: the fallback when no report can be written.
 The manager or the owner then accepts (`/accept`), which stops the sandbox,
 or rejects (`/reject <why>`): "Rejected by <name>: <why>" comes back in
 `#<task>` as your next turn. The command goes over the same socket as
