@@ -14,11 +14,29 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/shell/page-title'
 
-import { formatMemory, sandboxMoment, shortAge } from './format'
-import { SandboxActions, StatusError } from './SandboxParts'
+import { sandboxMoment, shortAge } from './format'
+import { Readout, SandboxActions, SpecReadouts, StatusError } from './SandboxParts'
 
 const ORDER = ['failed', 'starting', 'running', 'unknown', 'stopped']
 const color = conceptColors.sandbox
+
+// How many sandboxes carry each status word, in the order the groups come;
+// the words are the backend's, verbatim.
+function StatusCounts({ groups }: { groups: [string, SandboxView[]][] }) {
+  if (groups.length === 0) {
+    return null
+  }
+  return (
+    <span data-testid="status-counts" className="ml-2 inline-flex items-center gap-4 text-xs text-muted-foreground">
+      {groups.map(([status, list]) => (
+        <span key={status} data-status-count={status} className="inline-flex items-center gap-1.5">
+          <StatusPill status={status} detail={list[0]?.status_error} className="border-0 px-0" />
+          <b className="font-mono tabular-nums">{String(list.length).padStart(2, '0')}</b>
+        </span>
+      ))}
+    </span>
+  )
+}
 
 export function ComputePage() {
   usePageTitle('Compute')
@@ -28,8 +46,8 @@ export function ComputePage() {
   const groups = groupByStatus(sandboxes.data ?? [])
 
   return (
-    <div className="flex flex-col gap-5 p-6">
-      <div className="flex items-center gap-4">
+    <div data-testid="compute-page" className="flex flex-col gap-5 p-6">
+      <div data-testid="compute-header" className="flex items-center gap-4">
         <span
           title="Sandboxes"
           data-testid="sandbox-count"
@@ -39,6 +57,7 @@ export function ComputePage() {
           {sandboxes.data?.length ?? '–'}
         </span>
         <StatusLegend />
+        <StatusCounts groups={groups} />
       </div>
       <ErrorText error={sandboxes.error} />
       {sandboxes.isPending && (
@@ -89,14 +108,16 @@ function groupByStatus(list: SandboxView[]) {
 }
 
 // One sandbox as a flat row (panel/CLAUDE.md "Lists are rows, not
-// cards"): its light, its name, the task it serves and the age; under it,
-// muted, cpus · memory · image · command, the boot error in red when there
-// is one, and small Stop/Start/Delete. The whole row opens the sandbox; the
-// task link and the buttons sit above that.
+// cards"): its light, its name with the command under it, then columns: the
+// task it serves, cpus, memory, disk and image as labelled readouts, the
+// age, and at the far right Terminal (while running) and Stop/Start/Delete.
+// The boot error follows in red when there is one. The whole row opens the
+// sandbox; the task link and the controls sit above that.
 export function SandboxRow({ sandbox, taskTitle }: { sandbox: SandboxView; taskTitle?: string }) {
   const tier = statusTier(sandbox.status, sandbox.status_error)
   const off = tier === 'off'
   const moment = sandboxMoment(sandbox)
+  const command = sandbox.command.trim()
   return (
     <article
       aria-label={sandbox.name}
@@ -104,72 +125,68 @@ export function SandboxRow({ sandbox, taskTitle }: { sandbox: SandboxView; taskT
       data-tier={tier}
       className="relative flex flex-col gap-1 px-3 py-2 text-sm transition-colors hover:bg-zinc-500/5 has-[a:focus-visible]:rounded-md has-[a:focus-visible]:ring-1 has-[a:focus-visible]:ring-violet-500/70 dark:hover:bg-zinc-500/10"
     >
-      <div className="flex items-center gap-3">
-        <div className="flex w-20 shrink-0">
+      <div className="flex items-center gap-4">
+        <div data-testid="sandbox-status" className="flex w-20 shrink-0">
           <StatusPill status={sandbox.status} detail={sandbox.status_error} />
         </div>
-        <Link
-          to={`/compute/${encodeURIComponent(sandbox.name)}`}
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <Link
+            to={`/compute/${encodeURIComponent(sandbox.name)}`}
+            data-testid="sandbox-name"
+            className={cn(
+              'truncate font-mono outline-none after:absolute after:inset-0 after:content-[""]',
+              off && 'text-muted-foreground',
+            )}
+          >
+            {sandbox.name}
+          </Link>
+          {command && (
+            <span title="Command (the agent terminal)" className="truncate font-mono text-xs text-muted-foreground">
+              {command}
+            </span>
+          )}
+        </div>
+        <div
+          data-testid="sandbox-readouts"
           className={cn(
-            'truncate font-mono outline-none after:absolute after:inset-0 after:content-[""]',
-            off && 'text-muted-foreground',
+            'grid shrink-0 grid-cols-[10rem_2.5rem_4rem_3.5rem_6rem] items-start gap-x-4 text-xs',
+            off && 'opacity-70',
           )}
         >
-          {sandbox.name}
-        </Link>
-        <Link
-          to={`/tasks/${encodeURIComponent(sandbox.task)}`}
-          title={`Task ${sandbox.task}`}
-          className="relative z-10 inline-flex min-w-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline"
-        >
-          <conceptIcons.task aria-hidden className={cn('size-3.5 shrink-0 opacity-70', conceptColors.task.text)} />
-          <span className="truncate">{taskTitle || sandbox.task}</span>
-        </Link>
+          <Readout label="Task">
+            <Link
+              to={`/tasks/${encodeURIComponent(sandbox.task)}`}
+              title={`Task ${sandbox.task}`}
+              className="relative z-10 inline-flex max-w-full min-w-0 items-center gap-1 text-muted-foreground hover:text-foreground hover:underline"
+            >
+              <conceptIcons.task aria-hidden className={cn('size-3.5 shrink-0 opacity-70', conceptColors.task.text)} />
+              <span className="truncate">{taskTitle || sandbox.task}</span>
+            </Link>
+          </Readout>
+          <SpecReadouts sandbox={sandbox} />
+        </div>
         <span
           title={`${moment.label} ${new Date(moment.at).toLocaleString()}`}
-          className="relative z-10 ml-auto shrink-0 font-mono text-xs text-muted-foreground tabular-nums"
+          className="relative z-10 w-8 shrink-0 text-right font-mono text-xs text-muted-foreground tabular-nums"
         >
           {shortAge(moment.at)}
         </span>
+        <div data-testid="sandbox-acts" className="relative z-10 flex w-64 shrink-0 items-start justify-end gap-2">
+          {sandbox.status === 'running' && (
+            <Link
+              to={`/compute/${encodeURIComponent(sandbox.name)}`}
+              data-control="terminal"
+              title={`Open the terminals of ${sandbox.name}`}
+              className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            >
+              <conceptIcons.terminal aria-hidden className="size-3" />
+              Terminal
+            </Link>
+          )}
+          <SandboxActions sandbox={sandbox} quiet />
+        </div>
       </div>
-      <div
-        className={cn(
-          'flex flex-wrap items-center gap-x-1.5 gap-y-1 pl-[5.75rem] font-mono text-xs text-muted-foreground',
-          off && 'opacity-70',
-        )}
-      >
-        {specParts(sandbox).map(([title, value], i) => (
-          <span key={title} className="inline-flex items-center gap-1.5">
-            {i > 0 && (
-              <span aria-hidden className="opacity-50">
-                ·
-              </span>
-            )}
-            <span title={title}>{value}</span>
-          </span>
-        ))}
-        <SandboxActions sandbox={sandbox} quiet className="relative z-10 ml-auto" />
-      </div>
-      <StatusError sandbox={sandbox} className="pl-[5.75rem]" />
+      <StatusError sandbox={sandbox} className="pl-[6rem]" />
     </article>
   )
-}
-
-// cpus, memory, image and command, each with its tooltip, in that order.
-function specParts(sandbox: SandboxView) {
-  const { spec } = sandbox
-  const parts: [string, string][] = []
-  if (spec.cpus) {
-    parts.push(['CPUs', String(spec.cpus)])
-  }
-  if (spec.memory) {
-    parts.push(['Memory', formatMemory(spec.memory)])
-  }
-  if (spec.image) {
-    parts.push(['Image', spec.image])
-  }
-  if (sandbox.command.trim()) {
-    parts.push(['Command (the agent terminal)', sandbox.command])
-  }
-  return parts
 }

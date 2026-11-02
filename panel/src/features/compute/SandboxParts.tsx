@@ -64,6 +64,48 @@ export function SpecChips({ sandbox, full = false }: { sandbox: SandboxView; ful
   )
 }
 
+// A small label over a value: one column of a sandbox's readouts.
+export function Readout({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <span data-readout={label} className="flex min-w-0 flex-col">
+      <span aria-hidden className="text-[10px] tracking-wider text-muted-foreground/70 uppercase">
+        {label}
+      </span>
+      {children}
+    </span>
+  )
+}
+
+// cpus, memory, disk and image as readouts, plus repo, ref and the command
+// when full is set, each value with its tooltip. A value the spec leaves out
+// reads "–" so columns stay aligned.
+export function SpecReadouts({ sandbox, full = false }: { sandbox: SandboxView; full?: boolean }) {
+  const { spec } = sandbox
+  const parts: [string, string, string][] = [
+    ['CPU', 'CPUs', spec.cpus ? String(spec.cpus) : '–'],
+    ['Mem', 'Memory', spec.memory ? formatMemory(spec.memory) : '–'],
+    ['Disk', spec.disk ? 'Disk' : 'Disk: not set, the default', spec.disk || '–'],
+    ['Image', 'Image', spec.image || '–'],
+  ]
+  if (full) {
+    parts.push(['Repo', 'Repo', spec.repo || '–'], ['Ref', 'Ref', spec.ref || '–'])
+    if (sandbox.command.trim()) {
+      parts.push(['Cmd', 'Command (the agent terminal)', sandbox.command])
+    }
+  }
+  return (
+    <>
+      {parts.map(([label, title, value]) => (
+        <Readout key={label} label={label}>
+          <span title={title} className="truncate font-mono text-muted-foreground tabular-nums">
+            {value}
+          </span>
+        </Readout>
+      ))}
+    </>
+  )
+}
+
 // The program the sandbox runs as its agent terminal, in mono.
 export function CommandChip({ command }: { command: string }) {
   if (!command.trim()) {
@@ -141,7 +183,7 @@ export function SandboxActions({ sandbox, onDeleted, quiet = false, className, d
             icon={Square}
             onConfirm={() => stop.mutate(sandbox.name)}
             trigger={
-              <Button variant={variant} size={size} disabled={busy} className={cn(quietText)}>
+              <Button data-control="stop" variant={variant} size={size} disabled={busy} className={cn(quietText)}>
                 {stop.isPending ? <Loader2 className="animate-spin" /> : <Square />}
                 Stop
               </Button>
@@ -150,6 +192,7 @@ export function SandboxActions({ sandbox, onDeleted, quiet = false, className, d
         )}
         {canStart && (
           <Button
+            data-control="start"
             variant={variant}
             size={size}
             disabled={busy}
@@ -168,6 +211,7 @@ export function SandboxActions({ sandbox, onDeleted, quiet = false, className, d
           onConfirm={() => remove.mutate(sandbox.name, { onSuccess: () => onDeleted?.() })}
           trigger={
             <Button
+              data-control="delete"
               variant={variant}
               size={size}
               disabled={busy}

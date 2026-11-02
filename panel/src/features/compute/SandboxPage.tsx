@@ -1,9 +1,9 @@
-// /compute/:name: one sandbox (ADR 0008): a header with its status, task,
-// spec and controls, then its terminals. While starting it polls every 2s
+// /compute/:name: one sandbox (ADR 0008): a header with its status, then
+// its task and spec as labelled readouts, and its controls, then its terminals. While starting it polls every 2s
 // and the terminals area says it is booting; a failed sandbox shows its
 // error verbatim and can only be deleted.
 import { useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { Link, useNavigate, useParams } from 'react-router'
 
 import { useSandbox, useTask } from '@/api/hooks'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
@@ -15,7 +15,7 @@ import { TerminalsTab } from '@/features/terminals/TerminalsTab'
 import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/shell/page-title'
 
-import { CommandChip, MomentChip, SandboxActions, SpecChips, StatusError, TaskChip } from './SandboxParts'
+import { MomentChip, Readout, SandboxActions, SpecReadouts, StatusError } from './SandboxParts'
 
 const BOOT_POLL_MS = 2000
 const color = conceptColors.sandbox
@@ -64,17 +64,33 @@ export function SandboxPage() {
           color.edge,
         )}
       >
+        <div data-testid="sandbox-status" className="flex shrink-0">
+          <StatusPill status={box.status} detail={box.status_error} />
+        </div>
         <div className="flex min-w-0 flex-1 flex-col gap-2.5">
           <div className="flex items-center gap-2">
-            <StatusPill status={box.status} detail={box.status_error} />
             <conceptIcons.sandbox aria-hidden className={cn('size-4 shrink-0', color.text)} />
             <h2 className="truncate font-mono text-base font-semibold">{box.name}</h2>
             <MomentChip sandbox={box} />
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <TaskChip task={box.task} title={task.data?.title} />
-            <SpecChips sandbox={box} full />
-            <CommandChip command={box.command} />
+          <div
+            data-testid="sandbox-readouts"
+            className="flex flex-wrap items-start gap-x-6 gap-y-2 text-xs [&>[data-readout]]:max-w-72"
+          >
+            <Readout label="Task">
+              <Link
+                to={`/tasks/${encodeURIComponent(box.task)}`}
+                title={`Task ${box.task}`}
+                className="inline-flex max-w-full min-w-0 items-center gap-1 text-muted-foreground hover:text-foreground hover:underline"
+              >
+                <conceptIcons.task
+                  aria-hidden
+                  className={cn('size-3.5 shrink-0 opacity-70', conceptColors.task.text)}
+                />
+                <span className="truncate">{task.data?.title || box.task}</span>
+              </Link>
+            </Readout>
+            <SpecReadouts sandbox={box} full />
           </div>
         </div>
         <SandboxActions sandbox={box} onDeleted={() => void navigate('/compute')} />
