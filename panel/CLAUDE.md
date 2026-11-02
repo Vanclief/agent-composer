@@ -77,7 +77,12 @@ Each page sets the top bar title with `usePageTitle('…')` from
   the green shape turned off, a dim hollow ring), `attention` for died or
   needs a hand (failed, crashed: lit red triangle, the only red on screen),
   `idle` for not started (open: hollow grey). A done thing never looks as
-  bright as a running one; a dead thing never looks like a done one.
+  bright as a running one; a dead thing never looks like a done one. A word
+  the pill doesn't know is `idle`, or `attention` when it has a `detail`.
+  `statusTier`/`tierRank` from `@/components/status-pill` give a status's
+  tier; the Tasks and Compute lists sort attention, lit, idle, off (cards
+  carry `data-tier`; off ones are muted), and their top row has
+  `<StatusLegend />` (four dots, the tier word on hover).
 - **Lists are rows, not cards:** a list item is a flat row with a hairline
   separator, no colored border (that is for the selected item and for
   grouping panels). Left to right: the status light, the name in normal
@@ -129,7 +134,7 @@ Each page sets the top bar title with `usePageTitle('…')` from
   pill, a "Delivered <when>" chip, and Accept (confirms "Accept and stop N
   running sandboxes", or "Accept" when none run) and Reject… (a required
   "Why") until done. `by` is the signed-in name (`humanName()` in
-  `src/features/messages/identity.ts`). The list sorts `review` first.
+  `src/features/messages/identity.ts`). The list sorts `review` first among the lit tasks.
 - `@/api/hooks`: tasks `useTasks` (polls every 5s, or 30s while the live
   event stream is connected; sandboxes embedded newest first), `useTask(nameOrId)`, `useCreateTask` (returns at once; an
   optional `sandbox` comes back `starting`), `useDeliverTask` (`{ref, summary}`),

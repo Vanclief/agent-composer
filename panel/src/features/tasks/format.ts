@@ -1,5 +1,6 @@
 // Display helpers for tasks and their specs. Spec entries are parsed the
 // way the server reads them (see TaskSpec in docs/openapi.yaml).
+import { tierRank } from '@/components/status-pill'
 
 // Memory in the unit humans think in: 2048 MiB is "2 GB", 1536 is "1.5 GB".
 export function formatMemory(mib: number) {
@@ -89,15 +90,16 @@ export function assignedToHarness(task: { assignee: string; model: string }) {
   return task.model !== '' || HARNESSES.includes(task.assignee)
 }
 
-// The list order: review first (delivered, waiting for someone to accept
-// or reject it, ADR 0010), then open, running and done (any other word
-// last), newest first inside each. The words are the server's, never
+// The list order follows the status lights (TIER_ORDER): attention, then
+// lit (review first: delivered, waiting for someone to accept or reject it,
+// ADR 0010; then running), then idle (open, any other word), then off
+// (done), newest first inside each. The words are the server's, never
 // relabeled.
-const STATUS_ORDER = ['review', 'open', 'running', 'done']
+const STATUS_ORDER = ['review', 'running', 'open', 'done']
 
 function statusRank(status: string) {
   const i = STATUS_ORDER.indexOf(status)
-  return i < 0 ? STATUS_ORDER.length : i
+  return tierRank(status) * 10 + (i < 0 ? STATUS_ORDER.length : i)
 }
 
 export function sortTasks<T extends { status: string; created_at: string }>(list: T[]) {

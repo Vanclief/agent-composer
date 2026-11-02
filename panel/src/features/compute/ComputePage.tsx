@@ -1,6 +1,7 @@
 // /compute: every sandbox with its task (ADR 0008), as cards grouped by
-// status: starting, running, failed, stopped, unknown, then any other word
-// the backend sends, each verbatim.
+// status, each verbatim, the groups sorted by status light: attention
+// (failed), lit (starting, running), idle (unknown and any other word), off
+// (stopped). A stopped card recedes.
 import { Link } from 'react-router'
 
 import { useSandboxes, useTasks } from '@/api/hooks'
@@ -8,14 +9,14 @@ import type { SandboxView } from '@/api/tasks'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
-import { StatusPill } from '@/components/status-pill'
+import { StatusLegend, StatusPill, statusTier, tierRank } from '@/components/status-pill'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/shell/page-title'
 
 import { CommandChip, MomentChip, SandboxActions, SpecChips, StatusError, TaskChip } from './SandboxParts'
 
-const ORDER = ['starting', 'running', 'failed', 'stopped', 'unknown']
+const ORDER = ['failed', 'starting', 'running', 'unknown', 'stopped']
 const color = conceptColors.sandbox
 
 export function ComputePage() {
@@ -27,14 +28,17 @@ export function ComputePage() {
 
   return (
     <div className="flex flex-col gap-5 p-6">
-      <span
-        title="Sandboxes"
-        data-testid="sandbox-count"
-        className="inline-flex items-center gap-1.5 text-sm text-zinc-500 tabular-nums dark:text-zinc-400"
-      >
-        <conceptIcons.sandbox className={cn('size-4', color.text)} />
-        {sandboxes.data?.length ?? '–'}
-      </span>
+      <div className="flex items-center gap-4">
+        <span
+          title="Sandboxes"
+          data-testid="sandbox-count"
+          className="inline-flex items-center gap-1.5 text-sm text-zinc-500 tabular-nums dark:text-zinc-400"
+        >
+          <conceptIcons.sandbox className={cn('size-4', color.text)} />
+          {sandboxes.data?.length ?? '–'}
+        </span>
+        <StatusLegend />
+      </div>
       <ErrorText error={sandboxes.error} />
       {sandboxes.isPending && (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(22rem,1fr))] gap-3" aria-label="Loading sandboxes">
@@ -49,7 +53,7 @@ export function ComputePage() {
       {groups.map(([status, list]) => (
         <section key={status} aria-label={status} className="flex flex-col gap-2">
           <h2 className="flex items-center gap-2">
-            <StatusPill status={status} />
+            <StatusPill status={status} detail={list[0]?.status_error} />
             <span title={`${list.length} ${status}`} data-testid="group-count" className="text-sm tabular-nums">
               {list.length}
             </span>
@@ -67,29 +71,34 @@ export function ComputePage() {
   )
 }
 
-// Known statuses in their fixed order, then any other word as it came.
+// Groups by status light (TIER_ORDER), known statuses in their fixed order
+// inside a light, then any other word as it came.
 function groupByStatus(list: SandboxView[]) {
   const groups = new Map<string, SandboxView[]>()
-  for (const status of ORDER) {
-    groups.set(status, [])
-  }
   for (const sandbox of list) {
     const group = groups.get(sandbox.status) ?? []
     group.push(sandbox)
     groups.set(sandbox.status, group)
   }
-  return [...groups].filter(([, group]) => group.length > 0)
+  const rank = (status: string, group: SandboxView[]) => {
+    const i = ORDER.indexOf(status)
+    return tierRank(status, group[0]?.status_error) * 10 + (i < 0 ? ORDER.length : i)
+  }
+  return [...groups].sort(([a, ga], [b, gb]) => rank(a, ga) - rank(b, gb))
 }
 
 // The whole card opens the sandbox; the task chip and buttons sit above the
 // card's link so they work on their own.
 export function SandboxCard({ sandbox, taskTitle }: { sandbox: SandboxView; taskTitle?: string }) {
+  const tier = statusTier(sandbox.status, sandbox.status_error)
   return (
     <article
       aria-label={sandbox.name}
+      data-tier={tier}
       className={cn(
         'relative flex h-full flex-col gap-2.5 rounded-xl border border-border bg-white p-3.5 shadow-sm transition-colors hover:bg-zinc-50 dark:bg-zinc-900/60 dark:hover:bg-zinc-800/60',
         color.edge,
+        tier === 'off' && 'text-muted-foreground shadow-none',
       )}
     >
       <div className="flex items-center gap-2">

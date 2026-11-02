@@ -23,7 +23,7 @@ function chip(form: Locator, group: string, text: string) {
   return form.getByRole('radiogroup', { name: group }).getByRole('radio', { name: text, exact: true })
 }
 
-test('the list puts tasks in review first, then open, running and done, newest first', async ({ page }) => {
+test('the list puts tasks in review first, then running, open and done, newest first', async ({ page }) => {
   await page.goto('/panel/tasks')
   await expect(page.getByTestId('page-title')).toHaveText('Tasks')
   await expect(page.getByRole('button', { name: 'New task' })).toBeVisible()
