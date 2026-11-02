@@ -16,6 +16,7 @@ the panel stays conflict-free.
 | `src/features/compute/` (`ComputePage`, `SandboxPage`)                                                                                                           | compute feature     |
 | `src/features/terminals/` (`TerminalsTab`, `TerminalPane`, mounted by `SandboxPage`) + `tests/terminals.spec.ts`                                                 | terminals feature   |
 | `src/features/messages/` (`MessagesTab`, `MessagesPage`, `ChannelRows`, unread, message toasts) + `tests/messages.spec.ts`, `tests/talk.spec.ts`                 | messages feature    |
+| `src/features/agents/` (`AgentsPage`, `AgentPage`, the New agent and Keep… dialogs) + `tests/agents.spec.ts`                                                     | agents feature      |
 | everything else: `src/api/`, `src/components/`, `src/shell/`, `src/App.tsx`, `src/main.tsx`, `mock/`, `scripts/`, `tests/shell.spec.ts`, configs, `package.json` | foundation (shared) |
 
 - The files in `src/features/` are placeholders. Replace them freely, but keep
@@ -48,6 +49,8 @@ Basename `/panel`. Defined in `src/App.tsx` (foundation).
 | `/tasks/:name/messages`                                  | `MessagesTab` (channel `#<name>`)                                                                                                                                     |
 | `/compute`                                               | `ComputePage`: every sandbox with its task (Work mode)                                                                                                                |
 | `/compute/:name`                                         | `SandboxPage`: one sandbox (`:name` is the sandbox) with its terminals                                                                                                |
+| `/agents`                                                | `AgentsPage`: every persistent agent (Work mode); "New agent" makes a numbered one                                                                                    |
+| `/agents/:name`                                          | `AgentPage`: one agent, its home sandbox, tasks, conversations and identity                                                                                           |
 | `/messages`, `/messages/:channel`                        | Talk mode: `MessagesPage`; `:channel` has no `#` (`/messages/review-42` is `#review-42`)                                                                              |
 
 Each page sets the top bar title with `usePageTitle('…')` from
@@ -150,12 +153,13 @@ replay: after a drop it refetches tasks, sandboxes and channels.
 | `task.done`      | `{ "task": TaskView, "summary": string }` | a task is accepted; `summary` is the task's delivery summary, else the last message in `#<task>` from neither a human nor `agc`, else `""` |
 | `sandbox.status` | `{ "sandbox": SandboxView }`              | every status change: starting→running, →failed, stop, start, and delete (with status `"deleted"`)                                          |
 | `message.posted` | `{ "message": Message }`                  | a message is posted in any channel                                                                                                         |
+| `agent.state`    | `{ "agent": AgentView }`                  | every agent state change: wake (asleep→waking, then →awake) and sleep (awake→asleep); mock only until the Go side exists                   |
 
 - `@/api/events` (`useLiveEvents(onEvent)`): the app's one `EventSource`,
   opened by the shell (`src/shell/layout.tsx`). Each event invalidates the
   queries it changes (tasks and sandboxes roots for task and sandbox events;
   channels and participants for messages, and the message is appended to
-  its channel's feed), so every page refreshes itself. Don't open another
+  its channel's feed; agents and sandboxes roots for `agent.state`), so every page refreshes itself. Don't open another
   stream in a feature; read the cache.
 - `@/api/live`: whether the stream is connected (`useLiveConnected`) and
   `livePollMs`, the polling fallback for tasks, sandboxes and channels: 5s
@@ -173,6 +177,29 @@ replay: after a drop it refetches tasks, sandboxes and channels.
   `/tasks/<name>`. Both play a two-tone Web Audio chime (`src/shell/sound.ts`,
   no asset); before the page's first click or key press the browser keeps
   audio suspended, so the chime waits for it.
+
+## Agents (persistent agents, proposal; no Go side yet)
+
+- `@/api/agents`: `AgentView` (`name`, `role`, `kept`, `harness`, `model`,
+  `owner`, `state`, `home`, `tasks: {name, status}[]`,
+  `conversations: {channel, last_at}[]`, `last_active_at`, `created_at`),
+  `CreateAgentRequest {role, harness?, model?}`, `KeepAgentRequest {name,
+role?}`, hand-typed from the proposal and served only by the mock. Hooks:
+  `useAgents`, `useAgent(name)`, `useCreateAgent` (201, the numbered agent
+  `<role>-<n>`, asleep, `home: null`), `useKeepAgent(name)` (names or
+  renames; the answer carries the new name), `useWakeAgent(name)`,
+  `useSleepAgent(name)`. Agent mutations refresh agents and sandboxes.
+- An agent is born numbered from its role (`reviewer-3`, `kept: false`);
+  Keep… names it (`ada`, `kept: true`) and may change its role; Rename… is
+  the same dialog for a kept agent. `state` is `awake`, `asleep` or
+  `waking`, shown verbatim with `StatusPill` (emerald, zinc, sky, as
+  sandbox `running`, `stopped`, `starting`).
+- `/agents` lists awake, then waking, then asleep; numbered names are muted
+  with a "numbered" hint, kept ones bold. `/agents/:name` has Wake (asleep),
+  Sleep (awake; disabled as "Waking…" while waking), Keep…/Rename…, and the
+  cards Home (`/compute/<home>`, or "Not woken yet"), Tasks
+  (`/tasks/<name>`, status verbatim), Conversations (`/messages/<channel>`,
+  the DM `#<owner>` first) and Identity.
 
 ## Talk mode: inbox, unread, notifications
 
@@ -269,8 +296,18 @@ starts its `command` as the job `agent`. `POST /api/tasks/{id}/deliver
 `#<task>` as `agc`; `/done` is gone. The terminal WebSocket echoes input
 and acknowledges resize frames.
 
-`GET /api/events` streams the four live events from the mock's own
-operations (create, boot, stop/start/delete, accept, post) with the 20s
+Agents: `orchestrator-1` awake (home `orchestrator-1`, manages
+`review-42` and `flaky-ci`, reads `#franco`, `#review-42`, `#flaky-ci`),
+`reviewer-2` asleep and numbered, `ada` kept (role Reviewer, asleep,
+manages `docs-pass`) and `writer-1` waking (stays waking: the mock only
+finishes wakes it starts). Create names `<role slug>-<n>`, n one past the
+highest ever given for that role (so the first `Reviewer` is `reviewer-3`);
+keep validates the name (lowercase letters, digits, dashes; 409 when
+taken); wake is asleep→waking and 2s later awake, sleep awake→asleep (409
+otherwise). Agent homes are not mock sandboxes, so `/compute/<home>` 404s.
+
+`GET /api/events` streams the live events from the mock's own
+operations (create, boot, stop/start/delete, accept, post, wake, sleep) with the 20s
 heartbeat. `notify` is true on every seeded task except `docs-pass`. Mock
 only: `POST /api/msg/join` with a `task` joins as that task's agent (not
 human), so a test can post the closing message `task.done` summarizes.

@@ -9,6 +9,7 @@
 //   task.done       { task, summary }   summary: the agent's closing message in #<task>, may be ""
 //   sandbox.status  { sandbox }         every status change; status "deleted" on delete
 //   message.posted  { message }
+//   agent.state     { agent }           every agent state change: wake (waking, then awake) and sleep
 import { useEffect, useRef } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 
@@ -16,6 +17,7 @@ import { addPostedMessage, queryKeys } from './hooks'
 import { isLiveConnected, setLiveConnected } from './live'
 import type { Message } from './msg'
 import type { SandboxView, TaskView } from './tasks'
+import type { AgentView } from './agents'
 
 export const EVENTS_URL = '/api/events'
 
@@ -24,8 +26,9 @@ export type LiveEvent =
   | { type: 'task.done'; task: TaskView; summary: string }
   | { type: 'sandbox.status'; sandbox: SandboxView }
   | { type: 'message.posted'; message: Message }
+  | { type: 'agent.state'; agent: AgentView }
 
-const TYPES: LiveEvent['type'][] = ['task.created', 'task.done', 'sandbox.status', 'message.posted']
+const TYPES: LiveEvent['type'][] = ['task.created', 'task.done', 'sandbox.status', 'message.posted', 'agent.state']
 
 // When the browser gives up on the stream (an HTTP error, a wrong content
 // type), reopen it after 1s, doubling up to 30s. Network drops are retried
@@ -54,6 +57,11 @@ function invalidate(queryClient: QueryClient, event: LiveEvent) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.channels })
       void queryClient.invalidateQueries({ queryKey: queryKeys.participants(event.message.channel) })
       return
+    // An agent's state follows its home sandbox: refresh both roots.
+    case 'agent.state':
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sandboxes })
+      return
   }
 }
 
@@ -62,6 +70,7 @@ function invalidateAll(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.tasks })
   void queryClient.invalidateQueries({ queryKey: queryKeys.sandboxes })
   void queryClient.invalidateQueries({ queryKey: queryKeys.channels })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.agents })
 }
 
 function parse(type: LiveEvent['type'], data: string): LiveEvent | null {
