@@ -1,2 +1,662 @@
 /* Eva look, think area (docs/design/panel.md). Rules keyed on the markup's attributes;
-   unlayered so they win over Tailwind utilities. Filled by task panel-eva-think. */
+   unlayered so they win over Tailwind utilities. Filled by task panel-eva-think.
+
+   Every item is an indexed chamfered plate (the row's background is the
+   frame, ::after one pixel inside is the fill); its left edge is a tab with
+   the server's label word. No LED: the word is the light (Franco,
+   2026-11-02, second round; docs/design/panel.md Lights), colored by kind:
+   grounded or passed a green outline (as done), opinion and unknown words a
+   dim green outline (as open), judgment a cyan outline (a person's word),
+   contested, in doubt or failed a steady red outline (as failed), needs a
+   human the whole tab blinking yellow (as review, the only blink here). The
+   why chain in the detail pane is a rail of small plates; what-if is a
+   filled yellow tab across the top while it is on. */
+
+/* ---- Labels: the word is the light, everywhere in the area -------------
+   LabelMark's shape is hidden; the word sits in a one-pixel outline in its
+   kind's color and never blinks outside a plate's tab. */
+.dark main [data-label] {
+  --light: oklch(0.8 0.2 150 / 45%);
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  padding: 0 5px;
+  box-shadow: inset 0 0 0 1px var(--light);
+}
+.dark main [data-label] > svg {
+  display: none;
+}
+.dark main :is([data-label='grounded'], [data-label='passed']) {
+  --light: var(--eva-green);
+  color: var(--eva-green);
+}
+.dark main [data-label='judgment'] {
+  --light: var(--eva-cyan);
+  color: var(--eva-cyan);
+}
+.dark main :is([data-label='contested'], [data-label='in_doubt'], [data-label='in doubt'], [data-label='failed']) {
+  --light: var(--eva-red);
+  color: var(--eva-red);
+}
+.dark main [data-label='needs a human'] {
+  --light: var(--eva-yellow);
+  color: var(--eva-yellow);
+}
+/* An action's to do / done: the word is the light too, dim outline while
+   open, green outline once done; the checkbox stays only in the group
+   headers, as a plain square. */
+.dark main span:has(> [data-testid='done-mark']):not(h2) {
+  --light: oklch(0.8 0.2 150 / 45%);
+  color: var(--muted-foreground);
+  padding: 0 5px;
+  box-shadow: inset 0 0 0 1px var(--light);
+}
+.dark main span:has(> [data-testid='done-mark'][data-done='true']):not(h2) {
+  --light: var(--eva-green);
+  color: var(--eva-green);
+}
+.dark main span:has(> [data-testid='done-mark']) > [data-testid='done-mark'] {
+  display: none;
+}
+.dark main [data-testid='done-mark'] {
+  border-radius: 0;
+  border-width: 1px;
+  border-color: oklch(0.8 0.2 150 / 45%);
+  background: transparent;
+  color: var(--eva-green);
+}
+.dark main [data-testid='done-mark'][data-done='true'] {
+  border-color: var(--eva-green);
+}
+
+/* ---- The header strip: the total, the counts by label, a ruler ---------- */
+.dark [data-testid='think-strip'] {
+  position: relative;
+  counter-reset: think;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--eva-dim);
+}
+.dark [data-testid='think-strip']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, var(--eva-dim) 0 1px, transparent 1px 12px);
+}
+.dark [data-testid='think-strip'] > span:first-child {
+  font-family: var(--font-mono);
+  color: var(--foreground);
+}
+.dark [data-testid='think-strip'] > span:first-child > svg {
+  color: var(--eva);
+}
+.dark [data-testid='label-counts'] {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.dark [data-testid='label-counts'] [data-label] {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.dark [data-testid='label-counts'] b {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+/* ---- What-if: a filled yellow tab across the top while it is on --------- */
+.dark [data-testid='what-if-banner'] {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  border: 0;
+  border-radius: 0;
+  background: var(--eva-yellow);
+  color: var(--eva-ink);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 5px 14px;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+.dark [data-testid='what-if-banner'] > svg {
+  color: var(--eva-ink);
+}
+
+/* ---- Plates --------------------------------------------------------------- */
+.dark main ul:has(> [data-testid='think-card']) {
+  gap: 6px;
+}
+.dark [data-testid='think-card'] {
+  position: relative;
+  isolation: isolate;
+  counter-increment: think;
+  background: var(--eva-dim);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    var(--cut) 100%,
+    0 calc(100% - var(--cut))
+  );
+}
+.dark [data-testid='think-card']::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  background: var(--card);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut) + 1px) 0,
+    100% calc(var(--cut) - 1px),
+    100% 100%,
+    calc(var(--cut) - 1px) 100%,
+    0 calc(100% - var(--cut) + 1px)
+  );
+}
+.dark [data-testid='think-card']:hover::after {
+  background: var(--secondary);
+}
+/* The index, small, at the top right inside the cut. */
+.dark [data-testid='think-card']::before {
+  content: counter(think, decimal-leading-zero);
+  position: absolute;
+  z-index: 1;
+  right: 16px;
+  top: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  color: var(--eva-dim);
+}
+.dark [data-testid='think-card'] > a {
+  position: relative;
+  z-index: 1;
+  min-height: 3.5rem;
+  gap: 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 10px 2.75rem 10px calc(7.5rem + 14px);
+}
+.dark [data-testid='think-card'] > a:hover {
+  background: transparent;
+}
+/* The one you have open: a cyan frame, a cyan tint. */
+.dark [data-testid='think-card']:has(> a[aria-current='true']) {
+  background: var(--eva-cyan);
+}
+.dark [data-testid='think-card']:has(> a[aria-current='true'])::after {
+  background: linear-gradient(oklch(0.8 0.14 200 / 9%), oklch(0.8 0.14 200 / 9%)), var(--card);
+}
+.dark [data-testid='think-card']:has(> a[aria-current='true'])::before {
+  color: var(--eva-cyan);
+}
+/* Red frame when the item is contested, in doubt or failed; settled and
+   struck things (done actions, retracted evidence) a fainter frame. */
+.dark
+  [data-testid='think-card']:has(
+    > a
+      > div:first-child
+      > span:first-child
+      :is([data-label='contested'], [data-label='in_doubt'], [data-label='in doubt'], [data-label='failed'])
+  ):not(:has(> a[aria-current='true'])) {
+  background: oklch(0.62 0.25 27 / 70%);
+}
+.dark
+  [data-testid='think-card']:has(> a > div:first-child > span:first-child [data-label='needs a human']):not(
+    :has(> a[aria-current='true'])
+  ) {
+  background: oklch(0.86 0.18 92 / 70%);
+}
+.dark
+  [data-testid='think-card']:has([data-testid='done-mark'][data-done='true'], [data-testid='retracted']):not(
+    :has(> a[aria-current='true'])
+  ) {
+  background: oklch(0.74 0.19 48 / 22%);
+}
+
+/* The tab: the plate's left edge, top to bottom, holding the label word,
+   which fills it and draws its own outline. */
+.dark [data-testid='think-card'] > a > div:first-child > span:first-child {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 7.5rem;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border-right: 1px solid var(--eva-dim);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, calc(var(--cut) - 1px) 100%, 0 calc(100% - var(--cut) + 1px));
+}
+.dark [data-testid='think-card'] > a > div:first-child > span:first-child > svg {
+  align-self: center;
+  color: var(--eva);
+}
+.dark
+  [data-testid='think-card']
+  > a
+  > div:first-child
+  > span:first-child
+  > :is([data-label], span:has(> [data-testid='done-mark'])) {
+  flex: 1;
+  justify-content: center;
+  padding: 0 8px;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.dark
+  [data-testid='think-card']
+  > a
+  > div:first-child
+  > span:first-child
+  > :is([data-label='contested'], [data-label='in_doubt'], [data-label='in doubt'], [data-label='failed']) {
+  font-weight: 700;
+}
+/* Needs a human: the whole tab blinks yellow, filled then outlined, the
+   one thing in this area that blinks (tab-blink, index.css). */
+.dark [data-testid='think-card'] > a > div:first-child > span:first-child > [data-label='needs a human'] {
+  --tab: var(--eva-yellow);
+  font-weight: 700;
+  animation: tab-blink 1s steps(1, end) infinite;
+}
+/* The sentence, the title line, in pale text. */
+.dark [data-testid='card-text'] {
+  color: var(--foreground);
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+.dark
+  [data-testid='think-card']:has([data-testid='done-mark'][data-done='true'], [data-testid='retracted'])
+  [data-testid='card-text'] {
+  color: var(--muted-foreground);
+}
+
+/* The trailer: ids, files, who and when in muted mono, no frames; warnings
+   (rests on, retracted, contested by) keep a one-pixel frame in their color. */
+.dark [data-testid='think-card'] > a > div:last-child {
+  padding-left: 0;
+  column-gap: 14px;
+  row-gap: 2px;
+}
+.dark [data-testid='think-card'] > a > div:last-child > span:not([data-testid]),
+.dark [data-testid='think-card'] > a > div:last-child > [data-testid='by'] > span,
+.dark [data-testid='think-card'] > a > div:last-child > [data-testid='check-chip'] > span,
+.dark [data-testid='think-card'] > a > div:last-child > [data-testid='serves'] > span {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  font-size: 0.7rem;
+  color: var(--muted-foreground);
+}
+.dark [data-testid='think-card'] > a > div:last-child > span:first-child {
+  color: oklch(0.92 0.02 80 / 80%);
+}
+.dark [data-testid='think-card'] > a > div:last-child > span:not([data-testid]) > svg,
+.dark [data-testid='think-card'] > a > div:last-child > [data-testid] > span > svg {
+  color: var(--eva-dim);
+}
+.dark
+  main
+  :is(
+    [data-testid='rests-on-opinion'],
+    [data-testid='rests-on-doubt'],
+    [data-testid='retracted'],
+    [data-testid='contested-by']
+  ) {
+  border-radius: 0;
+  font-size: 0.7rem;
+  padding: 0 6px;
+  background: transparent;
+}
+.dark main [data-testid='rests-on-opinion'] {
+  border-color: oklch(0.62 0.03 70 / 50%);
+  color: var(--muted-foreground);
+}
+.dark main [data-testid='rests-on-opinion'] > svg {
+  color: var(--muted-foreground);
+}
+.dark main :is([data-testid='rests-on-doubt'], [data-testid='retracted'], [data-testid='contested-by']) {
+  border-color: oklch(0.62 0.25 27 / 70%);
+  color: var(--eva-red);
+}
+.dark main :is([data-testid='rests-on-doubt'], [data-testid='retracted'], [data-testid='contested-by']) > svg {
+  color: var(--eva-red);
+  fill: var(--eva-red);
+}
+.dark main :is([data-testid='retracted'], [data-testid='contested-by']) > svg {
+  fill: none;
+}
+.dark main [data-testid='contested-by']:hover {
+  background: oklch(0.62 0.25 27 / 15%);
+}
+/* How many beliefs cite a piece of evidence: a square mono readout. */
+.dark [data-testid='cited-by'] {
+  border-radius: 0;
+  border-color: var(--eva-dim);
+  color: var(--foreground);
+  font-size: 0.7rem;
+}
+.dark [data-testid='cited-by'] > svg {
+  color: var(--eva);
+}
+
+/* ---- Groups (rules by subject, actions to do / done) -------------------- */
+.dark :is([data-testid='rule-group'], [data-testid='action-group']) {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  gap: 8px;
+}
+.dark :is([data-testid='rule-group'], [data-testid='action-group']) > h2 {
+  position: relative;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--eva-dim);
+  color: var(--eva);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.dark :is([data-testid='rule-group'], [data-testid='action-group']) > h2::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, var(--eva-dim) 0 1px, transparent 1px 12px);
+}
+.dark :is([data-testid='rule-group'], [data-testid='action-group']) > h2 > svg {
+  color: var(--eva);
+}
+.dark :is([data-testid='rule-group'], [data-testid='action-group']) > h2 > span:last-child {
+  color: var(--foreground);
+  letter-spacing: 0.05em;
+}
+
+/* ---- Conflicts: red-framed plates on top of Beliefs --------------------- */
+.dark [data-testid='conflicts'] > h2 {
+  color: var(--eva-red);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.dark [data-testid='conflicts'] > ul {
+  gap: 6px;
+}
+.dark [data-testid='conflict'] {
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  border-radius: 0;
+  background: oklch(0.62 0.25 27 / 70%);
+  padding: 10px 16px 10px 14px;
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    var(--cut) 100%,
+    0 calc(100% - var(--cut))
+  );
+}
+.dark [data-testid='conflict']::after {
+  content: '';
+  position: absolute;
+  inset: 1px 1px 1px 4px;
+  z-index: -1;
+  background: linear-gradient(oklch(0.62 0.25 27 / 7%), oklch(0.62 0.25 27 / 7%)), var(--card);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut) + 1px) 0,
+    100% calc(var(--cut) - 1px),
+    100% 100%,
+    calc(var(--cut) - 4px) 100%,
+    0 calc(100% - var(--cut) + 4px)
+  );
+}
+.dark [data-testid='conflict-text'] {
+  color: var(--foreground);
+  font-size: 0.95rem;
+}
+.dark [data-testid='conflict'] > p:last-child {
+  border-top-color: oklch(0.62 0.25 27 / 35%);
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.dark [data-testid='conflict-side'] > a {
+  border-radius: 0;
+}
+.dark [data-testid='conflict-side'] > a:hover,
+.dark [data-testid='conflict-leaf']:hover {
+  background: var(--eva-faint);
+}
+.dark [data-testid='conflict-leaf'] {
+  border-radius: 0;
+  border-color: var(--eva-dim);
+  color: var(--foreground);
+  font-size: 0.7rem;
+}
+.dark [data-testid='conflict-leaf'] > svg {
+  color: var(--eva);
+}
+
+/* ---- The detail pane ---------------------------------------------------- */
+.dark aside[aria-label='Detail'] {
+  border-left-color: var(--eva-dim);
+  background: var(--sidebar);
+}
+.dark aside[aria-label='Detail'] > section {
+  border-top-color: var(--eva-dim);
+}
+.dark aside[aria-label='Detail'] > a[aria-label='Close'] {
+  border-radius: 0;
+  color: var(--eva);
+}
+.dark aside[aria-label='Detail'] > a[aria-label='Close']:hover {
+  background: var(--eva);
+  color: var(--eva-ink);
+}
+.dark aside[aria-label='Detail'] section > h3 {
+  color: var(--eva);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.75rem;
+}
+.dark aside[aria-label='Detail'] section section > h3 {
+  color: var(--muted-foreground);
+  font-size: 0.7rem;
+}
+.dark aside[aria-label='Detail'] section > h3 > span {
+  color: var(--foreground);
+  letter-spacing: 0.05em;
+}
+/* The item's header: its label word as the light, a step larger; the
+   sentence in pale text. */
+.dark
+  aside[aria-label='Detail']
+  > div:first-of-type
+  > div:first-child
+  :is([data-label], span:has(> [data-testid='done-mark'])) {
+  padding: 2px 10px;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.dark [data-testid='detail-text'] {
+  color: var(--foreground);
+  font-size: 1rem;
+  line-height: 1.35;
+}
+.dark [data-testid='detail-note'] {
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+.dark
+  aside[aria-label='Detail']
+  > div:first-of-type
+  > div:last-child
+  > :is(span:not([data-testid]), [data-testid='by'] > span) {
+  border-radius: 0;
+  border-color: var(--eva-dim);
+  font-size: 0.7rem;
+  color: var(--foreground);
+}
+.dark
+  aside[aria-label='Detail']
+  > div:first-of-type
+  > div:last-child
+  > :is(span:not([data-testid]), [data-testid='by'] > span)
+  > svg {
+  color: var(--eva);
+}
+/* The what-if switch: outlined, yellow once on. */
+.dark aside[aria-label='Detail'] label:has([data-testid='what-if']) {
+  border-radius: 0;
+  border-color: var(--eva-dim);
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.dark aside[aria-label='Detail'] label:has([data-testid='what-if']):hover {
+  background: var(--eva-faint);
+}
+.dark aside[aria-label='Detail'] label:has([data-testid='what-if'][data-state='checked']) {
+  border-color: var(--eva-yellow);
+  background: oklch(0.86 0.18 92 / 12%);
+  color: var(--eva-yellow);
+}
+.dark [data-testid='what-if'][data-state='checked'] {
+  background: var(--eva-yellow);
+}
+
+/* Item rows in the pane (why chain, cited by, if this is wrong): small
+   chamfered plates. */
+.dark aside[aria-label='Detail'] :is(section > a:not([data-testid]), [data-testid='why-node'] > a) {
+  position: relative;
+  isolation: isolate;
+  border-radius: 0;
+  padding: 5px 14px 5px 8px;
+  background: var(--eva-dim);
+  color: var(--foreground);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+.dark aside[aria-label='Detail'] :is(section > a:not([data-testid]), [data-testid='why-node'] > a)::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  background: var(--card);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+.dark aside[aria-label='Detail'] :is(section > a:not([data-testid]), [data-testid='why-node'] > a):hover::after {
+  background: var(--secondary);
+}
+.dark
+  aside[aria-label='Detail']
+  :is(section > a:not([data-testid]), [data-testid='why-node'] > a):has(
+    :is([data-label='contested'], [data-label='in_doubt'], [data-label='in doubt'], [data-label='failed'])
+  ) {
+  background: oklch(0.62 0.25 27 / 70%);
+}
+.dark aside[aria-label='Detail'] :is(section > a:not([data-testid]), [data-testid='why-node'] > a) [data-label] {
+  font-size: 0.7rem;
+}
+
+/* The why chain: a rail down the left, a tick to each plate on it, each
+   level indented one step. */
+.dark [data-testid='why-tree'],
+.dark [data-testid='why-node'] > div {
+  position: relative;
+  margin-left: 6px;
+  padding-left: 14px;
+  border-left: 1px solid var(--eva-dim);
+}
+.dark
+  :is([data-testid='why-tree'], [data-testid='why-node'] > div, [data-testid='why-or'])
+  > :is([data-testid='why-node'], [data-testid='evidence-row']) {
+  position: relative;
+}
+.dark
+  :is([data-testid='why-tree'], [data-testid='why-node'] > div, [data-testid='why-or'])
+  > :is([data-testid='why-node'], [data-testid='evidence-row'])::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 13px;
+  width: 12px;
+  height: 1px;
+  background: var(--eva-dim);
+}
+.dark [data-testid='evidence-row']::before {
+  top: 11px;
+}
+/* An alternative set of reasons: a dashed orange rail with an OR tab. */
+.dark [data-testid='why-or'] {
+  border-left: 1px dashed var(--eva);
+  padding-left: 14px;
+  margin-top: 6px;
+}
+.dark [data-testid='why-or'] > h4 {
+  align-self: flex-start;
+  margin-left: -14px;
+  padding: 0 10px 0 6px;
+  background: var(--eva);
+  color: var(--eva-ink);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+}
+/* Evidence on the chain: who and when in mono on a faint plate; retracted
+   in red, struck. */
+.dark [data-testid='evidence-row'] {
+  border-radius: 0;
+  border-left: 2px solid var(--eva-dim);
+  background: var(--eva-faint);
+  color: var(--foreground);
+  padding: 3px 8px;
+}
+.dark [data-testid='evidence-row']:hover {
+  background: oklch(0.74 0.19 48 / 20%);
+}
+.dark [data-testid='evidence-row'] > svg {
+  color: var(--eva);
+}
+.dark [data-testid='evidence-row'] > span:last-child {
+  color: var(--muted-foreground);
+}
+.dark [data-testid='evidence-row'][data-retracted='true'] {
+  border-left-color: var(--eva-red);
+  background: oklch(0.62 0.25 27 / 10%);
+  color: var(--eva-red);
+}
+.dark [data-testid='evidence-row'][data-retracted='true'] > svg {
+  color: var(--eva-red);
+}
