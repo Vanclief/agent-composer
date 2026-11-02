@@ -345,7 +345,10 @@ test('the Talk badge counts open questions for me and unread in followed channel
   const badges = page.getByTestId('area-badge-talk')
   await expect(badges.getByTestId('question-badge')).toHaveText('2')
   await expect(badges.getByTestId('unread-badge')).toHaveText('3')
-  await expect(page.getByTestId('inbox-row').getByTestId('unread-badge')).toHaveText('2')
+  const inbox = page.getByTestId('inbox-row')
+  await expect(inbox.getByTestId('unread-badge')).toHaveText('2')
+  // Every open question for me, though both were asked outside the inbox.
+  await expect(inbox.getByTestId('question-badge')).toHaveText('2')
   await expect(row(page, quiet)).toHaveCount(0)
   // Nowhere in the sidebar a channel's total message count.
   await expect(page.getByTestId('sidebar').getByText('5', { exact: true })).toHaveCount(0)

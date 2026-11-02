@@ -418,7 +418,8 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   "You are @test here, the server's owner is @franco".
 - **Sidebar** (`ChannelRows`), followed channels only: a pinned first row
   "Inbox" (inbox icon, `data-testid="inbox-row"`) for `#<me>`, shown even
-  before it has a message; then the groups "Direct" (my DMs, `data-testid="dm-row"`,
+  before it has a message, its badges every open question for me wherever
+  it was asked plus the inbox's unread; then the groups "Direct" (my DMs, `data-testid="dm-row"`,
   each `@<other>` with the task name dim; `<other>` is the newest participant
   neither me nor `agc`, else the task), "Tasks" (channels named after a task
   from `useTasks`) and "Other" (`role="group"`, `aria-label` the group name);

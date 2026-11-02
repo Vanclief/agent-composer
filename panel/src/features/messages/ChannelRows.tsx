@@ -5,7 +5,8 @@
 // "Browse channels…" to every channel. Tasks and Other list the newest
 // activity first, at most ROW_LIMIT, then one "N more…" row to Browse. Each
 // row has its unread badge, the questions waiting for me (QuestionBadge),
-// and is bold while unread.
+// and is bold while unread. The Inbox row counts every open question for me,
+// wherever it was asked (franco, 2026-11-02), plus the inbox's unread.
 import { Compass, Lock, MoreHorizontal } from 'lucide-react'
 import { NavLink } from 'react-router'
 
@@ -154,7 +155,7 @@ export function ChannelRows() {
         >
           <InboxIcon aria-hidden className={cn('size-3.5 shrink-0', conceptColors.inbox.text)} />
           <span className="truncate">Inbox</span>
-          <RowBadges count={inboxUnread.count} mention={inboxUnread.mention} questions={questions.of(inbox).length} />
+          <RowBadges count={inboxUnread.count} mention={inboxUnread.mention} questions={questions.total} />
         </NavLink>
       </li>
       {channelsQuery.isPending ? (
