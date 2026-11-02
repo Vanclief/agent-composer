@@ -3,10 +3,12 @@
 // it is left, so joining the same name again from a new mount or reload
 // would be refused with 409. The panel never leaves on unmount for the same
 // reason; it leaves only when the human switches to another name.
+// With no name stored, the name is the server's owner (GET /api/defaults),
+// and the constant only while the server does not say.
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
 import { ApiError } from '@/api/client'
-import { useJoin, useLeave } from '@/api/hooks'
+import { useDefaults as useServerDefaults, useJoin, useLeave } from '@/api/hooks'
 
 const NAME_KEY = 'agc.panel.human'
 const PARTICIPANT_KEY = 'agc.panel.human.participant'
@@ -15,12 +17,20 @@ const DEFAULT_NAME = 'franco'
 // Joins in flight, by name, shared by every mounted view.
 const inflight = new Map<string, Promise<string>>()
 
-function readName() {
+// The server's owner once GET /api/defaults answered; '' before.
+let serverOwner = ''
+
+// The name stored in this browser, '' when none.
+export function storedName() {
   try {
-    return localStorage.getItem(NAME_KEY) || DEFAULT_NAME
+    return localStorage.getItem(NAME_KEY) || ''
   } catch {
-    return DEFAULT_NAME
+    return ''
   }
+}
+
+function readName() {
+  return storedName() || serverOwner || DEFAULT_NAME
 }
 
 // Views that only need the name (unread counts, notifications) follow
@@ -36,8 +46,30 @@ function subscribeName(listener: () => void) {
   }
 }
 
+function notifyName() {
+  for (const listener of nameListeners) {
+    listener()
+  }
+}
+
+// GET /api/defaults, and its owner becomes the name of a browser that
+// stored none. settled is true once the server answered or refused (a
+// server without the route keeps the constant).
+export function useDefaults() {
+  const query = useServerDefaults()
+  const owner = query.data?.owner ?? ''
+  useEffect(() => {
+    if (owner && owner !== serverOwner) {
+      serverOwner = owner
+      notifyName()
+    }
+  }, [owner])
+  return { ...query, owner, settled: query.isFetched || query.isError }
+}
+
 // The signed-in person's name, without the @.
 export function useMyName() {
+  useDefaults()
   return useSyncExternalStore(subscribeName, readName)
 }
 
@@ -61,8 +93,11 @@ export function isStaleParticipant(error: unknown) {
 
 export type Identity = ReturnType<typeof useIdentity>
 
-export function useIdentity() {
-  const [name, setName] = useState(readName)
+// autoJoin false: never join on mount, only on rename or rejoin (the top
+// bar's name popover).
+export function useIdentity({ autoJoin = true }: { autoJoin?: boolean } = {}) {
+  const name = useMyName()
+  const defaults = useDefaults()
   const [participantID, setParticipantID] = useState(() => readParticipant(readName()))
   const join = useJoin()
   const leave = useLeave()
@@ -97,14 +132,16 @@ export function useIdentity() {
     [joinAsync],
   )
 
-  // Join once on first use when this browser holds no participant yet.
+  // Join once on first use when this browser holds no participant yet;
+  // without a stored name, only once the server said who its owner is.
+  const ready = Boolean(storedName()) || defaults.settled
   useEffect(() => {
-    if (started.current || participantID) {
+    if (!autoJoin || started.current || participantID || !ready) {
       return
     }
     started.current = true
     joinAs(name)
-  }, [joinAs, name, participantID])
+  }, [autoJoin, joinAs, name, participantID, ready])
 
   // Switch to another name (or retry the same one after a failed join).
   function rename(input: string) {
@@ -117,10 +154,7 @@ export function useIdentity() {
     }
     localStorage.setItem(NAME_KEY, next)
     localStorage.removeItem(PARTICIPANT_KEY)
-    for (const listener of nameListeners) {
-      listener()
-    }
-    setName(next)
+    notifyName()
     setParticipantID('')
     joinAs(next)
   }

@@ -6,7 +6,11 @@
 //   with a check for done; dim text);
 // - attention: died or needs a hand (failed, crashed, error, or any word with
 //   a detail): a red triangle, the only red on screen;
-// - idle: not started (open, and any word not listed): a hollow grey circle.
+// - idle: not started. open is a hollow sky ring, the transition hue but
+//   empty and still (no fill, no pulse), so open → starting → running reads
+//   hollow blue → pulsing blue → lit green, and stays quieter than
+//   starting. A word not listed is a hollow grey ring (attention with a
+//   detail).
 // The word is printed exactly as sent, never relabeled.
 import { Check, Triangle } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -51,7 +55,11 @@ const DONE: StatusStyle = {
   tier: 'off',
   shape: (
     <span className={cn(dot, OFF_RING, 'grid place-items-center')}>
-      <Check className="size-2 text-emerald-700/60 dark:text-emerald-400/60" strokeWidth={3} />
+      <Check
+        className="size-[7px] text-emerald-700/70 dark:text-emerald-400/70"
+        strokeWidth={1.5}
+        absoluteStrokeWidth
+      />
     </span>
   ),
   pill: OFF_PILL,
@@ -66,7 +74,13 @@ const FAILED: StatusStyle = {
   shape: <Triangle className="size-2.5 shrink-0 fill-red-500 text-red-500" strokeWidth={2.5} />,
   pill: 'border-red-500/60 text-red-700 dark:text-red-400',
 }
-// Not started, or a word this panel does not know.
+// Not started: the sky ring of the transition dot, hollow and still.
+const OPEN: StatusStyle = {
+  tier: 'idle',
+  shape: <span className={cn(dot, 'border-[1.5px] border-sky-500/70')} />,
+  pill: 'border-sky-500/25 text-sky-800/80 dark:text-sky-300/70',
+}
+// A word this panel does not know.
 const IDLE: StatusStyle = {
   tier: 'idle',
   shape: <span className={cn(dot, 'border-[1.5px] border-zinc-400 dark:border-zinc-500')} />,
@@ -84,7 +98,7 @@ const STYLES: Record<string, StatusStyle> = {
   crashed: FAILED,
   error: FAILED,
   failed: FAILED,
-  open: IDLE,
+  open: OPEN,
   // An agent's state: its home sandbox running, stopped, or starting.
   awake: RUNNING,
   asleep: STOPPED,
@@ -140,7 +154,7 @@ export function StatusPill({ status, detail, className }: StatusPillProps) {
 const LEGEND: [StatusTier, StatusStyle][] = [
   ['attention', FAILED],
   ['lit', RUNNING],
-  ['idle', IDLE],
+  ['idle', OPEN],
   ['off', DONE],
 ]
 

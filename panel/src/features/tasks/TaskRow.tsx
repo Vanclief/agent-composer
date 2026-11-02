@@ -3,6 +3,9 @@
 // under it, muted, who works on it (harness · model or a person), manager,
 // owner and what it is for, then the compute as the only chip, since it is
 // live. The whole row opens the task; the links in it sit above that.
+// When the task waits on me (attention.tsx) the row has a lit amber mark at
+// its left edge and a chip per act after the pill; when it waits on someone
+// else, their name follows the pill, dim.
 import { Link } from 'react-router'
 
 import type { TaskView } from '@/api/tasks'
@@ -10,11 +13,15 @@ import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { StatusPill, statusTier } from '@/components/status-pill'
 import { cn } from '@/lib/utils'
 
+import { ActChip, WaitsOn, type Attention } from './attention'
 import { assignedToHarness, shortAge } from './format'
 import { ForChip } from './TaskChips'
 
-export function TaskRow({ task }: { task: TaskView }) {
-  const tier = statusTier(task.status)
+export function TaskRow({ task, attention }: { task: TaskView; attention?: Attention }) {
+  const mine = Boolean(attention?.mine.length)
+  const other = !mine && Boolean(attention?.others.length)
+  // Waiting on me sorts into the attention group (TasksPage).
+  const tier = mine ? 'attention' : statusTier(task.status)
   const off = tier === 'off'
 
   return (
@@ -22,11 +29,25 @@ export function TaskRow({ task }: { task: TaskView }) {
       data-task={task.name}
       data-status={task.status}
       data-tier={tier}
+      data-attention={mine ? 'me' : other ? 'other' : undefined}
       className="relative flex flex-col gap-1 px-3 py-2 text-sm transition-colors focus-within:z-10 hover:bg-zinc-500/5 has-[a:focus-visible]:rounded-md has-[a:focus-visible]:ring-1 has-[a:focus-visible]:ring-violet-500/70 dark:hover:bg-zinc-500/10"
     >
+      {mine && (
+        <span
+          aria-hidden
+          data-testid="attention-mark"
+          className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-amber-500 shadow-[0_0_6px_1px] shadow-amber-500/60"
+        />
+      )}
       <div className="flex items-center gap-3">
-        <div data-testid="task-status" className="flex w-20 shrink-0">
-          <StatusPill status={task.status} />
+        <div className="flex shrink-0 items-center gap-1.5">
+          <div data-testid="task-status" className="flex w-20 shrink-0">
+            <StatusPill status={task.status} />
+          </div>
+          {attention?.mine.map((act) => (
+            <ActChip key={act.act} act={act} />
+          ))}
+          {other && <WaitsOn names={attention?.others ?? []} className="-ml-1" />}
         </div>
         <Link
           to={`/tasks/${encodeURIComponent(task.name)}`}

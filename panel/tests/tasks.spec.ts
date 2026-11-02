@@ -398,3 +398,108 @@ test('creating returns at once; allocation starts, then runs', async ({ request 
   expect(accepted.accepted_by).toBe('franco')
   expect(accepted.sandboxes.map((b: { status: string }) => b.status)).toEqual(['stopped', 'stopped'])
 })
+
+// ---------- attention is personal ----------
+
+function uniqueName(prefix: string) {
+  return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
+}
+
+async function signIn(page: Page, name: string) {
+  await page.addInitScript((n) => localStorage.setItem('agc.panel.human', n), name)
+}
+
+// A task delivered for review, managed by manager.
+async function reviewTask(request: APIRequestContext, manager: string) {
+  const task = await createTask(request, unique('Attn'), { manager, owner: 'franco' })
+  const delivered = await request.post(`/api/tasks/${task.name}/deliver`, { data: { summary: 'Done.' } })
+  expect(delivered.ok()).toBe(true)
+  return task
+}
+
+test('a review I manage waits on me: amber mark, accept chip, counted on the Tasks badge', async ({
+  page,
+  request,
+}) => {
+  const me = uniqueName('m')
+  const task = await reviewTask(request, me)
+  await signIn(page, me)
+  await page.goto('/panel/tasks')
+
+  const row = card(page, task.name)
+  await expect(row).toHaveAttribute('data-attention', 'me')
+  await expect(row).toHaveAttribute('data-tier', 'attention')
+  await expect(row.getByTestId('attention-mark')).toBeVisible()
+  await expect(row.getByTestId('act')).toHaveText(['accept'])
+  await expect(row.getByTestId('waits-on')).toHaveCount(0)
+
+  // The badge counts the rows waiting on me, and only those.
+  const badge = page.getByRole('navigation', { name: 'Main' }).getByTestId('tasks-badge')
+  await expect
+    .poll(async () => Number(await badge.textContent()) === (await page.locator('[data-attention="me"]').count()))
+    .toBe(true)
+
+  await row.getByTestId('act').click()
+  await expect(page).toHaveURL(new RegExp(`/panel/tasks/${task.name}$`))
+  const rail = page.getByTestId('task-header')
+  await expect(rail.getByRole('button', { name: /^Accept/ })).toBeInViewport()
+  await expect(rail.getByTestId('waiting-on')).toHaveAttribute('data-attention', 'me')
+  await expect(rail.getByTestId('waiting-on')).toContainText('Waiting on you:')
+  await expect(rail.getByTestId('waiting-on').getByTestId('act')).toHaveText('accept')
+})
+
+test('a review someone else manages shows their name, dim, and is not counted', async ({ page, request }) => {
+  const me = uniqueName('m')
+  const manager = uniqueName('boss')
+  // The manager joined messaging, so the review waits on them, not the owner.
+  expect((await request.post('/api/msg/join', { data: { name: manager, task: '' } })).ok()).toBe(true)
+  const task = await reviewTask(request, manager)
+  // A manager who never joined: the review waits on the owner.
+  const absent = await reviewTask(request, uniqueName('ghost'))
+  await signIn(page, me)
+  await page.goto('/panel/tasks')
+
+  const row = card(page, task.name)
+  await expect(row).toHaveAttribute('data-attention', 'other')
+  await expect(row.getByTestId('waits-on')).toHaveText(`· @${manager}`)
+  await expect(row.getByTestId('act')).toHaveCount(0)
+  await expect(row.getByTestId('attention-mark')).toHaveCount(0)
+  await expect(row).toHaveAttribute('data-tier', 'lit')
+
+  await expect(card(page, absent.name).getByTestId('waits-on')).toHaveText('· @franco')
+  // A failed sandbox waits on the owner too.
+  await expect(card(page, 'boot-fail').getByTestId('waits-on')).toHaveText('· @franco')
+
+  // Nothing of mine here: the badge counts only the rows waiting on me.
+  const badge = page.getByRole('navigation', { name: 'Main' }).getByTestId('tasks-badge')
+  await expect
+    .poll(async () => {
+      const mine = await page.locator('[data-attention="me"]').count()
+      return mine === 0 ? (await badge.count()) === 0 : Number(await badge.textContent()) === mine
+    })
+    .toBe(true)
+
+  await page.goto(`/panel/tasks/${task.name}`)
+  const waiting = page.getByTestId('task-header').getByTestId('waiting-on')
+  await expect(waiting).toHaveText(`Waiting on @${manager}`)
+  await expect(waiting).toHaveAttribute('data-attention', 'other')
+})
+
+test('an open question for me in the task channel adds an answer chip to the thread', async ({ page, request }) => {
+  const me = uniqueName('m')
+  const task = await reviewTask(request, me)
+  const agent = await (await request.post('/api/msg/join', { data: { name: uniqueName('a'), task: task.name } })).json()
+  const asked = await (
+    await request.post('/api/msg/post', {
+      data: { participant_id: agent.id, channel: `#${task.name}`, body: 'Squash or keep?', kind: 'question' },
+    })
+  ).json()
+  await signIn(page, me)
+  await page.goto('/panel/tasks')
+
+  const row = card(page, task.name)
+  await expect(row.getByTestId('act')).toHaveText(['accept', 'answer'])
+  await row.locator('[data-act="answer"]').click()
+  await expect(page).toHaveURL(new RegExp(`/panel/messages/${task.name}\\?thread=${asked.id}$`))
+  await expect(page.getByTestId('thread-pane')).toContainText('Squash or keep?')
+})

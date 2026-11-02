@@ -77,9 +77,12 @@ Each page sets the top bar title with `usePageTitle('…')` from
   pulsing blue; review: filled amber), `off` for ended well (done, stopped:
   the green shape turned off, a dim hollow ring), `attention` for died or
   needs a hand (failed, crashed: lit red triangle, the only red on screen),
-  `idle` for not started (open: a hollow blue ring, the transition hue but
-  empty and still, so open → starting → running reads hollow blue → pulsing
-  blue → lit green; Franco: open must not be grey). A done thing never looks
+  `idle` for not started (open: a hollow sky ring, `border-sky-500/70`, the
+  transition hue but empty and still, its pill a low-saturation sky so it
+  stays quieter than `starting`; open → starting → running reads hollow
+  blue → pulsing blue → lit green; Franco: open must not be grey). Done is
+  the off ring with a 7px check drawn at an absolute 1.5px stroke so it
+  stays crisp at 10px. A done thing never looks
   as bright as a running one; a dead thing never looks like a done one. A
   word the pill doesn't know is hollow grey, or `attention` when it has a
   `detail`.
@@ -90,13 +93,26 @@ Each page sets the top bar title with `usePageTitle('…')` from
 - **Attention is personal (rtsdesign rule 14):** a task in `review` waits on
   its manager first (ADR 0010: the manager or the owner accepts); it waits on
   the owner when the owner is the manager or the manager never joined
-  messaging. An open question (`kind: question`) waits on whom it is `for`.
-  When the thing waits on the signed-in person (`useMyName`), the row gets
-  one lit amber mark at its left edge and a lit chip naming the act
-  (`accept`, `answer`) that opens the place to do it, and the Tasks and Talk
-  nav badges count them. When it waits on someone else, the pill is followed
-  by dim text naming them (`review · @agent-composer-da`), never lit. Nothing
-  that waits on nobody in particular is highlighted.
+  messaging (no participant of that name in `GET /api/msg/participants?all=1`;
+  the signed-in person counts as joined; until that list loads, or on a
+  server without `all=1`, the manager is taken as joined). An open question
+  (`kind: question`) in `#<task>` waits on whom it is `for` (the questions
+  query with `for=<me>`). A `crashed`/`failed` sandbox of a task not `done`
+  waits on the owner. All in `src/features/tasks/attention.tsx`
+  (`useAttention`). When the thing waits on the signed-in person
+  (`useMyName`), the task row (`data-attention="me"`) gets one lit amber
+  mark at its left edge (`attention-mark`), a lit amber chip per act right
+  after the pill (`data-testid="act"`, `data-act`: `accept` → the task page,
+  Accept in view; `answer` → `/messages/<task>?thread=<question>`; `restart`
+  → `/tasks/<task>/compute?sandbox=<broken>`), and sorts into the
+  `attention` group (the row's `data-tier` is `attention`). The Tasks nav
+  link and the Work mode row show the count of such rows as a lit amber
+  badge (`tasks-badge`, `work-badge`); the Talk row keeps counting questions
+  for me. When it waits on someone else, the pill is followed by dim text
+  naming them (`· @agent-composer-da`, `waits-on`, `data-attention="other"`),
+  never lit. The task rail says the same under the status (`waiting-on`):
+  "Waiting on you:" with the act chips, lit, or "Waiting on @name", dim.
+  Nothing that waits on nobody in particular is highlighted.
 - **Lists are rows, not cards:** a list item is a flat row with a hairline
   separator, no colored border (that is for the selected item and for
   grouping panels). Left to right: the status light, the name in normal
@@ -185,6 +201,13 @@ Each page sets the top bar title with `usePageTitle('…')` from
   `GET /api/msg/questions?channel=&open=1&for=<name>` answers
   `{questions}`, each a message with `answered_by` (empty while open) and
   `answered_at` (`null` while open); typed ahead of the Go side.
+  `msg.allParticipants()` is `GET /api/msg/participants?all=1`: everyone who
+  ever joined, any channel; typed ahead of the Go side (which still requires
+  `channel`), hook `useAllParticipants()`.
+- `@/api/defaults`: `GET /api/defaults` → `{ harness, model, owner, system }`
+  (ADR 0009 defaults, the server's owner and reserved participant), typed
+  ahead of the Go side (another task builds it on the same path); hook
+  `useDefaults()` in `@/api/hooks`, read once per session.
 - `@/api/terminals`: terminal types, `terminals.list/start`, and
   `terminalSocketURL(sandbox, job)`, all under `/api/sandboxes/{id}/terminals`.
   A sandbox allocated with a `command` runs it as the job `agent`. Binary frames carry bytes both ways; send
@@ -288,8 +311,18 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
 ## Talk mode: inbox, unread, notifications
 
 - **Me:** the signed-in name is `useMyName()` (`src/features/messages/identity.ts`,
-  localStorage `agc.panel.human`, default `franco`); it follows "Join as…".
-  My inbox is the channel `#<me>` (ADR 0009 item 5).
+  localStorage `agc.panel.human`; with none stored, the server's owner from
+  `GET /api/defaults`, exposed as `useDefaults()` there, and `franco` only
+  while the server does not say; the first join waits for that answer); it
+  follows "Join as…". My inbox is the channel `#<me>` (ADR 0009 item 5).
+- **The top bar's `@me`** (`MeChip`, `data-testid="me"`) is a button
+  opening a popover ("Who you are"): the current name, the server's owner as
+  one click ("Sign in as @franco", `sign-in-owner`) when they differ, and an
+  input for another name; both go through `useIdentity().rename` (leave,
+  then join; the popover never joins on its own, `autoJoin: false`, and
+  shows a join error in place). When the stored name differs from the
+  server's owner the chip has an amber ring (`data-mismatch`) and the title
+  "You are @test here, the server's owner is @franco".
 - **Sidebar** (`ChannelRows`), followed channels only: a pinned first row
   "Inbox" (inbox icon, `data-testid="inbox-row"`) for `#<me>`, shown even
   before it has a message; then the groups "Direct" (my DMs, `data-testid="dm-row"`,
@@ -458,7 +491,13 @@ decision. `#review-42` has a thread (franco's reply to @reviewer's first
 message), a code block, an answered question (@tester, answered by franco)
 and an open one from @reviewer to @franco; `#flaky-ci` has an open question
 from its agent @fixer. Posts take `kind`; `GET /api/msg/questions` ignores
-`for`. Creating a task
+`for`, so every open question is the signed-in person's (on the task list
+`review-42` and `flaky-ci` show `answer` for anyone).
+`GET /api/defaults` answers `{ harness: claude_code, model:
+claude-opus-5-5, owner: franco, system: agc }`;
+`GET /api/msg/participants?all=1` lists every participant ever joined
+(`agent-composer-da` never joins, so `review-42` waits on `franco`).
+Creating a task
 returns at once. An allocated sandbox (`POST /api/tasks/{id}/sandboxes`, or
 `sandbox` on create) answers 201 `starting` for 2s, then `running`, and
 starts its `command` as the job `agent`. `POST /api/tasks/{id}/deliver

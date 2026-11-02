@@ -10,6 +10,7 @@ import { followFromEvent, useFollow } from '@/features/messages/follow'
 import { useMyName } from '@/features/messages/identity'
 import { useMessageNotifications } from '@/features/messages/notifications'
 import { TalkBadges } from '@/features/messages/QuestionBadge'
+import { TasksBadge, useMyTaskCount } from '@/features/tasks/attention'
 import { cn } from '@/lib/utils'
 
 import { MODES, ModeSwitch, useMode } from './mode'
@@ -36,6 +37,8 @@ export function Layout() {
   )
   // Unread only across followed channels, my inbox, my DMs and mentions.
   const unread = useFollow()
+  // Tasks waiting on me (accept, answer, restart): the Tasks and Work badges.
+  const mine = useMyTaskCount()
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -47,7 +50,13 @@ export function Layout() {
           agc
         </div>
         <div className="border-b border-border p-2">
-          <ModeSwitch mode={mode} badges={{ talk: <TalkBadges count={unread.total} mention={unread.mention} /> }} />
+          <ModeSwitch
+            mode={mode}
+            badges={{
+              work: mine > 0 ? <TasksBadge count={mine} testid="work-badge" /> : undefined,
+              talk: <TalkBadges count={unread.total} mention={unread.mention} />,
+            }}
+          />
         </div>
         <nav aria-label="Main" className="flex-1 overflow-y-auto p-2">
           <ul className="flex flex-col gap-0.5">
@@ -68,6 +77,7 @@ export function Layout() {
                   >
                     <Icon className={cn('size-4', conceptColors[concept].text)} />
                     {label}
+                    {to === '/tasks' && <TasksBadge count={mine} />}
                   </NavLink>
                   {mode === 'talk' && to === '/messages' && <ChannelRows />}
                 </li>
