@@ -1,0 +1,15 @@
+# The rules for the control panel's look (docs/design/panel.md).
+subject: the control panel in panel/
+rules:
+  - id: panel-follows-the-design-system
+    rule: A change to the panel follows docs/design/panel.md; statuses verbatim, color only for state, frame or you, radius zero with cut corners, condensed uppercase labels and lowercase monospace data, LEDs as specified, no new dependency for a look, and test hooks kept.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: Does the panel change follow docs/design/panel.md? Check that no status is derived or relabeled, that every new color is a state, a frame or the current item, that no rounded corner or decorative animation is added, that labels are condensed uppercase and data is lowercase monospace, and that data-testid, data-tier, data-status and aria attributes the tests use are unchanged.
+    because: [panel-reads-like-an-instrument]
+  - id: panel-no-branding
+    rule: The panel carries no name, glyph, logo or phrase from Evangelion, Blade Runner or any other work; only the grammar of their displays.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: Does the panel change add any name, glyph, logo or phrase taken from Evangelion, Blade Runner or another work (NERV, MAGI, angels, Tyrell and the like)?
+    because: [panel-reads-like-an-instrument]

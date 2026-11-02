@@ -1,0 +1,7 @@
+# The panel's look (docs/design/panel.md).
+decisions:
+  - id: panel-reads-like-an-instrument
+    decision: The control panel's design system is the instrument look of docs/design/panel.md (warm black ground, orange frames and tabs, pale text, chamfered plates, LED statuses, one meaningful color per state), as the whole look rather than a theme, with no branding from its references.
+    because: [instrument-panels-are-clear-and-rewarding, feedback-not-decoration-makes-a-ui-feel-alive, icon-and-shape-ui-reduces-operator-mistakes]
+    adr: docs/design/panel.md
+    decided: { who: franco, when: 2026-11-02 }

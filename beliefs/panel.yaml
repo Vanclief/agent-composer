@@ -1,0 +1,9 @@
+# What we hold true about the control panel's look (ADR 0006).
+beliefs:
+  - id: instrument-panels-are-clear-and-rewarding
+    belief: A control panel that reads like an instrument (plates, tabs, indexes, lamps, one meaningful color per state) is clearer at a glance and more rewarding to watch than a conventional dark UI of rows and pills.
+    experience: { of: franco, in: "years of strategy games, operator UIs and the displays of Evangelion and Blade Runner" }
+  - id: feedback-not-decoration-makes-a-ui-feel-alive
+    belief: A UI feels alive because things respond to events, a lamp flips, a count steps, a frame changes, not because it is decorated; decoration without events is noise.
+    because: [icon-and-shape-ui-reduces-operator-mistakes]
+    experience: { of: franco, in: "what makes games feel good to play" }

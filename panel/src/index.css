@@ -1,6 +1,12 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import '@xterm/xterm/css/xterm.css';
+@import './styles/eva-base.css';
+@import './styles/eva-compute.css';
+@import './styles/eva-agents.css';
+@import './styles/eva-talk.css';
+@import './styles/eva-think.css';
+@import './styles/eva-task.css';
 
 /* Dark mode is the `dark` class on <html> (theme toggle, default dark). */
 @custom-variant dark (&:is(.dark *));
