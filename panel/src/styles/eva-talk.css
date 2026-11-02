@@ -644,22 +644,21 @@
   color: var(--eva);
 }
 
-/* The thread pane is an <aside>: undo the shell's sidebar-brand rules
-   (aside > div:first-child) that would fill its header's spans orange. */
-.dark [data-testid='thread-pane'] > div:first-child {
-  letter-spacing: normal;
-  text-transform: none;
-  background: transparent;
+/* Lights (docs/design/panel.md, no LED): only review and crashed blink, and
+   Talk shows neither. Presence: online filled green, steady; offline a dim
+   green outline, not filled. Joining is a transition: a steady blue
+   outline, no pulse. */
+.dark [data-testid='members'] [data-testid='presence'][data-online='true'] {
+  background: var(--eva-green);
+  border: 0;
 }
-.dark [data-testid='thread-pane'] > div:first-child > span {
-  background: transparent;
-  border-radius: 0;
+.dark [data-testid='members'] [data-testid='presence'][data-online='false'] {
+  background: var(--background);
+  border: 1px solid oklch(0.8 0.2 150 / 45%);
 }
-.dark [data-testid='thread-pane'] > div:first-child > span:first-of-type {
-  color: var(--eva);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
-.dark [data-testid='thread-pane'] > div:first-child > span.font-mono {
-  color: var(--muted-foreground);
+.dark [data-slot='identity'].animate-pulse {
+  animation: none;
+  border-style: solid;
+  border-color: oklch(0.78 0.12 220);
+  color: oklch(0.78 0.12 220);
 }
