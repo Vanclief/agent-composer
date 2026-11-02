@@ -124,6 +124,13 @@ func unquote(value string) string {
 	return value
 }
 
+// Lookup returns the value of the secret called name, for a process agc
+// runs on this host (a schedule's poll command). Callers never print it.
+func (s *Store) Lookup(name string) (string, bool) {
+	value, ok := s.values[name]
+	return value, ok
+}
+
 // Names returns the configured secret names, sorted.
 func (s *Store) Names() []string {
 	names := make([]string, 0, len(s.values))

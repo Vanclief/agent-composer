@@ -1,0 +1,28 @@
+# agc schedule create -f docs/schedules/pr-reviews.yaml
+#
+# Every two minutes, list the open pull requests labeled ready-for-review
+# and create one review task per pull request and head commit (ADR 0011).
+# A new push is a new key, so it gets a new review; a key already seen
+# creates nothing. The poll runs on the agc host with sh -c, PATH, HOME and
+# GITHUB_TOKEN from the secrets file, nothing else.
+name: pr-reviews
+every: 2m
+poll:
+  command: >-
+    gh search prs --label ready-for-review --state open --repo Vanclief/compose
+    --json url,title,headRefOid
+    --jq '.[] | {key: (.url + "@" + .headRefOid), url, title}'
+  secrets: [GITHUB_TOKEN]
+# The task: block is a task.yaml. title, name, brief and each accept entry
+# are Go templates over the item's fields ({{.url}}, {{.title}}, {{.key}})
+# and {{.Now}}. Without name: the task is pr-reviews-<8 hex of the key>.
+task:
+  title: Review {{.title}}
+  brief: |
+    Review the pull request {{.url}} and post the review on it.
+  accept:
+    - a review of {{.url}} is posted
+  # manager: defaults to your messaging name (agc msg join) on create.
+  sandbox:
+    repo: github.com/Vanclief/compose
+    secrets: [GITHUB_TOKEN]

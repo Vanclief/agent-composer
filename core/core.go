@@ -13,6 +13,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/hooks"
 	"github.com/vanclief/agent-composer/core/resources/knowledge"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
+	"github.com/vanclief/agent-composer/core/resources/schedules"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
 	"github.com/vanclief/agent-composer/messaging"
@@ -28,13 +29,16 @@ const tickTime = 1 * time.Minute
 
 // Stack represents the core services required by any interface.
 type Stack struct {
-	Controller   *controller.Controller
-	Scheduler    *scheduler.Scheduler
-	Runtime      *runtime.Runtime
-	HooksAPI     *hooks.API
-	WorkflowAPI  *workflowapi.API
-	Messaging    *messaging.Service
-	TasksAPI     *tasks.API
+	Controller  *controller.Controller
+	Scheduler   *scheduler.Scheduler
+	Runtime     *runtime.Runtime
+	HooksAPI    *hooks.API
+	WorkflowAPI *workflowapi.API
+	Messaging   *messaging.Service
+	TasksAPI    *tasks.API
+	// SchedulesAPI creates tasks on a schedule; only agc rest starts its
+	// scheduler (ADR 0011).
+	SchedulesAPI *schedules.API
 	KnowledgeAPI *knowledge.API
 }
 
@@ -91,6 +95,7 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	specs := task.Store{Dir: filepath.Join(home, "config", "specs")}
 	sandboxesAPI := sandboxes.NewAPI(rootCtx, ctrl, msg, sandboxes.SandboxRuntime{}, secretsPath, filepath.Join(home, "tasks"))
 	tasksAPI := tasks.NewAPI(ctrl, sandboxesAPI, msg, secretsPath, specs)
+	schedulesAPI := schedules.NewAPI(ctrl, tasksAPI, secretsPath)
 
 	// Sandboxes keep running while agc is down. Their messaging listeners
 	// come back here.
@@ -115,6 +120,7 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		WorkflowAPI:  workflowAPI,
 		Messaging:    msg,
 		TasksAPI:     tasksAPI,
+		SchedulesAPI: schedulesAPI,
 		KnowledgeAPI: knowledgeAPI,
 	}, nil
 }

@@ -74,6 +74,15 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	sandboxes.POST("/:id/terminals", h.StartTerminal)
 	sandboxes.GET("/:id/terminals/:job/ws", h.TerminalSocket)
 
+	schedules := api.Group("/schedules")
+	schedules.GET("", h.ListSchedules)
+	schedules.POST("", h.CreateSchedule)
+	schedules.GET("/:id", h.GetSchedule)
+	schedules.PUT("/:id", h.UpdateSchedule)
+	schedules.DELETE("/:id", h.DeleteSchedule)
+	schedules.POST("/:id/run", h.RunSchedule)
+	schedules.GET("/:id/items", h.ListScheduleItems)
+
 	specs := api.Group("/specs")
 	specs.GET("", h.ListSpecs)
 	specs.GET("/:name", h.GetSpec)

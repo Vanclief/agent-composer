@@ -20,11 +20,13 @@ import (
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
+	"github.com/vanclief/agent-composer/core/resources/schedules"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	"github.com/vanclief/agent-composer/interfaces/rest/handler"
 	restserver "github.com/vanclief/agent-composer/interfaces/rest/server"
 	"github.com/vanclief/agent-composer/messaging"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
+	schedulemodels "github.com/vanclief/agent-composer/models/schedule"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/task"
 )
@@ -61,6 +63,8 @@ func newTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *task
 		(*taskmodels.Sandbox)(nil),
 		(*msgmodels.Participant)(nil),
 		(*msgmodels.Message)(nil),
+		(*schedulemodels.Schedule)(nil),
+		(*schedulemodels.Item)(nil),
 	}
 	for _, table := range tables {
 		_, err = db.NewCreateTable().Model(table).Exec(context.Background())
@@ -80,14 +84,18 @@ func newTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *task
 	msg := messaging.NewService(db)
 	specs := task.Store{Dir: filepath.Join(t.TempDir(), "specs")}
 	sandboxesAPI := sandboxes.NewAPI(context.Background(), ctrl, msg, rt, secretsPath, socketDir)
+	tasksAPI := tasks.NewAPI(ctrl, sandboxesAPI, msg, secretsPath, specs)
+	schedulesAPI := schedules.NewAPI(ctrl, tasksAPI, secretsPath)
 	server := &restserver.Server{
 		Ctrl:         ctrl,
 		RateLimiter:  ratelimit.NewWindowCounter(10, 100),
-		TasksAPI:     tasks.NewAPI(ctrl, sandboxesAPI, msg, secretsPath, specs),
+		TasksAPI:     tasksAPI,
 		SandboxesAPI: sandboxesAPI,
+		SchedulesAPI: schedulesAPI,
 		Messaging:    msg,
 	}
 	t.Cleanup(func() {
+		schedulesAPI.Wait()
 		sandboxesAPI.Wait()
 		_ = os.RemoveAll(socketDir)
 	})

@@ -5,6 +5,7 @@ import (
 	"github.com/vanclief/agent-composer/models/execution"
 	"github.com/vanclief/agent-composer/models/hook"
 	"github.com/vanclief/agent-composer/models/messaging"
+	"github.com/vanclief/agent-composer/models/schedule"
 	"github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/models/user"
 	"github.com/vanclief/agent-composer/models/workflow"
@@ -21,6 +22,8 @@ var ALL = []interface{}{
 	(*execution.NodeExecution)(nil),
 	(*task.Task)(nil),
 	(*task.Sandbox)(nil),
+	(*schedule.Schedule)(nil),
+	(*schedule.Item)(nil),
 	(*user.User)(nil),
 	(*workflow.Workflow)(nil),
 	(*workflow.WorkflowVersion)(nil),

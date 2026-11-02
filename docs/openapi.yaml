@@ -25,6 +25,10 @@ tags:
     description: >
       A task is work to be done, in words (ADR 0008). It allocates compute as sandboxes. Its
       status is computed: done, review, running or open (ADR 0010).
+  - name: Schedules
+    description: >
+      A schedule creates a task from a template every interval, or one task per new item its poll
+      command lists (ADR 0011). agc rest runs the scheduler; next_run_at is computed, never stored.
   - name: Sandboxes
     description: >
       A sandbox is the compute a task is allocated: one microsandbox VM (ADR 0003, ADR 0008).
@@ -944,6 +948,170 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
+  /schedules:
+    get:
+      tags: [Schedules]
+      operationId: listSchedules
+      summary: List schedules
+      description: Every schedule, by name.
+      responses:
+        '200':
+          description: Schedules.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleList'
+        '500':
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [Schedules]
+      operationId: createSchedule
+      summary: Create a schedule
+      description: >
+        Stores the schedule without running it; the scheduler runs it on its next check (every
+        30s), as a schedule that never ran is due at once. The template is rendered with every
+        item field it reads set to "sample" (with a poll) and must pass the same defaults and
+        validation as POST /tasks, else 400. 409 when the name is taken.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScheduleRequest'
+      responses:
+        '200':
+          description: The created schedule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+        '400':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /schedules/{id}:
+    get:
+      tags: [Schedules]
+      operationId: getSchedule
+      summary: Retrieve a schedule
+      parameters:
+        - $ref: '#/components/parameters/ScheduleIdParam'
+      responses:
+        '200':
+          description: The schedule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    put:
+      tags: [Schedules]
+      operationId: updateSchedule
+      summary: Replace a schedule
+      description: >
+        Replaces every, enabled, task and poll; the name stays, and so do last_run_at and the
+        items, so keys already seen still create nothing. Omitted enabled is true, omitted poll
+        removes the poll. Validated as on create.
+      parameters:
+        - $ref: '#/components/parameters/ScheduleIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateScheduleRequest'
+      responses:
+        '200':
+          description: The schedule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Schedules]
+      operationId: deleteSchedule
+      summary: Delete a schedule
+      description: Deletes the schedule and its items. The tasks it created are kept.
+      parameters:
+        - $ref: '#/components/parameters/ScheduleIdParam'
+      responses:
+        '200':
+          description: The deleted schedule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteScheduleResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /schedules/{id}/run:
+    post:
+      tags: [Schedules]
+      operationId: runSchedule
+      summary: Run a schedule now
+      description: >
+        Ticks the schedule now, enabled or not and due or not, and answers once the tick ends.
+        Without a poll it creates one task; with one it runs the command on the host (sh -c, 60s
+        timeout, only PATH, HOME and the named secrets in its environment), reads its stdout as
+        JSON lines, and creates a task for each key not seen before, exactly as POST /tasks does.
+        A failed tick answers 200 with error set (also the schedule's last_error); a failing
+        command or bad output creates nothing. 409 while another tick of the schedule runs.
+      parameters:
+        - $ref: '#/components/parameters/ScheduleIdParam'
+      responses:
+        '200':
+          description: The tick.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleRunResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /schedules/{id}/items:
+    get:
+      tags: [Schedules]
+      operationId: listScheduleItems
+      summary: List the items a schedule has seen
+      description: >
+        One item per key, newest first, with the task created for it. Without a poll the key is
+        the created task's name.
+      parameters:
+        - $ref: '#/components/parameters/ScheduleIdParam'
+      responses:
+        '200':
+          description: Items.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleItemList'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
   /specs:
     get:
       tags: [Tasks]
@@ -1231,6 +1399,13 @@ components:
       in: path
       required: true
       description: Task UUID or task name. A value that parses as a UUID is looked up by id.
+      schema:
+        type: string
+    ScheduleIdParam:
+      name: id
+      in: path
+      required: true
+      description: Schedule UUID or schedule name. A value that parses as a UUID is looked up by id.
       schema:
         type: string
     SandboxIdParam:
@@ -2841,6 +3016,204 @@ components:
         - id
         - kind
         - text
+    ScheduleTemplate:
+      type: object
+      description: >
+        The task a schedule creates: the fields of CreateTaskRequest. title, name, brief and each
+        accept entry are Go text/templates over the item's fields (.key, .url, ...) and .Now, the
+        tick's time; a field the item lacks is an error. Without name the task is
+        <schedule>-<yyyymmdd-hhmm> (UTC) without a poll, <schedule>-<first 8 hex of the key's
+        SHA-256> with one. manager is required.
+      properties:
+        title:
+          type: string
+        name:
+          type: string
+        brief:
+          type: string
+        accept:
+          type: array
+          items:
+            type: string
+        assignee:
+          type: string
+        model:
+          type: string
+        manager:
+          type: string
+        owner:
+          type: string
+        for:
+          type: string
+        sandbox:
+          $ref: '#/components/schemas/SandboxRequest'
+    SchedulePoll:
+      type: object
+      description: >
+        A command run on the agc host with sh -c. Each non-empty stdout line is a JSON object of
+        string fields with a non-empty key. secrets are names in the secrets file, set in the
+        command's environment; their values are redacted from last_error.
+      required:
+        - command
+      properties:
+        command:
+          type: string
+        secrets:
+          type: array
+          items:
+            type: string
+    CreateScheduleRequest:
+      type: object
+      required:
+        - name
+        - every
+        - task
+      properties:
+        name:
+          type: string
+          description: 1-63 lowercase letters, digits or -, starting with a letter, and not a UUID.
+        every:
+          type: string
+          description: A Go duration such as 2m or 1h, at least 1m.
+        enabled:
+          type: boolean
+          description: Defaults to true.
+        task:
+          $ref: '#/components/schemas/ScheduleTemplate'
+        poll:
+          $ref: '#/components/schemas/SchedulePoll'
+    UpdateScheduleRequest:
+      type: object
+      required:
+        - every
+        - task
+      properties:
+        every:
+          type: string
+        enabled:
+          type: boolean
+          description: Defaults to true.
+        task:
+          $ref: '#/components/schemas/ScheduleTemplate'
+        poll:
+          $ref: '#/components/schemas/SchedulePoll'
+    Schedule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        every:
+          type: string
+        enabled:
+          type: boolean
+        task:
+          $ref: '#/components/schemas/ScheduleTemplate'
+        poll:
+          allOf:
+            - $ref: '#/components/schemas/SchedulePoll'
+          nullable: true
+        last_run_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the last tick started, failed ones included.
+        last_error:
+          type: string
+          description: The last tick's error, empty when it succeeded.
+        next_run_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: last_run_at plus every (created_at before the first run); null while disabled.
+        running:
+          type: boolean
+          description: True while a tick of this schedule runs.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - every
+        - enabled
+        - task
+        - poll
+        - last_run_at
+        - last_error
+        - next_run_at
+        - running
+        - created_at
+        - updated_at
+    ScheduleList:
+      type: object
+      properties:
+        schedules:
+          type: array
+          items:
+            $ref: '#/components/schemas/Schedule'
+      required:
+        - schedules
+    ScheduleRunResponse:
+      type: object
+      properties:
+        schedule:
+          $ref: '#/components/schemas/Schedule'
+        created:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+        error:
+          type: string
+          description: The tick's error, empty when it succeeded.
+      required:
+        - schedule
+        - created
+        - error
+    ScheduleItem:
+      type: object
+      properties:
+        key:
+          type: string
+        task:
+          type: string
+          description: The created task's name, kept after the task is deleted.
+        task_id:
+          type: string
+          format: uuid
+        seen_at:
+          type: string
+          format: date-time
+      required:
+        - key
+        - task
+        - task_id
+        - seen_at
+    ScheduleItemList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScheduleItem'
+      required:
+        - items
+    DeleteScheduleResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required:
+        - id
+        - name
     DeleteTaskResponse:
       type: object
       properties:
