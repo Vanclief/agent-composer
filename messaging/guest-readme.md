@@ -41,7 +41,9 @@ also use the channels listed in the Task spec, some of them read-only; any
 other channel is refused with an error naming it, so tell the user instead
 of guessing. When the task has an owner, their inbox (`#<owner>`, e.g.
 `#franco`) is open to you too: ask there (`agc msg ask`) only for a decision
-only the owner can make, and say so in the task's channel. Names are unique while held: if
+only the owner can make, and say so in the task's channel. An inbox takes only
+questions and replies in their threads from you; a plain post there is refused,
+so post notes in `#<task>`. Names are unique while held: if
 `join` says a name is in use, pick another, and agc fills in who sent each
 message, so you cannot post as anyone else. `@agc` is agc itself (it opens
 the task's channel) and no one else can take that name; every message says

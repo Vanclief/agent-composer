@@ -44,7 +44,7 @@
 - `executor`: host and sandbox executors.
 - `task`: the task.yaml file and the sandbox environment spec (`Spec`, `Sandbox`), saved specs.
 - `secrets`: secret placeholders bound to hosts.
-- `messaging`: messaging transport and identity; `PostAsSystem` posts as `agc`, `OnPost` hooks run after every post; messages carry `human`. `messaging/guest-readme.md` is `/etc/agc/README.md` in the image.
+- `messaging`: messaging transport and identity; `PostAsSystem` posts as `agc`, `OnPost` hooks run after every post; messages carry `human`; in a person's inbox `#<name>` only the person and agc post freely, anyone else only a question or a thread reply (ADR 0005 "Inbox"). `messaging/guest-readme.md` is `/etc/agc/README.md` in the image.
 - `images/agc-agent`: the agent image that runs inside sandboxes.
 - `panel/`: React control panel, see `panel/CLAUDE.md`. `web/` is the older workflow builder UI.
 - `docs/decisions`: ADRs 0001–0010, 0012, 0016 and 0018 (tasks and sandboxes: 0003, 0008; messaging: 0005; knowledge: 0006; proposals and gates: 0007; task agents, managers and owners: 0009; task acceptance: 0010; scheduled tasks: 0012; persistent agents: 0016, Proposed; accounts: 0018, Proposed); read the relevant one before changing that area.
