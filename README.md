@@ -159,7 +159,7 @@ agc --server http://rig:8788 task ls  # one-off, without the env var
 
 **Scheduled tasks**
 
-A schedule creates a task from a template every interval, or, with a `poll:` command, one task per new item the command lists as JSON lines (ADR 0011). `agc rest` runs the scheduler; `agc schedule` works locally or against `AGC_SERVER` like `agc task`, and locally a schedule runs only with `agc schedule run`. See [docs/schedules/pr-reviews.yaml](docs/schedules/pr-reviews.yaml):
+A schedule creates a task from a template every interval, or, with a `poll:` command, one task per new item the command lists as JSON lines (ADR 0012). `agc rest` runs the scheduler; `agc schedule` works locally or against `AGC_SERVER` like `agc task`, and locally a schedule runs only with `agc schedule run`. See [docs/schedules/pr-reviews.yaml](docs/schedules/pr-reviews.yaml):
 
 ```bash
 agc schedule create -f docs/schedules/pr-reviews.yaml

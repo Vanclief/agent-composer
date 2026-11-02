@@ -2,7 +2,7 @@
 
 Tables are created from `models.ALL` only when missing, so a model change never reaches an existing database on its own. A migration does that.
 
-- One Go file per migration, named `YYYYMMDDHHMMSS_short_name.go` (bun reads the name and comment from the file name).
+- One Go file per migration, named `YYYYMMDDHHMMSS_short_name.go` (bun reads the name and comment from the file name). The timestamp must be unique across the directory: bun records applied migrations by that timestamp alone, so two files sharing one are one migration to it and the second never runs on a database that already applied the first (this bit the rig on 2026-11-01). Check `ls` before picking yours.
 - Each file registers itself in an `init()` with `Migrations.MustRegister(up, down)`.
 - `up` must work on a fresh database too, where the model already created the current shape: check before changing (see `20261101000000_tasks_title.go`) and support both SQLite and Postgres via `db.Dialect().Name()`.
 - `down` may be a no-op with a comment: we do not roll back schema.

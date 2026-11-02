@@ -1,4 +1,4 @@
-# ADR 0011: Schedules create tasks from a template, once per new item a poll finds
+# ADR 0012: Schedules create tasks from a template, once per new item a poll finds
 
 **Status:** Accepted — 2026-11-02. Builds on [ADR 0008](0008-tasks-allocate-compute.md), [ADR 0009](0009-task-agents-and-managers.md) and [ADR 0010](0010-task-acceptance.md).
 
@@ -65,10 +65,10 @@ a task like any other and is out of scope here.
 ## Consequences
 
 - Tables `schedules` and `schedule_items` (unique on schedule and key),
-  added by migration `20261102180000_schedules`.
+  added by migration `20261102200000_schedules`.
 - Routes: `GET/POST /api/schedules`, `GET/PUT/DELETE /api/schedules/{id}`,
   `POST /api/schedules/{id}/run`, `GET /api/schedules/{id}/items`. CLI:
   `agc schedule create|list|show|run|enable|disable|delete`, local or
   against `AGC_SERVER`. Example: `docs/schedules/pr-reviews.yaml`.
-- `schedule.ran {schedule, created}` is to be published on the events bus
-  once it lands; until then a TODO marks the spot.
+- Every tick publishes `schedule.ran {schedule, created}` on the events bus
+  (`GET /api/events`).

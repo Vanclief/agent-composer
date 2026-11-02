@@ -106,7 +106,7 @@ beliefs:
   - id: delivery-and-acceptance-are-different-acts
     belief: Delivering work and accepting it are different acts by different parties, and the gap between them should be visible.
 
-  # ADR 0011: scheduled tasks. Opinions: the prwatch framing in the brief;
+  # ADR 0012: scheduled tasks. Opinions: the prwatch framing in the brief;
   # nothing measured.
   - id: recurring-work-arrives-as-items
     belief: Recurring work, such as pull requests ready for review, arrives as items a source can list, and each item should become one task, once.

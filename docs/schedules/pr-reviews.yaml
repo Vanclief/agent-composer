@@ -1,7 +1,7 @@
 # agc schedule create -f docs/schedules/pr-reviews.yaml
 #
 # Every two minutes, list the open pull requests labeled ready-for-review
-# and create one review task per pull request and head commit (ADR 0011).
+# and create one review task per pull request and head commit (ADR 0012).
 # A new push is a new key, so it gets a new review; a key already seen
 # creates nothing. The poll runs on the agc host with sh -c, PATH, HOME and
 # GITHUB_TOKEN from the secrets file, nothing else.

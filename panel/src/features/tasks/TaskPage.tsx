@@ -76,8 +76,8 @@ export function TaskPage() {
           </div>
           <div data-testid="task-chips" className="flex flex-wrap items-center gap-1.5">
             <AssigneeChip task={data} />
-            <ManagerChip task={data} />
-            <OwnerChip task={data} />
+            <ManagerChip task={data} avatar />
+            <OwnerChip task={data} avatar />
             <ForChip task={data} />
             {data.notify ? (
               <span data-testid="notify-chip" className="inline-flex">

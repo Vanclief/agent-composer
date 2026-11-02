@@ -1,9 +1,12 @@
-// The top bar's right side: the live feed's state and the sound toggle.
+// The top bar's right side: the live feed's state, the sound toggle and
+// who you are.
 import { Volume2, VolumeX } from 'lucide-react'
 
 import { useLiveConnected } from '@/api/live'
+import { Avatar } from '@/components/avatar'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useMyName } from '@/features/messages/identity'
 import { cn } from '@/lib/utils'
 
 import { setSoundOn, useSoundOn } from './sound'
@@ -50,5 +53,20 @@ export function SoundToggle() {
     >
       {on ? <Volume2 /> : <VolumeX />}
     </Button>
+  )
+}
+
+// Who the panel posts as (useMyName, follows "Join as…"): your avatar and
+// name.
+export function MeChip() {
+  const me = useMyName()
+  return (
+    <span
+      data-testid="me"
+      title={`Signed in as @${me}`}
+      className="flex items-center gap-1.5 rounded-md px-2 py-1 font-mono text-xs text-muted-foreground"
+    >
+      <Avatar name={me} size="sm" human />@{me}
+    </span>
   )
 }

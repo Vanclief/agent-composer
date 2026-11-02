@@ -16,6 +16,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/vanclief/ez"
 
+	"github.com/vanclief/agent-composer/core/events"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	schedulemodels "github.com/vanclief/agent-composer/models/schedule"
 	"github.com/vanclief/agent-composer/secrets"
@@ -103,10 +104,11 @@ func (api *API) claimedTick(ctx context.Context, id uuid.UUID, force bool) (*Run
 	event.Str("schedule", record.Name).Bool("forced", force).Strs("created", names).
 		Dur("took", time.Since(began)).Msg("schedule ran")
 
-	// TODO(events): publish schedule.ran {schedule, created: [TaskView]} on
-	// the events bus once core/events lands on this branch.
+	view := *api.view(record)
+	view.Running = false
+	api.events.Publish(events.Event{Type: events.ScheduleRan, Data: RanEvent{Schedule: view, Created: created}})
 
-	return &RunResponse{Schedule: *api.view(record), Created: created, Error: lastError}, nil
+	return &RunResponse{Schedule: view, Created: created, Error: lastError}, nil
 }
 
 // runOnce creates the tick's tasks and returns them with what went wrong.

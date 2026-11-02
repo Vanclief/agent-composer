@@ -1,6 +1,6 @@
 // Package schedules runs tasks on a schedule: every interval a schedule
 // creates a task from its template, or, with a poll command, one task per
-// new item the command lists (docs/decisions/0011-scheduled-tasks.md).
+// new item the command lists (docs/decisions/0012-scheduled-tasks.md).
 package schedules
 
 import (
@@ -13,6 +13,7 @@ import (
 	"github.com/vanclief/ez"
 
 	"github.com/vanclief/agent-composer/core/controller"
+	"github.com/vanclief/agent-composer/core/events"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	schedulemodels "github.com/vanclief/agent-composer/models/schedule"
 )
@@ -32,6 +33,7 @@ type API struct {
 	db          bun.IDB
 	tasks       *tasks.API
 	secretsPath string
+	events      *events.Bus
 
 	// run, pollTimeout and now are replaced in tests.
 	run         Runner
@@ -69,6 +71,19 @@ func New(db bun.IDB, tasksAPI *tasks.API, secretsPath string) *API {
 		now:         time.Now,
 		running:     map[uuid.UUID]bool{},
 	}
+}
+
+// SetEvents publishes schedule.ran on bus after every tick from now on.
+// Call it before the API is used.
+func (api *API) SetEvents(bus *events.Bus) {
+	api.events = bus
+}
+
+// RanEvent is the data of schedule.ran: the schedule after the tick and
+// the tasks it created.
+type RanEvent struct {
+	Schedule ScheduleView     `json:"schedule"`
+	Created  []tasks.TaskView `json:"created"`
 }
 
 // Wait returns once every tick started so far has ended.

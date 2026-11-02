@@ -9,7 +9,7 @@ import (
 	"github.com/vanclief/agent-composer/models/schedule"
 )
 
-// Scheduled tasks (ADR 0011) add two tables: schedules, and
+// Scheduled tasks (ADR 0012) add two tables: schedules, and
 // schedule_items with one row per key a schedule has seen, unique on
 // (schedule_id, key). A fresh database already has both from the models.
 func init() {

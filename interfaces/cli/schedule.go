@@ -22,7 +22,7 @@ import (
 func scheduleCommand() *cli.Command {
 	return withRemoteFlags(&cli.Command{
 		Name:   "schedule",
-		Usage:  "Scheduled tasks: a task template created every interval, or once per new item a poll command lists (ADR 0011); agc rest runs them; --server or $AGC_SERVER calls a remote agc",
+		Usage:  "Scheduled tasks: a task template created every interval, or once per new item a poll command lists (ADR 0012); agc rest runs them; --server or $AGC_SERVER calls a remote agc",
 		Before: quietLogs,
 		Subcommands: []*cli.Command{
 			{

@@ -45,5 +45,5 @@ decisions:
   - id: schedules-create-tasks-per-polled-item
     decision: A schedule creates a task from its template every interval, or once per new key its poll command lists, only under agc rest, and never twice for one key.
     because: [recurring-work-arrives-as-items, a-poll-command-beats-an-integration]
-    adr: docs/decisions/0011-scheduled-tasks.md
+    adr: docs/decisions/0012-scheduled-tasks.md
     decided: { who: franco, when: 2026-11-02 }

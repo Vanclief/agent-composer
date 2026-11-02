@@ -31,8 +31,15 @@ const (
 	LabelKey = "agc.task"
 	// LabelSandbox carries the sandbox name.
 	LabelSandbox = "agc.sandbox"
-	// HomeDir is the sandbox user's home, where the repo is cloned.
+	// HomeDir is the sandbox user's home, where the repo is cloned. It is
+	// a private disk of the spec's disk size, removed with the sandbox.
 	HomeDir = "/home/agent"
+	// HarnessDir holds the harness homes (.claude, .codex), which ~/.claude
+	// and ~/.codex link to. It is the named volume VolumeName(sandbox),
+	// kept after the sandbox is removed so its transcripts survive.
+	HarnessDir = HomeDir + "/.harness"
+	// harnessQuotaMiB caps what one boot may add to the harness volume.
+	harnessQuotaMiB = 4 * 1024
 	// EnvTask, EnvSandbox and EnvMsgVsockPort are set by agc in every
 	// sandbox. EnvTask is the Task name, EnvSandbox the sandbox's.
 	EnvTask         = "AGC_TASK"
@@ -51,6 +58,7 @@ type Spec struct {
 	Image    string            `yaml:"image" json:"image"`
 	CPUs     uint8             `yaml:"cpus" json:"cpus"`
 	Memory   uint32            `yaml:"memory" json:"memory"` // MiB
+	Disk     string            `yaml:"disk" json:"disk"`     // size of /home/agent, such as 10G (empty: 20G)
 	Repo     string            `yaml:"repo" json:"repo"`     // "github.com/owner/name" or a full https URL
 	Ref      string            `yaml:"ref" json:"ref"`
 	Setup    string            `yaml:"setup" json:"setup"`       // bash script run once after the clone
@@ -86,7 +94,9 @@ type File struct {
 	Manager  string   `yaml:"manager"`
 	Owner    string   `yaml:"owner"`
 	For      string   `yaml:"for"`
-	Sandbox  *Sandbox `yaml:"sandbox"`
+	// Notify is nil when the file does not say, and the task then notifies.
+	Notify  *bool    `yaml:"notify"`
+	Sandbox *Sandbox `yaml:"sandbox"`
 }
 
 // LoadFile reads a task.yaml.
@@ -149,9 +159,41 @@ func decodeStrict(data []byte, out interface{}) error {
 	return nil
 }
 
+// VolumeName is the named volume holding the harness homes of the
+// sandbox called name.
+func VolumeName(sandboxName string) string {
+	return "agc-" + sandboxName
+}
+
+// DiskMiB parses disk. Empty is 0, which sandbox.Spec.Validate makes the
+// default.
+func (s Spec) DiskMiB() (uint32, error) {
+	if strings.TrimSpace(s.Disk) == "" {
+		return 0, nil
+	}
+
+	mib, err := sandbox.ParseSize(s.Disk)
+	if err != nil {
+		return 0, ez.New(ez.EINVALID, "disk: "+ez.ErrorMessage(err), nil)
+	}
+
+	if mib < sandbox.MinDiskMiB {
+		msg := fmt.Sprintf("disk is %s, the minimum is %s", s.Disk, sandbox.FormatSize(sandbox.MinDiskMiB))
+		return 0, ez.New(ez.EINVALID, msg, nil)
+	}
+
+	return mib, nil
+}
+
 // Validate rejects entries the Task cannot honor and names the bad entry.
-// Image, CPU and memory defaults and limits belong to sandbox.Spec.Validate.
+// Image, CPU and memory defaults and limits belong to sandbox.Spec.Validate;
+// disk is checked here too so a bad size fails the request.
 func (s Spec) Validate() error {
+	_, err := s.DiskMiB()
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
 	if s.Repo != "" {
 		_, _, err := s.RepoURL()
 		if err != nil {
@@ -185,13 +227,19 @@ func (s Spec) Validate() error {
 	}
 
 	for _, entry := range s.Volumes {
-		_, err := ParseVolume(entry)
+		volume, err := ParseVolume(entry)
 		if err != nil {
 			return ez.Wrap(err)
 		}
+
+		dest := path.Clean(volume.Dest)
+		if dest == HomeDir || dest == HarnessDir || strings.HasPrefix(dest, HarnessDir+"/") {
+			msg := fmt.Sprintf("volume %q: %s and %s are mounted by agc", entry, HomeDir, HarnessDir)
+			return ez.New(ez.EINVALID, msg, nil)
+		}
 	}
 
-	_, err := s.Grants()
+	_, err = s.Grants()
 	if err != nil {
 		return ez.Wrap(err)
 	}
@@ -225,7 +273,8 @@ func (s Spec) RepoURL() (string, string, error) {
 
 // SandboxSpec is the sandbox called name, allocated to the Task called
 // taskName. The guest reaches agc messaging on vsockPort, which the runtime
-// connects to vsockPath.
+// connects to vsockPath. HomeDir is a private disk of the spec's size and
+// HarnessDir the named volume VolumeName(name).
 func (s Spec) SandboxSpec(taskName string, name string, bindings []secrets.Binding, vsockPath string, vsockPort uint32) (sandbox.Spec, error) {
 	env := map[string]string{}
 	for k, v := range s.Env {
@@ -243,6 +292,12 @@ func (s Spec) SandboxSpec(taskName string, name string, bindings []secrets.Bindi
 		}
 		volumes = append(volumes, volume)
 	}
+	volumes = append(volumes, sandbox.Volume{Source: VolumeName(name), Dest: HarnessDir, ReadWrite: true, QuotaMiB: harnessQuotaMiB})
+
+	diskMiB, err := s.DiskMiB()
+	if err != nil {
+		return sandbox.Spec{}, ez.Wrap(err)
+	}
 
 	return sandbox.Spec{
 		Name:      name,
@@ -252,6 +307,8 @@ func (s Spec) SandboxSpec(taskName string, name string, bindings []secrets.Bindi
 		Env:       env,
 		Secrets:   SandboxSecrets(bindings),
 		Volumes:   volumes,
+		DiskDest:  HomeDir,
+		DiskMiB:   diskMiB,
 		VsockPath: vsockPath,
 		VsockPort: vsockPort,
 		Labels:    map[string]string{LabelKey: taskName, LabelSandbox: name},

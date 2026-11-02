@@ -396,14 +396,14 @@ func runServer(ctx context.Context, project string) error {
 	}
 
 	group, gctx := errgroup.WithContext(ctx)
-	app := restserver.New(gctx, stack.Controller, stack.HooksAPI, stack.WorkflowAPI, stack.TasksAPI, stack.SchedulesAPI, stack.KnowledgeAPI, stack.Messaging)
+	app := restserver.New(gctx, stack.Controller, stack.HooksAPI, stack.WorkflowAPI, stack.TasksAPI, stack.SchedulesAPI, stack.KnowledgeAPI, stack.Messaging, stack.Events)
 
 	group.Go(func() error {
 		stack.StartScheduler(gctx)
 		return nil
 	})
 
-	// Scheduled tasks run only under agc rest (ADR 0011).
+	// Scheduled tasks run only under agc rest (ADR 0012).
 	group.Go(func() error {
 		stack.SchedulesAPI.Start(gctx)
 		return nil

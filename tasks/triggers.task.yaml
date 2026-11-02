@@ -1,0 +1,87 @@
+# agc task create -f tasks/triggers.task.yaml
+# Triggers: events from outside agc become messages in channels. GitHub
+# first, by polling (the rig has no public entrance). A trigger on an
+# agc/<task> branch lands in #<task>; anything unrouted lands in #main,
+# the main agent's channel. Franco decided 2026-11-02.
+name: triggers
+title: Triggers, outside events become messages in channels
+assignee: claude_code
+manager: franco
+owner: franco
+for: proposals-pass-through-human-gates
+accept:
+  - A new comment, review or review comment on a pull request whose head branch is agc/<task> is posted by agc in #<task> within one poll interval, once, with who wrote it, where, and the text
+  - A finished check run or workflow run on an agc/<task> branch is posted by agc in #<task> once, with its conclusion and link
+  - Any other new issue, issue comment or pull request on a configured repo is posted by agc in #main once
+  - Nothing is posted twice across restarts; the fast-path filter (repos, ignored users, source on or off) is config, not code
+  - Unit tests against httptest for the GitHub poller and the routing; go build/vet/test pass; gofmt lists only the three known files
+  - docs/decisions/0014-triggers.md, decisions/triggers.yaml, actions/triggers.yaml, proposals/triggers.yaml written; branch agc/triggers pushed; nothing merged
+brief: |
+  Build triggers: events from outside agc turned into messages in agc
+  channels. Read AGENTS.md, ADR 0004, 0005, 0008, 0009 first, then
+  `agc rules show`. Write the whole thing; do not stop at a plan.
+
+  Shape:
+  - A trigger is an outside event posted by agc (`messaging.PostAsSystem`)
+    as a plain message. The body names the source, the actor, the place
+    and the text, for example "[github] franco commented on PR #12
+    (agc/dms-whatsapp): ...". Long text is cut with "..." and a link
+    follows. No new message kind unless you find you truly need one.
+  - Routing is code, not a model: a pull request whose head branch is
+    `agc/<task>` belongs to `#<task>` when that task exists; everything
+    else goes to `#main`, the channel of the main agent (a sibling task,
+    `main-agent`, builds that agent; you only post there). A trigger
+    for a task that is done still goes to `#<task>`.
+  - Source one is GitHub, by polling only. The rig's services bind to
+    127.0.0.1 (rules/rig.yaml) so there is no inbound webhook; say so in
+    the ADR. Poll the configured repos every `triggers.github.poll`
+    (default 60s) for new issue comments, PR review comments, reviews,
+    issues, pull requests, and finished check runs or workflow runs, using
+    GITHUB_TOKEN read on the host the way agc reads other secrets
+    (secrets.Load and Resolve; GITHUB_TOKEN is already a known host in
+    secrets/secrets.go). Remember what was seen so nothing posts twice
+    across restarts: one small table with a cursor per source (and a
+    migration in models/migrations), or a cursor file under the agc
+    home; pick the simpler one that survives a restart.
+  - Fast-path filter in config: `triggers: { github: { repos: [...],
+    ignore_users: [...], poll: 60s } }` in core/controller.Config, read
+    like `defaults:`. An empty repos list means triggers are off. The
+    semantic filter (is this worth acting on) is the main agent's job,
+    not yours.
+  - Start the loop from core/core.go next to the scheduler. Keep the
+    core.go and config.go additions to a few lines: sibling tasks
+    `watchdog` and `main-agent` add their own blocks and the merges
+    must stay trivial. Do not use or change the workflow scheduler, and
+    do not build time-based triggers: the task `task-schedules` owns
+    schedules.
+  - `agc triggers show` lists the sources, their cursors and when each
+    last polled. No REST route is needed now; if you add one follow the
+    checklist in AGENTS.md including docs/openapi.yaml and `make types`.
+
+  Record it: docs/decisions/0014-triggers.md in the style of the others
+  (0011 to 0013 are taken by sibling branches). Knowledge entries in
+  their own files: decisions/triggers.yaml (decided: { who: franco,
+  when: 2026-11-02 }), actions/triggers.yaml for what is left open (at
+  least: more sources, and inbound webhooks need a public entrance),
+  proposals/triggers.yaml with one `proposes: code` proposal (`change:
+  agc/triggers`, by: claude_code). Cite existing belief ids in
+  `because`; write no evidence.
+
+  If you add a migration, pick a timestamp no file in models/migrations
+  already uses, even on sibling branches: bun tracks applied migrations by
+  timestamp, and two sharing one broke the rig once.
+
+  Verify: go build ./... && go vet ./... && go test ./...; gofmt -l .
+  lists only the three known files. The panel is untouched, so skip
+  panel-check. Commit on branch agc/triggers, push it, never merge. You
+  may read GitHub with GITHUB_TOKEN to test the poller against the real
+  repo read-only; never write to GitHub beyond pushing your branch. Post
+  progress in #triggers. When done, answer DONE: with what changed, what
+  you left out and why.
+sandbox:
+  image: agc-agent
+  cpus: 2
+  memory: 4096
+  repo: https://github.com/vanclief/agent-composer
+  ref: feat/tasks-microsandbox
+  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]

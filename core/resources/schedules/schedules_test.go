@@ -16,6 +16,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/vanclief/agent-composer/core/controller"
+	"github.com/vanclief/agent-composer/core/events"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	"github.com/vanclief/agent-composer/messaging"
@@ -157,9 +158,33 @@ func TestTickWithoutPollCreatesATask(t *testing.T) {
 		t.Fatalf("created = %+v", created)
 	}
 
+	bus := events.New()
+	env.api.SetEvents(bus)
+	subCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stream := bus.Subscribe(subCtx)
+
 	response := env.run(t, "digest")
 	if response.Error != "" || len(response.Created) != 1 {
 		t.Fatalf("response = %+v", response)
+	}
+
+	// schedule.ran carries the schedule and what it created.
+	ran := false
+	for !ran {
+		select {
+		case event := <-stream:
+			if event.Type != events.ScheduleRan {
+				continue
+			}
+			data := event.Data.(RanEvent)
+			if data.Schedule.Name != "digest" || data.Schedule.Running || len(data.Created) != 1 || data.Created[0].Name != "digest-20261102-0930" {
+				t.Fatalf("schedule.ran = %+v", data)
+			}
+			ran = true
+		case <-time.After(5 * time.Second):
+			t.Fatal("no schedule.ran event")
+		}
 	}
 
 	made := response.Created[0]

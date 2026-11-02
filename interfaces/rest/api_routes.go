@@ -10,6 +10,7 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	// API
 	api := e.Group("/api")
 	api.GET("/config", h.GetConfig)
+	api.GET("/events", h.Events)
 
 	// Hooks
 	hooks := api.Group("/hooks")
@@ -73,6 +74,8 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	sandboxes.GET("/:id/terminals", h.ListTerminals)
 	sandboxes.POST("/:id/terminals", h.StartTerminal)
 	sandboxes.GET("/:id/terminals/:job/ws", h.TerminalSocket)
+	sandboxes.GET("/:id/transcripts", h.ListTranscripts)
+	sandboxes.GET("/:id/transcripts/*", h.GetTranscript)
 
 	schedules := api.Group("/schedules")
 	schedules.GET("", h.ListSchedules)

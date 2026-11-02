@@ -1,6 +1,6 @@
 // Package schedule holds Schedules: a task template run on an interval,
 // optionally once per item a poll command finds, and the items each
-// schedule has already seen (docs/decisions/0011-scheduled-tasks.md).
+// schedule has already seen (docs/decisions/0012-scheduled-tasks.md).
 package schedule
 
 import (

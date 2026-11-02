@@ -60,7 +60,12 @@ participant_id TEXT NOT NULL, task TEXT NOT NULL, reply_to INTEGER, body TEXT NO
 		t.Fatal(err)
 	}
 
-	// The later migration runs before the model reads the row.
+	// The later migrations run before the model reads the rows.
+	err = taskNotify(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	err = taskAcceptance(ctx, db)
 	if err != nil {
 		t.Fatal(err)

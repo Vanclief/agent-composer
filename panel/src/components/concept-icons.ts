@@ -25,6 +25,7 @@ import { ListTodo } from 'lucide-react'
 import { Bot } from 'lucide-react'
 import { Bell } from 'lucide-react'
 import { Inbox, ListChecks, PackageCheck } from 'lucide-react'
+import { MessageCircleQuestionMark, MessageSquareReply } from 'lucide-react'
 
 export const conceptIcons = {
   // A Task: a VM agents work in.
@@ -78,6 +79,10 @@ export const conceptIcons = {
   // ADR 0009 item 5: a person's own channel, #<name>, where agents and
   // tasks escalate.
   inbox: Inbox,
+  // A message of kind question: it waits for an answer (a reply to it).
+  question: MessageCircleQuestionMark,
+  // A message's replies (reply_to), read in the thread pane.
+  thread: MessageSquareReply,
 } satisfies Record<string, LucideIcon>
 
 export type Concept = keyof typeof conceptIcons
@@ -271,4 +276,6 @@ export const conceptColors = {
   criteria: zinc,
   delivery: zinc,
   inbox: pink,
+  question: pink,
+  thread: pink,
 } satisfies Record<Concept, ConceptColor>

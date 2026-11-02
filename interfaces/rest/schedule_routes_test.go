@@ -11,7 +11,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 )
 
-// ADR 0011: schedules, their run and their items.
+// ADR 0012: schedules, their run and their items.
 func TestScheduleRoutes(t *testing.T) {
 	routes := newTaskRoutes(t, sandboxes.SandboxRuntime{}, "")
 

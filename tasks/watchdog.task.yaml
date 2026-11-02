@@ -1,0 +1,84 @@
+# agc task create -f tasks/watchdog.task.yaml
+# A mechanical watchdog over running tasks: a sandbox that goes silent, a
+# dead agent job or a delivery nobody reviews gets one message from agc in
+# #<task> and in the owner's inbox. No model. Franco decided 2026-11-02
+# after two silent sandboxes went unnoticed for ~50 minutes.
+name: watchdog
+title: Watchdog over running tasks, mechanical first
+assignee: claude_code
+manager: franco
+owner: franco
+for: proposals-pass-through-human-gates
+accept:
+  - A sandbox whose agent job prints nothing and whose task channel gets nothing for watchdog.silence (default 15m) gets one agc post in #<task> and one in #<owner> naming the task, the silence length and the last terminal line, then at most one more per hour while it stays silent
+  - A sandbox whose job named agent exits while the task is not done gets an agc post in #<task> and #<owner> at once, with the exit code
+  - A task in review with no accept or reject after watchdog.review (default 2h) gets one agc post in #<owner>
+  - All of it is unit tested with a fake clock, go build/vet/test pass, gofmt lists only the three known files
+  - docs/decisions/0013-watchdog.md, decisions/watchdog.yaml, actions/watchdog.yaml, proposals/watchdog.yaml written; branch agc/watchdog pushed; nothing merged
+brief: |
+  Build a mechanical watchdog over running tasks. Read AGENTS.md, ADR
+  0005, 0008, 0009, 0010 first, then `agc rules show`. Write the whole
+  thing; do not stop at a plan.
+
+  Why: on 2026-11-02 the task dms-whatsapp sat idle for about 52 minutes
+  because its command was split on whitespace, and yc-pitch sat on a
+  permission prompt. Nobody noticed except a session polling a terminal
+  by hand. The owner must be told, in agc's own messaging, by a check
+  that needs no model.
+
+  What to build:
+  - A loop inside the agc stack (start it from core/core.go next to the
+    scheduler; keep the core.go and config.go additions to a few lines,
+    sibling tasks `triggers` and `main-agent` add their own blocks to the
+    same two files and the merges must stay trivial). Every minute it
+    looks at every sandbox of a task that is not done.
+  - Signals, all mechanical: when the job named `agent` (ADR 0009) last
+    wrote to its terminal; when `#<task>` last got a message; whether the
+    agent job has exited and with what code; whether the task is in
+    review and since when. Find the cheapest source of truth for "last
+    terminal output": the executor or sandbox terminals package may
+    already buffer output, otherwise record a last-output time on the
+    sandbox row (then add a migration in models/migrations). Prefer
+    deriving over storing.
+  - Posts are made by agc (`messaging.PostAsSystem`, ADR 0009) as plain
+    messages, in `#<task>` and in `#<owner>` (the owner's inbox, ADR
+    0009). One sentence each, for example: "dms-whatsapp has been silent
+    for 52 minutes. Last terminal line: `> `". Repeat at most once per
+    hour while the condition holds; stop when it clears or the task is
+    done. If core/events publishes server-sent events for the panel,
+    publish one too; do not build any panel UI (other tasks own the
+    panel).
+  - Config block `watchdog: { silence: 15m, review: 2h }` in
+    core/controller.Config, read like `defaults:`.
+  - Drifting from the brief is a judgment, not a mechanical check; do
+    not build it. Leave a sentence in the ADR saying that step is a
+    judged rule (ADR 0006) for later.
+  - Direct message channels `@<human>/<task>` exist only on the unmerged
+    branch agc/dms-whatsapp; do not depend on them. Presence
+    (msg-presence) is also unmerged; do not depend on it.
+
+  Record it: docs/decisions/0013-watchdog.md in the style of the others
+  (0011 and 0012 are taken by sibling branches, so use 0013). Put
+  the knowledge entries in their own files so sibling branches do not
+  collide: decisions/watchdog.yaml (decided: { who: franco, when:
+  2026-11-02 }, since Franco asked for this), actions/watchdog.yaml for
+  anything left open, proposals/watchdog.yaml with one `proposes: code`
+  proposal (`change: agc/watchdog`, by: claude_code). Cite existing
+  belief ids in `because` (see beliefs/repo.yaml); write no evidence.
+
+  If you add a migration, pick a timestamp no file in models/migrations
+  already uses, even on sibling branches: bun tracks applied migrations by
+  timestamp, and two sharing one broke the rig once.
+
+  Verify: go build ./... && go vet ./... && go test ./...; gofmt -l .
+  lists only the three known files. The panel is untouched, so skip
+  panel-check. Commit on branch agc/watchdog, push it, never merge.
+  Post progress in #watchdog. When done, answer DONE: with what changed,
+  what you left out and why.
+sandbox:
+  image: agc-agent
+  cpus: 2
+  memory: 4096
+  repo: https://github.com/vanclief/agent-composer
+  ref: feat/tasks-microsandbox
+  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]

@@ -1,115 +1,103 @@
-// A channel's messages, newest at the bottom. Sticks to the bottom while the
-// reader is there; otherwise a "New messages" pill appears when more arrive.
-// Reads like a chat log: consecutive messages from one participant within
-// GROUP_GAP_MS form a group under one header (icon, name, task, time); the
-// rest of the group is bodies only, their time shown in the gutter on hover.
+// A channel's top-level messages, newest at the bottom. Sticks to the
+// bottom while the reader is there; otherwise a "New messages" pill
+// appears when more arrive. Reads like a chat log: a day separator where
+// the day changes, an "Unread" line before the first message that was
+// unread when the channel opened (with "Jump to unread" while it is above
+// the fold), and consecutive messages from one participant within
+// GROUP_GAP_MS grouped under one header. agc's posts are compact system
+// lines and questions are cards; both stand alone. Replies are not here:
+// their parent's footer opens the thread pane.
 import { useLayoutEffect, useRef, useState } from 'react'
-import { ArrowDown, Reply } from 'lucide-react'
-import { Link } from 'react-router'
+import { ArrowDown, ArrowUp } from 'lucide-react'
 
 import type { Message } from '@/api/msg'
-import { conceptColors, conceptIcons } from '@/components/concept-icons'
-import { IconChip } from '@/components/icon-chip'
+import { conceptColors } from '@/components/concept-icons'
 import { cn } from '@/lib/utils'
+
+import { useChannel } from './context'
+import { isSystem, MessageRow, QuestionCard, SystemLine } from './parts'
+import { isQuestion } from './questions'
+import { dayKey, dayLabel } from './time'
 
 // How close to the bottom (px) still counts as at the bottom.
 const BOTTOM_SLACK = 32
 // The longest pause that still continues a group.
 const GROUP_GAP_MS = 5 * 60_000
-// How much of a replied-to message its stub quotes.
-const QUOTE_CHARS = 60
 
-function groupByAuthor(messages: Message[]) {
-  const groups: Message[][] = []
+type Item =
+  | { type: 'day'; key: string; label: string }
+  | { type: 'unread'; key: string }
+  | { type: 'system' | 'question'; key: string; message: Message }
+  | { type: 'group'; key: string; messages: Message[] }
+
+function itemsOf(messages: Message[], unreadID: number | undefined, now: number) {
+  const items: Item[] = []
+  let day = ''
+  let group: Message[] | undefined
   for (const m of messages) {
-    const last = groups.at(-1)
-    const prev = last?.at(-1)
+    const d = dayKey(m.created_at)
+    if (d !== day) {
+      day = d
+      group = undefined
+      items.push({ type: 'day', key: `day-${d}`, label: dayLabel(m.created_at, now) })
+    }
+    if (m.id === unreadID) {
+      group = undefined
+      items.push({ type: 'unread', key: 'unread' })
+    }
+    if (isSystem(m) || isQuestion(m)) {
+      group = undefined
+      items.push({ type: isSystem(m) ? 'system' : 'question', key: String(m.id), message: m })
+      continue
+    }
+    const prev = group?.at(-1)
     if (
-      last &&
+      group &&
       prev &&
       prev.participant_id === m.participant_id &&
       Date.parse(m.created_at) - Date.parse(prev.created_at) <= GROUP_GAP_MS
     ) {
-      last.push(m)
-    } else {
-      groups.push([m])
+      group.push(m)
+      continue
     }
+    group = [m]
+    items.push({ type: 'group', key: String(m.id), messages: group })
   }
-  return groups
+  return items
 }
 
-function clock(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-// A human or an agent (its task's icon), in the gutter left of the header.
-function SenderIcon({ message }: { message: Message }) {
-  const human = !message.task
-  const Icon = human ? conceptIcons.human : conceptIcons.task
+function Divider({ label, testid, className }: { label: string; testid: string; className?: string }) {
   return (
-    <Icon
-      aria-hidden
-      data-concept={human ? 'human' : 'task'}
-      className={cn('ml-auto size-4', human ? conceptColors.human.text : conceptColors.task.text)}
-    />
-  )
-}
-
-// @name in mono, the agent's task as a link, and the first time.
-function Header({ message }: { message: Message }) {
-  const human = !message.task
-  return (
-    <div className="flex items-center gap-2">
-      <span
-        data-testid="author"
-        data-kind={human ? 'human' : 'agent'}
-        title={human ? 'Human' : `Agent in task ${message.task}`}
-        className="font-mono text-sm font-semibold text-foreground"
-      >
-        @{message.from}
-      </span>
-      {!human && (
-        <Link to={`/tasks/${encodeURIComponent(message.task)}`} title={`Task ${message.task}`}>
-          <IconChip icon={conceptIcons.task} concept="task" className="hover:brightness-125">
-            {message.task}
-          </IconChip>
-        </Link>
-      )}
-      <time
-        dateTime={message.created_at}
-        title={new Date(message.created_at).toLocaleString()}
-        className="font-mono text-xs text-muted-foreground"
-      >
-        {clock(message.created_at)}
-      </time>
-    </div>
-  )
-}
-
-// One line quoting the message replied to, or its id when not loaded.
-function ReplyStub({ id, target }: { id: number; target?: Message }) {
-  let text = `replying to #${id}`
-  if (target) {
-    const quote = target.body.length > QUOTE_CHARS ? target.body.slice(0, QUOTE_CHARS) + '…' : target.body
-    text = `replying to @${target.from}: ${quote}`
-  }
-  return (
-    <div
-      data-testid="reply-stub"
-      title={`#${id}`}
-      className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
+    <li
+      data-testid={testid}
+      role="separator"
+      aria-label={label}
+      className={cn('flex items-center gap-2 py-1', className)}
     >
-      <Reply aria-hidden className="size-3 shrink-0" />
-      <span className="truncate">{text}</span>
-    </div>
+      <span className="h-px flex-1 bg-current opacity-30" />
+      <span className="text-[11px] font-medium tracking-wide uppercase">{label}</span>
+      <span className="h-px flex-1 bg-current opacity-30" />
+    </li>
   )
 }
 
-export function MessageList({ messages }: { messages: Message[] }) {
-  const byID = new Map(messages.map((m) => [m.id, m]))
+export function GroupRows({ messages, inThread }: { messages: Message[]; inThread?: boolean }) {
+  return (
+    <li data-testid="message-group" className="flex flex-col">
+      {messages.map((m, i) => (
+        <MessageRow key={m.id} message={m} first={i === 0} inThread={inThread} />
+      ))}
+    </li>
+  )
+}
+
+// unreadID is the first message unread when the channel opened.
+export function MessageList({ messages, unreadID }: { messages: Message[]; unreadID?: number }) {
+  const { now } = useChannel()
   const scroller = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
   const [atBottom, setAtBottom] = useState(true)
+  const [unreadAbove, setUnreadAbove] = useState(false)
   const lastID = messages.at(-1)?.id ?? 0
   const [seenID, setSeenID] = useState(lastID)
 
@@ -120,6 +108,10 @@ export function MessageList({ messages }: { messages: Message[] }) {
       el.scrollTop = el.scrollHeight
     }
   }, [lastID])
+
+  function unreadLine() {
+    return scroller.current?.querySelector<HTMLElement>('[data-testid="unread-line"]') ?? null
+  }
 
   function onScroll() {
     const el = scroller.current
@@ -132,6 +124,8 @@ export function MessageList({ messages }: { messages: Message[] }) {
     if (bottom) {
       setSeenID(lastID)
     }
+    const line = unreadLine()
+    setUnreadAbove(line !== null && line.offsetTop < el.scrollTop)
   }
 
   function toBottom() {
@@ -141,45 +135,67 @@ export function MessageList({ messages }: { messages: Message[] }) {
     }
   }
 
+  function toUnread() {
+    unreadLine()?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }
+
   return (
     <div className="relative min-h-0 flex-1">
-      <div ref={scroller} onScroll={onScroll} data-testid="message-list" className="h-full overflow-y-auto px-4 py-3">
+      <div
+        ref={scroller}
+        onScroll={onScroll}
+        data-testid="message-list"
+        className="relative h-full overflow-y-auto px-4 py-3"
+      >
         <ol className="flex flex-col gap-2 text-sm">
-          {groupByAuthor(messages).map((group) => (
-            <li key={group[0].id} data-testid="message-group" className="flex flex-col">
-              {group.map((m, i) => (
-                <div
-                  key={m.id}
-                  data-testid="message"
-                  className="group flex gap-2 rounded-md px-1 py-0.5 hover:bg-zinc-100 dark:hover:bg-zinc-800/40"
-                >
-                  {/* The gutter: the sender's icon by the header, the time on hover after. */}
-                  <div className="flex w-11 shrink-0 justify-end pt-0.5">
-                    {i === 0 ? (
-                      <SenderIcon message={m} />
-                    ) : (
-                      <time
-                        dateTime={m.created_at}
-                        title={new Date(m.created_at).toLocaleString()}
-                        className="font-mono text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100"
-                      >
-                        {clock(m.created_at)}
-                      </time>
-                    )}
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    {i === 0 && <Header message={m} />}
-                    {m.reply_to !== undefined && <ReplyStub id={m.reply_to} target={byID.get(m.reply_to)} />}
-                    <p title={`#${m.id}`} className="break-words whitespace-pre-wrap">
-                      {m.body}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </li>
-          ))}
+          {itemsOf(messages, unreadID, now).map((item) => {
+            switch (item.type) {
+              case 'day':
+                return (
+                  <Divider key={item.key} testid="day-separator" label={item.label} className="text-muted-foreground" />
+                )
+              case 'unread':
+                return (
+                  <Divider
+                    key={item.key}
+                    testid="unread-line"
+                    label="Unread"
+                    className={cn('scroll-mt-2', conceptColors.message.text)}
+                  />
+                )
+              case 'system':
+                return (
+                  <li key={item.key}>
+                    <SystemLine message={item.message} />
+                  </li>
+                )
+              case 'question':
+                return (
+                  <li key={item.key}>
+                    <QuestionCard message={item.message} />
+                  </li>
+                )
+              default:
+                return <GroupRows key={item.key} messages={item.messages} />
+            }
+          })}
         </ol>
       </div>
+      {unreadAbove && (
+        <button
+          type="button"
+          onClick={toUnread}
+          className={cn(
+            'absolute top-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium shadow-sm',
+            conceptColors.message.bg,
+            conceptColors.message.border,
+            conceptColors.message.text,
+            'bg-background',
+          )}
+        >
+          Jump to unread <ArrowUp className="size-3.5" />
+        </button>
+      )}
       {!atBottom && lastID > seenID && (
         <button
           type="button"

@@ -10,6 +10,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/vanclief/agent-composer/core/controller"
+	"github.com/vanclief/agent-composer/core/events"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
 	"github.com/vanclief/agent-composer/core/resources/knowledge"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
@@ -37,9 +38,11 @@ type Stack struct {
 	Messaging   *messaging.Service
 	TasksAPI    *tasks.API
 	// SchedulesAPI creates tasks on a schedule; only agc rest starts its
-	// scheduler (ADR 0011).
+	// scheduler (ADR 0012).
 	SchedulesAPI *schedules.API
 	KnowledgeAPI *knowledge.API
+	// Events is the live feed behind GET /api/events.
+	Events *events.Bus
 }
 
 type StackOptions struct {
@@ -80,7 +83,9 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		log.Warn().Err(err).Msg("workflow uuid backfill failed")
 	}
 
+	bus := events.New()
 	msg := messaging.NewService(ctrl.DB)
+	msg.SetEvents(bus)
 
 	secretsPath, err := secrets.DefaultPath()
 	if err != nil {
@@ -95,7 +100,9 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	specs := task.Store{Dir: filepath.Join(home, "config", "specs")}
 	sandboxesAPI := sandboxes.NewAPI(rootCtx, ctrl, msg, sandboxes.SandboxRuntime{}, secretsPath, filepath.Join(home, "tasks"))
 	tasksAPI := tasks.NewAPI(ctrl, sandboxesAPI, msg, secretsPath, specs)
+	tasksAPI.SetEvents(bus)
 	schedulesAPI := schedules.NewAPI(ctrl, tasksAPI, secretsPath)
+	schedulesAPI.SetEvents(bus)
 
 	// Sandboxes keep running while agc is down. Their messaging listeners
 	// come back here.
@@ -122,6 +129,7 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		TasksAPI:     tasksAPI,
 		SchedulesAPI: schedulesAPI,
 		KnowledgeAPI: knowledgeAPI,
+		Events:       bus,
 	}, nil
 }
 
