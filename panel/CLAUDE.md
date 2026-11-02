@@ -78,6 +78,14 @@ Each page sets the top bar title with `usePageTitle('…')` from
   needs a hand (failed, crashed: lit red triangle, the only red on screen),
   `idle` for not started (open: hollow grey). A done thing never looks as
   bright as a running one; a dead thing never looks like a done one.
+- **Lists are rows, not cards:** a list item is a flat row with a hairline
+  separator, no colored border (that is for the selected item and for
+  grouping panels). Left to right: the status light, the name in normal
+  weight, then the rest as dim text in a fixed order. Chips in a row are
+  only for things you click or things lit (a live count, a warning); a
+  model name or a person is plain muted text. Franco on the task list of
+  2026-11-01: equal violet cards with six chips each were "harder than it
+  should" be to read.
 - **Empty states say why in place:** use `<EmptySlot onAdd={…} label="Add …" />`
   for a fillable slot, or `<EmptySlot reason="Sandbox stopped" />` when it can't
   be filled. A disabled control says why in its own label ("Create: needs a
