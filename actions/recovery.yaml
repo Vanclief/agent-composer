@@ -1,0 +1,33 @@
+# Open follow-ups of ADR 0017 (recovery). Its own file so sibling branches
+# do not collide in actions/repo.yaml.
+actions:
+  # ADR 0017 item 2: lingering needs sudo, which only Franco runs.
+  - id: enable-linger-on-the-rig
+    action: "On the rig, in a real terminal, run `sudo loginctl enable-linger <user>` once, then `make rig-deploy` again so it enables agc-msb and agc-rest."
+    because: [agc-recovers-after-a-restart]
+    opened: { who: franco, when: 2026-11-02 }
+
+  # ADR 0017 item 1: the msb server command is assumed.
+  - id: confirm-the-msb-server-command
+    action: "Confirm that `msb server start` (AGC_RIG_MSB_SERVER) runs the msb server in the foreground and binds 127.0.0.1, or set the right arguments, before the agc-msb unit is enabled."
+    because: [agc-recovers-after-a-restart]
+    opened: { who: franco, when: 2026-11-02 }
+
+  # ADR 0017, Consequences: nothing here was run on the rig.
+  - id: reboot-test-the-rig-with-the-units
+    action: "With lingering on, reboot the rig with a task running and check that msb and agc come back, the sandbox is restarted, the agent resumes its session and the line is posted in #<task> and #<owner>; and that `systemctl --user restart agc-rest` leaves running VMs up (KillMode=process)."
+    because: [agc-recovers-after-a-restart]
+    opened: { who: franco, when: 2026-11-02 }
+
+  # ADR 0017, Consequences: agc agent run saves its session only once the
+  # image carries the new agc.
+  - id: rebuild-the-agent-image-for-recovery
+    action: "Rebuild images/agc-agent on the rig (images/agc-agent/build.sh) so sandboxes run the agc that saves and resumes its harness session."
+    because: [agc-recovers-after-a-restart]
+    opened: { who: franco, when: 2026-11-02 }
+
+  # ADR 0017, Consequences: the push token has no workflow scope.
+  - id: run-the-deploy-test-in-ci
+    action: "Add a step running scripts/rig-deploy_test.sh to the go job in .github/workflows/ci.yml."
+    because: [agc-recovers-after-a-restart]
+    opened: { who: franco, when: 2026-11-02 }

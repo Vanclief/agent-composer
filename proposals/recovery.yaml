@@ -1,0 +1,19 @@
+# Task recovery (2026-11-02): Franco powered the rig off and on and nothing
+# came back. Its own file so sibling branches do not collide.
+proposals:
+  # Evidence written by an agent needs Franco's decision, so the reboot
+  # test is a proposal here, not an evidence file. Witness: franco.
+  - id: rig-reboot-left-tasks-down
+    proposes: evidence
+    proposal: "franco, 2026-11-02, powered the rig off and on: neither the msb server nor agc rest restarted; every VM that had been running came back as crashed in msb; the named volumes agc-<sandbox> with the harness homes and transcripts were intact; agc's resume pass re-attached messaging only to VMs still running and skipped the rest; a task whose VM crashed showed as open and nobody was told."
+    because: [mechanical-watchdog-tells-the-owner]
+    by: claude_code
+    when: 2026-11-02
+
+  - id: recovery-code
+    proposes: code
+    proposal: "rig-deploy.sh installs agc-msb and agc-rest as systemd user units (used once lingering is on); agc rest restarts at startup every sandbox that went down without being stopped while its task is not done; the watchdog restarts a crashed sandbox up to recovery.restarts times an hour and gives up once; every restart is posted in #<task> and #<owner>; agc agent run saves its harness session in ~/.harness/agc-agent.json and resumes it (ADR 0017)."
+    because: [agc-recovers-after-a-restart]
+    by: claude_code
+    when: 2026-11-02
+    change: agc/recovery
