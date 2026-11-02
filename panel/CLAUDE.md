@@ -93,24 +93,27 @@ its area.
 - **Statuses are verbatim:** render `<StatusPill status={task.status} />`
   or `<StatusPill status={sandbox.status} detail={sandbox.status_error} />`.
   Never derive, map or relabel a status in the UI. If a status is wrong, the
-  backend has to change. The pill's shape is an LED. Franco's spec,
-  2026-11-02, verbatim: "Running: green led blinking. Review: yellow led
-  blinking. Open: green led off. Done: green led on. Crashed: red dot
-  blinking. Canceled: red dot." (canceled is not a backend status yet;
-  failed is the steady red until it is). It is also rtsdesign rule 6. In the rtsdesign tiers
-  (`data-tier`): `lit` for alive (running: green blinking; review: yellow
-  blinking; starting/stopping: blue pulsing), `off` for ended well (done:
-  green on, steady; stopped: green off), `attention` for died or needs a
-  hand (crashed, or any word with a `detail`: red blinking; failed, error:
-  red on, steady; the only red on screen), `idle` for not started (open, and
-  any word the pill doesn't know: green off, grey text). Blinking means it
-  is doing something or waiting on someone; steady means it is settled:
-  running and done share the green, the blink tells them apart. A dead
-  thing never looks like a done one (red, never green).
-  `statusTier`/`tierRank` from `@/components/status-pill` give a status's
-  tier; the Tasks and Compute lists sort attention, lit, idle, off (rows
-  carry `data-tier`; off ones are muted), and their top row has
-  `<StatusLegend />` (four dots, the tier word on hover).
+  backend has to change. There is no LED: the word is the light (Franco,
+  2026-11-02, second round: "Only things that need my attention should be
+  blinking. Get rid of the led; it's the whole REVIEW that would blink. If
+  it's not running just make the green outline but not filled."; the rest is
+  rtsdesign rule 6, color by kind: green work, yellow a person's turn, blue
+  a machine in transition, red broken). The tiers (`data-tier`): `lit` for
+  alive (running, review, starting/stopping/creating), `off` for ended
+  (done, stopped), `attention` for died or needs a hand (crashed, or any
+  word with a `detail`; failed, error: the only red on screen), `idle` for
+  not started (open, and any word the pill doesn't know: grey text). In the
+  Tasks list's status tab (`index.css`): running filled green, transition
+  filled blue, both steady; review blinks the whole tab yellow and crashed
+  red, the only two things that blink anywhere; failed a steady red
+  outline; done a green outline, not filled; open and unknown a dim green
+  outline. The pill alone (rails, Compute, counts) carries the colors as
+  border and text and never blinks. A dead thing never looks like a done
+  one (red, never green). `statusTier`/`tierRank` from
+  `@/components/status-pill` give a status's tier; the Tasks and Compute
+  lists sort attention, lit, idle, off (rows carry `data-tier`; off ones
+  are muted). `Led({color})` is a small steady light for facts that are not
+  a status (the rail's criteria and checks).
 - **Attention is personal (rtsdesign rule 14):** a task in `review` waits on
   its manager first (ADR 0010: the manager or the owner accepts); it waits on
   the owner when the owner is the manager or the manager never joined
