@@ -77,13 +77,26 @@ Each page sets the top bar title with `usePageTitle('…')` from
   pulsing blue; review: filled amber), `off` for ended well (done, stopped:
   the green shape turned off, a dim hollow ring), `attention` for died or
   needs a hand (failed, crashed: lit red triangle, the only red on screen),
-  `idle` for not started (open: hollow grey). A done thing never looks as
-  bright as a running one; a dead thing never looks like a done one. A word
-  the pill doesn't know is `idle`, or `attention` when it has a `detail`.
+  `idle` for not started (open: a hollow blue ring, the transition hue but
+  empty and still, so open → starting → running reads hollow blue → pulsing
+  blue → lit green; Franco: open must not be grey). A done thing never looks
+  as bright as a running one; a dead thing never looks like a done one. A
+  word the pill doesn't know is hollow grey, or `attention` when it has a
+  `detail`.
   `statusTier`/`tierRank` from `@/components/status-pill` give a status's
   tier; the Tasks and Compute lists sort attention, lit, idle, off (rows
   carry `data-tier`; off ones are muted), and their top row has
   `<StatusLegend />` (four dots, the tier word on hover).
+- **Attention is personal (rtsdesign rule 14):** a task in `review` waits on
+  its manager first (ADR 0010: the manager or the owner accepts); it waits on
+  the owner when the owner is the manager or the manager never joined
+  messaging. An open question (`kind: question`) waits on whom it is `for`.
+  When the thing waits on the signed-in person (`useMyName`), the row gets
+  one lit amber mark at its left edge and a lit chip naming the act
+  (`accept`, `answer`) that opens the place to do it, and the Tasks and Talk
+  nav badges count them. When it waits on someone else, the pill is followed
+  by dim text naming them (`review · @agent-composer-da`), never lit. Nothing
+  that waits on nobody in particular is highlighted.
 - **Lists are rows, not cards:** a list item is a flat row with a hairline
   separator, no colored border (that is for the selected item and for
   grouping panels). Left to right: the status light, the name in normal
