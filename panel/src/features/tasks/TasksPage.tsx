@@ -11,7 +11,7 @@ import type { TaskView } from '@/api/tasks'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
-import { StatusLegend, StatusPill } from '@/components/status-pill'
+import { StatusPill } from '@/components/status-pill'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CreateTaskDialog } from '@/features/create-task/CreateTaskDialog'
@@ -65,7 +65,6 @@ export function TasksPage() {
           <TaskIcon className={cn('size-4', conceptColors.task.text)} />
           {tasks.data?.length ?? '–'}
         </span>
-        <StatusLegend className="ml-4" />
         <StatusCounts tasks={tasks.data ?? []} />
         <Button onClick={() => setCreating(true)} className={conceptColors.task.solid}>
           <Plus /> New task

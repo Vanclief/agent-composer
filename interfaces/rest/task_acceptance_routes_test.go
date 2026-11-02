@@ -128,3 +128,29 @@ func TestTaskAcceptanceRoutes(t *testing.T) {
 		t.Fatalf("stops = %q", rt.Stops())
 	}
 }
+
+// ADR 0010 "Delivery report": deliver with a report stores it, returns it
+// on the task and in the list, renders it in the Delivered message, and a
+// reject keeps it.
+func TestTaskDeliverReportRoutes(t *testing.T) {
+	rt := &statefulRuntime{sb: &fakeSandbox{}, statuses: map[string]string{}}
+	routes := newTaskRoutes(t, rt, "")
+
+	report := `{"criteria":[{"met":"yes","note":" filled "},{"met":"partly","note":"one warning"}],` +
+		`"changes":{"branch":"agc/stop-icon","sha":"efbec13","files":2},` +
+		`"checks":[{"name":"npm run check","passed":true,"note":""}],"left_out":[],"needs":["Pick the icon size"]}`
+
+	routes.check(t, []routeCase{
+		{http.MethodPost, "/api/tasks", `{"title":"Stop icon","brief":"b","manager":"orchestrator","accept":["the icon is filled","npm run check passes"]}`, http.StatusOK, `"report":null`},
+		{http.MethodPost, "/api/tasks/stop-icon/deliver", `{"summary":"Filled.","report":{"criteria":[{"met":"yes"}]}}`, http.StatusBadRequest, "report has 1 criteria but the task has 2 accept criteria"},
+		{http.MethodPost, "/api/tasks/stop-icon/deliver", `{"summary":"Filled.","report":{"criteria":[{"met":"done"},{"met":"yes"}]}}`, http.StatusBadRequest, `criteria[0].met is \"done\"`},
+		{http.MethodPost, "/api/tasks/stop-icon/deliver", `{"summary":"Filled.","report":{"changes":{"branch":"b","sha":"xyz"}}}`, http.StatusBadRequest, "changes.sha"},
+		{http.MethodGet, "/api/tasks/stop-icon", "", http.StatusOK, `"delivered_at":null`},
+		{http.MethodPost, "/api/tasks/stop-icon/deliver", `{"summary":"Filled.","report":` + report + `}`, http.StatusOK, `"report":{"criteria":[{"met":"yes","note":"filled"},{"met":"partly","note":"one warning"}],"changes":{"branch":"agc/stop-icon","sha":"efbec13","files":2},"checks":[{"name":"npm run check","passed":true,"note":""}],"left_out":[],"needs":["Pick the icon size"]}`},
+		{http.MethodGet, "/api/tasks/stop-icon", "", http.StatusOK, `"needs":["Pick the icon size"]`},
+		{http.MethodGet, "/api/tasks", "", http.StatusOK, `"sha":"efbec13"`},
+		{http.MethodGet, "/api/msg/read?channel=%23stop-icon", "", http.StatusOK, `"body":"Delivered: Filled.\n\n- [x] the icon is filled — filled\n- [~] npm run check passes — one warning\n\nChanges: agc/stop-icon @ efbec13 (2 files)\n\nChecks:\n- ✓ npm run check\n\nNeeds you:\n- Pick the icon size"`},
+		{http.MethodPost, "/api/tasks/stop-icon/reject", `{"by":"orchestrator","why":"too small"}`, http.StatusOK, `"note":"one warning"`},
+		{http.MethodGet, "/api/tasks/stop-icon", "", http.StatusOK, `"summary":"Filled.","report":{"criteria"`},
+	})
+}

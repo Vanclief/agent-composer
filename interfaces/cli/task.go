@@ -2,7 +2,9 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -78,10 +80,19 @@ func taskCommand() *cli.Command {
 			},
 			{
 				Name:      "deliver",
-				Usage:     "Deliver a task for review: posts \"Delivered: <summary>\" in #<task> (ADR 0010); inside a sandbox it delivers the sandbox's own task",
+				Usage:     "Deliver a task for review: posts \"Delivered: <summary>\" in #<task>, then the report when given (ADR 0010); inside a sandbox it delivers the sandbox's own task",
 				ArgsUsage: "<summary>",
+				Description: "The summary is one or two sentences, what the reviewer reads first. --report <file|-> reads a JSON report\n" +
+					"(- is stdin), what the reviewer judges:\n\n" +
+					"  {\"criteria\": [{\"met\": \"yes|no|partly\", \"note\": \"...\"}],  one per accept criterion, in order\n" +
+					"   \"changes\": {\"branch\": \"agc/x\", \"sha\": \"efbec13\", \"files\": 41},\n" +
+					"   \"checks\": [{\"name\": \"go test ./...\", \"passed\": true, \"note\": \"\"}],\n" +
+					"   \"left_out\": [{\"what\": \"...\", \"why\": \"...\"}],\n" +
+					"   \"needs\": [\"a decision the reviewer must make\"]}\n\n" +
+					"A report that breaks the rules (ADR 0010, \"Delivery report\") is rejected with the server's error.",
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "task", Usage: "Task to deliver (default $" + task.EnvTask + ")"},
+					&cli.StringFlag{Name: "report", Usage: "JSON delivery report: a file, or - for stdin"},
 				},
 				Action: taskDeliver,
 			},
@@ -261,6 +272,7 @@ func taskCreate(c *cli.Context) error {
 			Title:    firstNonEmpty(c.String("title"), parsed.Title),
 			Name:     firstNonEmpty(c.String("name"), parsed.Name),
 			Brief:    firstNonEmpty(c.String("brief"), parsed.Brief),
+			Accept:   parsed.Accept,
 			Assignee: parsed.Assignee,
 			Model:    parsed.Model,
 			Manager:  parsed.Manager,
@@ -647,6 +659,11 @@ func taskDeliver(c *cli.Context) error {
 		return ez.New(ez.EINVALID, "usage: agc task deliver <summary>", nil)
 	}
 
+	report, err := readReport(c)
+	if err != nil {
+		return err
+	}
+
 	sandboxTask := strings.TrimSpace(os.Getenv(task.EnvTask))
 	name := firstNonEmpty(c.String("task"), sandboxTask)
 
@@ -656,7 +673,7 @@ func taskDeliver(c *cli.Context) error {
 		}
 
 		view := &tasks.TaskView{}
-		err = newMsgClient().Deliver(c.Context, summary, view)
+		err = newMsgClient().Deliver(c.Context, summary, report, view)
 		if err != nil {
 			return err
 		}
@@ -670,8 +687,13 @@ func taskDeliver(c *cli.Context) error {
 		return ez.New(ez.EINVALID, "pass --task <name> or set "+task.EnvTask, nil)
 	}
 
+	decoded, err := tasks.DecodeReport(report)
+	if err != nil {
+		return err
+	}
+
 	return withService(c, func(ctx context.Context, svc taskService) error {
-		view, err := svc.DeliverTask(ctx, name, summary)
+		view, err := svc.DeliverTask(ctx, name, summary, decoded)
 		if err != nil {
 			return err
 		}
@@ -680,6 +702,37 @@ func taskDeliver(c *cli.Context) error {
 			writeTask(w, view)
 		})
 	})
+}
+
+// readReport reads --report: the JSON in the file it names, or stdin for
+// -, nil when the flag is not given. Only JSON syntax is checked here; the
+// rules are the server's, and its error is returned as it is.
+func readReport(c *cli.Context) (json.RawMessage, error) {
+	path := strings.TrimSpace(c.String("report"))
+	if path == "" {
+		return nil, nil
+	}
+
+	var data []byte
+	var err error
+	if path == "-" {
+		data, err = io.ReadAll(c.App.Reader)
+	} else {
+		data, err = os.ReadFile(path)
+	}
+	if err != nil {
+		return nil, ez.New(ez.EINVALID, "cannot read the report "+path+": "+err.Error(), err)
+	}
+
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
+		return nil, ez.New(ez.EINVALID, "the report "+path+" is empty", nil)
+	}
+	if !json.Valid(trimmed) {
+		return nil, ez.New(ez.EINVALID, "the report "+path+" is not valid JSON", nil)
+	}
+
+	return json.RawMessage(trimmed), nil
 }
 
 // insideSandbox reports whether this agc runs in a task's sandbox: the
