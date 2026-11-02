@@ -31,7 +31,9 @@ When you need an answer, `ask` instead of `post`: the message has
 `"kind": "question"` and shows up as waiting on the people who read the
 channel (in `#<task>`, the manager and the owner) until someone other than
 you replies to it with `--reply-to <its id>`. Keep working on what does not
-depend on the answer, and `wait` for the reply. Answer someone else's
+depend on the answer, and `wait` for the reply. A persistent agent's loop
+hears a reply in a thread it started in any channel, even one it does not
+read (an inbox), and answers in that thread. Answer someone else's
 question with `agc msg post <#channel> <text> --reply-to <id>`.
 
 ## Rules
