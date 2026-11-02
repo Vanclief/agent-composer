@@ -61,9 +61,18 @@ Each page sets the top bar title with `usePageTitle('…')` from
 
 - Follow `/Users/vanclief/.claude/skills/rtsdesign/SKILL.md`: icons, slots,
   chips and numbers instead of sentences; explanations go in tooltips.
-- Modes are a vertical list in the sidebar; adding a mode is one entry in `MODES`.
-  In Talk mode the sidebar lists the followed channels under Channels (`ChannelRows` in `src/features/messages/ChannelRows.tsx`, mounted by the shell), linking to `/messages/<name>`; see Talk mode below.
-  `ModeSwitch` takes an optional `badges` slot per mode (Talk: the unread total).
+- The three areas (Think, Work, Talk) are not modes that hide each other:
+  the sidebar shows all three at once as collapsible groups (rtsdesign rule
+  12), each with a header row (its concept icon and color, the label, its
+  badge) that toggles the group open or closed, the state kept per group in
+  localStorage. The route highlights the active page and opens its group;
+  it never hides the others. A collapsed group still shows its header and
+  badge. Franco (2026-11-02): "they should always be present and their
+  contents just be collapsable". Adding an area is one entry in `MODES`.
+  In the Talk group the followed channels are listed under Channels
+  (`ChannelRows` in `src/features/messages/ChannelRows.tsx`, mounted by the
+  shell), linking to `/messages/<name>`; see Talk below. Each group header
+  takes an optional badge (Talk: the unread total; Work: rows waiting on me).
 - **One icon per concept:** import from `@/components/concept-icons`
   (`conceptIcons.task`, `.sandbox`, `.brief`, `.cpu`, `.memory`, `.image`,
   `.repo`, `.ref`, `.setup`, `.secret`, `.env`, `.volume`, `.channel`,
