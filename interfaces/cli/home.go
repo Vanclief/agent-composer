@@ -9,6 +9,7 @@ import (
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
+	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/task"
 )
 
@@ -84,7 +85,7 @@ func (homeService) GetTask(ctx context.Context, ref string) (*tasks.TaskView, er
 	return out, nil
 }
 
-func (homeService) DeliverTask(ctx context.Context, ref string, summary string) (*tasks.TaskView, error) {
+func (homeService) DeliverTask(ctx context.Context, ref string, summary string, report *taskmodels.Report) (*tasks.TaskView, error) {
 	return nil, notInHome("task deliver")
 }
 

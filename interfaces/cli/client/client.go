@@ -19,6 +19,7 @@ import (
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
+	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/task"
 )
 
@@ -88,9 +89,10 @@ func (c *Client) GetTask(ctx context.Context, ref string) (*tasks.TaskView, erro
 	return out, nil
 }
 
-// DeliverTask delivers the task with summary (ADR 0010 item 2).
-func (c *Client) DeliverTask(ctx context.Context, ref string, summary string) (*tasks.TaskView, error) {
-	return c.taskCall(ctx, ref, "/deliver", &tasks.DeliverRequest{Summary: summary})
+// DeliverTask delivers the task with summary and report, nil for none
+// (ADR 0010 item 2, "Delivery report").
+func (c *Client) DeliverTask(ctx context.Context, ref string, summary string, report *taskmodels.Report) (*tasks.TaskView, error) {
+	return c.taskCall(ctx, ref, "/deliver", &tasks.DeliverRequest{Summary: summary, Report: report})
 }
 
 // AcceptTask accepts the task as by, or as its owner when by is empty,

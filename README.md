@@ -139,7 +139,7 @@ agc task create -f task.yaml          # returns at once: task open, sandbox star
 agc task create -f task.yaml --wait   # polls until the sandbox is running or failed
 agc task list
 agc task get fix-login
-agc task deliver --task fix-login "Fixed 2FA; branch agc/fix-login"
+agc task deliver --task fix-login "Fixed 2FA; branch agc/fix-login" --report report.json  # or --report - for stdin
 agc task reject fix-login --why "the login test still fails"
 agc task accept fix-login             # done; its sandboxes are stopped, not deleted
 agc task delete fix-login --yes
@@ -155,7 +155,7 @@ agc task spec ls                      # saved specs are the server's
 agc --server http://rig:8788 task ls  # one-off, without the env var
 ```
 
-`task.yaml` is the ADR 0008 shape: `name`, `title`, `brief`, `assignee`, `for`, and `sandbox:` holding the environment block plus `command`. `agc task create` against a server prints the task and its page, `<server>/panel/tasks/<name>`. Every command prints the same lines in both modes; add `--json` for the raw view the API returns. A server error prints the server's message as is and exits 1. Without `AGC_SERVER` or `--server` everything runs locally as before, and local `create`/`allocate` always wait for the boot, since it runs in that process.
+`task.yaml` is the ADR 0008 shape: `name`, `title`, `brief`, `assignee`, `for`, and `sandbox:` holding the environment block plus `command`. `agc task create` against a server prints the task and its page, `<server>/panel/tasks/<name>`. Every command prints the same lines in both modes; add `--json` for the raw view the API returns. A server error prints the server's message as is and exits 1. `agc task deliver --report` takes the delivery report of ADR 0010 ("Delivery report"): a JSON object with `criteria` (one `{met: yes|no|partly, note}` per accept criterion, in order), `changes` (`branch`, `sha`, `files`), `checks` (`name`, `passed`, `note`), `left_out` (`what`, `why`) and `needs`; agc stores it on the task and renders it under "Delivered:" in `#<task>`, and a bad report is refused with the server's error. Without `AGC_SERVER` or `--server` everything runs locally as before, and local `create`/`allocate` always wait for the boot, since it runs in that process.
 
 **Scheduled tasks**
 
