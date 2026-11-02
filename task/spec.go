@@ -293,8 +293,8 @@ func (s Spec) RepoURL() (string, string, error) {
 // taskName, or to no task when taskName is empty (an agent's home: no
 // AGC_TASK and no task label). The guest reaches agc messaging on vsockPort, which the runtime
 // connects to vsockPath. HomeDir is a private disk of the spec's size and
-// HarnessDir the named volume VolumeName(name).
-func (s Spec) SandboxSpec(taskName string, name string, bindings []secrets.Binding, vsockPath string, vsockPort uint32) (sandbox.Spec, error) {
+// HarnessDir the named volume volume (VolumeName(name) when empty).
+func (s Spec) SandboxSpec(taskName string, name string, volume string, bindings []secrets.Binding, vsockPath string, vsockPort uint32) (sandbox.Spec, error) {
 	env := map[string]string{}
 	for k, v := range s.Env {
 		env[k] = v
@@ -314,7 +314,10 @@ func (s Spec) SandboxSpec(taskName string, name string, bindings []secrets.Bindi
 		}
 		volumes = append(volumes, volume)
 	}
-	volumes = append(volumes, sandbox.Volume{Source: VolumeName(name), Dest: HarnessDir, ReadWrite: true, QuotaMiB: harnessQuotaMiB})
+	if volume == "" {
+		volume = VolumeName(name)
+	}
+	volumes = append(volumes, sandbox.Volume{Source: volume, Dest: HarnessDir, ReadWrite: true, QuotaMiB: harnessQuotaMiB})
 
 	diskMiB, err := s.DiskMiB()
 	if err != nil {

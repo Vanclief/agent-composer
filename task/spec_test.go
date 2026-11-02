@@ -310,7 +310,7 @@ func TestSandboxSpec(t *testing.T) {
 	}
 	bindings := []secrets.Binding{{Name: "GITHUB_TOKEN", Value: "v", Hosts: []string{"github.com"}}}
 
-	got, err := spec.SandboxSpec("review-42", "review-42-2", bindings, "/tmp/review-42-2.sock", 5100)
+	got, err := spec.SandboxSpec("review-42", "review-42-2", "", bindings, "/tmp/review-42-2.sock", 5100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +341,7 @@ func TestSandboxSpec(t *testing.T) {
 	}
 
 	spec.Disk = "50g"
-	got, err = spec.SandboxSpec("review-42", "review-42-2", bindings, "/tmp/review-42-2.sock", 5100)
+	got, err = spec.SandboxSpec("review-42", "review-42-2", "", bindings, "/tmp/review-42-2.sock", 5100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,7 +388,7 @@ func TestSandboxSpecAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := spec.SandboxSpec("work", "work-1", bindings, "/tmp/work-1.sock", 5100)
+	got, err := spec.SandboxSpec("work", "work-1", "", bindings, "/tmp/work-1.sock", 5100)
 	if err != nil {
 		t.Fatal(err)
 	}

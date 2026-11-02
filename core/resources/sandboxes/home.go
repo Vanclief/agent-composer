@@ -83,7 +83,11 @@ type HomeRequest struct {
 
 // AllocateHome inserts the agent's home and boots it in the background, as
 // AllocateFor does for a task. The sandbox is named after the agent (the
-// first free name), has no task, and gets $AGC_AGENT.
+// first free name), has no task, and gets $AGC_AGENT. Its volume is the
+// agent's, agc-<agent>, whatever the sandbox is called, and is reused when
+// an earlier home left it: the harness sessions and the loop's
+// agc-sessions.json and agc-cursor.json outlive every home (ADR 0016
+// item 5).
 func (api *API) AllocateHome(ctx context.Context, request HomeRequest) (*SandboxView, error) {
 	err := request.Sandbox.Validate()
 	if err != nil {
@@ -112,7 +116,7 @@ func (api *API) AllocateHome(ctx context.Context, request HomeRequest) (*Sandbox
 		return nil, ez.Wrap(err)
 	}
 
-	record := &taskmodels.Sandbox{Agent: request.Agent, Spec: encodedSpec, Command: strings.TrimSpace(request.Command), Instructions: request.Instructions}
+	record := &taskmodels.Sandbox{Agent: request.Agent, Volume: task.VolumeName(request.Agent), Spec: encodedSpec, Command: strings.TrimSpace(request.Command), Instructions: request.Instructions}
 
 	err = api.insert(ctx, request.Agent, record)
 	if err != nil {

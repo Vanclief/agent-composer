@@ -1000,3 +1000,56 @@ func TestStartRelaunchesTheJob(t *testing.T) {
 		t.Fatalf("a sandbox with no command launched a job: %q", terminals())
 	}
 }
+
+// A persistent agent's home keeps the agent's volume agc-<agent> across
+// homes (ADR 0016 item 5): after the first home is deleted, its volume is
+// still on the host, so the next home gets a free sandbox name and the
+// same volume, mounted as the harness homes.
+func TestAllocateHomeAfterDeleteKeepsTheAgentsVolume(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	request := HomeRequest{Agent: "reviewer-1", Command: "agc agent run --agent reviewer-1"}
+
+	first, err := env.api.AllocateHome(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.api.Wait()
+	if first.Name != "reviewer-1" || first.Volume != "agc-reviewer-1" {
+		t.Fatalf("first = %s %s", first.Name, first.Volume)
+	}
+
+	_, err = env.api.Delete(ctx, nil, &DeleteRequest{Name: first.Name})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// msb keeps the deleted home's volume on the host.
+	err = os.MkdirAll(filepath.Join(env.api.volumeRoot, "agc-reviewer-1", ".claude"), 0o755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := env.api.AllocateHome(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.api.Wait()
+	if second.Name != "reviewer-1-2" || second.Volume != "agc-reviewer-1" {
+		t.Fatalf("second = %s %s", second.Name, second.Volume)
+	}
+
+	got, err := taskmodels.GetSandboxByName(ctx, env.db, second.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Volume != "agc-reviewer-1" {
+		t.Fatalf("row volume = %q", got.Volume)
+	}
+
+	created := env.rt.created[len(env.rt.created)-1]
+	harness := sandbox.Volume{Source: "agc-reviewer-1", Dest: "/home/agent/.harness", ReadWrite: true, QuotaMiB: 4096}
+	if created.Name != "reviewer-1-2" || len(created.Volumes) != 1 || created.Volumes[0] != harness {
+		t.Fatalf("created = %s %+v", created.Name, created.Volumes)
+	}
+}
