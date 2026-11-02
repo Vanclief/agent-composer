@@ -1,0 +1,103 @@
+# agc task create -f tasks/recovery.task.yaml
+# Recovery: agc comes back after a host reboot and brings its running
+# sandboxes back with it, agents continue their harness session, and a
+# sandbox that crashes while its task is open is restarted with a cap.
+# Franco decided 2026-11-02 after a power-off test of the rig: nothing
+# restarted on its own, six VMs came back as crashed, their volumes and
+# transcripts were intact.
+name: recovery
+title: Recovery, agc restarts at boot and brings its sandboxes and agents back
+assignee: claude_code
+manager: franco
+owner: franco
+for: proposals-pass-through-human-gates
+accept:
+  - On startup agc starts every sandbox msb reports crashed whose task is not done, re-attaches its messaging listener, restarts its agent job, and posts one agc line in #<task> and #<owner> saying it did; a test with a fake runtime covers it
+  - The watchdog loop (agc/watchdog, core/watchdog) restarts a sandbox that msb reports crashed while its task is not done, at most recovery.restarts times per hour per sandbox (default 3), then posts that it gave up; tests with a fake clock and runtime cover both paths
+  - A restarted agent continues its harness session instead of starting over; the agent loop persists the session id in the harness home on the volume and resumes it; a test covers resume and the first-run case
+  - scripts/rig-deploy.sh installs and uses systemd user units for the msb server and agc rest when systemd is present (falls back to nohup otherwise), and the ADR documents the one-time sudo loginctl enable-linger the units need to start at boot
+  - go build/vet/test pass; gofmt lists only the three known files; docs/decisions/0017-recovery.md, decisions/recovery.yaml, actions/recovery.yaml, proposals/recovery.yaml written; branch agc/recovery pushed; nothing merged
+brief: |
+  Make agc recover on its own. Read AGENTS.md, ADR 0008, 0009, 0010,
+  0013 (the watchdog, on this branch), the deploy script
+  scripts/rig-deploy.sh, core/resources/sandboxes/{resume,start}.go and
+  interfaces/cli/agent.go first, then `agc rules show`. Write the whole
+  thing; do not stop at a plan. You are branched from agc/watchdog,
+  which is not merged yet: build on it, do not rewrite it.
+
+  What the reboot showed (2026-11-02, Franco powered the rig off and
+  on): nothing restarts after a boot, neither the msb server nor agc
+  rest; every VM that was running came back as `crashed` in msb; the
+  named volumes agc-<sandbox> with the harness homes and transcripts
+  were intact; agc's resume pass only re-attaches messaging to VMs that
+  are still running and skips the rest; a task whose VM crashed shows
+  as open, and nobody is told.
+
+  Build:
+  - Recovery at startup. Extend core/resources/sandboxes.Resume: a
+    sandbox whose task is not done and whose runtime status is crashed
+    (or any not-running state that msb reports for a VM that had been
+    running) is started again the way Start does (secrets resolved
+    again, listener attached, runtime started, stopped_at cleared), and
+    the agent job is started again if the runtime does not do it. Post
+    one agc line in #<task> and #<owner>: "<task> came back after a
+    restart; its agent continues." Failures are logged, posted once,
+    and skipped.
+  - Heartbeat restarts. In core/watchdog, add a condition: a sandbox
+    msb reports crashed while its task is not done is restarted, at
+    most `recovery.restarts` per hour per sandbox (default 3). Each
+    restart posts in #<task> and #<owner>; giving up posts once with
+    the reason. The watchdog's existing silence check keeps covering an
+    agent that is up but stuck.
+  - Agents continue, not restart from zero. The agent loop (`agc agent
+    run`, interfaces/cli/agent.go) keeps its harness session id in
+    memory; persist it in the harness home on the volume (next to where
+    Claude Code and Codex keep their sessions, task.HarnessDir), and on
+    start resume that session when the file exists (claude --resume
+    <id> or the codex equivalent, as runtime/harnesses drives them) and
+    run on TASK.md only when it does not. A resumed agent gets one
+    line as its turn: "agc restarted your sandbox; continue where you
+    were; the repo clone may need a fresh pull."
+  - Boot. scripts/rig-deploy.sh installs two systemd user units when
+    `systemctl --user` works on the rig: one for the msb server, one
+    for `agc rest` with the same env the script passes today, Restart=
+    on-failure, the agc unit After= the msb one. The restart step uses
+    `systemctl --user restart` when the units are installed and keeps
+    today's nohup path otherwise. Starting at boot without a login
+    needs `sudo loginctl enable-linger <user>` once; you cannot run it
+    and the agent must not try: document it in the ADR and print it at
+    the end of the deploy when lingering is off. Never put a secret in
+    a unit file.
+  - Config: `recovery: { restarts: 3 }` in core/controller.Config, read
+    like `defaults:`. Keep the core.go and config.go additions to a few
+    lines, sibling branches touch the same files.
+
+  Record it: docs/decisions/0017-recovery.md in the style of the others
+  (0011 to 0016 are taken). Knowledge entries in their own files:
+  decisions/recovery.yaml (decided: { who: franco, when: 2026-11-02 }),
+  actions/recovery.yaml for what is left open, proposals/recovery.yaml
+  with one `proposes: evidence` entry for the reboot test (who franco,
+  when 2026-11-02, what was seen as listed above; evidence by an agent
+  needs Franco's decision, so it is a proposal, not an evidence file)
+  and one `proposes: code` proposal (`change: agc/recovery`, by:
+  claude_code). Cite existing belief ids in `because`.
+
+  If you add a migration, pick a timestamp no file in models/migrations
+  already uses, even on sibling branches: bun tracks applied migrations
+  by timestamp, and two sharing one broke the rig once.
+
+  Verify: go build ./... && go vet ./... && go test ./...; gofmt -l .
+  lists only the three known files. The panel is untouched, so skip
+  panel-check. You cannot reboot anything or run systemd inside your
+  sandbox; test the unit text and the script path with shell tests or
+  by reading them back. Commit on branch agc/recovery, push it, never
+  merge. Post progress in #recovery. When done, answer DONE: with what
+  changed, the exact commands Franco runs once on the rig, and what you
+  left out and why.
+sandbox:
+  image: agc-agent
+  cpus: 2
+  memory: 4096
+  repo: https://github.com/vanclief/agent-composer
+  ref: agc/watchdog
+  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
