@@ -14,6 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/vanclief/agent-composer/models/agent"
+	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/agent-composer/task"
 )
 
@@ -28,6 +29,9 @@ var roleRegex = regexp.MustCompile(`^[A-Za-z0-9]+([_-][A-Za-z0-9]+)*$`)
 type Template struct {
 	Harness string `yaml:"harness"`
 	Model   string `yaml:"model"`
+	// Effort is the harness's reasoning effort, one of
+	// runtimetypes.ReasoningEffort; empty keeps the harness's default.
+	Effort string `yaml:"effort"`
 	// Sandbox is the home's spec (ADR 0008), disk included. A command is
 	// ignored: the home runs the agent loop.
 	Sandbox task.Sandbox `yaml:"sandbox"`
@@ -63,7 +67,12 @@ func (t Template) Validate() error {
 		}
 	}
 
-	_, err := t.IdleDuration()
+	err := ValidateEffort(t.Effort)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	_, err = t.IdleDuration()
 	if err != nil {
 		return ez.Wrap(err)
 	}
@@ -78,6 +87,21 @@ func (t Template) Validate() error {
 	err = t.Sandbox.Validate()
 	if err != nil {
 		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// ValidateEffort checks effort is empty or a runtimetypes.ReasoningEffort.
+func ValidateEffort(effort string) error {
+	trimmed := strings.TrimSpace(effort)
+	if trimmed == "" {
+		return nil
+	}
+
+	err := runtimetypes.ReasoningEffort(trimmed).Validate()
+	if err != nil {
+		return ez.New(ez.EINVALID, "effort "+trimmed+" is not one of low, medium, high, xhigh", err)
 	}
 
 	return nil

@@ -94,7 +94,7 @@ func TestAgentRoutes(t *testing.T) {
 		{http.MethodPost, "/api/agents", `{}`, http.StatusBadRequest, "role is required"},
 		{http.MethodPost, "/api/agents", `{"role":"Writer"}`, http.StatusBadRequest, "writer.yaml"},
 		{http.MethodPost, "/api/agents", `{"role":"Reviewer","harness":"vim"}`, http.StatusBadRequest, "unknown harness vim"},
-		{http.MethodPost, "/api/agents", `{"role":"Reviewer"}`, http.StatusCreated, `"name":"reviewer-1","role":"Reviewer","kept":false,"harness":"claude_code","model":"claude-opus-5-5","owner":"franco","state":"asleep","home":null,"tasks":[],"conversations":[{"channel":"@franco/reviewer-1"`},
+		{http.MethodPost, "/api/agents", `{"role":"Reviewer"}`, http.StatusCreated, `"name":"reviewer-1","role":"Reviewer","kept":false,"harness":"claude_code","model":"claude-opus-5-5","effort":"","owner":"franco","state":"asleep","home":null,"tasks":[],"conversations":[{"channel":"@franco/reviewer-1"`},
 		{http.MethodPost, "/api/agents", `{"role":"reviewer","harness":"codex_cli","model":"gpt-5"}`, http.StatusCreated, `"name":"reviewer-2","role":"reviewer","kept":false,"harness":"codex_cli","model":"gpt-5"`},
 		{http.MethodGet, "/api/agents", "", http.StatusOK, `"name":"reviewer-2"`},
 		{http.MethodGet, "/api/agents/reviewer-1", "", http.StatusOK, `"last_active_at":null`},

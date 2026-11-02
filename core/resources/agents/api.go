@@ -133,7 +133,9 @@ type AgentView struct {
 	Kept    bool   `json:"kept"`
 	Harness string `json:"harness"`
 	Model   string `json:"model"`
-	Owner   string `json:"owner"`
+	// Effort is the harness's reasoning effort, empty for its default.
+	Effort string `json:"effort"`
+	Owner  string `json:"owner"`
 	// State is asleep, waking or awake, or the home sandbox's own status
 	// when it is anything else.
 	State string `json:"state"`
@@ -274,6 +276,7 @@ func (api *API) viewWith(ctx context.Context, record *agent.Agent, state string)
 		Kept:          record.Kept,
 		Harness:       string(record.Harness),
 		Model:         record.Model,
+		Effort:        record.Effort,
 		Owner:         record.Owner,
 		State:         state,
 		Home:          home,
