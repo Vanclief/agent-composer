@@ -12,6 +12,7 @@ import (
 
 	"github.com/vanclief/agent-composer/messaging"
 	"github.com/vanclief/agent-composer/messaging/httpapi"
+	"github.com/vanclief/agent-composer/models/agent"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/task"
 )
@@ -72,6 +73,9 @@ func (api *API) currentHomes() (Homes, error) {
 type HomeRequest struct {
 	// Agent is the agent's name, which the sandbox is named after.
 	Agent string
+	// Harness is the agent's harness, whose provider's default account
+	// is bound when the template names no credential of it (ADR 0018).
+	Harness agent.Harness
 	// Sandbox is the template's sandbox; its command is ignored for
 	// Command.
 	Sandbox task.Sandbox
@@ -106,7 +110,7 @@ func (api *API) AllocateHome(ctx context.Context, request HomeRequest) (*Sandbox
 	env[EnvAgent] = request.Agent
 	spec.Env = env
 
-	bindings, err := api.resolveSecrets(spec)
+	spec, bindings, err := api.resolveSecrets(ctx, spec, request.Harness)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}

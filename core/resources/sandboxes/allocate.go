@@ -81,9 +81,7 @@ func (api *API) AllocateFor(ctx context.Context, owner *taskmodels.Task, request
 		return nil, ez.Wrap(err)
 	}
 
-	spec := request.Spec
-
-	bindings, err := api.resolveSecrets(spec)
+	spec, bindings, err := api.resolveSecrets(ctx, request.Spec, taskHarness(owner))
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}

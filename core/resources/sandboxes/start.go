@@ -2,6 +2,7 @@ package sandboxes
 
 import (
 	"context"
+	"encoding/json"
 
 	"slices"
 	"strings"
@@ -47,9 +48,32 @@ func (api *API) Start(ctx context.Context, requester interface{}, request *Start
 		return nil, ez.Wrap(err)
 	}
 
-	bindings, err := api.resolveSecrets(spec)
+	harness, err := api.harnessOf(ctx, record, owner)
 	if err != nil {
 		return nil, ez.Wrap(err)
+	}
+
+	bound, bindings, err := api.resolveSecrets(ctx, spec, harness)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	// A sandbox allocated before its provider had a default gets it now,
+	// recorded on the row so the account cannot be deleted under it.
+	if len(bound.Secrets) != len(spec.Secrets) {
+		encoded, err := json.Marshal(bound)
+		if err != nil {
+			return nil, ez.Wrap(err)
+		}
+
+		record.Spec = encoded
+
+		err = record.Update(ctx, api.db, "spec")
+		if err != nil {
+			return nil, ez.Wrap(err)
+		}
+
+		spec = bound
 	}
 
 	err = api.startSandboxListener(record, owner, spec)
