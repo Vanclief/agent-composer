@@ -109,6 +109,7 @@ func serveTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *ta
 	msg.SetPresence(sandboxesAPI)
 	tasksAPI := tasks.NewAPI(ctrl, sandboxesAPI, msg, secretsPath, specs)
 	tasksAPI.SetEvents(bus)
+	tasksAPI.SetShotsDir(filepath.Join(t.TempDir(), "shots"))
 	schedulesAPI := schedules.NewAPI(ctrl, tasksAPI, secretsPath)
 	schedulesAPI.SetEvents(bus)
 	// The templates the repo ships, agents/ at its root.

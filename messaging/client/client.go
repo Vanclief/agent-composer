@@ -146,10 +146,11 @@ func (c *Client) Questions(ctx context.Context, channel string, open bool, forNa
 }
 
 // Deliver posts the task's delivery with summary and report, the report
-// JSON as is (nil for none), on a sandbox's socket (agc task deliver, ADR
-// 0010 item 2, "Delivery report") and decodes the task's view into out.
-func (c *Client) Deliver(ctx context.Context, summary string, report json.RawMessage, out any) error {
-	err := c.do(ctx, http.MethodPost, httpapi.DeliverPath, nil, httpapi.DeliverRequest{Summary: summary, Report: report}, out)
+// JSON as is (nil for none), and files, the PNGs of its shots under their
+// labels, on a sandbox's socket (agc task deliver, ADR 0010 item 2,
+// "Delivery report") and decodes the task's view into out.
+func (c *Client) Deliver(ctx context.Context, summary string, report json.RawMessage, files map[string][]byte, out any) error {
+	err := c.do(ctx, http.MethodPost, httpapi.DeliverPath, nil, httpapi.DeliverRequest{Summary: summary, Report: report, Files: files}, out)
 	if err != nil {
 		return ez.Wrap(err)
 	}

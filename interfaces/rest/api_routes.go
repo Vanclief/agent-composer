@@ -64,6 +64,7 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	tasks.POST("/:id/deliver", h.DeliverTask)
 	tasks.POST("/:id/accept", h.AcceptTask)
 	tasks.POST("/:id/reject", h.RejectTask)
+	tasks.GET("/:id/shots/:file", h.GetTaskShot)
 	tasks.POST("/:id/sandboxes", h.AllocateSandbox)
 	tasks.DELETE("/:id", h.DeleteTask)
 
