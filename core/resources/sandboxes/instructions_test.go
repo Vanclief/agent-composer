@@ -45,6 +45,7 @@ func TestInstructions(t *testing.T) {
 				"  `agc msg post '#fix-login' <text>`; your manager reads that channel and\n" +
 				"  answers there. Ask your manager there too, then keep working on what\n" +
 				"  does not depend on the answer.\n" +
+				"- Post progress in `#fix-login`, and anything that needs franco in `@franco`.\n" +
 				"- If something needs a decision only franco can make, post it in\n" +
 				"  `#franco` (their inbox) and say so in `#fix-login`; do not wait idle.\n" +
 				"- Do not modify files outside the repository, and never print secret values.\n" +
@@ -75,6 +76,7 @@ func TestInstructions(t *testing.T) {
 				"  `agc msg post '#call-the-bank' <text>`; your manager reads that channel and\n" +
 				"  answers there. Ask your manager there too, then keep working on what\n" +
 				"  does not depend on the answer.\n" +
+				"- Post progress in `#call-the-bank`, and anything that needs ana in `@ana`.\n" +
 				"- If something needs a decision only franco can make, post it in\n" +
 				"  `#franco` (their inbox) and say so in `#call-the-bank`; do not wait idle.\n" +
 				"- Do not modify files outside the repository, and never print secret values.\n" +
@@ -106,6 +108,7 @@ func TestInstructions(t *testing.T) {
 				"  `agc msg post '#bump-deps' <text>`; your manager reads that channel and\n" +
 				"  answers there. Ask your manager there too, then keep working on what\n" +
 				"  does not depend on the answer.\n" +
+				"- Post progress in `#bump-deps`, and anything that needs franco in `@franco`.\n" +
 				"- Do not modify files outside the repository, and never print secret values.\n" +
 				"- When the work is finished, end by running `agc task deliver \"<summary>\"`\n" +
 				"  (or start your answer with `DONE:` followed by the summary). The task\n" +

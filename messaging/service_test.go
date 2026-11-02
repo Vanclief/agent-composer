@@ -13,6 +13,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
+	"github.com/vanclief/agent-composer/notify"
 )
 
 // newTestDB returns an in-memory SQLite database with the messaging
@@ -427,4 +428,142 @@ func TestParticipantsActiveFirstThenDeparted(t *testing.T) {
 
 	_, err = svc.Participants(ctx, human, "review-42")
 	wantCode(t, err, ez.EINVALID)
+}
+
+type recordingNotifier struct {
+	notices chan notify.Notice
+	err     error
+}
+
+func (r *recordingNotifier) Notify(ctx context.Context, notice notify.Notice) error {
+	r.notices <- notice
+	return r.err
+}
+
+func TestDirectMessageAccess(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+
+	agent := join(t, svc, review, "agent")
+	builder := join(t, svc, other, "builder")
+	franco := join(t, svc, human, "franco")
+
+	// A task posts to its own DM with the short form and the full name.
+	m := post(t, svc, review, agent, "@franco", "need a decision")
+	if m.Channel != "@franco/review-42" {
+		t.Fatalf("short form should expand to the task's DM, got %q", m.Channel)
+	}
+	post(t, svc, review, agent, "@franco/review-42", "again")
+
+	// A human answers in the full name and reads without limits.
+	post(t, svc, human, franco, "@franco/review-42", "yes")
+	messages, err := svc.Read(ctx, human, "@franco/review-42", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 3 {
+		t.Fatalf("want 3 messages, got %d", len(messages))
+	}
+
+	// The task reads it back with the short form too.
+	messages, err = svc.Read(ctx, review, "@franco", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 3 {
+		t.Fatalf("want 3 messages by short form, got %d", len(messages))
+	}
+
+	// A task may use a DM with any human, but only its own task's.
+	post(t, svc, review, agent, "@ana", "hello ana")
+
+	// No other task can read, wait on or post in it, by either spelling.
+	_, err = svc.Read(ctx, other, "@franco/review-42", 0, 0)
+	wantCode(t, err, ez.ENOTAUTHORIZED)
+	_, err = svc.Wait(ctx, other, "@franco/review-42", 0, time.Millisecond)
+	wantCode(t, err, ez.ENOTAUTHORIZED)
+	_, err = svc.Post(ctx, other, builder.ID, "@franco/review-42", "psst", nil)
+	wantCode(t, err, ez.ENOTAUTHORIZED)
+	_, err = svc.Participants(ctx, other, "@franco/review-42")
+	wantCode(t, err, ez.ENOTAUTHORIZED)
+
+	// The short form from another task is that task's own DM, not review-42's.
+	m = post(t, svc, other, builder, "@franco", "build done")
+	if m.Channel != "@franco/build-7" {
+		t.Fatalf("got %q", m.Channel)
+	}
+	messages, err = svc.Read(ctx, other, "@franco", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("build-7 should see only its own DM, got %d messages", len(messages))
+	}
+
+	// A human must name the task.
+	_, err = svc.Read(ctx, human, "@franco", 0, 0)
+	wantCode(t, err, ez.EINVALID)
+	_, err = svc.Read(ctx, human, "@Franco/review-42", 0, 0)
+	wantCode(t, err, ez.EINVALID)
+
+	// A task's channel list has its own channel, grants and its DMs, and
+	// nothing of other tasks' DMs.
+	channels, err := svc.Channels(ctx, review)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := []string{}
+	for _, c := range channels {
+		got = append(got, c.Channel)
+	}
+	want := "#review-42 #releases #alerts @ana/review-42 @franco/review-42"
+	if strings.Join(got, " ") != want {
+		t.Fatalf("channels = %v, want %s", got, want)
+	}
+	for _, c := range channels {
+		if c.Channel == "@franco/review-42" && (c.Count != 3 || c.ReadOnly) {
+			t.Fatalf("unexpected DM info %+v", c)
+		}
+	}
+
+	// A human sees every channel, DMs included.
+	all, err := svc.Channels(ctx, human)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 3 {
+		t.Fatalf("human should see 3 channels, got %+v", all)
+	}
+}
+
+func TestDirectMessageNotifies(t *testing.T) {
+	svc := newTestService(t)
+	notifier := &recordingNotifier{notices: make(chan notify.Notice, 4), err: ez.New(ez.EINTERNAL, "down", nil)}
+	svc.SetNotifier(notifier)
+
+	agent := join(t, svc, review, "agent")
+	franco := join(t, svc, human, "franco")
+
+	// A failing notifier does not fail the post.
+	post(t, svc, review, agent, "@franco", "need a decision")
+
+	select {
+	case notice := <-notifier.notices:
+		want := notify.Notice{Human: "franco", Sender: "agent", Task: "review-42", Text: "need a decision"}
+		if notice != want {
+			t.Fatalf("notice = %+v, want %+v", notice, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("notifier was not called")
+	}
+
+	// Task channels and the human's own posts tell no one.
+	post(t, svc, review, agent, "#review-42", "progress")
+	post(t, svc, human, franco, "@franco/review-42", "ok")
+
+	select {
+	case notice := <-notifier.notices:
+		t.Fatalf("unexpected notice %+v", notice)
+	case <-time.After(100 * time.Millisecond):
+	}
 }

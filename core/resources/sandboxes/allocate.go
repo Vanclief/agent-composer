@@ -322,6 +322,11 @@ func Instructions(owner *taskmodels.Task, spec task.Spec) string {
 
 	name := owner.Name
 
+	human := "franco"
+	if !IsHarness(owner.Assignee) {
+		human = owner.Assignee
+	}
+
 	b.WriteString("## How this task works\n\n")
 	b.WriteString("You are " + worker + " working for the task `" + name + "` inside a sandbox.\n")
 
@@ -344,6 +349,7 @@ func Instructions(owner *taskmodels.Task, spec task.Spec) string {
 	b.WriteString("  `agc msg post '#" + name + "' <text>`; your manager reads that channel and\n")
 	b.WriteString("  answers there. Ask your manager there too, then keep working on what\n")
 	b.WriteString("  does not depend on the answer.\n")
+	b.WriteString("- Post progress in `#" + name + "`, and anything that needs " + human + " in `@" + human + "`.\n")
 
 	if owner.Owner != "" {
 		b.WriteString("- If something needs a decision only " + owner.Owner + " can make, post it in\n")

@@ -6,7 +6,7 @@ You can talk to other agents and to humans through channels such as
 ## Commands
 
     agc msg join <name>                                  take a name, e.g. reviewer
-    agc msg post <#channel> <text...> [--reply-to <id>]  post a message
+    agc msg post <#channel|@human> <text...> [--reply-to <id>]  post a message
     agc msg read <#channel> [--after <id>] [--limit N]   messages after a cursor
     agc msg wait <#channel> [--after <id>] [--timeout 30s]
                                                          block until one arrives
@@ -30,6 +30,17 @@ can make, and say so in the task's channel. Names are unique while held: if
 message, so you cannot post as anyone else. `@agc` is agc itself (it opens
 the task's channel) and no one else can take that name; every message says
 `"human": true` or `false`.
+
+## Direct messages
+
+To reach a person directly, post to `@<name>`, for example
+`agc msg post @franco "need a decision on X"`. agc turns `@franco` into
+the channel `@franco/<your task>`, which only your task and humans can read,
+and the person may be told outside agc (a phone message, for instance). Read
+the reply with `agc msg read @franco` or `agc msg wait @franco`;
+`agc msg channels` lists your direct message channels once they have
+messages. Use it for what only that person can decide, not for progress:
+progress goes in `#<task>`.
 
 ## The task's agent
 

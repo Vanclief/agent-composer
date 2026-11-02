@@ -91,6 +91,15 @@ func TestTaskAgentRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// A human answers in a direct message with the full name, and reads it
+	// back; the bare short form is only for a task's own calls (ADR 0011).
+	routes.check(t, []routeCase{
+		{http.MethodPost, "/api/msg/post", `{"participant_id":"` + franco.ID + `","channel":"@franco/fix-login","body":"on it"}`, http.StatusOK, `"channel":"@franco/fix-login"`},
+		{http.MethodGet, "/api/msg/read?channel=@franco/fix-login", "", http.StatusOK, `"body":"on it"`},
+		{http.MethodGet, "/api/msg/read?channel=@franco", "", http.StatusBadRequest, `"error"`},
+		{http.MethodGet, "/api/msg/channels", "", http.StatusOK, `"channel":"@franco/fix-login"`},
+	})
+
 	routes.check(t, []routeCase{
 		{http.MethodPost, "/api/msg/post", `{"participant_id":"` + franco.ID + `","channel":"#fix-login","body":"/accept"}`, http.StatusOK, `"human":true`},
 		{http.MethodGet, "/api/tasks/fix-login", "", http.StatusOK, `"done_at":"20`},

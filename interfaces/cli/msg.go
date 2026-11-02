@@ -46,7 +46,7 @@ func msgCommand() *cli.Command {
 			{
 				Name:      "post",
 				Usage:     "Post a message to a channel",
-				ArgsUsage: "<#channel> <text...>",
+				ArgsUsage: "<#channel|@human> <text...>",
 				Flags: []cli.Flag{
 					&cli.Int64Flag{Name: "reply-to", Usage: "Id of the message this replies to"},
 				},
@@ -234,9 +234,11 @@ func msgArgs(c *cli.Context, min int) ([]string, error) {
 }
 
 // msgChannel adds the leading # when it was left off, since an unquoted
-// #name starts a comment in most shells.
+// #name starts a comment in most shells. A direct message channel starts
+// with @ and is left alone: @franco inside a sandbox is expanded by agc to
+// @franco/<task> from the task the socket belongs to (ADR 0011).
 func msgChannel(channel string) string {
-	if strings.HasPrefix(channel, "#") {
+	if strings.HasPrefix(channel, "#") || strings.HasPrefix(channel, "@") {
 		return channel
 	}
 

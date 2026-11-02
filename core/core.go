@@ -16,6 +16,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
 	"github.com/vanclief/agent-composer/messaging"
+	"github.com/vanclief/agent-composer/notify"
 	"github.com/vanclief/agent-composer/runtime"
 	"github.com/vanclief/agent-composer/secrets"
 	"github.com/vanclief/agent-composer/task"
@@ -83,6 +84,8 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		return nil, err
 	}
 
+	msg.SetNotifier(whatsAppNotifier(ctrl.Config.Notify.WhatsApp, secretsPath))
+
 	home, err := workflowruntime.ResolveHomeDir()
 	if err != nil {
 		return nil, err
@@ -122,4 +125,32 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 // StartScheduler blocks while the scheduler runs until the context is canceled.
 func (s *Stack) StartScheduler(ctx context.Context) {
 	s.Scheduler.Start(ctx)
+}
+
+// whatsAppNotifier is the direct message notifier (ADR 0011), or nil when
+// the config names no phone number id or no number, in which case nothing
+// is forwarded. The token is read from the secrets file on each send.
+func whatsAppNotifier(settings controller.WhatsAppSettings, secretsPath string) notify.Notifier {
+	if settings.PhoneNumberID == "" || len(settings.Numbers) == 0 {
+		return nil
+	}
+
+	return &notify.WhatsApp{
+		Version:       settings.Version,
+		PhoneNumberID: settings.PhoneNumberID,
+		Numbers:       settings.Numbers,
+		Token: func() (string, error) {
+			store, err := secrets.Load(secretsPath)
+			if err != nil {
+				return "", err
+			}
+
+			bindings, err := store.Resolve([]secrets.Request{{Name: "WHATSAPP_TOKEN"}})
+			if err != nil {
+				return "", err
+			}
+
+			return bindings[0].Value, nil
+		},
+	}
 }

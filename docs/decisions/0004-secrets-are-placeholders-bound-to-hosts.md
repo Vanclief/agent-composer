@@ -60,6 +60,7 @@ not.
    | `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` | `api.anthropic.com` |
    | `OPENAI_API_KEY` | `api.openai.com` |
    | `GITHUB_TOKEN` | `api.github.com`, `github.com` |
+   | `WHATSAPP_TOKEN` | `graph.facebook.com` |
 
    Any other name must declare hosts in the spec, `NAME@host1,host2`, or
    creation fails with a message naming the missing hosts. Substitution is

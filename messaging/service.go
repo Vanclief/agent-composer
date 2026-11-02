@@ -11,13 +11,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/uptrace/bun"
 	"github.com/vanclief/ez"
 
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
+	"github.com/vanclief/agent-composer/notify"
 )
 
 const (
+	notifyTimeout    = 15 * time.Second
 	defaultReadLimit = 50
 	maxReadLimit     = 500
 	defaultWait      = 30 * time.Second
@@ -56,6 +59,10 @@ type Service struct {
 	posted chan struct{}
 	hooks  []PostHook
 
+	// notifier hears of every message that lands in a direct message
+	// channel (ADR 0011). Nil means no one is told.
+	notifier notify.Notifier
+
 	// system serializes taking the reserved name agc.
 	system sync.Mutex
 }
@@ -69,15 +76,45 @@ func TaskChannel(task string) string {
 	return "#" + task
 }
 
+// SetNotifier sets who is told when a message lands in a direct message
+// channel. Call it before serving; nil turns notifying off.
+func (s *Service) SetNotifier(notifier notify.Notifier) {
+	s.mu.Lock()
+	s.notifier = notifier
+	s.mu.Unlock()
+}
+
+// resolveChannel expands a bare @<human> to @<human>/<task> for a task's
+// caller, the task coming from the transport (ADR 0011). Anything else,
+// and any human's channel, is returned as given.
+func resolveChannel(caller Caller, channel string) string {
+	if caller.Human || caller.Task == "" {
+		return channel
+	}
+
+	human, ok := msgmodels.BareDMHuman(channel)
+	if !ok {
+		return channel
+	}
+
+	return msgmodels.DMChannel(human, caller.Task)
+}
+
 // authorize is the single access rule. Humans may do anything. A Task
-// may read and post in its own channel, read any granted channel, and
-// post in a granted channel unless it is read-only.
+// may read and post in its own channel and in any direct message channel
+// @<anyone>/<its own task>, read any granted channel, and post in a
+// granted channel unless it is read-only.
 func authorize(caller Caller, channel string, post bool) error {
 	if caller.Human {
 		return nil
 	}
 
 	if caller.Task != "" && channel == TaskChannel(caller.Task) {
+		return nil
+	}
+
+	_, dmTask, isDM := msgmodels.ParseDM(channel)
+	if isDM && caller.Task != "" && dmTask == caller.Task {
 		return nil
 	}
 
@@ -207,6 +244,8 @@ func (s *Service) Post(ctx context.Context, caller Caller, participantID, channe
 		return nil, ez.Wrap(err)
 	}
 
+	channel = resolveChannel(caller, channel)
+
 	err = msgmodels.ValidateChannel(channel)
 	if err != nil {
 		return nil, ez.Wrap(err)
@@ -271,7 +310,47 @@ func (s *Service) insert(ctx context.Context, p *msgmodels.Participant, channel,
 		hook(ctx, m)
 	}
 
+	s.notify(ctx, m)
+
 	return m, nil
+}
+
+// notify tells the human of a direct message that someone else wrote,
+// without holding up or failing the post: the call runs on its own
+// goroutine and a failure is logged and dropped.
+func (s *Service) notify(ctx context.Context, m *msgmodels.Message) {
+	human, task, isDM := msgmodels.ParseDM(m.Channel)
+	if !isDM || m.Human {
+		return
+	}
+
+	s.mu.Lock()
+	notifier := s.notifier
+	s.mu.Unlock()
+
+	if notifier == nil {
+		return
+	}
+
+	notice := notify.Notice{Human: human, Sender: m.From, Task: task, Text: m.Body}
+	detached := context.WithoutCancel(ctx)
+
+	go func() {
+		defer func() {
+			recovered := recover()
+			if recovered != nil {
+				log.Error().Interface("panic", recovered).Str("channel", m.Channel).Msg("direct message notifier panicked")
+			}
+		}()
+
+		sendCtx, cancel := context.WithTimeout(detached, notifyTimeout)
+		defer cancel()
+
+		err := notifier.Notify(sendCtx, notice)
+		if err != nil {
+			log.Warn().Err(err).Str("channel", m.Channel).Msg("direct message notice failed")
+		}
+	}()
 }
 
 // OnPost registers hook to run after every stored message, in the
@@ -341,6 +420,8 @@ func (s *Service) Read(ctx context.Context, caller Caller, channel string, after
 		return nil, ez.Wrap(err)
 	}
 
+	channel = resolveChannel(caller, channel)
+
 	err = msgmodels.ValidateChannel(channel)
 	if err != nil {
 		return nil, ez.Wrap(err)
@@ -388,6 +469,8 @@ func (s *Service) Wait(ctx context.Context, caller Caller, channel string, after
 		return nil, ez.Wrap(err)
 	}
 
+	channel = resolveChannel(caller, channel)
+
 	err = msgmodels.ValidateChannel(channel)
 	if err != nil {
 		return nil, ez.Wrap(err)
@@ -431,7 +514,8 @@ func (s *Service) Wait(ctx context.Context, caller Caller, channel string, after
 }
 
 // Channels lists the channels the caller may read. A Task sees its own
-// channel and its grants, even before anyone posts. A human sees every
+// channel and its grants, even before anyone posts, and any direct
+// message channel @<anyone>/<its task> that has messages. A human sees every
 // channel that has messages.
 func (s *Service) Channels(ctx context.Context, caller Caller) ([]ChannelInfo, error) {
 	err := checkCaller(caller)
@@ -471,9 +555,16 @@ func (s *Service) Channels(ctx context.Context, caller Caller) ([]ChannelInfo, e
 		names = append(names, grant.Channel)
 	}
 
-	err = query.Where("channel IN (?)", bun.In(names)).Scan(ctx, &stats)
+	err = query.Where("channel IN (?) OR channel LIKE '@%/%'", bun.In(names)).Scan(ctx, &stats)
 	if err != nil {
 		return nil, ez.Wrap(err)
+	}
+
+	for _, stat := range stats {
+		_, dmTask, isDM := msgmodels.ParseDM(stat.Channel)
+		if isDM && dmTask == caller.Task {
+			channels = append(channels, ChannelInfo{Channel: stat.Channel})
+		}
 	}
 
 	for i := range channels {
@@ -495,6 +586,8 @@ func (s *Service) Participants(ctx context.Context, caller Caller, channel strin
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
+
+	channel = resolveChannel(caller, channel)
 
 	err = msgmodels.ValidateChannel(channel)
 	if err != nil {

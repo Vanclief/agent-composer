@@ -49,3 +49,10 @@ actions:
     action: "Make the panel show criteria, review, accept and reject: the Brief tab's checklist, the review chip, Accept and Reject in a reviewed task's actions, and \"Accepted when\" in the New task dialog."
     because: [tasks-are-done-when-accepted]
     opened: { who: franco, when: 2026-11-02 }
+
+  # ADR 0011, Open question: Meta calls a public HTTPS webhook and the rig
+  # is LAN-only on 127.0.0.1 (rig-services-bind-localhost).
+  - id: whatsapp-inbound-needs-a-reachable-webhook
+    action: Choose how Franco's WhatsApp replies reach a @franco/<task> channel, a tunnel to one signed webhook route on the rig or a polled relay outside it, and say how a reply names its task.
+    because: [direct-messages-are-human-task-channels]
+    opened: { who: claude_code, when: 2026-11-02 }

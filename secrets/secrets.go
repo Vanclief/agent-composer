@@ -26,6 +26,7 @@ var KnownHosts = map[string][]string{
 	"CLAUDE_CODE_OAUTH_TOKEN": {"api.anthropic.com"},
 	"OPENAI_API_KEY":          {"api.openai.com"},
 	"GITHUB_TOKEN":            {"api.github.com", "github.com"},
+	"WHATSAPP_TOKEN":          {"graph.facebook.com"},
 }
 
 var (

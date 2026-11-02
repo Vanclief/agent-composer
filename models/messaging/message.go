@@ -16,6 +16,39 @@ const MaxBodyBytes = 64 * 1024
 
 var channelRegex = regexp.MustCompile(`^#[a-z0-9][a-z0-9_-]{0,63}$`)
 
+// dmRegex is a direct message channel, @<human>/<task> (ADR 0011).
+var dmRegex = regexp.MustCompile(`^@([a-z0-9][a-z0-9_-]{0,63})/([a-z0-9][a-z0-9_-]{0,63})$`)
+
+// bareDMRegex is @<human> alone, which a task's calls expand to its own DM.
+var bareDMRegex = regexp.MustCompile(`^@([a-z0-9][a-z0-9_-]{0,63})$`)
+
+// ParseDM splits a direct message channel @<human>/<task> into its two
+// names. ok is false for any other channel.
+func ParseDM(channel string) (human, task string, ok bool) {
+	match := dmRegex.FindStringSubmatch(channel)
+	if match == nil {
+		return "", "", false
+	}
+
+	return match[1], match[2], true
+}
+
+// BareDMHuman returns the human of a bare @<human> channel, the short form
+// a task's calls expand to @<human>/<its task>.
+func BareDMHuman(channel string) (human string, ok bool) {
+	match := bareDMRegex.FindStringSubmatch(channel)
+	if match == nil {
+		return "", false
+	}
+
+	return match[1], true
+}
+
+// DMChannel is the direct message channel between human and task.
+func DMChannel(human, task string) string {
+	return "@" + human + "/" + task
+}
+
 // Message is one entry in the append-only log. The autoincrement id is
 // the cursor and gives total order per channel.
 type Message struct {
@@ -51,8 +84,9 @@ func (*Message) AfterCreateTable(ctx context.Context, query *bun.CreateTableQuer
 }
 
 func ValidateChannel(channel string) error {
-	if !channelRegex.MatchString(channel) {
-		msg := fmt.Sprintf("channel %q is invalid: use # followed by 1-64 lowercase letters, digits, _ or -", channel)
+	_, _, isDM := ParseDM(channel)
+	if !channelRegex.MatchString(channel) && !isDM {
+		msg := fmt.Sprintf("channel %q is invalid: use # followed by 1-64 lowercase letters, digits, _ or -, or @human/task for a direct message", channel)
 		return ez.New(ez.EINVALID, msg, nil)
 	}
 

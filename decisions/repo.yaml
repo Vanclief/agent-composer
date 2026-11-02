@@ -42,3 +42,11 @@ decisions:
     because: [done-needs-criteria-before-an-agent-says-it, delivery-and-acceptance-are-different-acts]
     adr: docs/decisions/0010-task-acceptance.md
     decided: { who: franco, when: 2026-11-02 }
+
+  # Proposed in proposals/repo.yaml as dms-are-human-task-channels (open until
+  # Franco accepts it); recorded here with the ADR by the agent that built it.
+  - id: direct-messages-are-human-task-channels
+    decision: A direct message is a channel named @<human>/<task> that only that task and humans may read, with `agc msg post @franco` expanding to the task's own DM channel and each message written there by an agent forwarded to the human on WhatsApp, outbound only.
+    because: [messaging-over-per-task-vsock, task-vms-have-no-path-to-agc, secrets-are-placeholders-bound-to-hosts]
+    adr: docs/decisions/0011-direct-messages.md
+    decided: { who: claude_code, when: 2026-11-02 }

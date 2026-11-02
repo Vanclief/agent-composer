@@ -30,3 +30,13 @@ proposals:
     by: claude_code
     when: 2026-11-01
 
+
+  # The code for dms-are-human-task-channels plus the outbound WhatsApp
+  # bridge, built by task dms-whatsapp. Nothing is merged.
+  - id: dms-and-whatsapp-code
+    proposes: code
+    proposal: Direct message channels with the one extended access rule and server-side @human expansion, a notify package with a WhatsApp Cloud API sender, the WHATSAPP_TOKEN known host, ADR 0011, and the open inbound action.
+    because: [messaging-over-per-task-vsock, task-vms-have-no-path-to-agc, secrets-are-placeholders-bound-to-hosts, direct-messages-are-human-task-channels]
+    by: claude_code
+    when: 2026-11-02
+    change: agc/dms-whatsapp
