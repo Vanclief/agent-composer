@@ -523,3 +523,71 @@ func TestHomeLoopBacksOffAndDropsAnInvalidChannel(t *testing.T) {
 		t.Fatalf("the recovery is not logged once:\n%s", out)
 	}
 }
+
+// agentMsg is a post by another agent: a task's sandbox.
+func agentMsg(id int64, channel, from string, replyTo int64, body string) msgmodels.Message {
+	m := homeMsg(id, channel, from, replyTo, body)
+	m.Task = from
+
+	return m
+}
+
+func TestHomeLoopSkipsAnotherAgentsPlainPost(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	question := agentMsg(13, "#c", "fix-ci", 0, "which runner?")
+	question.Kind = msgmodels.KindQuestion
+
+	msg := &fakeHomeMessenger{
+		cancel: cancel,
+		nextID: 100,
+		agent:  msgclient.AgentResponse{Agent: msgclient.AgentView{Name: "reviewer-1", Role: "reviewer"}, Channels: []string{"#b", "#c"}, Idle: "15m"},
+		script: [][]msgmodels.Message{
+			// The task's agent acknowledges in a new thread: no turn.
+			{agentMsg(10, "#b", "fix-login", 0, "Noted, thanks.")},
+			// A person answers in that thread: a turn, shown the agent's
+			// post as context; another agent's question and a post naming
+			// the reviewer are turns too.
+			{
+				homeMsg(11, "#b", "franco", 10, "@reviewer-1 did you fetch?"),
+				question,
+				agentMsg(14, "#c", "fix-db", 0, "@reviewer-1 fetch origin"),
+				agentMsg(15, "#c", "fix-db", 0, "@reviewer-10 fetch origin"),
+			},
+		},
+	}
+	harness := &homeHarness{}
+	loop, _ := newHomeLoop(t, msg, harness)
+
+	err := loop.run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(harness.turns) != 3 {
+		t.Fatalf("turns = %#v, want 3", harness.turns)
+	}
+	want := "@fix-login in #b [message] (10): Noted, thanks.\n@franco in #b [message] (11): @reviewer-1 did you fetch?\n"
+	if !strings.Contains(harness.turns[0].prompt, want) {
+		t.Fatalf("the first turn does not show the agent's post as context:\n%s", harness.turns[0].prompt)
+	}
+	if !strings.Contains(harness.turns[1].prompt, "which runner?") || !strings.Contains(harness.turns[2].prompt, "fetch origin") {
+		t.Fatalf("turns = %#v", harness.turns)
+	}
+
+	wantPosts := []homePost{
+		{channel: "#b", body: "answer 1", replyTo: 10},
+		{channel: "#c", body: "answer 2", replyTo: 13},
+		{channel: "#c", body: "answer 3", replyTo: 14},
+	}
+	if !reflect.DeepEqual(msg.posts, wantPosts) {
+		t.Fatalf("posts = %+v", msg.posts)
+	}
+
+	cursor := cursorState{}
+	readJSONFile(t, filepath.Join(loop.dir, cursorFile), &cursor)
+	if cursor.After != 15 {
+		t.Fatalf("cursor = %d", cursor.After)
+	}
+}

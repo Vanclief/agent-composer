@@ -628,6 +628,13 @@ func TestDeleteRemovesTheHomeAndKeepsTheVolume(t *testing.T) {
 // postAs joins name with caller and posts body in channel.
 func (env *testEnv) postAs(t *testing.T, caller messaging.Caller, name string, channel string, body string) {
 	t.Helper()
+
+	env.postKindAs(t, caller, name, channel, body, "")
+}
+
+// postKindAs is postAs with a kind: question asks.
+func (env *testEnv) postKindAs(t *testing.T, caller messaging.Caller, name string, channel string, body string, kind string) {
+	t.Helper()
 	ctx := context.Background()
 
 	p, err := env.msg.Join(ctx, caller, name)
@@ -635,7 +642,7 @@ func (env *testEnv) postAs(t *testing.T, caller messaging.Caller, name string, c
 		t.Fatal(err)
 	}
 
-	_, err = env.msg.Post(ctx, caller, p.ID, channel, body, nil, "")
+	_, err = env.msg.Post(ctx, caller, p.ID, channel, body, nil, kind)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -752,9 +759,16 @@ func TestWakeHookWakesOnlyMatchingAsleepAgents(t *testing.T) {
 		env.create(t, "reviewer")
 		env.create(t, "watcher")
 
+		// Another agent's plain post is no turn (ADR 0016 item 6).
 		env.postAs(t, messaging.Caller{Task: "ci-main"}, "builder", "#ci-main", "red")
-
 		woken := env.woken("reviewer-1", "watcher-1")
+		if len(woken) != 0 {
+			t.Fatalf("an agent's plain post woke %q", woken)
+		}
+
+		env.postAs(t, messaging.Caller{Human: true}, "franco", "#ci-main", "red again")
+
+		woken = env.woken("reviewer-1", "watcher-1")
 		if !reflect.DeepEqual(woken, []string{"watcher-1"}) {
 			t.Fatalf("woken = %q, want watcher-1 only", woken)
 		}
@@ -777,7 +791,15 @@ func TestWakeHookWakesOnlyMatchingAsleepAgents(t *testing.T) {
 			t.Fatalf("agc's post woke %q", woken)
 		}
 
-		env.postAs(t, task42, "review-42", "#review-42", "QUESTION: which branch?")
+		// The task agent's plain post does not wake its manager.
+		env.postAs(t, task42, "review-42", "#review-42", "I fixed the tests.")
+		woken = env.woken("reviewer-1", "reviewer-2")
+		if len(woken) != 0 {
+			t.Fatalf("the task agent's plain post woke %q", woken)
+		}
+
+		// Its question does.
+		env.postKindAs(t, task42, "review-42b", "#review-42", "which branch?", msgmodels.KindQuestion)
 
 		woken = env.woken("reviewer-1", "reviewer-2")
 		if !reflect.DeepEqual(woken, []string{"reviewer-2"}) {
@@ -808,10 +830,10 @@ func TestWakeHookWakesOnlyMatchingAsleepAgents(t *testing.T) {
 			t.Fatalf("calls after = %q, want none past %d", calls, before)
 		}
 
-		// Another agent's post does wake it.
+		// Another agent's post naming it does wake it.
 		env.create(t, "reviewer")
 		env.wake(t, "reviewer-1")
-		env.postAs(t, messaging.Caller{Agent: "reviewer-1", Grants: []messaging.Grant{{Channel: "#ci-main"}}}, "reviewer-1", "#ci-main", "looked at it")
+		env.postAs(t, messaging.Caller{Agent: "reviewer-1", Grants: []messaging.Grant{{Channel: "#ci-main"}}}, "reviewer-1", "#ci-main", "@watcher-1 looked at it")
 
 		calls = env.rt.Calls()
 		if !slices.Contains(calls[before:], "start watcher-1") {
@@ -867,11 +889,7 @@ func TestWakeHookWakesOnlyMatchingAsleepAgents(t *testing.T) {
 			t.Fatal(err)
 		}
 		own := &msgmodels.Message{From: msgmodels.SystemName, Channel: "#review-42", Body: "Accepted by reviewer-2."}
-		manages, err := env.api.managesChannel(ctx, record, own)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if manages {
+		if msgmodels.TurnFor(own, &msgmodels.Participant{Name: record.Name, Agent: record.Home}) {
 			t.Fatal("the manager's own accept is a turn for it")
 		}
 	})

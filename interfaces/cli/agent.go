@@ -37,10 +37,6 @@ const (
 	// or the owner: the rest is posted as a question, which shows as
 	// waiting on them until someone answers it.
 	questionPrefix = "QUESTION:"
-	// agc posts these in #<task> when the task is accepted or rejected
-	// (core/resources/tasks).
-	acceptedPrefix = "Accepted by "
-	rejectedPrefix = "Rejected by "
 )
 
 // agentHarness runs one turn: prompt on session, or a new session when
@@ -241,12 +237,12 @@ func (l *agentLoop) run(ctx context.Context) error {
 				continue
 			}
 
-			if isSystem(m) && strings.HasPrefix(m.Body, acceptedPrefix) {
+			if isSystem(m) && strings.HasPrefix(m.Body, msgmodels.AcceptedPrefix) {
 				l.logf("the task is accepted (%s), exiting", strings.TrimSpace(m.Body))
 				return nil
 			}
 
-			if !l.isTurn(m) {
+			if !l.isTurn(m, p) {
 				continue
 			}
 
@@ -263,12 +259,17 @@ func (l *agentLoop) run(ctx context.Context) error {
 }
 
 // isTurn reports whether m, not the loop's own, is the agent's next turn.
-// agc's posts are not, except a rejection; the manager's and the owner's
-// /accept and /reject are not either, since agc answers them in the
-// channel.
-func (l *agentLoop) isTurn(m msgmodels.Message) bool {
+// agc's posts are not, except a rejection; another agent's post is only
+// when it is a question or names the agent (msgmodels.TurnFor, ADR 0016
+// item 6); the manager's and the owner's /accept and /reject are not
+// either, since agc answers them in the channel.
+func (l *agentLoop) isTurn(m msgmodels.Message, me *msgmodels.Participant) bool {
 	if isSystem(m) {
-		return strings.HasPrefix(m.Body, rejectedPrefix)
+		return strings.HasPrefix(m.Body, msgmodels.RejectedPrefix)
+	}
+
+	if !msgmodels.TurnFor(&m, me) {
+		return false
 	}
 
 	if !l.closers[m.From] {
@@ -285,7 +286,7 @@ func (l *agentLoop) isTurn(m msgmodels.Message) bool {
 
 // isSystem reports whether agc itself posted m.
 func isSystem(m msgmodels.Message) bool {
-	return m.From == msgmodels.SystemName && m.Task == "" && !m.Human
+	return msgmodels.FromSystem(&m)
 }
 
 // join takes the sandbox's name, or name-2 … name-5 when an earlier run
