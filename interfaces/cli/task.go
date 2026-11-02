@@ -272,6 +272,7 @@ func taskCreate(c *cli.Context) error {
 			Title:    firstNonEmpty(c.String("title"), parsed.Title),
 			Name:     firstNonEmpty(c.String("name"), parsed.Name),
 			Brief:    firstNonEmpty(c.String("brief"), parsed.Brief),
+			Accept:   parsed.Accept,
 			Assignee: parsed.Assignee,
 			Model:    parsed.Model,
 			Manager:  parsed.Manager,
