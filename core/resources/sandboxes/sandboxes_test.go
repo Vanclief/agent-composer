@@ -37,13 +37,14 @@ type fakeRuntime struct {
 	created   []sandbox.Spec
 	started   [][]sandbox.Secret
 	files     map[string]string
-	runFailOn string // a Run whose first arg is this exits 128
+	terminals map[string][]executor.Terminal // jobs per sandbox, cleared by Stop
+	runFailOn string                         // a Run whose first arg is this exits 128
 	// blockCreate makes Create wait until its context ends.
 	blockCreate bool
 }
 
 func newFakeRuntime() *fakeRuntime {
-	return &fakeRuntime{statuses: map[string]string{}, failing: map[string]bool{}, files: map[string]string{}}
+	return &fakeRuntime{statuses: map[string]string{}, failing: map[string]bool{}, files: map[string]string{}, terminals: map[string][]executor.Terminal{}}
 }
 
 func (f *fakeRuntime) record(call string) {
@@ -68,11 +69,11 @@ func (f *fakeRuntime) Create(ctx context.Context, spec sandbox.Spec) (Sandbox, e
 	f.created = append(f.created, spec)
 	f.statuses[spec.Name] = "running"
 	f.mu.Unlock()
-	return &fakeSandbox{rt: f}, nil
+	return &fakeSandbox{rt: f, name: spec.Name}, nil
 }
 
 func (f *fakeRuntime) Connect(ctx context.Context, name string) (Sandbox, error) {
-	return &fakeSandbox{rt: f}, nil
+	return &fakeSandbox{rt: f, name: name}, nil
 }
 
 func (f *fakeRuntime) Start(ctx context.Context, name string, secrets []sandbox.Secret) error {
@@ -88,6 +89,7 @@ func (f *fakeRuntime) Stop(ctx context.Context, name string) error {
 	f.record("stop " + name)
 	f.mu.Lock()
 	f.statuses[name] = "stopped"
+	delete(f.terminals, name)
 	f.mu.Unlock()
 	return nil
 }
@@ -113,12 +115,14 @@ func (f *fakeRuntime) Status(ctx context.Context, name string) (string, error) {
 	return status, nil
 }
 
-// fakeSandbox implements Run, WriteFile, StartTerminal and Detach. Any
+// fakeSandbox implements Run, WriteFile, StartTerminal, ListTerminals and
+// Detach. Any
 // other method panics on the nil embedded interface, which no test
 // reaches.
 type fakeSandbox struct {
 	executor.TerminalExecutor
-	rt *fakeRuntime
+	rt   *fakeRuntime
+	name string
 }
 
 func (s *fakeSandbox) Run(ctx context.Context, cmd executor.Command) (*executor.Result, error) {
@@ -143,7 +147,17 @@ func (s *fakeSandbox) WriteFile(ctx context.Context, path string, data []byte) e
 
 func (s *fakeSandbox) StartTerminal(ctx context.Context, cmd executor.Command) (*executor.Terminal, error) {
 	s.rt.record("terminal " + cmd.Name + " " + strings.Join(cmd.Args, " ") + " in " + cmd.Dir)
-	return &executor.Terminal{ID: "job_1", Command: append([]string{cmd.Name}, cmd.Args...), Running: true}, nil
+	terminal := executor.Terminal{ID: "job_1", Command: append([]string{cmd.Name}, cmd.Args...), Running: true}
+	s.rt.mu.Lock()
+	s.rt.terminals[s.name] = append(s.rt.terminals[s.name], terminal)
+	s.rt.mu.Unlock()
+	return &terminal, nil
+}
+
+func (s *fakeSandbox) ListTerminals(ctx context.Context) ([]executor.Terminal, error) {
+	s.rt.mu.Lock()
+	defer s.rt.mu.Unlock()
+	return append([]executor.Terminal(nil), s.rt.terminals[s.name]...), nil
 }
 
 func (s *fakeSandbox) Detach(ctx context.Context) error {
@@ -695,7 +709,7 @@ func TestStopStartDelete(t *testing.T) {
 		t.Fatalf("delete response %+v", deleted)
 	}
 
-	wantCalls := []string{"stop review-42", "start review-42", "stop review-42", "remove review-42"}
+	wantCalls := []string{"stop review-42", "start review-42", "terminal claude --dangerously-skip-permissions in /home/agent/agent-composer", "detach", "stop review-42", "remove review-42"}
 	if !reflect.DeepEqual(env.rt.Calls()[before:], wantCalls) {
 		t.Fatalf("calls = %q", env.rt.Calls()[before:])
 	}
@@ -927,5 +941,62 @@ func TestStartListenerLeavesASocketServedElsewhere(t *testing.T) {
 	_, err = socketClient(env.api.socketPath("shared")).Join(context.Background(), "still-served")
 	if err != nil {
 		t.Fatalf("socket no longer served: %v", err)
+	}
+}
+
+func TestStartRelaunchesTheJob(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	owner := insertTask(t, env.db, "review-42")
+
+	withCommand := insertBooted(t, env.db, owner, "review-42", time.Now().UTC())
+	withCommand.Command = "agc agent run"
+	err := withCommand.Update(ctx, env.db, "command")
+	if err != nil {
+		t.Fatal(err)
+	}
+	insertBooted(t, env.db, owner, "review-42-2", time.Now().UTC())
+
+	for _, name := range []string{"review-42", "review-42-2"} {
+		_, err = env.api.Stop(ctx, nil, &StopRequest{Name: name})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	terminals := func() []string {
+		calls := []string{}
+		for _, call := range env.rt.Calls() {
+			if strings.HasPrefix(call, "terminal ") {
+				calls = append(calls, call)
+			}
+		}
+		return calls
+	}
+
+	_, err = env.api.Start(ctx, nil, &StartRequest{Name: "review-42"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"terminal agc agent run in /home/agent"}
+	if !reflect.DeepEqual(terminals(), want) {
+		t.Fatalf("terminals after start = %q, want %q", terminals(), want)
+	}
+
+	// A start on a VM whose job still runs does not launch it again.
+	_, err = env.api.Start(ctx, nil, &StartRequest{Name: "review-42"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(terminals(), want) {
+		t.Fatalf("terminals after a second start = %q, want %q", terminals(), want)
+	}
+
+	_, err = env.api.Start(ctx, nil, &StartRequest{Name: "review-42-2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(terminals(), want) {
+		t.Fatalf("a sandbox with no command launched a job: %q", terminals())
 	}
 }

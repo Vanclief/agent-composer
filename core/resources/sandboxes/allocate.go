@@ -283,12 +283,9 @@ func (api *API) bootSandbox(ctx context.Context, record *taskmodels.Sandbox, own
 	}
 
 	if record.Command != "" {
-		fields := strings.Fields(record.Command)
-
-		_, err = sb.StartTerminal(ctx, executor.Command{Name: fields[0], Args: fields[1:], Dir: workDir(spec)})
+		_, err = sb.StartTerminal(ctx, jobCommand(record, spec))
 		if err != nil {
-			cause := ez.New(ez.ErrorCode(err), "cannot start "+record.Command+": "+ez.ErrorMessage(err), err)
-			return api.discard(ctx, name, sb, cause)
+			return api.discard(ctx, name, sb, jobError(record, err))
 		}
 	}
 
@@ -298,6 +295,18 @@ func (api *API) bootSandbox(ctx context.Context, record *taskmodels.Sandbox, own
 	}
 
 	return nil
+}
+
+// jobCommand is the sandbox's job: its command, run in workDir.
+func jobCommand(record *taskmodels.Sandbox, spec task.Spec) executor.Command {
+	fields := strings.Fields(record.Command)
+
+	return executor.Command{Name: fields[0], Args: fields[1:], Dir: workDir(spec)}
+}
+
+// jobError says the sandbox's job could not start.
+func jobError(record *taskmodels.Sandbox, err error) error {
+	return ez.New(ez.ErrorCode(err), "cannot start "+record.Command+": "+ez.ErrorMessage(err), err)
 }
 
 // workDir is where setup and the command run: the repo, or the home
