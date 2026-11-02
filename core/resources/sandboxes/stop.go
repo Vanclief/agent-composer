@@ -51,7 +51,7 @@ func (api *API) Stop(ctx context.Context, requester interface{}, request *StopRe
 		return nil, ez.Wrap(err)
 	}
 
-	return api.view(ctx, record, owner.Name)
+	return api.view(ctx, record, owner)
 }
 
 // requireBooted refuses runtime operations on a sandbox that is still

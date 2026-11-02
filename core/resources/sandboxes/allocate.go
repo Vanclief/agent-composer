@@ -14,6 +14,7 @@ import (
 	"github.com/vanclief/ez"
 
 	"github.com/vanclief/agent-composer/executor"
+	"github.com/vanclief/agent-composer/models/agent"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/secrets"
 	"github.com/vanclief/agent-composer/task"
@@ -22,7 +23,7 @@ import (
 // maxStderrBytes keeps the tail of a failed clone or setup in the error.
 const maxStderrBytes = 2000
 
-// BriefPath is where agc writes the task's title and brief in a sandbox.
+// BriefPath is where agc writes the instructions (TASK.md) in a sandbox.
 const BriefPath = task.HomeDir + "/TASK.md"
 
 // AllocateRequest allocates a sandbox to the task named by TaskID or
@@ -92,13 +93,18 @@ func (api *API) AllocateFor(ctx context.Context, owner *taskmodels.Task, request
 		return nil, ez.Wrap(err)
 	}
 
-	record, err := api.insert(ctx, owner, encodedSpec, strings.TrimSpace(request.Command))
+	command := strings.TrimSpace(request.Command)
+	if command == "" {
+		command = AgentCommand(owner)
+	}
+
+	record, err := api.insert(ctx, owner, encodedSpec, command, Instructions(owner, spec))
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
 	// The view is read before the boot starts, so it always says starting.
-	view, err := api.view(ctx, record, owner.Name)
+	view, err := api.view(ctx, record, owner)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -125,7 +131,7 @@ func (api *API) AllocateFor(ctx context.Context, owner *taskmodels.Task, request
 
 // insert names the sandbox and inserts it. The first sandbox of a task is
 // named after it, later ones <task>-2, <task>-3: the first free name.
-func (api *API) insert(ctx context.Context, owner *taskmodels.Task, encodedSpec []byte, command string) (*taskmodels.Sandbox, error) {
+func (api *API) insert(ctx context.Context, owner *taskmodels.Task, encodedSpec []byte, command string, instructions string) (*taskmodels.Sandbox, error) {
 	api.naming.Lock()
 	defer api.naming.Unlock()
 
@@ -146,7 +152,7 @@ func (api *API) insert(ctx context.Context, owner *taskmodels.Task, encodedSpec 
 		}
 	}
 
-	record := &taskmodels.Sandbox{TaskID: owner.ID, Name: name, Spec: encodedSpec, Command: command}
+	record := &taskmodels.Sandbox{TaskID: owner.ID, Name: name, Spec: encodedSpec, Command: command, Instructions: instructions}
 
 	err := record.Insert(ctx, api.db)
 	if err != nil {
@@ -208,7 +214,7 @@ func (api *API) bootSandbox(ctx context.Context, record *taskmodels.Sandbox, own
 	}
 
 	// The listener starts first so the guest can use it at once.
-	err = api.startSandboxListener(name, owner.Name, spec)
+	err = api.startSandboxListener(name, owner, spec)
 	if err != nil {
 		return ez.Wrap(err)
 	}
@@ -219,7 +225,7 @@ func (api *API) bootSandbox(ctx context.Context, record *taskmodels.Sandbox, own
 		return ez.Wrap(err)
 	}
 
-	err = prepare(ctx, sb, spec, owner)
+	err = prepare(ctx, sb, spec, record.Instructions)
 	if err != nil {
 		return api.discard(ctx, name, sb, err)
 	}
@@ -265,10 +271,12 @@ func workDir(spec task.Spec) string {
 	return repoDir
 }
 
-// Brief is the TASK.md agc writes in every sandbox: the task's title and
-// brief, then the standing instruction that work must leave the sandbox
-// (ADR 0008 item 6).
-func Brief(owner *taskmodels.Task) string {
+// Instructions is the TASK.md agc writes in every sandbox and keeps on the
+// sandbox row, byte for byte: the task's title and brief, then the
+// standing instructions of ADR 0009 item 3 filled in. Without an owner it
+// says "no owner is set" and drops the escalation line; without a repo it
+// says so.
+func Instructions(owner *taskmodels.Task, spec task.Spec) string {
 	var b strings.Builder
 
 	b.WriteString("# " + owner.Title + "\n\n")
@@ -278,18 +286,76 @@ func Brief(owner *taskmodels.Task) string {
 		b.WriteString(brief + "\n\n")
 	}
 
-	b.WriteString("---\n\n")
-	b.WriteString("Work left only in this sandbox does not count. When you are done, commit on a branch named `agc/" + owner.Name + "`, ")
-	b.WriteString("push it, and post what changed in `#" + owner.Name + "`.\n")
+	worker := owner.Assignee
+	if owner.Model != "" {
+		worker += " (" + owner.Model + ")"
+	}
+
+	name := owner.Name
+
+	b.WriteString("## How this task works\n\n")
+	b.WriteString("You are " + worker + " working for the task `" + name + "` inside a sandbox.\n")
+
+	if owner.Owner != "" {
+		b.WriteString("Your manager is " + owner.Manager + "; the owner is " + owner.Owner + ".\n")
+	} else {
+		b.WriteString("Your manager is " + owner.Manager + "; no owner is set.\n")
+	}
+
+	_, repoDir, err := spec.RepoURL()
+	if spec.Repo != "" && err == nil {
+		b.WriteString("The repository is cloned at " + repoDir + ".\n")
+	} else {
+		b.WriteString("There is no repository.\n")
+	}
+
+	b.WriteString("Work counts only once it leaves this sandbox:\n\n")
+	b.WriteString("- Commit on a branch named `agc/" + name + "` and push it.\n")
+	b.WriteString("- Post what you changed and what you verified in `#" + name + "` with\n")
+	b.WriteString("  `agc msg post '#" + name + "' <text>`; your manager reads that channel and\n")
+	b.WriteString("  answers there. Ask your manager there too, then keep working on what\n")
+	b.WriteString("  does not depend on the answer.\n")
+
+	if owner.Owner != "" {
+		b.WriteString("- If something needs a decision only " + owner.Owner + " can make, post it in\n")
+		b.WriteString("  `#" + owner.Owner + "` (their inbox) and say so in `#" + name + "`; do not wait idle.\n")
+	}
+
+	b.WriteString("- Do not modify files outside the repository, and never print secret values.\n")
 
 	return b.String()
 }
 
-// prepare clones the repo, writes the agent config and TASK.md, and runs
-// the setup script, as the sandbox user. Setup runs in the repo, or in the
-// home directory when there is no repo, and can still change the agent
-// config.
-func prepare(ctx context.Context, sb Sandbox, spec task.Spec, owner *taskmodels.Task) error {
+// GuestAgc is the agc binary in the agent image (images/agc-agent).
+const GuestAgc = "/usr/local/bin/agc"
+
+// IsHarness reports whether assignee is a harness id rather than a person.
+func IsHarness(assignee string) bool {
+	return agent.Harness(assignee).Validate() == nil
+}
+
+// AgentCommand is the first job of a sandbox whose task is assigned to a
+// harness and whose request gives no command: the guest agc runs the
+// agent loop on TASK.md (ADR 0009 item 2). Empty for a person's task.
+func AgentCommand(owner *taskmodels.Task) string {
+	if !IsHarness(owner.Assignee) {
+		return ""
+	}
+
+	fields := []string{GuestAgc, "agent", "run", "--harness", owner.Assignee}
+	if owner.Model != "" {
+		fields = append(fields, "--model", owner.Model)
+	}
+	fields = append(fields, "--task", owner.Name, "--brief", BriefPath)
+
+	return strings.Join(fields, " ")
+}
+
+// prepare clones the repo, writes the agent config and TASK.md (the
+// instructions), and runs the setup script, as the sandbox user. Setup
+// runs in the repo, or in the home directory when there is no repo, and
+// can still change the agent config.
+func prepare(ctx context.Context, sb Sandbox, spec task.Spec, instructions string) error {
 	dir := ""
 
 	if spec.Repo != "" {
@@ -329,7 +395,7 @@ func prepare(ctx context.Context, sb Sandbox, spec task.Spec, owner *taskmodels.
 		return ez.Wrap(err)
 	}
 
-	err = sb.WriteFile(ctx, BriefPath, []byte(Brief(owner)))
+	err = sb.WriteFile(ctx, BriefPath, []byte(instructions))
 	if err != nil {
 		return ez.Wrap(err)
 	}

@@ -25,14 +25,14 @@ func (api *API) List(ctx context.Context, requester interface{}, request *ListRe
 		return nil, ez.Wrap(err)
 	}
 
-	taskNames, err := api.taskNames(ctx)
+	owners, err := api.tasksByID(ctx)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
 	views := []SandboxView{}
 	for i := range records {
-		view, err := api.view(ctx, &records[i], taskNames[records[i].TaskID.String()])
+		view, err := api.view(ctx, &records[i], owners.of(&records[i]))
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}

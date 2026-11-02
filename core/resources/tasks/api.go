@@ -12,6 +12,7 @@ import (
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
+	"github.com/vanclief/agent-composer/messaging"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/task"
 )
@@ -27,32 +28,49 @@ type API struct {
 	db bun.IDB
 	// Sandboxes is the compute tasks allocate.
 	Sandboxes   *sandboxes.API
+	msg         *messaging.Service
+	defaults    controller.DefaultsSettings
 	secretsPath string
 	specs       task.Store
 }
 
-// NewAPI returns the tasks API. secretsPath is the secrets file
-// (secrets.DefaultPath()), specs keeps the saved specs.
-func NewAPI(ctrl *controller.Controller, sandboxesAPI *sandboxes.API, secretsPath string, specs task.Store) *API {
+// NewAPI returns the tasks API. msg carries the task channels, the
+// controller's defaults fill in assignee, model and owner, secretsPath is
+// the secrets file (secrets.DefaultPath()), specs keeps the saved specs.
+func NewAPI(ctrl *controller.Controller, sandboxesAPI *sandboxes.API, msg *messaging.Service, secretsPath string, specs task.Store) *API {
 	if ctrl == nil {
 		panic("Controller reference is nil")
 	}
 
-	return New(ctrl.DB, sandboxesAPI, secretsPath, specs)
+	return New(ctrl.DB, sandboxesAPI, msg, ctrl.Defaults(), secretsPath, specs)
 }
 
-// New is NewAPI over a bare database, for tests.
-func New(db bun.IDB, sandboxesAPI *sandboxes.API, secretsPath string, specs task.Store) *API {
+// New is NewAPI over a bare database, for tests. It hooks /done into msg.
+func New(db bun.IDB, sandboxesAPI *sandboxes.API, msg *messaging.Service, defaults controller.DefaultsSettings, secretsPath string, specs task.Store) *API {
 	if sandboxesAPI == nil {
 		panic("Sandboxes reference is nil")
 	}
+	if msg == nil {
+		panic("Messaging reference is nil")
+	}
 
-	return &API{
+	api := &API{
 		db:          db,
 		Sandboxes:   sandboxesAPI,
+		msg:         msg,
+		defaults:    defaults,
 		secretsPath: secretsPath,
 		specs:       specs,
 	}
+
+	msg.OnPost(api.closeOnDone)
+
+	return api
+}
+
+// Defaults are the configured defaults Create fills in.
+func (api *API) Defaults() controller.DefaultsSettings {
+	return api.defaults
 }
 
 // TaskView is a Task with its computed status and its sandboxes, newest
@@ -63,6 +81,9 @@ type TaskView struct {
 	Name      string                  `json:"name"`
 	Brief     string                  `json:"brief"`
 	Assignee  string                  `json:"assignee"`
+	Model     string                  `json:"model"`
+	Manager   string                  `json:"manager"`
+	Owner     string                  `json:"owner"`
 	For       string                  `json:"for"`
 	Status    string                  `json:"status"`
 	DoneAt    *time.Time              `json:"done_at"`
@@ -121,6 +142,9 @@ func newView(record *taskmodels.Task, views []sandboxes.SandboxView) *TaskView {
 		Name:      record.Name,
 		Brief:     record.Brief,
 		Assignee:  record.Assignee,
+		Model:     record.Model,
+		Manager:   record.Manager,
+		Owner:     record.Owner,
 		For:       record.For,
 		Status:    status,
 		DoneAt:    record.DoneAt,

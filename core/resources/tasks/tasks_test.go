@@ -15,6 +15,7 @@ import (
 	"github.com/vanclief/ez"
 	_ "modernc.org/sqlite"
 
+	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/executor"
 	"github.com/vanclief/agent-composer/executor/sandbox"
@@ -111,6 +112,7 @@ type testEnv struct {
 	api *API
 	rt  *fakeRuntime
 	db  *bun.DB
+	msg *messaging.Service
 }
 
 func newTestEnv(t *testing.T) *testEnv {
@@ -154,23 +156,24 @@ func newTestEnv(t *testing.T) *testEnv {
 	}
 
 	rt := &fakeRuntime{statuses: map[string]string{}}
-	sandboxesAPI := sandboxes.New(context.Background(), db, messaging.NewService(db), rt, secretsPath, socketDir)
+	msg := messaging.NewService(db)
+	sandboxesAPI := sandboxes.New(context.Background(), db, msg, rt, secretsPath, socketDir)
 	specs := task.Store{Dir: filepath.Join(t.TempDir(), "specs")}
-	api := New(db, sandboxesAPI, secretsPath, specs)
+	api := New(db, sandboxesAPI, msg, controller.DefaultsSettings{Harness: "claude_code", Model: "claude-opus-5-5", Owner: "franco"}, secretsPath, specs)
 
 	t.Cleanup(func() {
 		sandboxesAPI.Wait()
 		_ = os.RemoveAll(socketDir)
 	})
 
-	return &testEnv{api: api, rt: rt, db: db}
+	return &testEnv{api: api, rt: rt, db: db, msg: msg}
 }
 
 func TestCreateWithoutSandbox(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := context.Background()
 
-	view, err := env.api.Create(ctx, nil, &CreateRequest{Title: "Call the bank", Brief: "Ask about the fee.", Assignee: " Franco ", For: "fees"})
+	view, err := env.api.Create(ctx, nil, &CreateRequest{Manager: "orchestrator", Title: "Call the bank", Brief: "Ask about the fee.", Assignee: " Franco ", For: "fees"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +188,7 @@ func TestCreateWithoutSandbox(t *testing.T) {
 		t.Fatalf("runtime was called: %q", env.rt.Calls())
 	}
 
-	_, err = env.api.Create(ctx, nil, &CreateRequest{Title: "Call the bank", Brief: "again"})
+	_, err = env.api.Create(ctx, nil, &CreateRequest{Manager: "orchestrator", Title: "Call the bank", Brief: "again"})
 	if ez.ErrorCode(err) != ez.ECONFLICT {
 		t.Fatalf("expected ECONFLICT for a duplicate name, got %v", err)
 	}
@@ -195,7 +198,7 @@ func TestCreateWithSandboxReturnsAtOnce(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := context.Background()
 
-	request := &CreateRequest{Name: "review-42", Sandbox: &task.Sandbox{Spec: task.Spec{Repo: "github.com/o/n"}, Command: "claude"}}
+	request := &CreateRequest{Manager: "orchestrator", Name: "review-42", Sandbox: &task.Sandbox{Spec: task.Spec{Repo: "github.com/o/n"}, Command: "claude"}}
 	view, err := env.api.Create(ctx, nil, request)
 	if err != nil {
 		t.Fatal(err)
@@ -235,7 +238,7 @@ func TestCreateTitleAndName(t *testing.T) {
 	for _, tc := range cases {
 		env := newTestEnv(t)
 
-		view, err := env.api.Create(context.Background(), nil, &CreateRequest{Title: tc.title, Name: tc.name, Brief: "b"})
+		view, err := env.api.Create(context.Background(), nil, &CreateRequest{Manager: "orchestrator", Title: tc.title, Name: tc.name, Brief: "b"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -253,12 +256,16 @@ func TestCreateRejects(t *testing.T) {
 		request CreateRequest
 		want    string
 	}{
-		{CreateRequest{Title: "  ", Name: "", Brief: "b"}, "title or name is required"},
-		{CreateRequest{Title: "???", Brief: "b"}, "has no letters or digits"},
-		{CreateRequest{Title: strings.Repeat("x", 121), Name: "long", Brief: "b"}, "longer than 120"},
-		{CreateRequest{Title: "Fine", Name: "Not A Slug", Brief: "b"}, "is invalid"},
-		{CreateRequest{Title: "No brief"}, "brief is required"},
-		{CreateRequest{Title: "Bad ref", Sandbox: &task.Sandbox{Spec: task.Spec{Ref: "master"}}}, "ref is set but repo is not"},
+		{CreateRequest{Manager: "orchestrator", Title: "  ", Name: "", Brief: "b"}, "title or name is required"},
+		{CreateRequest{Manager: "orchestrator", Title: "???", Brief: "b"}, "has no letters or digits"},
+		{CreateRequest{Manager: "orchestrator", Title: strings.Repeat("x", 121), Name: "long", Brief: "b"}, "longer than 120"},
+		{CreateRequest{Manager: "orchestrator", Title: "Fine", Name: "Not A Slug", Brief: "b"}, "is invalid"},
+		{CreateRequest{Manager: "orchestrator", Title: "No brief"}, "brief is required"},
+		{CreateRequest{Manager: "orchestrator", Title: "Bad ref", Sandbox: &task.Sandbox{Spec: task.Spec{Ref: "master"}}}, "ref is set but repo is not"},
+		{CreateRequest{Title: "No manager", Brief: "b"}, "manager is required"},
+		{CreateRequest{Manager: "Not A Name", Title: "Bad manager", Brief: "b"}, "manager name"},
+		{CreateRequest{Manager: "orchestrator", Owner: "#franco", Title: "Bad owner", Brief: "b"}, "owner name"},
+		{CreateRequest{Manager: "orchestrator", Title: "Person model", Brief: "b", Assignee: "ana", Model: "claude-opus-5-5"}, "assignee ana is a person"},
 	}
 
 	for _, tc := range cases {
@@ -273,7 +280,7 @@ func TestCreateMissingSecretLeavesNoTask(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := context.Background()
 
-	request := &CreateRequest{Name: "review-42", Sandbox: &task.Sandbox{Spec: task.Spec{Secrets: []string{"OPENAI_API_KEY"}}}}
+	request := &CreateRequest{Manager: "orchestrator", Name: "review-42", Sandbox: &task.Sandbox{Spec: task.Spec{Secrets: []string{"OPENAI_API_KEY"}}}}
 	_, err := env.api.Create(ctx, nil, request)
 	if ez.ErrorCode(err) != ez.ENOTFOUND || !strings.Contains(ez.ErrorMessage(err), "OPENAI_API_KEY") {
 		t.Fatalf("expected ENOTFOUND naming the secret, got %v", err)
@@ -289,7 +296,7 @@ func TestDone(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := context.Background()
 
-	_, err := env.api.Create(ctx, nil, &CreateRequest{Name: "review-42", Sandbox: &task.Sandbox{}})
+	_, err := env.api.Create(ctx, nil, &CreateRequest{Manager: "orchestrator", Name: "review-42", Sandbox: &task.Sandbox{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,17 +321,17 @@ func TestListAndStatus(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := context.Background()
 
-	_, err := env.api.Create(ctx, nil, &CreateRequest{Name: "human", Brief: "b"})
+	_, err := env.api.Create(ctx, nil, &CreateRequest{Manager: "orchestrator", Name: "human", Brief: "b"})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = env.api.Create(ctx, nil, &CreateRequest{Name: "stopped", Sandbox: &task.Sandbox{}})
+	_, err = env.api.Create(ctx, nil, &CreateRequest{Manager: "orchestrator", Name: "stopped", Sandbox: &task.Sandbox{}})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = env.api.Create(ctx, nil, &CreateRequest{Name: "busy", Sandbox: &task.Sandbox{}})
+	_, err = env.api.Create(ctx, nil, &CreateRequest{Manager: "orchestrator", Name: "busy", Sandbox: &task.Sandbox{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +362,7 @@ func TestDeleteRemovesSandboxesThenTask(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := context.Background()
 
-	created, err := env.api.Create(ctx, nil, &CreateRequest{Name: "review-42", Sandbox: &task.Sandbox{}})
+	created, err := env.api.Create(ctx, nil, &CreateRequest{Manager: "orchestrator", Name: "review-42", Sandbox: &task.Sandbox{}})
 	if err != nil {
 		t.Fatal(err)
 	}

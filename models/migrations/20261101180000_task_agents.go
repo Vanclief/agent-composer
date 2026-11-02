@@ -14,8 +14,8 @@ var DefaultOwner string
 
 // Every task has an agent and a manager (ADR 0009). Tasks gain model,
 // manager and owner; sandboxes gain instructions; messages gain human.
-// Existing tasks get the configured owner as manager and owner, or ''
-// when none is configured. Existing messages copy human from their
+// Existing tasks get the configured owner as manager and owner, or stay
+// empty when none is configured. Existing messages copy human from their
 // participant.
 func init() {
 	Migrations.MustRegister(taskAgents, func(ctx context.Context, db *bun.DB) error {

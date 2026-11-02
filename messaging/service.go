@@ -45,12 +45,19 @@ type ChannelInfo struct {
 	Count    int    `json:"count"`
 }
 
+// PostHook runs after every message is stored, with the stored message.
+type PostHook func(ctx context.Context, m *msgmodels.Message)
+
 type Service struct {
 	db bun.IDB
 
 	// posted is closed and replaced on every post, waking all waiters.
 	mu     sync.Mutex
 	posted chan struct{}
+	hooks  []PostHook
+
+	// system serializes taking the reserved name agc.
+	system sync.Mutex
 }
 
 func NewService(db bun.IDB) *Service {
@@ -115,6 +122,10 @@ func (s *Service) Join(ctx context.Context, caller Caller, name string) (*msgmod
 		return nil, ez.Wrap(err)
 	}
 
+	if name == msgmodels.SystemName {
+		return nil, ez.New(ez.ECONFLICT, fmt.Sprintf("name @%s is reserved for agc itself", name), nil)
+	}
+
 	p := &msgmodels.Participant{Name: name, Human: caller.Human}
 	if !caller.Human {
 		p.Task = caller.Task
@@ -172,6 +183,10 @@ func (s *Service) Leave(ctx context.Context, caller Caller, participantID string
 		return ez.New(ez.ENOTAUTHORIZED, fmt.Sprintf("participant %s does not belong to task %s", participantID, caller.Task), nil)
 	}
 
+	if isSystem(p) {
+		return ez.New(ez.ENOTAUTHORIZED, fmt.Sprintf("participant @%s is agc itself and cannot leave", p.Name), nil)
+	}
+
 	if p.LeftAt != nil {
 		return nil
 	}
@@ -226,16 +241,22 @@ func (s *Service) Post(ctx context.Context, caller Caller, participantID, channe
 		}
 	}
 
+	return s.insert(ctx, p, channel, body, replyTo)
+}
+
+// insert stores a message from p, wakes the waiters and runs the hooks.
+func (s *Service) insert(ctx context.Context, p *msgmodels.Participant, channel, body string, replyTo *int64) (*msgmodels.Message, error) {
 	m := &msgmodels.Message{
 		Channel:       channel,
 		From:          p.Name,
 		ParticipantID: p.ID,
 		Task:          p.Task,
+		Human:         p.Human,
 		ReplyTo:       replyTo,
 		Body:          body,
 	}
 
-	err = m.Insert(ctx, s.db)
+	err := m.Insert(ctx, s.db)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -243,9 +264,74 @@ func (s *Service) Post(ctx context.Context, caller Caller, participantID, channe
 	s.mu.Lock()
 	close(s.posted)
 	s.posted = make(chan struct{})
+	hooks := s.hooks
 	s.mu.Unlock()
 
+	for _, hook := range hooks {
+		hook(ctx, m)
+	}
+
 	return m, nil
+}
+
+// OnPost registers hook to run after every stored message, in the
+// poster's request, before the post returns.
+func (s *Service) OnPost(hook PostHook) {
+	s.mu.Lock()
+	s.hooks = append(s.hooks, hook)
+	s.mu.Unlock()
+}
+
+// isSystem reports whether p is agc's own participant.
+func isSystem(p *msgmodels.Participant) bool {
+	return p.Name == msgmodels.SystemName && !p.Human && p.Task == ""
+}
+
+// PostAsSystem posts body in channel as the reserved participant agc
+// (ADR 0009): task empty, human false. agc keeps the name for good, so no
+// one else can join with it.
+func (s *Service) PostAsSystem(ctx context.Context, channel, body string) (*msgmodels.Message, error) {
+	err := msgmodels.ValidateChannel(channel)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	p, err := s.systemParticipant(ctx)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return s.insert(ctx, p, channel, body, nil)
+}
+
+// systemParticipant returns agc's active participant, joining it the first
+// time.
+func (s *Service) systemParticipant(ctx context.Context) (*msgmodels.Participant, error) {
+	s.system.Lock()
+	defer s.system.Unlock()
+
+	p := &msgmodels.Participant{}
+
+	err := s.db.NewSelect().Model(p).Where("active_name = ?", msgmodels.SystemName).Scan(ctx)
+	if err == nil && isSystem(p) {
+		return p, nil
+	}
+	if err == nil {
+		msg := fmt.Sprintf("name @%s is held by participant %s, not by agc: release it with agc msg leave", p.Name, p.ID)
+		return nil, ez.New(ez.ECONFLICT, msg, nil)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, ez.Wrap(err)
+	}
+
+	p = &msgmodels.Participant{Name: msgmodels.SystemName}
+
+	err = p.Insert(ctx, s.db)
+	if err != nil {
+		return nil, s.joinError(ctx, p.Name, err)
+	}
+
+	return p, nil
 }
 
 // Read returns messages with id > afterID, oldest first.
