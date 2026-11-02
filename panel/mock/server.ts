@@ -1300,6 +1300,8 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
       body = await agentsAPI(state, method, parts.slice(2), req)
     } else if (parts[1] === 'defaults' && parts.length === 2 && method === 'GET') {
       body = DEFAULTS
+    } else if (parts[1] === 'accounts') {
+      body = await accountsAPI(state, method, parts.slice(2), req)
     } else {
       throw apiError(404, 'no such endpoint')
     }
@@ -1308,6 +1310,11 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
     }
     if (body instanceof Created) {
       send(res, 201, body.body)
+      return
+    }
+    if (body === NO_CONTENT) {
+      res.writeHead(204)
+      res.end()
       return
     }
     send(res, 200, body)
@@ -2455,4 +2462,190 @@ function allParticipants(state: State) {
   return [...state.participants.values()]
     .sort((a, b) => Number(Boolean(a.left_at)) - Number(Boolean(b.left_at)) || a.name.localeCompare(b.name))
     .map((p) => ({ ...p, ...presenceOf(state, p) }))
+}
+
+// ---------- accounts (ahead of accounts-model and accounts-usage) ----------
+//
+// GET /api/accounts → { accounts, providers }; POST /api/accounts {name,
+// provider, kind, value, email?} (201; the value is dropped, never stored
+// or echoed), POST|DELETE /api/accounts/:name/default (at most one default
+// per provider) and DELETE /api/accounts/:name (204; 409 ECONFLICT while a
+// running sandbox's spec names its secret). Seeds: anthropic franco-max
+// (oauth, default, usage with session, weekly and opus windows), work-api
+// (api_key, usage null) and old-max (oauth, its token rejected); openai has
+// none. Function declarations only, like the sections above.
+
+type MockAccount = {
+  name: string
+  provider: 'anthropic' | 'openai'
+  kind: 'oauth' | 'api_key'
+  secret: string
+  email: string
+  default: boolean
+  created_at: string
+  usage: {
+    updated_at: string
+    windows: { id: string; label: string; used: number; resets_at: string }[]
+    error: string
+  } | null
+}
+
+const ACCOUNT_NAME_RE = /^[a-z0-9-]{1,32}$/
+
+// Answers 204 with no body (DELETE /api/accounts/:name).
+const NO_CONTENT = Symbol('no content')
+
+const ACCOUNT_PROVIDERS = [
+  {
+    id: 'anthropic',
+    harnesses: ['claude_code'],
+    variables: { oauth: 'CLAUDE_CODE_OAUTH_TOKEN', api_key: 'ANTHROPIC_API_KEY' },
+  },
+  { id: 'openai', harnesses: ['codex_cli'], variables: { api_key: 'CODEX_API_KEY' } },
+]
+
+function accountSecret(name: string) {
+  return 'ACCOUNT_' + name.toUpperCase().replace(/-/g, '_')
+}
+
+function accountsOf(state: State): MockAccount[] {
+  const holder = state as State & { accountsMock?: MockAccount[] }
+  if (!holder.accountsMock) {
+    holder.accountsMock = accountsSeed()
+  }
+  return holder.accountsMock
+}
+
+function accountsSeed(): MockAccount[] {
+  const now = Date.now()
+  const min = 60_000
+  const hour = 60 * min
+  const day = 24 * hour
+  return [
+    {
+      name: 'franco-max',
+      provider: 'anthropic',
+      kind: 'oauth',
+      secret: accountSecret('franco-max'),
+      email: 'franco@example.com',
+      default: true,
+      created_at: iso(now - 30 * day),
+      usage: {
+        updated_at: iso(now - 20_000),
+        windows: [
+          { id: 'session', label: 'Session', used: 0.16, resets_at: iso(now + 4 * hour + 11 * min + 30_000) },
+          { id: 'weekly', label: 'Weekly', used: 0.17, resets_at: iso(now + day + 19 * hour + 30 * min) },
+          { id: 'opus', label: 'Opus', used: 0.2, resets_at: iso(now + day + 19 * hour + 30 * min) },
+        ],
+        error: '',
+      },
+    },
+    {
+      name: 'work-api',
+      provider: 'anthropic',
+      kind: 'api_key',
+      secret: accountSecret('work-api'),
+      email: '',
+      default: false,
+      created_at: iso(now - 10 * day),
+      usage: null,
+    },
+    {
+      name: 'old-max',
+      provider: 'anthropic',
+      kind: 'oauth',
+      secret: accountSecret('old-max'),
+      email: 'old@example.com',
+      default: false,
+      created_at: iso(now - 90 * day),
+      usage: {
+        updated_at: iso(now - 5 * min),
+        windows: [],
+        error: 'token rejected: 401 invalid authentication credentials',
+      },
+    },
+  ]
+}
+
+function findAccount(state: State, name: string) {
+  const account = accountsOf(state).find((a) => a.name === name)
+  if (!account) {
+    throw apiError(404, `account ${name} not found`)
+  }
+  return account
+}
+
+async function accountsAPI(state: State, method: string, rest: string[], req: IncomingMessage) {
+  const list = accountsOf(state)
+  if (rest.length === 0 && method === 'GET') {
+    return { accounts: list, providers: ACCOUNT_PROVIDERS }
+  }
+  if (rest.length === 0 && method === 'POST') {
+    const body = await readJSON(req, apiError)
+    const name = str(body.name).trim()
+    const provider = str(body.provider)
+    const kind = str(body.kind)
+    if (!ACCOUNT_NAME_RE.test(name)) {
+      throw apiError(400, 'name must be 1 to 32 lowercase letters, digits or dashes')
+    }
+    const known = ACCOUNT_PROVIDERS.find((p) => p.id === provider)
+    if (!known) {
+      throw apiError(400, `unknown provider ${provider}`)
+    }
+    if (kind !== 'oauth' && kind !== 'api_key') {
+      throw apiError(400, `unknown kind ${kind}`)
+    }
+    if (!(kind in known.variables)) {
+      throw apiError(400, `provider ${provider} has no ${kind} kind`)
+    }
+    if (!str(body.value).trim()) {
+      throw apiError(400, 'value is required')
+    }
+    if (list.some((a) => a.name === name)) {
+      throw apiError(409, `account ${name} already exists`)
+    }
+    const account: MockAccount = {
+      name,
+      provider: provider as MockAccount['provider'],
+      kind,
+      secret: accountSecret(name),
+      email: str(body.email).trim(),
+      default: false,
+      created_at: iso(),
+      usage: null,
+    }
+    list.push(account)
+    return new Created(account)
+  }
+  const account = findAccount(state, rest[0])
+  if (rest.length === 2 && rest[1] === 'default' && method === 'POST') {
+    for (const a of list) {
+      if (a.provider === account.provider) {
+        a.default = false
+      }
+    }
+    account.default = true
+    return account
+  }
+  if (rest.length === 2 && rest[1] === 'default' && method === 'DELETE') {
+    account.default = false
+    return account
+  }
+  if (rest.length === 1 && method === 'DELETE') {
+    for (const sandbox of state.sandboxes.values()) {
+      const names = (sandbox.spec.secrets ?? []).map(
+        (entry) =>
+          String(entry)
+            .split('@')[0]
+            .trim()
+            .split(/\s+as\s+/)[0],
+      )
+      if (state.sandboxView(sandbox).status === 'running' && names.includes(account.secret)) {
+        throw apiError(409, `account ${account.name} is in use by running sandbox ${sandbox.name}`)
+      }
+    }
+    list.splice(list.indexOf(account), 1)
+    return NO_CONTENT
+  }
+  throw apiError(404, 'no such endpoint')
 }

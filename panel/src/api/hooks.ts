@@ -12,6 +12,7 @@ import { keepPreviousData } from '@tanstack/react-query'
 import { livePollMs } from './live'
 import { agents, type CreateAgentRequest, type KeepAgentRequest } from './agents'
 import { defaults } from './defaults'
+import { accounts, type CreateAccountRequest } from './accounts'
 
 // How often tasks, sandboxes and terminals refetch, so statuses stay live.
 export const TASKS_POLL_MS = 5000
@@ -55,6 +56,7 @@ export const queryKeys = {
   defaults: ['defaults'] as const,
   // Everyone who ever joined (?all=1), under the participants root.
   allParticipants: ['msg', 'participants', '*all'] as const,
+  accounts: ['accounts'] as const,
 }
 
 // ---------- tasks and sandboxes (ADR 0008) ----------
@@ -486,4 +488,42 @@ export function useSecretHarnesses() {
       return body.harnesses ?? []
     },
   })
+}
+
+// ---------- accounts (hand-typed in ./accounts) ----------
+
+// Every account and the providers they serve; usage changes slowly, so it
+// polls like the rest.
+export function useAccounts() {
+  return useQuery({
+    queryKey: queryKeys.accounts,
+    queryFn: ({ signal }) => accounts.list(signal),
+    refetchInterval: livePollMs,
+  })
+}
+
+function useAccountMutation<TVariables, TData>(mutationFn: (variables: TVariables) => Promise<TData>) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn,
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.accounts }),
+  })
+}
+
+// 201 with the account; the request carries the value once.
+export function useCreateAccount() {
+  return useAccountMutation((request: CreateAccountRequest) => accounts.create(request))
+}
+
+export function useMakeDefaultAccount() {
+  return useAccountMutation((name: string) => accounts.makeDefault(name))
+}
+
+// "System default": the provider has no default account.
+export function useClearDefaultAccount() {
+  return useAccountMutation((name: string) => accounts.clearDefault(name))
+}
+
+export function useRemoveAccount() {
+  return useAccountMutation((name: string) => accounts.remove(name))
 }
