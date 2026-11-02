@@ -805,8 +805,9 @@ paths:
       operationId: deleteSandbox
       summary: Delete a sandbox
       description: >
-        Cancels a boot in progress, stops the VM if needed and removes it with its disk and
-        uncommitted work. Volumes and the task's channel history are kept.
+        Cancels a boot in progress, stops the VM if needed and removes it with its disk (including
+        /home/agent) and uncommitted work. Volumes, among them the sandbox's own volume with the
+        harness transcripts, and the task's channel history are kept.
       parameters:
         - $ref: '#/components/parameters/SandboxIdParam'
       responses:
@@ -950,6 +951,62 @@ paths:
       responses:
         '101':
           description: Switching to the WebSocket protocol.
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /sandboxes/{id}/transcripts:
+    get:
+      tags: [Sandboxes]
+      operationId: listTranscripts
+      summary: List a sandbox's harness transcripts
+      description: >
+        The Claude Code and Codex session files (.claude/projects/**/*.jsonl,
+        .codex/sessions/**/*.jsonl) on the sandbox's volume, newest first. Read on the host side
+        of the volume, never through the VM, so it works for stopped sandboxes and, by name, for
+        deleted ones whose volume is left. Links are not listed.
+      parameters:
+        - $ref: '#/components/parameters/SandboxIdParam'
+      responses:
+        '200':
+          description: Transcripts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranscriptList'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /sandboxes/{id}/transcripts/{path}:
+    get:
+      tags: [Sandboxes]
+      operationId: getTranscript
+      summary: Stream one harness transcript
+      description: >
+        Streams one transcript as JSON Lines from the host side of the sandbox's volume (Range
+        requests supported). path is a listed path, relative to the volume and under
+        .claude/projects/ or .codex/sessions/; its slashes are path separators. A path with
+        "..", "." or empty segments is refused (400), and so is anything but a regular file.
+      parameters:
+        - $ref: '#/components/parameters/SandboxIdParam'
+        - name: path
+          in: path
+          required: true
+          description: Transcript path relative to the volume, as listed.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The transcript.
+          content:
+            application/x-ndjson:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
         '500':
@@ -1849,6 +1906,11 @@ components:
         memory:
           type: integer
           description: MiB.
+        disk:
+          type: string
+          description: >
+            Size of /home/agent, a private ext4 disk removed with the sandbox: a whole number
+            followed by M, G or T, such as 10G. Default 20G, minimum 2G.
         repo:
           type: string
           description: host/owner/name or an https URL, cloned to /home/agent/<name>.
@@ -2082,6 +2144,12 @@ components:
         instructions:
           type: string
           description: The TASK.md written into the sandbox at /home/agent/TASK.md, byte for byte (ADR 0009).
+        volume:
+          type: string
+          description: >
+            The named volume agc-<name> holding the harness homes (~/.claude, ~/.codex) and their
+            transcripts, mounted at /home/agent/.harness and kept after the sandbox is deleted.
+            Empty for sandboxes booted before volumes.
         status:
           type: string
           description: >
@@ -2118,6 +2186,7 @@ components:
         - spec
         - command
         - instructions
+        - volume
         - status
         - booted_at
         - stopped_at
@@ -2198,6 +2267,36 @@ components:
           $ref: '#/components/schemas/ChannelMessage'
       required:
         - message
+    TranscriptList:
+      type: object
+      properties:
+        volume:
+          type: string
+          description: The volume read.
+        transcripts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transcript'
+      required:
+        - volume
+        - transcripts
+    Transcript:
+      type: object
+      properties:
+        path:
+          type: string
+          description: Relative to the volume, which the guest sees at /home/agent/.harness.
+        size:
+          type: integer
+          format: int64
+          description: Bytes.
+        modified_at:
+          type: string
+          format: date-time
+      required:
+        - path
+        - size
+        - modified_at
     SandboxWork:
       type: object
       properties:

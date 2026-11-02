@@ -27,7 +27,11 @@ func TestCreateArgs(t *testing.T) {
 			{Source: "go-mod-cache", Dest: "/home/agent/go/pkg/mod", ReadWrite: true},
 			{Source: "datasets", Dest: "/data"},
 			{Source: "/srv/models", Dest: "/models", HostPath: true},
+			{Source: "agc-task-1", Dest: "/home/agent/.harness", ReadWrite: true, QuotaMiB: 4096},
+			{Source: "shared", Dest: "/shared", QuotaMiB: 1500},
 		},
+		DiskDest:  "/home/agent",
+		DiskMiB:   20480,
 		VsockPath: "/run/agc/t1.sock",
 		VsockPort: 5000,
 	}
@@ -44,6 +48,9 @@ func TestCreateArgs(t *testing.T) {
 		"--mount-named", "go-mod-cache:/home/agent/go/pkg/mod",
 		"--mount-named", "datasets:/data:ro",
 		"--mount-dir", "/srv/models:/models:ro",
+		"--mount-named", "agc-task-1:/home/agent/.harness:quota=4G",
+		"--mount-named", "shared:/shared:ro,quota=1500M",
+		"--mount-owned", "/home/agent:kind=disk,size=20G",
 		"--vsock", "/run/agc/t1.sock:5000",
 	}
 	got := createArgs(spec)

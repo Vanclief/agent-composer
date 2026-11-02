@@ -28,6 +28,10 @@ export type SandboxView = {
   command: string
   // ADR 0009: the exact TASK.md the agent received, verbatim.
   instructions: string
+  // The named volume agc-<name> with the harness homes and their
+  // transcripts, kept after delete; empty for sandboxes booted before
+  // volumes (ADR 0008 "Disk and transcripts").
+  volume: string
   status: SandboxStatus
   // Why the status is what it is, e.g. the boot error of a failed sandbox.
   status_error?: string

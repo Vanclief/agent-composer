@@ -38,9 +38,11 @@ RUN useradd -m -s /bin/bash agent
 # messaging readme agents are pointed at (ADR 0005).
 COPY agc /usr/local/bin/agc
 COPY README.guest.md /etc/agc/README.md
+# System-wide, not in ~/.gitconfig: agc mounts a fresh disk on /home/agent
+# (ADR 0008, "Disk and transcripts"), which hides the image's home.
+# $GITHUB_TOKEN is escaped so the helper reads it when git asks, not at build time.
+RUN git config --system credential.helper "!f() { echo username=x-access-token; echo password=\$GITHUB_TOKEN; }; f"
 USER agent
 WORKDIR /home/agent
-# $GITHUB_TOKEN is escaped so the helper reads it when git asks, not at build time.
-RUN git config --global credential.helper "!f() { echo username=x-access-token; echo password=\$GITHUB_TOKEN; }; f"
 ENV TERM=xterm-256color
 CMD ["sleep", "infinity"]
