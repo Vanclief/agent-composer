@@ -334,6 +334,20 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   for the page is `src/styles/eva-accounts.css` (keyed on `data-accounts-page`):
   each card a cut plate with a ruled header strip, meters square and ticked,
   filled with the system orange (a readout, not a status).
+- Sign-in (contract of accounts-signin, hand-typed in
+  `src/features/accounts/signin.ts` until the routes reach the OpenAPI spec:
+  `POST /api/accounts/{name}/signin` → `{url, expires_at}`,
+  `POST …/signin/complete {code}` and `DELETE …/signin` → the account with
+  `signed_in_at`). A default account whose `usage.error` starts with
+  `inference-only token` or `sign-in expired` shows "Sign in for usage" /
+  "Sign in again to use this account" with Sign in (`sign-in-line`,
+  `data-need` `usage`/`expired`) in place of the error; "Signed in <ago>"
+  (`signed-in`) under the bars. The dialog (`sign-in-dialog`) begins on
+  open, "Open the sign-in page" links to `url` in a new tab, the pasted
+  code (password field) goes to complete and is cleared either way; errors
+  verbatim with Start again; an `expires_at` passed says so. Manage
+  Accounts… rows of anthropic accounts show "Signed in <ago>" / "Not signed
+  in" (`sign-in-state`), Sign in and Sign out (confirm).
 
 ## Task page (`/tasks/:name`)
 
@@ -612,8 +626,14 @@ otherwise). Agent homes are not mock sandboxes, so `/compute/<home>` 404s.
 
 Accounts (`GET /api/accounts`): anthropic `franco-max` (oauth,
 `franco@example.com`, default, Session 16% resets in 4h 11m, Weekly 17%
-and Opus 20% in 1d 19h), `work-api` (api_key, usage null) and `old-max`
-(oauth, usage error `token rejected: 401 …`); openai has none. Create
+and Opus 20% in 1d 19h), `work-api` (api_key, usage null), `old-max`
+(oauth, usage error `token rejected: 401 …`) and `plain-max` (oauth,
+`plain@example.com`, usage error `inference-only token: sign in for
+usage`); openai has none. Sign-in: begin answers a claude.ai authorize URL
+with a fresh `state` for 10 minutes, complete takes `code#state` (400
+when the state differs or nothing is pending; the code `made-up-bad`
+fails as `token exchange failed: HTTP 400`), sets `signed_in_at` and clears
+the usage error; sign-out clears `signed_in_at`. Create
 validates like the contract (409 `account <name> already exists`), drops
 the value; delete answers 204, or 409 while a running sandbox's spec names
 the account's secret.
