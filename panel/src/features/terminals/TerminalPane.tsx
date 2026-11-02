@@ -5,7 +5,7 @@
 // the server replays recent output on every attach.
 import { useEffect, useRef, useState } from 'react'
 import { FitAddon } from '@xterm/addon-fit'
-import { Terminal as XTerm } from '@xterm/xterm'
+import { Terminal as XTerm, type ITheme } from '@xterm/xterm'
 import { RotateCw, Unplug } from 'lucide-react'
 
 import { terminalSocketURL, type Terminal } from '@/api/terminals'
@@ -21,13 +21,47 @@ import { JobShape } from './JobShape'
 // The close reason the server sends when the program exits.
 const JOB_COMPLETED = 'job completed'
 
-// zinc-950 background, zinc-200 text, like the rest of the dark panel.
-const THEME = {
+// The light theme's terminal: zinc-950 background, zinc-200 text.
+const ZINC_THEME: ITheme = {
   background: '#09090b',
   foreground: '#e4e4e7',
   cursor: '#e4e4e7',
   cursorAccent: '#09090b',
   selectionBackground: '#3f3f46',
+}
+
+// The dark look (docs/design/panel.md "Palette"), the oklch tokens in hex
+// since xterm wants sRGB: the warm ground, pale text, the orange cursor, and
+// the ANSI colors mapped to the system's red, green, yellow and cyan (blue a
+// deeper cyan, magenta the orange); black and white are the ground and the
+// text, the bright ones a step lighter.
+const EVA_THEME: ITheme = {
+  background: '#0a0705', // ground, oklch(0.13 0.008 60)
+  foreground: '#ece3d6', // text, oklch(0.92 0.02 80)
+  cursor: '#ff7e22', // --eva
+  cursorAccent: '#030303', // --eva-ink
+  selectionBackground: '#ff7e224d', // --eva at 30%
+  black: '#1a1512',
+  red: '#f90a1f', // --eva-red
+  green: '#3ce074', // --eva-green
+  yellow: '#fbcb00', // --eva-yellow
+  blue: '#26a7d0',
+  magenta: '#ff7e22', // --eva
+  cyan: '#00d8e1', // --eva-cyan
+  white: '#ece3d6',
+  brightBlack: '#5d5449',
+  brightRed: '#ff554c',
+  brightGreen: '#7af69a',
+  brightYellow: '#ffe362',
+  brightBlue: '#5ec6ec',
+  brightMagenta: '#ffa553',
+  brightCyan: '#73eef4',
+  brightWhite: '#f9f4ee',
+}
+
+// The theme for the page's look: dark is the `dark` class on <html>.
+function themeNow() {
+  return document.documentElement.classList.contains('dark') ? EVA_THEME : ZINC_THEME
 }
 
 type Connection =
@@ -63,7 +97,7 @@ export function TerminalPane({ sandbox, job, visible, onExited }: TerminalPanePr
       cursorBlink: true,
       fontSize: 13,
       fontFamily: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
-      theme: THEME,
+      theme: themeNow(),
       scrollback: 5000,
     })
     const fit = new FitAddon()
@@ -80,6 +114,11 @@ export function TerminalPane({ sandbox, job, visible, onExited }: TerminalPanePr
     fitToContainer()
     const observer = new ResizeObserver(fitToContainer)
     observer.observe(container)
+    // Follow the theme toggle.
+    const themes = new MutationObserver(() => {
+      term.options.theme = themeNow()
+    })
+    themes.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
 
     const encoder = new TextEncoder()
     const input = term.onData((data) => {
@@ -97,6 +136,7 @@ export function TerminalPane({ sandbox, job, visible, onExited }: TerminalPanePr
 
     return () => {
       observer.disconnect()
+      themes.disconnect()
       input.dispose()
       resize.dispose()
       term.dispose()
@@ -168,7 +208,12 @@ export function TerminalPane({ sandbox, job, visible, onExited }: TerminalPanePr
       data-connection={connection.state}
       className={cn('min-h-0 flex-1 flex-col', visible ? 'flex' : 'hidden')}
     >
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
+      <div data-testid="terminal-strip" className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
+        <span data-testid="terminal-title" title={`Sandbox ${sandbox}, job ${job.id}`} className="hidden">
+          <span>{sandbox}</span>
+          <span aria-hidden>/</span>
+          <span>{job.id}</span>
+        </span>
         <IconChip
           icon={job.id === AGENT_JOB ? conceptIcons.task : conceptIcons.terminal}
           concept="terminal"
@@ -199,7 +244,7 @@ export function TerminalPane({ sandbox, job, visible, onExited }: TerminalPanePr
           )}
         </div>
       </div>
-      <div className="min-h-0 flex-1 bg-[#09090b] p-2">
+      <div data-testid="terminal-screen" className="min-h-0 flex-1 bg-[#09090b] p-2">
         <div ref={containerRef} className="h-full w-full" />
       </div>
     </div>

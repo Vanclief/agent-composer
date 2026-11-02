@@ -1,2 +1,495 @@
 /* Eva look, compute area (docs/design/panel.md). Rules keyed on the markup's attributes;
-   unlayered so they win over Tailwind utilities. Filled by task panel-eva-compute. */
+   unlayered so they win over Tailwind utilities. Filled by task panel-eva-compute.
+   Compute (/compute): the header strip with counts and a ruler, each status
+   group a small label, each sandbox an indexed chamfered plate with its
+   status fused into the left edge, readouts in columns, controls at the far
+   right. The sandbox page (/compute/:name): the same plate as its header.
+   The terminals: job tiles as blocks (the shown one cyan), the terminal a
+   one-pixel orange frame with a filled title tab. */
+
+/* The header strip: counts by status word, closed by a fine ruler. */
+.dark [data-testid='compute-header'] {
+  position: relative;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--eva-dim);
+}
+.dark [data-testid='compute-header']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, var(--eva-dim) 0 1px, transparent 1px 12px);
+}
+.dark [data-testid='compute-page'] {
+  counter-reset: plate;
+}
+
+/* A status group: its word and count as a small label on a hairline. */
+.dark [data-testid='compute-page'] section > h2 {
+  gap: 10px;
+}
+.dark [data-testid='compute-page'] section > h2::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--eva-faint);
+}
+.dark [data-testid='compute-page'] section > h2 span[data-status][data-tier] {
+  border-color: transparent;
+  background: transparent;
+  padding-left: 0;
+}
+.dark [data-testid='group-count'] {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--foreground);
+}
+
+/* The plates. As on the Tasks list: the article's background is the frame,
+   a pseudo-element one pixel inside is the fill, both cut at the top right
+   and the bottom left; the content sits above them. */
+.dark [data-testid='compute-page'] section > ul {
+  border: 0;
+  gap: 6px;
+}
+.dark [data-testid='compute-page'] section > ul > li + li {
+  border-top: 0;
+}
+.dark [data-testid='compute-page'] article[data-tier],
+.dark [data-testid='sandbox-header'] {
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--eva-dim);
+  padding: 10px 14px 10px calc(7.5rem + 14px);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    var(--cut) 100%,
+    0 calc(100% - var(--cut))
+  );
+}
+.dark [data-testid='compute-page'] article[data-tier] {
+  counter-increment: plate;
+}
+.dark [data-testid='compute-page'] article[data-tier]::after,
+.dark [data-testid='sandbox-header']::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  background: var(--card);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut) + 1px) 0,
+    100% calc(var(--cut) - 1px),
+    100% 100%,
+    calc(var(--cut) - 1px) 100%,
+    0 calc(100% - var(--cut) + 1px)
+  );
+}
+.dark [data-testid='compute-page'] article[data-tier]:hover {
+  background-color: var(--eva-dim);
+}
+.dark [data-testid='compute-page'] article[data-tier]:hover::after {
+  background: var(--secondary);
+}
+.dark [data-testid='compute-page'] article[data-tier] > *,
+.dark [data-testid='sandbox-header'] > * {
+  position: relative;
+  z-index: 1;
+}
+.dark [data-testid='compute-page'] article[data-tier] > div:first-child {
+  position: static;
+}
+/* The row's link covers the plate; it has to sit above the fill. */
+.dark [data-testid='compute-page'] [data-testid='sandbox-name']::after {
+  z-index: 1;
+}
+.dark [data-testid='compute-page'] article[data-tier='attention'],
+.dark [data-testid='sandbox-header']:has([data-tier='attention']) {
+  background: var(--eva-red);
+}
+.dark [data-testid='compute-page'] article[data-tier='off'] {
+  background: oklch(0.74 0.19 48 / 22%);
+}
+.dark [data-testid='compute-page'] article[data-tier]:focus-within {
+  background: var(--eva-cyan);
+}
+
+/* The index, small, at the top right inside the cut. */
+.dark [data-testid='compute-page'] article[data-tier]::before {
+  content: counter(plate, decimal-leading-zero);
+  position: absolute;
+  z-index: 1;
+  right: 16px;
+  top: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  color: var(--eva-dim);
+}
+
+/* The status tab: the plate's left edge, top to bottom. The word is the
+   light (docs/design/panel.md "Lights", no LED): running filled green and a
+   machine in transition (starting) filled blue, both steady; not running a
+   green outline, not filled (stopped full, unknown and any other word dim);
+   failed a steady red outline. Only what needs a hand blinks, the whole tab:
+   crashed red (and review yellow, were a sandbox ever to say it). Hard blink
+   once a second, never a fade. */
+.dark [data-testid='sandbox-status'] {
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  bottom: 1px;
+  width: 7.5rem;
+  display: flex;
+  z-index: 1;
+  border-right: 1px solid var(--eva-dim);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, calc(var(--cut) - 1px) 100%, 0 calc(100% - var(--cut) + 1px));
+}
+.dark [data-testid='sandbox-status'] span[data-status][data-tier] {
+  flex: 1;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  padding: 0 8px;
+  color: var(--muted-foreground);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px oklch(0.8 0.2 150 / 45%);
+}
+.dark [data-testid='sandbox-status'] span[data-status][data-tier='off'] {
+  color: var(--eva-green);
+  box-shadow: inset 0 0 0 1px var(--eva-green);
+}
+.dark [data-testid='sandbox-status'] span[data-status][data-tier='lit'] {
+  color: var(--eva-ink);
+  font-weight: 700;
+  box-shadow: none;
+  background: oklch(0.78 0.12 220);
+}
+.dark [data-testid='sandbox-status'] span[data-status='running'][data-tier='lit'] {
+  background: var(--eva-green);
+}
+.dark [data-testid='sandbox-status'] span[data-status='review'][data-tier='lit'] {
+  --compute-tab: var(--eva-yellow);
+  background: transparent;
+  animation: compute-tab-blink 1s steps(1, end) infinite;
+}
+.dark [data-testid='sandbox-status'] span[data-status][data-tier='attention'] {
+  --compute-tab: var(--eva-red);
+  color: var(--compute-tab);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px var(--compute-tab);
+}
+.dark
+  [data-testid='sandbox-status']
+  span[data-status][data-tier='attention']:not([data-status='failed']):not([data-status='error']) {
+  animation: compute-tab-blink 1s steps(1, end) infinite;
+}
+@keyframes compute-tab-blink {
+  0%,
+  49% {
+    background: var(--compute-tab);
+    color: var(--eva-ink);
+    box-shadow: none;
+  }
+  50%,
+  100% {
+    background: transparent;
+    color: var(--compute-tab);
+    box-shadow: inset 0 0 0 1px var(--compute-tab);
+  }
+}
+
+/* Name (the title of the plate), command, readouts, age. */
+.dark [data-testid='sandbox-name'] {
+  color: var(--foreground);
+  font-size: 0.95rem;
+}
+.dark [data-testid='compute-page'] article[data-tier='off'] [data-testid='sandbox-name'] {
+  color: var(--muted-foreground);
+}
+.dark [data-readout] > span:first-child {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  font-size: 0.6rem;
+  color: var(--eva-dim);
+}
+.dark [data-readout] > span:last-child,
+.dark [data-readout] > a {
+  color: var(--foreground);
+  font-family: var(--font-mono);
+}
+.dark [data-readout] > a:hover {
+  color: var(--eva-cyan);
+}
+.dark [data-testid='compute-page'] article[data-tier='off'] [data-readout] > span:last-child,
+.dark [data-testid='compute-page'] article[data-tier='off'] [data-readout] > a {
+  color: var(--muted-foreground);
+}
+.dark [data-testid='compute-page'] [data-testid='status-error'] {
+  padding-left: 0;
+  color: var(--eva-red);
+}
+
+/* Controls at the far right: blocks cut at the top right. Terminal, the act
+   on a live sandbox, is filled orange; Start and Stop outlined orange;
+   Delete outlined red, filled red on hover. */
+.dark [data-testid='sandbox-acts'] [data-control],
+.dark [data-testid='sandbox-header'] [data-control] {
+  height: 1.5rem;
+  border-radius: 0;
+  box-shadow: none;
+  border: 1px solid var(--eva);
+  background: transparent;
+  color: var(--eva);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0 10px 0 8px;
+  gap: 5px;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+}
+.dark [data-testid='sandbox-acts'] [data-control] svg,
+.dark [data-testid='sandbox-header'] [data-control] svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+.dark [data-testid='sandbox-acts'] [data-control]:hover,
+.dark [data-testid='sandbox-header'] [data-control]:hover,
+.dark [data-testid='sandbox-acts'] [data-control='terminal'] {
+  background: var(--eva);
+  color: var(--eva-ink);
+}
+.dark [data-testid='sandbox-acts'] [data-control='terminal']:hover {
+  background: oklch(0.85 0.17 55);
+}
+.dark [data-testid='sandbox-acts'] [data-control='delete'],
+.dark [data-testid='sandbox-header'] [data-control='delete'] {
+  border-color: oklch(0.62 0.25 27 / 60%);
+  color: oklch(0.72 0.2 27);
+}
+.dark [data-testid='sandbox-acts'] [data-control='delete']:hover,
+.dark [data-testid='sandbox-header'] [data-control='delete']:hover {
+  border-color: var(--eva-red);
+  background: var(--eva-red);
+  color: var(--eva-ink);
+}
+.dark [data-testid='sandbox-acts'] [data-control]:focus-visible,
+.dark [data-testid='sandbox-header'] [data-control]:focus-visible {
+  outline: 1px solid var(--eva-cyan);
+  outline-offset: 1px;
+}
+
+/* The sandbox page's header: the same plate, the name its title, the age
+   a plain readout. */
+.dark [data-testid='sandbox-header'] {
+  padding: 14px 18px 14px calc(7.5rem + 18px);
+  align-items: center;
+}
+.dark [data-testid='sandbox-header'] h2 {
+  color: var(--foreground);
+  font-weight: 500;
+}
+.dark [data-testid='sandbox-header'] h2 + span[title] {
+  border: 0;
+  padding: 0;
+  color: var(--muted-foreground);
+}
+.dark [data-testid='sandbox-header'] h2 + span[title] svg {
+  color: var(--muted-foreground);
+}
+.dark main [data-testid='status-error'][class*='border'] {
+  border-radius: 0;
+  border: 0;
+  border-left: 3px solid var(--eva-red);
+  background: oklch(0.62 0.25 27 / 12%);
+  color: var(--eva-red);
+}
+
+/* Terminals: the job tiles as outlined blocks, the shown one cyan. */
+.dark ul[aria-label='Terminals'] {
+  gap: 4px;
+}
+.dark ul[aria-label='Terminals'] button {
+  border-radius: 0;
+  border: 1px solid var(--eva-dim);
+  border-left-width: 3px;
+  background: var(--card);
+  color: var(--foreground);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+}
+.dark ul[aria-label='Terminals'] button:hover {
+  background: var(--secondary);
+}
+.dark ul[aria-label='Terminals'] button svg[data-icon] {
+  color: var(--muted-foreground);
+}
+.dark ul[aria-label='Terminals'] button[aria-current='true'] {
+  border-color: var(--eva-cyan);
+  color: var(--eva-cyan);
+  background: oklch(0.8 0.14 200 / 10%);
+}
+.dark ul[aria-label='Terminals'] button[aria-current='true'] svg[data-icon] {
+  color: var(--eva-cyan);
+}
+.dark ul[aria-label='Terminals'] [data-state='running'] > svg,
+.dark [data-job] [data-state='running'] > svg {
+  color: var(--eva-green);
+  fill: var(--eva-green);
+}
+.dark ul[aria-label='Terminals'] [data-state='exited'] > svg,
+.dark [data-job] [data-state='exited'] > svg {
+  color: var(--muted-foreground);
+}
+.dark ul[aria-label='Terminals'] [data-slot='badge'],
+.dark [data-job] [data-slot='badge'] {
+  border-radius: 0;
+  border-color: oklch(0.62 0.03 70 / 50%);
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Starting a terminal: the quick starts as outlined orange blocks, the
+   command a square field, the working directory a plain readout. */
+.dark [role='group'][aria-label='Start terminal'] button {
+  border-radius: 0;
+  box-shadow: none;
+  border: 1px solid var(--eva-dim);
+  background: transparent;
+  color: var(--eva);
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+}
+.dark [role='group'][aria-label='Start terminal'] button svg {
+  color: currentColor;
+}
+.dark [role='group'][aria-label='Start terminal'] button:hover {
+  background: var(--eva);
+  border-color: var(--eva);
+  color: var(--eva-ink);
+}
+.dark [role='group'][aria-label='Start terminal'] input {
+  border-radius: 0;
+  border-color: var(--eva-dim);
+  background: var(--sidebar);
+  color: var(--foreground);
+}
+.dark [role='group'][aria-label='Start terminal'] input:focus-visible {
+  border-color: var(--eva-cyan);
+  box-shadow: none;
+}
+.dark [role='group'][aria-label='Start terminal'] form svg {
+  color: var(--eva-dim);
+}
+.dark [role='group'][aria-label='Start terminal'] > span[title='Working directory'] {
+  border: 0;
+  border-left: 1px solid var(--eva-dim);
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+}
+.dark [role='group'][aria-label='Start terminal'] > span[title='Working directory'] svg {
+  color: var(--muted-foreground);
+}
+
+/* The terminal: a one-pixel orange frame on the ground, its strip opened
+   by a filled tab naming the sandbox and the job. */
+.dark section[aria-label='Terminal'] {
+  border-radius: 0;
+  border: 1px solid var(--eva);
+  box-shadow: none;
+  background: var(--background);
+}
+.dark section[aria-label='Terminal'] > div:not([data-job]) {
+  background: var(--background);
+}
+.dark section[aria-label='Terminal'] > div:not([data-job]) svg {
+  color: var(--eva-faint);
+}
+.dark [data-testid='terminal-strip'] {
+  height: 2rem;
+  padding-left: 0;
+  border-bottom: 1px solid var(--eva-dim);
+  background: var(--sidebar);
+}
+.dark [data-testid='terminal-title'] {
+  display: inline-flex;
+  align-self: stretch;
+  align-items: center;
+  gap: 6px;
+  padding: 0 22px 0 12px;
+  margin-right: 4px;
+  background: var(--eva);
+  color: var(--eva-ink);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+}
+.dark [data-testid='terminal-title'] > span[aria-hidden] {
+  opacity: 0.55;
+}
+.dark [data-testid='terminal-strip'] > span[title]:not([data-testid]):not([data-state]) {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+.dark [data-testid='terminal-strip'] > span[title]:not([data-testid]):not([data-state]) svg {
+  color: var(--muted-foreground);
+}
+.dark [data-testid='terminal-strip'] [role='alert'] {
+  color: var(--eva-red);
+}
+.dark [data-testid='terminal-strip'] button {
+  height: 1.5rem;
+  border-radius: 0;
+  box-shadow: none;
+  border: 1px solid var(--eva);
+  background: transparent;
+  color: var(--eva);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0 10px 0 8px;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+}
+.dark [data-testid='terminal-strip'] button svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+.dark [data-testid='terminal-strip'] button:hover {
+  background: var(--eva);
+  color: var(--eva-ink);
+}
+.dark [data-testid='terminal-screen'] {
+  background: var(--background);
+}
+
+/* The shell paints every aside as the sidebar; the terminals rail sits on
+   the ground. With no job attached the frame dims to a plain frame. */
+.dark div:has(> section[aria-label='Terminal']) > aside,
+.dark div:has(> section[aria-label='Terminal']) > aside > div {
+  background: transparent;
+}
+.dark section[aria-label='Terminal']:not(:has([data-job])) {
+  border-color: var(--eva-dim);
+}
