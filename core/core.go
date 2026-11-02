@@ -11,6 +11,7 @@ import (
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/events"
+	"github.com/vanclief/agent-composer/core/resources/accounts/usage"
 	"github.com/vanclief/agent-composer/core/resources/agents"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
 	"github.com/vanclief/agent-composer/core/resources/knowledge"
@@ -46,6 +47,10 @@ type Stack struct {
 	AgentsAPI *agents.API
 	// Events is the live feed behind GET /api/events.
 	Events *events.Bus
+	// AccountsUsage keeps the latest usage of every anthropic oauth
+	// account; only agc rest starts it. Until the accounts API sets itself
+	// as the lister (SetLister) it lists no accounts.
+	AccountsUsage *usage.Poller
 }
 
 type StackOptions struct {
@@ -136,18 +141,21 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	agentsAPI := agents.NewAPI(ctrl, tasksAPI, msg, agentsDir)
 	agentsAPI.SetEvents(bus)
 
+	accountsUsage := usage.NewPoller(usage.NoAccounts{}, secretsPath)
+
 	return &Stack{
-		Controller:   ctrl,
-		Scheduler:    sch,
-		Runtime:      rt,
-		HooksAPI:     hooksAPI,
-		WorkflowAPI:  workflowAPI,
-		Messaging:    msg,
-		TasksAPI:     tasksAPI,
-		SchedulesAPI: schedulesAPI,
-		KnowledgeAPI: knowledgeAPI,
-		AgentsAPI:    agentsAPI,
-		Events:       bus,
+		Controller:    ctrl,
+		Scheduler:     sch,
+		Runtime:       rt,
+		HooksAPI:      hooksAPI,
+		WorkflowAPI:   workflowAPI,
+		Messaging:     msg,
+		TasksAPI:      tasksAPI,
+		SchedulesAPI:  schedulesAPI,
+		KnowledgeAPI:  knowledgeAPI,
+		AgentsAPI:     agentsAPI,
+		Events:        bus,
+		AccountsUsage: accountsUsage,
 	}, nil
 }
 
