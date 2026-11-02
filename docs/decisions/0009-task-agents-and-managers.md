@@ -14,16 +14,24 @@ the agent was given, and the exact text the manager was sent.
 
 ## Decision
 
-1. **Defaults are configuration.** agc's config file gains
-   `defaults: { harness: claude_code, model: claude-opus-5-5, manager: <name> }`,
+1. **Defaults are configuration; the manager is the creator; the owner is
+   the human.** agc's config file gains
+   `defaults: { harness: claude_code, model: claude-opus-5-5, owner: <name> }`,
    overridable with `AGC_DEFAULT_HARNESS`, `AGC_DEFAULT_MODEL` and
-   `AGC_DEFAULT_MANAGER`. A task's `assignee` defaults to the harness and the
-   task gains `model` (defaults to the configured model when the assignee is
-   a harness, empty for a person) and `manager` (a messaging name; defaults
-   to the configured manager, or to the creator's name when the request
-   carries one). The CLI and the panel's create dialog show the defaults
-   filled in, so a user sees who will work and who will manage before
-   pressing create.
+   `AGC_DEFAULT_OWNER`. A task's `assignee` defaults to the harness and the
+   task gains three fields:
+   - `model`: the configured model when the assignee is a harness, empty
+     for a person;
+   - `manager`: the messaging name of whoever created the task and runs it
+     day to day, an orchestrating agent or a person; the request must carry
+     it (`agc task create` sends the caller's messaging name, the panel
+     sends the signed-in person's);
+   - `owner`: the human the task answers to, who decides what the manager
+     cannot; defaults to the configured owner.
+
+   The CLI and the panel's create dialog show the defaults filled in, so a
+   user sees who will work, who will manage and who owns before pressing
+   create.
 
 2. **The agent is the sandbox's first job, started by agc.** When a sandbox
    is allocated for a task whose assignee is a harness and no `command` is
@@ -56,14 +64,17 @@ the agent was given, and the exact text the manager was sent.
    ## How this task works
 
    You are <harness> (<model>) working for the task `<name>` inside a sandbox.
-   Your manager is <manager>. The repository, if any, is cloned at
-   /home/agent/<repo>. Work counts only once it leaves this sandbox:
+   Your manager is <manager>; the owner is <owner>. The repository, if any,
+   is cloned at /home/agent/<repo>. Work counts only once it leaves this
+   sandbox:
 
    - Commit on a branch named `agc/<name>` and push it.
    - Post what you changed and what you verified in `#<name>` with
      `agc msg post '#<name>' <text>`; your manager reads that channel and
-     answers there. Ask questions there too, then keep working on what does
-     not depend on the answer.
+     answers there. Ask your manager there too, then keep working on what
+     does not depend on the answer.
+   - If something needs a decision only <owner> can make, post it in
+     `#<owner>` (their inbox) and say so in `#<name>`; do not wait idle.
    - Do not modify files outside the repository, and never print secret values.
    ```
 
@@ -72,10 +83,11 @@ the agent was given, and the exact text the manager was sent.
    and posts exactly:
 
    ```
-   @<manager>, task `<name>` is open: <title>.
+   @<manager> (manager), @<owner> (owner): task `<name>` is open: <title>.
    Agent: <harness> (<model>) on sandbox `<sandbox>`, starting.
    The agent's instructions are the next message. Reply here to talk to it;
-   post /done to close the task.
+   it escalates to #<owner> when only the owner can decide. Post /done to
+   close the task.
    ```
 
    followed by a second message whose body is the `instructions` text from
@@ -84,13 +96,20 @@ the agent was given, and the exact text the manager was sent.
    second message. `agc` is a reserved participant name no one else can
    take; messages from it carry `task` empty and `human` false.
 
-5. **The manager reaches the task the same way as anyone else.** They are a
-   messaging participant (a person in the panel, or an orchestrating session
-   using `agc msg wait` through the REST API). Being named `manager` on a
-   task means agc addresses them in the opening message; it grants nothing
-   else. `/done` from the manager sets the task's `done_at` (the same effect
-   as `POST /api/tasks/{id}/done`); from anyone else it is an ordinary
-   message.
+5. **Manager and owner reach the task the same way as anyone else.** Both
+   are messaging participants (a person in the panel, or an orchestrating
+   session using `agc msg wait` through the REST API). Being named on a task
+   means agc addresses you in the opening message; it grants nothing else.
+   `/done` from the manager or the owner sets the task's `done_at` (the same
+   effect as `POST /api/tasks/{id}/done`); from anyone else it is an
+   ordinary message.
+
+   **Escalation is a channel, not a feature.** Every person has an inbox
+   channel named after them (`#franco`). A task's sandbox is granted its
+   owner's inbox read-write in addition to `#<task>` and the spec's
+   channels, so the agent can post there when it needs a decision only the
+   owner can make; the manager raises things to the owner the same way.
+   Everything else goes through `#<task>`, where the manager answers.
 
 6. **The panel shows both texts where they belong.** The task page's Brief
    tab shows the brief, and under it "What the agent received", the
@@ -125,9 +144,11 @@ the agent was given, and the exact text the manager was sent.
 
 ## Consequences
 
-- `tasks` gains `model` and `manager`; `sandboxes` gains `instructions`.
-  `CreateTaskRequest` gains `model` and `manager`; `TaskView` returns both;
-  `SandboxView` returns `instructions`.
+- `tasks` gains `model`, `manager` and `owner`; `sandboxes` gains
+  `instructions`. `CreateTaskRequest` gains `model`, `manager` (required)
+  and `owner`; `TaskView` returns all three; `SandboxView` returns
+  `instructions`.
+- A sandbox's channel grants include its owner's inbox `#<owner>`.
 - The guest `agc` gains `agent run`; the image needs no other change.
 - `agc msg join agc` is refused for everyone but the server.
 - The CLI's `agc task create` prints the defaults it applied.

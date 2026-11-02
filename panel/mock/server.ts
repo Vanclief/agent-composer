@@ -37,10 +37,11 @@ type Task = {
   name: string
   brief: string
   assignee: string
-  // ADR 0009: the harness model when the assignee is a harness, and the
-  // messaging name agc addresses when the task opens.
+  // ADR 0009: the harness model when the assignee is a harness; the creator
+  // who manages the task day to day; the human it answers to.
   model: string
   manager: string
+  owner: string
   for: string
   done_at: string | null
   created_at: string
@@ -210,6 +211,7 @@ function createState() {
       assignee: '',
       model: '',
       manager: '',
+      owner: '',
       for: '',
       done_at: null,
       created_at: at,
@@ -229,12 +231,14 @@ function createState() {
     return (
       `# ${task.title}\n\n${task.brief}\n\n## How this task works\n\n` +
       `You are ${agent} working for the task \`${task.name}\` inside a sandbox (\`${sandboxName}\`).\n` +
-      `Your manager is ${task.manager}. ${repo} Work counts only once it leaves this sandbox:\n\n` +
+      `Your manager is ${task.manager}; the owner is ${task.owner}. ${repo} Work counts only once it leaves this sandbox:\n\n` +
       `- Commit on a branch named \`agc/${task.name}\` and push it.\n` +
       `- Post what you changed and what you verified in \`#${task.name}\` with\n` +
       `  \`agc msg post '#${task.name}' <text>\`; your manager reads that channel and\n` +
-      `  answers there. Ask questions there too, then keep working on what does\n` +
-      `  not depend on the answer.\n` +
+      `  answers there. Ask your manager there too, then keep working on what\n` +
+      `  does not depend on the answer.\n` +
+      `- If something needs a decision only ${task.owner} can make, post it in\n` +
+      `  \`#${task.owner}\` (their inbox) and say so in \`#${task.name}\`; do not wait idle.\n` +
       `- Do not modify files outside the repository, and never print secret values.\n`
     )
   }
@@ -428,7 +432,8 @@ function createState() {
           'Done when every finding is posted and the PR is approved or has changes requested.',
         assignee: 'claude_code',
         model: 'claude-opus-5-5',
-        manager: 'franco',
+        manager: 'agent-composer-da',
+        owner: 'franco',
         for: 'attach-rulesets-to-task-specs',
       },
       40 * 60_000,
@@ -447,7 +452,12 @@ function createState() {
     addTask(
       'Flaky CI',
       'flaky-ci',
-      { brief: 'Find why CI fails one run in five and fix it.', assignee: 'franco', manager: 'franco' },
+      {
+        brief: 'Find why CI fails one run in five and fix it.',
+        assignee: 'franco',
+        manager: 'franco',
+        owner: 'franco',
+      },
       3 * 3600_000,
     )
 
@@ -459,6 +469,7 @@ function createState() {
         assignee: 'codex_cli',
         model: 'gpt-6.1-sol',
         manager: 'franco',
+        owner: 'franco',
         done_at: iso(Date.now() - 86_400_000),
       },
       2 * 86_400_000,
@@ -470,7 +481,13 @@ function createState() {
     const fail = addTask(
       'Boot fail',
       'boot-fail',
-      { brief: 'Review the private repo.', assignee: 'claude_code', model: 'claude-opus-5-5', manager: 'franco' },
+      {
+        brief: 'Review the private repo.',
+        assignee: 'claude_code',
+        model: 'claude-opus-5-5',
+        manager: 'franco',
+        owner: 'franco',
+      },
       20 * 60_000,
     )
     const failBox = addSandbox(
@@ -652,6 +669,7 @@ function taskFields(body: Record<string, unknown>) {
     assignee,
     model,
     manager: str(body.manager).trim() || 'franco',
+    owner: str(body.owner).trim() || 'franco',
     for: str(body.for),
   }
 }

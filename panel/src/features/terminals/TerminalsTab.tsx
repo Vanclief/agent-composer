@@ -2,8 +2,8 @@
 // the selected job's xterm. Panes the user has viewed stay mounted (hidden
 // when not selected) so switching is instant and keeps scrollback; jobs
 // never viewed are not attached.
-// TODO(ADR 0008): not routed; :name is a sandbox. The compute feature mounts
-// this on SandboxPage (/compute/:name) and renames it as it sees fit.
+// Mounted by SandboxPage at /compute/:name; :name is the sandbox. The job
+// "agent" (the sandbox's command) is listed first with the task icon.
 import { useCallback, useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
+import { AGENT_JOB, JobIcon } from './JobIcon'
 import { JobShape } from './JobShape'
 import { ExitedBadge, TerminalPane } from './TerminalPane'
 
@@ -46,7 +47,7 @@ function TerminalsView({ name }: { name: string }) {
   const [viewed, setViewed] = useState<string[]>([])
   const [exited, setExited] = useState<ReadonlySet<string>>(new Set())
 
-  const jobs = running ? (terminals.data ?? []) : []
+  const jobs = running ? agentFirst(terminals.data ?? []) : []
   // Until the user picks one, the first running job is shown.
   const selected = picked ?? jobs.find((job) => job.running)?.id ?? null
   const panes = jobs.filter((job) => job.id === selected || viewed.includes(job.id))
@@ -188,10 +189,7 @@ function JobTile({ job, selected, exited, onSelect }: JobTileProps) {
           : 'border-border bg-white text-zinc-700 hover:bg-zinc-50 dark:bg-zinc-900/60 dark:text-zinc-300 dark:hover:bg-zinc-800/60',
       )}
     >
-      <conceptIcons.terminal
-        aria-hidden
-        className={cn('size-4 shrink-0', selected ? color.text : 'text-muted-foreground')}
-      />
+      <JobIcon job={job} className={cn('size-4 shrink-0', selected ? color.text : 'text-muted-foreground')} />
       <span className="min-w-0 flex-1 truncate">{job.command.join(' ')}</span>
       {exited && <ExitedBadge />}
       <JobShape running={job.running} />
@@ -209,6 +207,11 @@ function repoDir(spec: TaskSpec | undefined) {
       .pop()
       ?.replace(/\.git$/, '') ?? ''
   return last ? `${HOME_DIR}/${last}` : HOME_DIR
+}
+
+// The agent job first; the rest keep the server's order.
+function agentFirst(jobs: Terminal[]) {
+  return [...jobs.filter((job) => job.id === AGENT_JOB), ...jobs.filter((job) => job.id !== AGENT_JOB)]
 }
 
 function unique(ids: string[]) {
