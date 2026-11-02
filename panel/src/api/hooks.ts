@@ -10,6 +10,7 @@ import { terminals, type StartTerminalRequest } from './terminals'
 import { knowledge } from './knowledge'
 import { keepPreviousData } from '@tanstack/react-query'
 import { livePollMs } from './live'
+import { agents, type CreateAgentRequest, type KeepAgentRequest } from './agents'
 
 // How often tasks, sandboxes and terminals refetch, so statuses stay live.
 export const TASKS_POLL_MS = 5000
@@ -43,6 +44,8 @@ export const queryKeys = {
   // A channel's messages after the read cursor, up to its last id
   // (src/features/messages/unread.ts).
   unread: (channel: string, after: number, last: number) => ['msg', 'unread', channel, after, last] as const,
+  agents: ['agents'] as const,
+  agent: (name: string) => ['agents', name] as const,
 }
 
 // ---------- tasks and sandboxes (ADR 0008) ----------
@@ -382,4 +385,56 @@ export function addPostedMessage(queryClient: QueryClient, message: Message) {
   queryClient.setQueryData<MessagesResponse>(queryKeys.messages(message.channel), (old) =>
     old ? appendMessages(old, [message], old.cursor) : old,
   )
+}
+
+// ---------- agents (persistent agents; hand-typed in ./agents) ----------
+
+// Every agent; state follows its home sandbox, so it polls like sandboxes.
+export function useAgents() {
+  return useQuery({
+    queryKey: queryKeys.agents,
+    queryFn: async ({ signal }) => (await agents.list(signal)).agents,
+    refetchInterval: livePollMs,
+  })
+}
+
+export function useAgent(name: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.agent(name ?? ''),
+    queryFn: ({ signal }) => agents.get(name ?? '', signal),
+    enabled: Boolean(name),
+    refetchInterval: livePollMs,
+  })
+}
+
+// Waking and sleeping start and stop the home sandbox, so agent mutations
+// refresh agents and sandboxes.
+function useAgentMutation<TVariables, TData>(mutationFn: (variables: TVariables) => Promise<TData>) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn,
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sandboxes }),
+      ]),
+  })
+}
+
+// Returns the new numbered agent (<role>-<n>), asleep.
+export function useCreateAgent() {
+  return useAgentMutation((request: CreateAgentRequest) => agents.create(request))
+}
+
+// Names (or renames) the agent; the answer carries the new name.
+export function useKeepAgent(name: string) {
+  return useAgentMutation((request: KeepAgentRequest) => agents.keep(name, request))
+}
+
+export function useWakeAgent(name: string) {
+  return useAgentMutation(() => agents.wake(name))
+}
+
+export function useSleepAgent(name: string) {
+  return useAgentMutation(() => agents.sleep(name))
 }

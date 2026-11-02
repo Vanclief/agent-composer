@@ -85,6 +85,10 @@ const STYLES: Record<string, StatusStyle> = {
   error: FAILED,
   failed: FAILED,
   open: IDLE,
+  // An agent's state: its home sandbox running, stopped, or starting.
+  awake: RUNNING,
+  asleep: STOPPED,
+  waking: TRANSITION,
 }
 
 function styleOf(status: string, detail?: string) {
