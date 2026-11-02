@@ -1,0 +1,88 @@
+# agc task create -f tasks/compute-machines.task.yaml
+# Franco, 2026-11-02: "In compute I should see the machines we have and for
+# each VM we should see the status like we do for the tasks. Also each VM
+# should show in which machine is running. Machines should show their
+# current ram / CPU / available disk / GPU status."
+# Launch only once agc/peer-servers (ADR 0018: GET /api/servers, the
+# sandbox's server) and agc/panel-eva-compute (the Compute look) are merged
+# into feat/tasks-microsandbox.
+name: compute-machines
+title: Compute shows the machines, each with its RAM, CPU, disk and GPU, and every VM under its machine
+assignee: claude_code
+manager: franco
+owner: franco
+for: panel-reads-like-an-instrument
+accept:
+  - GET /api/servers (ADR 0018) answers for every server, local first, the host's cpus total and allocated to running sandboxes, memory total, used and available in MB, disk total and available in MB for the directory sandboxes live in, and gpu as null or {name, memory_total, memory_used, utilization} read from nvidia-smi when present; a peer answers for itself and the primary relays
+  - Every SandboxView carries server, the name of the machine it runs on, and the panel's Compute page groups sandboxes under a plate per machine whose header shows the four readouts as mono gauges with the words RAM, CPU, DISK, GPU and used/total, dim when unknown, the server's name as the plate's title tab, unreachable servers as a red outlined tab with the word unreachable verbatim
+  - Each sandbox row under its machine is the same plate as a task row, the status word as the left tab following docs/design/panel.md Lights (no LED, blink only for crashed), the acts at the far right, and the sandbox page states the machine with a link back to Compute
+  - The mock serves two servers (local and one peer, the peer with a gpu and one sandbox) and tests in tests/compute.spec.ts cover the grouping, the readouts and the unreachable tab; make panel-check passes; go build/vet/test pass; gofmt lists only the three known files; docs/openapi.yaml and make types updated
+  - Branch agc/compute-machines pushed and not merged; the delivery lists the screenshot paths of /compute and one sandbox page
+brief: |
+  Franco wants Compute to answer "what machines do I have, how full are
+  they, and what runs where" at a glance. Read AGENTS.md, ADR 0008 and
+  0018, core/resources/sandboxes, the servers resource that ADR 0018
+  added, panel/CLAUDE.md, docs/design/panel.md (the design system; every
+  new piece follows it) and panel/src/styles/eva-compute.css (the Compute
+  look, already applied; you extend it, you do not redo it). Write the
+  whole thing; do not stop at a plan.
+
+  Backend. Extend the server view of GET /api/servers with the host's
+  facts, read on each request: cpus (runtime.NumCPU and the sum of
+  `cpus` of the running sandboxes on that server), memory from
+  /proc/meminfo (MemTotal, MemAvailable; used is total minus available),
+  disk from statfs on the directory sandboxes live in
+  (AGC_MSB_VOLUMES_DIR's parent or the msb home), and gpu from
+  `nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu
+  --format=csv,noheader,nounits` when the binary exists, else null; a
+  failure to read any one of them leaves that field null and never
+  fails the request. A peer computes its own and the primary relays it
+  through the peer runtime ADR 0018 built. Every SandboxView carries
+  `server` (ADR 0018 records it on the row; `local` when unset). No
+  migration unless the row lacks the column.
+
+  Panel. Compute page: one plate per server, title tab the server name,
+  header strip with four readouts (RAM used/total GB, CPU allocated/total,
+  DISK available/total GB, GPU name and memory used/total or a dim
+  "none"), each a mono readout like the task meta line, dim when the
+  field is null; an unreachable server is a red outlined tab reading the
+  word the backend sends. Under it the sandboxes as rows in the Tasks
+  plate shape: status tab on the left per the Lights section (the word
+  is the light, no LED, only crashed blinks), name and image, then the
+  acts (Stop, Start, Delete, Open) at the far right. Sort servers local
+  first, rows by tier as today. The sandbox page gets a "machine" line
+  with the server name linking to /compute. Mock: `GET /api/servers`
+  with `local` (no gpu) and `mini` (a gpu, one sandbox `review-42-2`
+  moved there), every mock sandbox carrying `server`. Hand-type the
+  fields in src/api until the OpenAPI spec has them, then `npm run types`.
+
+  Keep the component names and test hooks the Compute spec relies on
+  (`data-sandbox`, `sandbox-summary`, the `article` per sandbox, the
+  status grouping test may move to grouping per server: update that
+  test, keep the others). CSS goes in panel/src/styles/eva-compute.css.
+  Statuses verbatim. No new dependency. Dark only.
+
+  If you add a migration, pick a timestamp later than 20261102230000 and
+  unused by any file in models/migrations, even on sibling branches.
+
+  Never print, echo, grep or read environment variables or secret values
+  (no env, printenv, gh auth status, cat of credential files): the
+  secrets in your environment are placeholders bound to hosts, and once
+  one appears in your context the secret policy blocks your own model
+  calls and your session is dead.
+
+  Verify: go build ./... && go vet ./... && go test ./...; gofmt -l .
+  lists only the three known files; make panel-check; npm run shot --
+  /compute and one sandbox page, look at the PNGs. Commit on branch
+  agc/compute-machines, push it, never merge. Post progress in
+  #compute-machines; ask in the channel with QUESTION: when blocked.
+  Answer DONE: with what changed, the screenshot paths, and what you
+  left out and why.
+sandbox:
+  image: agc-agent
+  cpus: 2
+  memory: 4096
+  repo: https://github.com/vanclief/agent-composer
+  ref: feat/tasks-microsandbox
+  setup: cd panel && npm ci
+  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
