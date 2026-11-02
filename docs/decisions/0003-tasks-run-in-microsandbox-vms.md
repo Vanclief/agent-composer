@@ -41,7 +41,7 @@ blocked when sent to a non-allowed host.
      ref: master                 # branch, tag or sha; optional
      setup: |                    # runs once after clone; optional
        go mod download
-     secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]   # names only, see ADR 0004
+     secrets: [GITHUB_TOKEN]   # names only, see ADR 0004
      env:
        GOFLAGS: -mod=mod
      volumes:
@@ -49,6 +49,9 @@ blocked when sent to a non-allowed host.
        - datasets:/data                           # named volume, read-only (default)
        - host:/srv/models:/models                 # host directory, explicit, read-only
    ```
+
+   The harness credential comes from the provider's default account (ADR
+   0018) unless the spec names one.
 
    A volume entry is `NAME:DEST[:rw]` for a microsandbox named volume, or
    `host:PATH:DEST[:rw]` for a host directory. Named volumes are the

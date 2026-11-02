@@ -32,14 +32,16 @@ not.
 
    ```yaml
    environment:
-     secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]   # placeholders, host-bound
+     secrets: [GITHUB_TOKEN]                           # placeholders, host-bound
      env:
        GOFLAGS: -mod=mod                                 # plain, readable by agents
      files:
        - codex-auth:/home/agent/.codex/auth.json         # copied in, fully exposed
    ```
 
-   `secrets` is the default and the only tier agc recommends. `env` is for
+   `secrets` is the default and the only tier agc recommends. The harness
+   credential comes from the provider's default account (ADR 0018) unless
+   the spec names one. `env` is for
    non-sensitive configuration. `files` exists for credentials that cannot be
    substituted (rotating tokens a program rewrites, SSH keys) and the UI
    marks every file entry as exposed to the agent.

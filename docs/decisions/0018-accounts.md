@@ -46,6 +46,8 @@ System default entry and the other accounts, and "Manage Accounts…".
    provider serves (pi) means no change: the sandbox gets no credential, as
    before. So templates and specs can stop listing
    `CLAUDE_CODE_OAUTH_TOKEN`; editing them is left to whoever owns them.
+   Since task `templates-default-account`, the shipped templates
+   (`agents/*.yaml`) name no credential and rely on the default.
 5. **Writes.** `POST /api/accounts` checks the name is free and the secret
    is not already set in `secrets.env`, then writes
    `ACCOUNT_<NAME>='<value>'` (quoted the way `secrets.Load` unquotes it)

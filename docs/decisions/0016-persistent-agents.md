@@ -36,6 +36,8 @@ that mock a backend and settles what it left open.
    gets TASK.md (ADR 0009 item 3). `POST /api/agents { role }` creates
    `<role>-<n>`, `n` the next number for that role, never reused even after
    a rename, so the list stays readable while the agent is on trial.
+   Templates name no harness credential, only `GITHUB_TOKEN`, and rely on
+   the provider's default account (ADR 0018).
 
 3. **Keeping names it.** `POST /api/agents/{name}/keep { name, role? }` sets
    `kept`, renames the row and may change the role. The home sandbox and the
