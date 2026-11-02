@@ -83,7 +83,8 @@ able to read or disrupt everything.
    channel list, a message stream with Task shown next to each sender, and a
    post box. The Task view shows the channels that Task's agents have joined.
    `GET /api/msg/participants?channel=%23name` lists who has posted in a
-   channel, active first, then those who left.
+   channel, active first, then those who left; `?all=1` (humans only) lists
+   everyone who ever joined, in any channel.
 
 ## Rationale
 

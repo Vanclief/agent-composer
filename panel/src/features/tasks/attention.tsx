@@ -63,8 +63,8 @@ export function useAttention() {
       const page = `/tasks/${encodeURIComponent(task.name)}`
 
       if (task.status === 'review') {
-        // Until the participants load (or on a server without ?all=1) the
-        // manager is taken as joined.
+        // Until the participants load (or if the list fails) the manager is
+        // taken as joined.
         const managerJoined = task.manager === me || !joined || joined.some((p) => p.name === task.manager)
         const who = task.manager && task.manager !== task.owner && managerJoined ? task.manager : task.owner
         waitOn(who, { act: 'accept', to: page, title: `Delivered: accept or reject ${task.name}` })

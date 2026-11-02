@@ -142,7 +142,7 @@ export const msg = {
     return apiFetch<{ questions: Question[] }>('GET', '/msg/questions?' + query(params), undefined, signal)
   },
   // GET /api/msg/participants?all=1: everyone who ever joined, in any
-  // channel. Typed ahead of the Go side, which still requires a channel.
+  // channel. Humans only (Service.AllParticipants).
   allParticipants(signal?: AbortSignal) {
     return apiFetch<{ participants: Participant[] }>('GET', '/msg/participants?all=1', undefined, signal)
   },

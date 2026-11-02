@@ -248,7 +248,14 @@ func (a *api) participants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	participants, err := a.svc.Participants(r.Context(), caller, r.URL.Query().Get("channel"))
+	// ?all=1: everyone who ever joined, in any channel (humans only).
+	query := r.URL.Query()
+	var participants []messaging.ParticipantView
+	if query.Get("all") == "1" {
+		participants, err = a.svc.AllParticipants(r.Context(), caller)
+	} else {
+		participants, err = a.svc.Participants(r.Context(), caller, query.Get("channel"))
+	}
 	if err != nil {
 		WriteError(w, err)
 		return
