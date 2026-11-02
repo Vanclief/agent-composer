@@ -428,3 +428,58 @@ func TestParticipantsActiveFirstThenDeparted(t *testing.T) {
 	_, err = svc.Participants(ctx, human, "review-42")
 	wantCode(t, err, ez.EINVALID)
 }
+
+func TestWaitChannelsReturnsAnyChannelInIDOrder(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+
+	agent := join(t, svc, review, "agent")
+	first := post(t, svc, review, agent, "#releases", "r1")
+	post(t, svc, review, agent, "#review-42", "own")
+	post(t, svc, review, agent, "#releases", "r2")
+
+	both := []string{"#review-42", "#releases"}
+
+	got, err := svc.WaitChannels(ctx, review, both, first.ID-1, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 || got[0].Body != "r1" || got[1].Body != "own" || got[2].Body != "r2" {
+		t.Fatalf("unexpected messages %+v", got)
+	}
+
+	// Blocks until any of them has a message after the cursor.
+	done := make(chan []msgmodels.Message, 1)
+	go func() {
+		messages, _ := svc.WaitChannels(ctx, review, both, got[2].ID, 10*time.Second)
+		done <- messages
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+	post(t, svc, review, agent, "#releases", "later")
+
+	select {
+	case messages := <-done:
+		if len(messages) != 1 || messages[0].Body != "later" || messages[0].Channel != "#releases" {
+			t.Fatalf("unexpected wait result %+v", messages)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("wait did not wake on a post in the second channel")
+	}
+
+	// One channel the caller may not read refuses the whole wait.
+	_, err = svc.WaitChannels(ctx, review, []string{"#review-42", "#build-7"}, 0, 10*time.Millisecond)
+	if ez.ErrorCode(err) != ez.ENOTAUTHORIZED {
+		t.Fatalf("want ENOTAUTHORIZED, got %v", err)
+	}
+
+	_, err = svc.ReadChannels(ctx, review, []string{"#build-7", "#releases"}, 0, 0)
+	if ez.ErrorCode(err) != ez.ENOTAUTHORIZED {
+		t.Fatalf("read: want ENOTAUTHORIZED, got %v", err)
+	}
+
+	_, err = svc.WaitChannels(ctx, review, nil, 0, 10*time.Millisecond)
+	if ez.ErrorCode(err) != ez.EINVALID {
+		t.Fatalf("no channel: want EINVALID, got %v", err)
+	}
+}

@@ -70,8 +70,8 @@ func msgCommand() *cli.Command {
 			},
 			{
 				Name:      "wait",
-				Usage:     "Block until a message after the cursor arrives, or the timeout passes",
-				ArgsUsage: "<#channel>",
+				Usage:     "Block until a message after the cursor arrives in any of the channels, or the timeout passes",
+				ArgsUsage: "<#channel>[,<#channel>...]",
 				Flags: []cli.Flag{
 					&cli.Int64Flag{Name: "after", Usage: "Only messages with an id greater than this"},
 					&cli.DurationFlag{Name: "timeout", Usage: "How long to wait", Value: 30 * time.Second},
@@ -195,7 +195,15 @@ func msgWait(c *cli.Context) error {
 		return err
 	}
 
-	res, err := newMsgClient().Wait(c.Context, msgChannel(args[0]), c.Int64("after"), c.Duration("timeout"))
+	channels := []string{}
+	for _, channel := range strings.Split(strings.Join(args, ","), ",") {
+		trimmed := strings.TrimSpace(channel)
+		if trimmed != "" {
+			channels = append(channels, msgChannel(trimmed))
+		}
+	}
+
+	res, err := newMsgClient().WaitChannels(c.Context, channels, c.Int64("after"), c.Duration("timeout"))
 	if err != nil {
 		return err
 	}
@@ -263,9 +271,10 @@ func msgArgs(c *cli.Context, min int) ([]string, error) {
 }
 
 // msgChannel adds the leading # when it was left off, since an unquoted
-// #name starts a comment in most shells.
+// #name starts a comment in most shells. A DM channel (`@<owner>/<name>`)
+// is left as it is.
 func msgChannel(channel string) string {
-	if strings.HasPrefix(channel, "#") {
+	if strings.HasPrefix(channel, "#") || strings.HasPrefix(channel, "@") {
 		return channel
 	}
 

@@ -79,11 +79,11 @@ type agentLoop struct {
 func agentCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "agent",
-		Usage: "Run a task's agent inside its sandbox (ADR 0009)",
+		Usage: "Run a task's agent inside its sandbox (ADR 0009), or a persistent agent inside its home (ADR 0016)",
 		Subcommands: []*cli.Command{
 			{
 				Name:  "run",
-				Usage: "Join #<task>, run the harness on the brief, then answer every message in the channel until the task is accepted",
+				Usage: "Join #<task>, run the harness on the brief, then answer every message in the channel until the task is accepted; with --agent, answer the agent's channels one thread at a time until it is idle",
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "harness", Usage: "claude_code or codex_cli", Required: true},
 					&cli.StringFlag{Name: "model", Usage: "Model the harness runs"},
@@ -92,6 +92,8 @@ func agentCommand() *cli.Command {
 					&cli.StringFlag{Name: "name", Usage: "Messaging name to join as (default $AGC_SANDBOX, else the task name)"},
 					&cli.StringFlag{Name: "manager", Usage: "Messaging name of the task's manager, who may post /accept and /reject"},
 					&cli.StringFlag{Name: "owner", Usage: "Messaging name of the task's owner, who may post /accept and /reject"},
+					&cli.StringFlag{Name: "agent", Usage: "Persistent agent to run as, in its home sandbox (default $AGC_AGENT when no task is given)"},
+					&cli.StringFlag{Name: "sessions", Usage: "With --agent, directory of the sessions and cursor files (the kept volume)", Value: defaultHarnessDir},
 				},
 				Action: agentRun,
 			},
@@ -101,8 +103,17 @@ func agentCommand() *cli.Command {
 
 func agentRun(c *cli.Context) error {
 	taskName := firstNonEmpty(c.String("task"), os.Getenv("AGC_TASK"))
+
+	agentName := c.String("agent")
+	if agentName == "" && taskName == "" {
+		agentName = os.Getenv("AGC_AGENT")
+	}
+	if agentName != "" {
+		return agentHomeRun(c, agentName)
+	}
+
 	if taskName == "" {
-		return ez.New(ez.EINVALID, "pass --task or set AGC_TASK", nil)
+		return ez.New(ez.EINVALID, "pass --task or --agent, or set AGC_TASK or AGC_AGENT", nil)
 	}
 
 	brief, err := os.ReadFile(c.String("brief"))
@@ -136,6 +147,39 @@ func agentRun(c *cli.Context) error {
 			// participant, so the loop does not take it for a reply.
 			return saveMsgState(msgState{ParticipantID: p.ID, Name: p.Name})
 		},
+	}
+
+	return loop.run(c.Context)
+}
+
+// agentHomeRun is agc agent run --agent: the loop of a persistent agent
+// (ADR 0016) inside its home sandbox.
+func agentHomeRun(c *cli.Context, name string) error {
+	brief, err := os.ReadFile(c.String("brief"))
+	if err != nil {
+		return ez.New(ez.EINVALID, "cannot read the brief "+c.String("brief"), err)
+	}
+
+	harness, err := newAgentHarness(c.String("harness"), c.String("model"))
+	if err != nil {
+		return err
+	}
+
+	loop := &homeLoop{
+		harness: harness,
+		msg:     newMsgClient(),
+		name:    name,
+		brief:   string(brief),
+		dir:     c.String("sessions"),
+		log:     os.Stdout,
+		joined: func(p *msgmodels.Participant) error {
+			return saveMsgState(msgState{ParticipantID: p.ID, Name: p.Name})
+		},
+	}
+
+	prior, err := loadMsgState()
+	if err == nil {
+		loop.prior = &prior
 	}
 
 	return loop.run(c.Context)
@@ -240,9 +284,20 @@ func isSystem(m msgmodels.Message) bool {
 }
 
 // join takes the sandbox's name, or name-2 … name-5 when an earlier run
-// still holds it. Names are cut to the 32 characters messaging allows.
+// still holds it.
 func (l *agentLoop) join(ctx context.Context) (*msgmodels.Participant, error) {
-	base := l.name
+	return joinAs(ctx, l.msg, l.name)
+}
+
+// joiner is the part of the messaging client joinAs uses.
+type joiner interface {
+	Join(ctx context.Context, name string) (*msgmodels.Participant, error)
+}
+
+// joinAs takes name, or name-2 … name-5 when it is held. Names are cut to
+// the 32 characters messaging allows.
+func joinAs(ctx context.Context, msg joiner, name string) (*msgmodels.Participant, error) {
+	base := name
 	if len(base) > 32 {
 		base = strings.TrimRight(base[:32], "-")
 	}
@@ -255,7 +310,7 @@ func (l *agentLoop) join(ctx context.Context) (*msgmodels.Participant, error) {
 		}
 
 		var p *msgmodels.Participant
-		p, err = l.msg.Join(ctx, candidate)
+		p, err = msg.Join(ctx, candidate)
 		if err == nil {
 			return p, nil
 		}
@@ -350,13 +405,7 @@ func (l *agentLoop) turn(ctx context.Context, p *msgmodels.Participant, prompt s
 }
 
 func (l *agentLoop) pause(ctx context.Context) {
-	timer := time.NewTimer(agentRetryDelay)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-	case <-timer.C:
-	}
+	pause(ctx)
 }
 
 // newAgentHarness drives the harness CLI non-interactively, as

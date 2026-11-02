@@ -44,7 +44,7 @@ tags:
     description: >
       Channels, participants and messages (ADR 0005), served by the same handler on agc's REST API
       for humans and on each sandbox's socket for its task. Only the routes below are documented
-      here; join, leave, read, wait and channels are in messaging/httpapi. A participant's
+      here; join, leave, read and channels are in messaging/httpapi. A participant's
       presence (online, last_seen_at) is computed on every request and never stored. Errors
       are `{"error": "<message>"}`.
 paths:
@@ -1472,6 +1472,59 @@ paths:
           $ref: '#/components/responses/MsgError'
         '500':
           $ref: '#/components/responses/MsgError'
+  /msg/wait:
+    get:
+      tags: [Messaging]
+      operationId: waitMessages
+      summary: Wait for messages in one or several channels
+      description: >
+        Blocks until a channel named in `channel` or `channels` has a message with an id greater
+        than `after`, or the timeout passes, and returns every such message from all of them in id
+        order (message ids are global, so one cursor serves them all; ADR 0016). An empty list
+        means the timeout passed. The caller must be allowed to read every channel named, or the
+        whole wait is refused. Inside a sandbox this is the socket's `GET /wait`, which
+        `agc msg wait` and `agc agent run --agent` call; `GET /read` takes the same channel
+        parameters and does not block.
+      parameters:
+        - name: channel
+          in: query
+          description: One channel, e.g. `#fix-login`.
+          schema:
+            type: string
+        - name: channels
+          in: query
+          description: Comma-separated channels, read together with `channel`.
+          schema:
+            type: string
+        - name: after
+          in: query
+          description: Only messages with an id greater than this; 0 or absent for all.
+          schema:
+            type: integer
+            format: int64
+        - name: timeout
+          in: query
+          description: How long to block, a Go duration such as `30s` (default 30s).
+          schema:
+            type: string
+        - name: participant
+          in: query
+          description: The waiting participant's id, marked as seen while it waits.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The messages after the cursor, oldest first, and the cursor to pass next.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsgMessagesResponse'
+        '400':
+          $ref: '#/components/responses/MsgError'
+        '403':
+          $ref: '#/components/responses/MsgError'
+        '500':
+          $ref: '#/components/responses/MsgError'
   /msg/questions:
     get:
       tags: [Messaging]
@@ -2424,7 +2477,7 @@ components:
         id:
           type: integer
           format: int64
-          description: Also the read cursor; ids are totally ordered per channel.
+          description: Also the read cursor; ids are global and totally ordered across channels.
         channel:
           type: string
         from:
@@ -3723,7 +3776,7 @@ components:
         id:
           type: integer
           format: int64
-          description: Also the read cursor; ids are totally ordered per channel.
+          description: Also the read cursor; ids are global and totally ordered across channels.
         channel:
           type: string
         from:
@@ -3756,6 +3809,20 @@ components:
         - body
         - kind
         - created_at
+    MsgMessagesResponse:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/MsgMessage'
+        cursor:
+          type: integer
+          format: int64
+          description: The id to pass as `after` next time; the given `after` when empty.
+      required:
+        - messages
+        - cursor
     MsgQuestion:
       allOf:
         - $ref: '#/components/schemas/MsgMessage'

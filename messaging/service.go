@@ -380,25 +380,57 @@ func (s *Service) systemParticipant(ctx context.Context) (*msgmodels.Participant
 
 // Read returns messages with id > afterID, oldest first.
 func (s *Service) Read(ctx context.Context, caller Caller, channel string, afterID int64, limit int) ([]msgmodels.Message, error) {
+	return s.ReadChannels(ctx, caller, []string{channel}, afterID, limit)
+}
+
+// ReadChannels is Read over several channels at once: messages from any of
+// them with id > afterID, in id order. Message ids are global, so one
+// cursor serves every channel. The caller must be allowed to read each.
+func (s *Service) ReadChannels(ctx context.Context, caller Caller, channels []string, afterID int64, limit int) ([]msgmodels.Message, error) {
+	channels, err := s.checkRead(caller, channels)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return s.read(ctx, channels, afterID, limit)
+}
+
+// checkRead validates channels, drops repeats and authorizes reading each.
+func (s *Service) checkRead(caller Caller, channels []string) ([]string, error) {
 	err := checkCaller(caller)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	err = msgmodels.ValidateChannel(channel)
-	if err != nil {
-		return nil, ez.Wrap(err)
+	if len(channels) == 0 {
+		return nil, ez.New(ez.EINVALID, "name at least one channel", nil)
 	}
 
-	err = authorize(caller, channel, false)
-	if err != nil {
-		return nil, ez.Wrap(err)
+	seen := map[string]bool{}
+	unique := []string{}
+	for _, channel := range channels {
+		err = msgmodels.ValidateChannel(channel)
+		if err != nil {
+			return nil, ez.Wrap(err)
+		}
+
+		err = authorize(caller, channel, false)
+		if err != nil {
+			return nil, ez.Wrap(err)
+		}
+
+		if seen[channel] {
+			continue
+		}
+
+		seen[channel] = true
+		unique = append(unique, channel)
 	}
 
-	return s.read(ctx, channel, afterID, limit)
+	return unique, nil
 }
 
-func (s *Service) read(ctx context.Context, channel string, afterID int64, limit int) ([]msgmodels.Message, error) {
+func (s *Service) read(ctx context.Context, channels []string, afterID int64, limit int) ([]msgmodels.Message, error) {
 	if limit <= 0 {
 		limit = defaultReadLimit
 	}
@@ -409,9 +441,14 @@ func (s *Service) read(ctx context.Context, channel string, afterID int64, limit
 
 	messages := []msgmodels.Message{}
 
-	err := s.db.NewSelect().
-		Model(&messages).
-		Where("channel = ?", channel).
+	query := s.db.NewSelect().Model(&messages)
+	if len(channels) == 1 {
+		query = query.Where("channel = ?", channels[0])
+	} else {
+		query = query.Where("channel IN (?)", bun.In(channels))
+	}
+
+	err := query.
 		Where("id > ?", afterID).
 		Order("id ASC").
 		Limit(limit).
@@ -427,17 +464,14 @@ func (s *Service) read(ctx context.Context, channel string, afterID int64, limit
 // the timeout passes, in which case it returns an empty slice. Every
 // Post wakes all waiters, which then query again.
 func (s *Service) Wait(ctx context.Context, caller Caller, channel string, afterID int64, timeout time.Duration) ([]msgmodels.Message, error) {
-	err := checkCaller(caller)
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
+	return s.WaitChannels(ctx, caller, []string{channel}, afterID, timeout)
+}
 
-	err = msgmodels.ValidateChannel(channel)
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-
-	err = authorize(caller, channel, false)
+// WaitChannels is Wait over several channels at once (ADR 0016 item 6):
+// it returns as soon as any of them has a message with id > afterID, with
+// every such message from all of them in id order.
+func (s *Service) WaitChannels(ctx context.Context, caller Caller, channels []string, afterID int64, timeout time.Duration) ([]msgmodels.Message, error) {
+	channels, err := s.checkRead(caller, channels)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -455,7 +489,7 @@ func (s *Service) Wait(ctx context.Context, caller Caller, channel string, after
 		posted := s.posted
 		s.mu.Unlock()
 
-		messages, err := s.read(ctx, channel, afterID, maxReadLimit)
+		messages, err := s.read(ctx, channels, afterID, maxReadLimit)
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}
