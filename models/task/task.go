@@ -35,6 +35,13 @@ type Task struct {
 	Brief string `bun:"brief,notnull,default:''" json:"brief"`
 	// Assignee is a harness id or a person's name. Empty is unassigned.
 	Assignee string `bun:"assignee,notnull,default:''" json:"assignee"`
+	// Model is the harness model when Assignee is a harness, else empty.
+	Model string `bun:"model,notnull,default:''" json:"model"`
+	// Manager is the messaging name of whoever created the task and runs
+	// it day to day (ADR 0009).
+	Manager string `bun:"manager,notnull,default:''" json:"manager"`
+	// Owner is the human the task answers to. Empty when none is set.
+	Owner string `bun:"owner,notnull,default:''" json:"owner"`
 	// For is the id of the knowledge action or decision the Task serves.
 	For       string     `bun:"for_id,notnull,default:''" json:"for"`
 	DoneAt    *time.Time `bun:"done_at" json:"done_at"`

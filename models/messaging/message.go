@@ -21,14 +21,16 @@ var channelRegex = regexp.MustCompile(`^#[a-z0-9][a-z0-9_-]{0,63}$`)
 type Message struct {
 	bun.BaseModel `bun:"table:messaging_messages"`
 
-	ID            int64     `bun:"id,pk,autoincrement" json:"id"`
-	Channel       string    `bun:"channel,notnull" json:"channel"`
-	From          string    `bun:"from,notnull" json:"from"`
-	ParticipantID string    `bun:"participant_id,notnull" json:"participant_id"`
-	Task          string    `bun:"task,notnull" json:"task"`
-	ReplyTo       *int64    `bun:"reply_to,nullzero" json:"reply_to,omitempty"`
-	Body          string    `bun:"body,notnull" json:"body"`
-	CreatedAt     time.Time `bun:"created_at,notnull" json:"created_at"`
+	ID            int64  `bun:"id,pk,autoincrement" json:"id"`
+	Channel       string `bun:"channel,notnull" json:"channel"`
+	From          string `bun:"from,notnull" json:"from"`
+	ParticipantID string `bun:"participant_id,notnull" json:"participant_id"`
+	Task          string `bun:"task,notnull" json:"task"`
+	// Human is copied from the participant: false for agc and agents.
+	Human     bool      `bun:"human,notnull,default:false" json:"human"`
+	ReplyTo   *int64    `bun:"reply_to,nullzero" json:"reply_to,omitempty"`
+	Body      string    `bun:"body,notnull" json:"body"`
+	CreatedAt time.Time `bun:"created_at,notnull" json:"created_at"`
 }
 
 var _ bun.AfterCreateTableHook = (*Message)(nil)

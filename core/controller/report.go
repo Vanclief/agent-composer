@@ -22,6 +22,8 @@ type ConfigReport struct {
 	PostgresDatabase string `json:"postgres_database,omitempty"`
 	HomeDir          string `json:"home_dir"`
 	AppPort          string `json:"app_port"`
+	// Defaults are the task defaults in effect, after the environment.
+	Defaults DefaultsSettings `json:"defaults"`
 }
 
 // ConfigReport works on a Load-ed controller — no database connection
@@ -32,6 +34,7 @@ func (controller *Controller) ConfigReport() (*ConfigReport, error) {
 		ConfigFile:      controller.configFile,
 		ConfigFileFound: controller.configFileFound,
 		AppPort:         controller.Config.App.Port,
+		Defaults:        controller.Defaults(),
 	}
 
 	home, err := os.UserHomeDir()

@@ -10,6 +10,7 @@ import (
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	_ "modernc.org/sqlite"
 
+	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 	"github.com/vanclief/agent-composer/models/task"
 )
 
@@ -55,6 +56,17 @@ spec BLOB, created_at TIMESTAMP NOT NULL, updated_at TIMESTAMP NOT NULL)`)
 	hasSpec, err := columnExists(ctx, db, "tasks", "spec")
 	if err != nil || hasSpec {
 		t.Fatalf("tasks.spec still there: %v, err %v", hasSpec, err)
+	}
+
+	// The later migrations run before the models read the rows.
+	_, err = db.NewCreateTable().Model((*msgmodels.Message)(nil)).Exec(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = taskAgents(ctx, db)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	record, err := task.GetTaskByName(ctx, db, "stop-icon")
