@@ -55,4 +55,6 @@ sandbox:
   setup: |
     npx playwright install chromium
   secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
-  command: claude
+  # A bare `claude` waits at its prompt for someone to type; hand it the
+  # brief so the task starts on its own.
+  command: claude Read /home/agent/TASK.md and do everything it says, start to finish, without waiting for me.
