@@ -1,7 +1,7 @@
 // react-query hooks for every API the panel uses. Query keys live in
 // queryKeys only; invalidate through them, never with ad-hoc arrays.
 import { useEffect, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 
 import { api, unwrap } from './client'
 import { msg, type Message, type MessagesResponse, type PostRequest } from './msg'
@@ -9,6 +9,7 @@ import { sandboxes, tasks, type CreateTaskRequest, type SandboxRequest } from '.
 import { terminals, type StartTerminalRequest } from './terminals'
 import { knowledge } from './knowledge'
 import { keepPreviousData } from '@tanstack/react-query'
+import { livePollMs } from './live'
 
 // How often tasks, sandboxes and terminals refetch, so statuses stay live.
 export const TASKS_POLL_MS = 5000
@@ -47,7 +48,7 @@ export function useTasks() {
   return useQuery({
     queryKey: queryKeys.tasks,
     queryFn: async ({ signal }) => (await tasks.list(signal)).tasks,
-    refetchInterval: TASKS_POLL_MS,
+    refetchInterval: livePollMs,
   })
 }
 
@@ -57,7 +58,7 @@ export function useTask(ref: string | undefined) {
     queryKey: queryKeys.task(ref ?? ''),
     queryFn: ({ signal }) => tasks.get(ref ?? '', signal),
     enabled: Boolean(ref),
-    refetchInterval: TASKS_POLL_MS,
+    refetchInterval: livePollMs,
   })
 }
 
@@ -99,7 +100,7 @@ export function useSandboxes() {
   return useQuery({
     queryKey: queryKeys.sandboxes,
     queryFn: async ({ signal }) => (await sandboxes.list(signal)).sandboxes,
-    refetchInterval: TASKS_POLL_MS,
+    refetchInterval: livePollMs,
   })
 }
 
@@ -109,7 +110,7 @@ export function useSandbox(ref: string | undefined) {
     queryKey: queryKeys.sandbox(ref ?? ''),
     queryFn: ({ signal }) => sandboxes.get(ref ?? '', signal),
     enabled: Boolean(ref),
-    refetchInterval: TASKS_POLL_MS,
+    refetchInterval: livePollMs,
   })
 }
 
@@ -196,7 +197,7 @@ export function useChannels() {
   return useQuery({
     queryKey: queryKeys.channels,
     queryFn: async () => (await msg.channels()).channels,
-    refetchInterval: TASKS_POLL_MS,
+    refetchInterval: livePollMs,
   })
 }
 
@@ -344,4 +345,15 @@ export function useParticipants(channel: string | undefined) {
     enabled: Boolean(channel),
     refetchInterval: TASKS_POLL_MS,
   })
+}
+
+// ---------- live events ----------
+
+// Adds a message from GET /api/events to its channel's feed, if loaded.
+// The cursor stays: the wait loop still reports the message (deduped), so
+// nothing between the last read and this message is skipped.
+export function addPostedMessage(queryClient: QueryClient, message: Message) {
+  queryClient.setQueryData<MessagesResponse>(queryKeys.messages(message.channel), (old) =>
+    old ? appendMessages(old, [message], old.cursor) : old,
+  )
 }

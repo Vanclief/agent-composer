@@ -96,8 +96,12 @@ Each page sets the top bar title with `usePageTitle('…')` from
   A task's `status` (`open`, `running`, `done`) is computed by the server; a
   sandbox's (`starting`, `failed` with `status_error`, `running`, `stopped`,
   `unknown`) is read live. `{id}` accepts an id or a name everywhere.
-- `@/api/hooks`: tasks `useTasks` (polls every 5s, sandboxes embedded newest
-  first), `useTask(nameOrId)`, `useCreateTask` (returns at once; an
+  `notify` (boolean on `TaskView`; optional on `CreateTaskRequest`, default
+  `true`) turns the "Task started" / "Task done" toasts and chime on for that
+  task. The create dialog sends it from "Notify me" in the Order card; the task
+  header shows a bell chip when it is on.
+- `@/api/hooks`: tasks `useTasks` (polls every 5s, or 30s while the live
+  event stream is connected; sandboxes embedded newest first), `useTask(nameOrId)`, `useCreateTask` (returns at once; an
   optional `sandbox` comes back `starting`), `useDoneTask`, `useDeleteTask`
   (deletes its sandboxes too), `useAllocate(task)` (201, `starting`, then
   `running`); sandboxes `useSandboxes`, `useSandbox(nameOrId)`,
@@ -118,6 +122,43 @@ Each page sets the top bar title with `usePageTitle('…')` from
   closes with reason `job completed` when the program exits.
 - After `docs/openapi.yaml` changes, run `npm run types` and commit
   `src/api/schema.d.ts`. `npm run check` fails while it is stale.
+
+## Live events
+
+`GET /api/events` is a server-sent events stream (`text/event-stream`). Each
+event has `event: <type>`, `data: <json>` and an `id` (the event number); the
+server sends a comment every 20s as a heartbeat. The panel does not rely on
+replay: after a drop it refetches tasks, sandboxes and channels.
+
+| Type             | `data`                                    | Sent when                                                                                                   |
+| ---------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `task.created`   | `{ "task": TaskView }`                    | a task is created (after its sandbox, if any, is allocated)                                                 |
+| `task.done`      | `{ "task": TaskView, "summary": string }` | a task is marked done; `summary` is the last message in `#<task>` from neither a human nor `agc`, else `""` |
+| `sandbox.status` | `{ "sandbox": SandboxView }`              | every status change: starting→running, →failed, stop, start, and delete (with status `"deleted"`)           |
+| `message.posted` | `{ "message": Message }`                  | a message is posted in any channel                                                                          |
+
+- `@/api/events` (`useLiveEvents(onEvent)`): the app's one `EventSource`,
+  opened by the shell (`src/shell/layout.tsx`). Each event invalidates the
+  queries it changes (tasks and sandboxes roots for task and sandbox events;
+  channels and participants for messages, and the message is appended to
+  its channel's feed), so every page refreshes itself. Don't open another
+  stream in a feature; read the cache.
+- `@/api/live`: whether the stream is connected (`useLiveConnected`) and
+  `livePollMs`, the polling fallback for tasks, sandboxes and channels: 5s
+  without the stream, 30s with it. EventSource retries network drops itself;
+  when it gives up (an HTTP error) the panel reopens it with backoff, 1s up
+  to 30s.
+- Top bar: a dot, green `live` while connected, amber `live: reconnecting`
+  otherwise (`data-testid="live-status"`, `data-state`), and the speaker
+  toggle (`data-testid="sound-toggle"`, localStorage `agc.panel.sound`
+  `on`/`off`, default on).
+- Notifications (`src/shell/notifications.tsx`), only for tasks with
+  `notify` true: a top-right toast "Task started" (title, assignee (model),
+  sandbox) on `task.created`, and "Task done" (title, the summary's first 240
+  characters, "Show more") on `task.done`, each with an "Open" action to
+  `/tasks/<name>`. Both play a two-tone Web Audio chime (`src/shell/sound.ts`,
+  no asset); before the page's first click or key press the browser keeps
+  audio suspended, so the chime waits for it.
 
 ## Commands (run in `panel/`)
 
@@ -168,6 +209,12 @@ returns at once. An allocated sandbox (`POST /api/tasks/{id}/sandboxes`, or
 `sandbox` on create) answers 201 `starting` for 2s, then `running`, and
 starts its `command` as the job `agent`. The terminal WebSocket echoes input
 and acknowledges resize frames.
+
+`GET /api/events` streams the four live events from the mock's own
+operations (create, boot, stop/start/delete, done, post) with the 20s
+heartbeat. `notify` is true on every seeded task except `docs-pass`. Mock
+only: `POST /api/msg/join` with a `task` joins as that task's agent (not
+human), so a test can post the closing message `task.done` summarizes.
 
 ## Serving from agc
 

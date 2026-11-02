@@ -78,6 +78,13 @@ export function TaskPage() {
             <ManagerChip task={data} />
             <OwnerChip task={data} />
             <ForChip task={data} />
+            {data.notify ? (
+              <span data-testid="notify-chip" className="inline-flex">
+                <IconChip icon={conceptIcons.notify} concept="notify" title="Notify: toast and sound on start and done">
+                  notify
+                </IconChip>
+              </span>
+            ) : null}
           </div>
         </div>
         <TaskActions task={data} actions={actions} onDeleted={() => navigate('/tasks')} className="ml-auto shrink-0" />

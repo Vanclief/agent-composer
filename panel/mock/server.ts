@@ -43,6 +43,9 @@ type Task = {
   manager: string
   owner: string
   for: string
+  // Whether the panel notifies (toast and sound) when the task starts and
+  // when it is done.
+  notify: boolean
   done_at: string | null
   created_at: string
   updated_at: string
@@ -110,6 +113,8 @@ const PARTICIPANT_NAME_RE = /^[a-z][a-z0-9_-]{0,31}$/
 const CHANNEL_RE = /^#[a-z0-9][a-z0-9_-]{0,63}$/
 const BOOT_MS = 2000
 const DEFAULT_WAIT_MS = 30_000
+// GET /api/events sends a comment this often so proxies keep it open.
+const HEARTBEAT_MS = 20_000
 
 class HttpError extends Error {
   status: number
@@ -200,6 +205,23 @@ function createState() {
   const messages: Message[] = []
   let waiters: Waiter[] = []
   let nextMessageId = 1
+  // GET /api/events listeners, each handed ready-to-write SSE frames.
+  const subscribers = new Set<(frame: string) => void>()
+  let nextEventId = 1
+
+  // One server-sent event to every open /api/events stream; id is the
+  // event number.
+  function emit(type: string, data: unknown) {
+    const frame = `id: ${nextEventId}\nevent: ${type}\ndata: ${JSON.stringify(data)}\n\n`
+    nextEventId += 1
+    for (const write of subscribers) {
+      write(frame)
+    }
+  }
+
+  function emitSandbox(sandbox: Sandbox) {
+    emit('sandbox.status', { sandbox: sandboxView(sandbox) })
+  }
 
   function addTask(title: string, name: string, fields: Partial<Task>, ageMs: number) {
     const at = iso(Date.now() - ageMs)
@@ -213,6 +235,7 @@ function createState() {
       manager: '',
       owner: '',
       for: '',
+      notify: true,
       done_at: null,
       created_at: at,
       updated_at: at,
@@ -282,6 +305,14 @@ function createState() {
     const sandbox = addSandbox(task, nextSandboxName(task), spec, command, 0)
     sandbox.booted_at = null
     readyAt.set(sandbox.name, Date.now() + BOOT_MS)
+    emitSandbox(sandbox)
+    // Booting is lazy (sandboxView); this reads it once the boot is over,
+    // so streams see starting -> running without anyone polling.
+    setTimeout(() => {
+      if (sandboxes.get(sandbox.name) === sandbox) {
+        emitSandbox(sandbox)
+      }
+    }, BOOT_MS + 20).unref()
     return sandbox
   }
 
@@ -370,6 +401,7 @@ function createState() {
   }
 
   function deleteSandbox(sandbox: Sandbox) {
+    emit('sandbox.status', { sandbox: { ...sandboxView(sandbox), status: 'deleted' } })
     sandboxes.delete(sandbox.name)
     terminals.delete(sandbox.name)
     readyAt.delete(sandbox.name)
@@ -396,6 +428,7 @@ function createState() {
     }
     nextMessageId += 1
     messages.push(m)
+    emit('message.posted', { message: m })
     const woken = waiters.filter((w) => w.channel === channel)
     waiters = waiters.filter((w) => w.channel !== channel)
     for (const w of woken) {
@@ -470,6 +503,7 @@ function createState() {
         model: 'gpt-6.1-sol',
         manager: 'franco',
         owner: 'franco',
+        notify: false,
         done_at: iso(Date.now() - 86_400_000),
       },
       2 * 86_400_000,
@@ -556,6 +590,29 @@ function createState() {
     removeWaiter(w: Waiter) {
       waiters = waiters.filter((x) => x !== w)
     },
+    emit,
+    emitSandbox,
+    // Returns the unsubscribe.
+    subscribe(write: (frame: string) => void) {
+      subscribers.add(write)
+      return () => {
+        subscribers.delete(write)
+      }
+    },
+    // The agent's closing words for task.done: the last message in
+    // #<task> from someone neither human nor agc, else "".
+    summary(task: Task) {
+      for (let i = messages.length - 1; i >= 0; i -= 1) {
+        const m = messages[i]
+        if (m.channel !== '#' + task.name || m.from === 'agc') {
+          continue
+        }
+        if (participants.get(m.participant_id)?.human === false) {
+          return m.body
+        }
+      }
+      return ''
+    },
   }
 }
 
@@ -624,7 +681,9 @@ async function tasksAPI(state: State, method: string, rest: string[], req: Incom
     }
     task.done_at = iso()
     task.updated_at = task.done_at
-    return state.taskView(task)
+    const view = state.taskView(task)
+    state.emit('task.done', { task: view, summary: state.summary(task) })
+    return view
   }
   if (rest.length === 2 && method === 'POST' && rest[1] === 'sandboxes') {
     const request = sandboxRequest(await readJSON(req, apiError))
@@ -672,6 +731,8 @@ function taskFields(body: Record<string, unknown>) {
     manager: str(body.manager).trim() || 'franco',
     owner: str(body.owner).trim() || 'franco',
     for: str(body.for),
+    // Default true: only an explicit false turns notifications off.
+    notify: body.notify !== false,
   }
 }
 
@@ -698,7 +759,9 @@ function createTask(state: State, body: Record<string, unknown>) {
   if (request) {
     state.allocate(task, request.spec, request.command)
   }
-  return state.taskView(task)
+  const view = state.taskView(task)
+  state.emit('task.created', { task: view })
+  return view
 }
 
 async function sandboxesAPI(state: State, method: string, rest: string[], req: IncomingMessage) {
@@ -726,6 +789,7 @@ async function sandboxesAPI(state: State, method: string, rest: string[], req: I
     for (const job of state.terminals.get(sandbox.name) ?? []) {
       job.running = false
     }
+    state.emitSandbox(sandbox)
     return state.sandboxView(sandbox)
   }
   if (rest.length === 2 && method === 'POST' && rest[1] === 'start') {
@@ -734,6 +798,7 @@ async function sandboxesAPI(state: State, method: string, rest: string[], req: I
     }
     sandbox.runtime = 'running'
     sandbox.stopped_at = null
+    state.emitSandbox(sandbox)
     return state.sandboxView(sandbox)
   }
   if (rest.length === 2 && rest[1] === 'terminals') {
@@ -881,7 +946,10 @@ async function msgAPI(state: State, method: string, verb: string, url: URL, req:
         throw msgError(409, `name @${name} is already in use`)
       }
     }
-    return state.join(name, '', true)
+    // Mock only: joining with a task joins as that task's agent (not
+    // human), as an agent in its sandbox would, so task.done has a summary.
+    const task = str(body.task)
+    return state.join(name, task, task === '')
   }
 
   if (verb === 'leave') {
@@ -934,6 +1002,10 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
     send(res, 404, { message: 'Not Found' })
     return
   }
+  if (parts[1] === 'events' && parts.length === 2 && method === 'GET') {
+    streamEvents(state, req, res)
+    return
+  }
 
   try {
     let body: unknown
@@ -968,6 +1040,24 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
     console.error(err)
     send(res, 500, { error: { code: 'EINTERNAL', message: String(err), request_id: 'mock-' + hex(4) } })
   }
+}
+
+// GET /api/events: server-sent events (task.created, task.done,
+// sandbox.status, message.posted), each with an id, and a comment every
+// 20s as a heartbeat. Missed events are not replayed on reconnect.
+function streamEvents(state: State, req: IncomingMessage, res: ServerResponse) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  })
+  res.write(': connected\n\n')
+  const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), HEARTBEAT_MS)
+  const unsubscribe = state.subscribe((frame) => res.write(frame))
+  req.on('close', () => {
+    clearInterval(heartbeat)
+    unsubscribe()
+  })
 }
 
 // /api/sandboxes/:id/terminals/:job/ws. Binary frames are terminal bytes both
