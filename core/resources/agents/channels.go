@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/vanclief/ez"
@@ -174,4 +175,39 @@ func dedupe(values []string) []string {
 	}
 
 	return out
+}
+
+// Asked is every channel outside channels where the agent started a
+// thread (ADR 0016 item 6): a reply there is a turn for it
+// (msgmodels.AnswerFor), so its home waits on these channels too and is
+// granted them, but takes only the replies in its own threads. In
+// practice it is the owner's inbox #<owner>, the one channel an agent may
+// post in without reading it.
+func (api *API) Asked(ctx context.Context, record *agent.Agent, channels []string) ([]string, error) {
+	started := []string{}
+
+	err := api.db.NewSelect().
+		Model((*msgmodels.Message)(nil)).
+		ColumnExpr("DISTINCT channel").
+		Where("reply_to IS NULL").
+		Where(`"from" = ?`, record.Name).
+		Where("human = ?", false).
+		Where("task = ''").
+		Where("agent <> ''").
+		Order("channel ASC").
+		Scan(ctx, &started)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	asked := []string{}
+	for _, channel := range started {
+		if slices.Contains(channels, channel) {
+			continue
+		}
+
+		asked = append(asked, channel)
+	}
+
+	return asked, nil
 }
