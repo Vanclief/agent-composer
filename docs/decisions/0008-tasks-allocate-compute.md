@@ -60,7 +60,10 @@ is allocated, compute to get done. The VM is not the task.
    writes `/home/agent/TASK.md` (the task's title and brief) and the
    harness pre-acceptance config, runs `setup`, sets `booted_at`, then, if
    `command` is set, starts it as a TTY job named `agent`. A failure sets
-   `boot_error` and discards the sandbox. `POST /api/tasks` accepts an
+   `boot_error` and discards the sandbox. `start` boots a stopped sandbox
+   from its disk and starts `command` again as the job, unless a running
+   job already runs it; a job that cannot start fails the start and leaves
+   the sandbox stopped, its disk kept. `POST /api/tasks` accepts an
    optional `sandbox` object and allocates it the same way after the insert, so
    one call still makes a working task.
 
