@@ -13,7 +13,7 @@ import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { StatusPill, statusTier } from '@/components/status-pill'
 import { cn } from '@/lib/utils'
 
-import { ActChip, WaitsOn, type Attention } from './attention'
+import { ActChip, AttentionMark, WaitsOn, type Attention } from './attention'
 import { assignedToHarness, shortAge } from './format'
 import { ForChip } from './TaskChips'
 
@@ -32,13 +32,7 @@ export function TaskRow({ task, attention }: { task: TaskView; attention?: Atten
       data-attention={mine ? 'me' : other ? 'other' : undefined}
       className="relative flex flex-col gap-1 px-3 py-2 text-sm transition-colors focus-within:z-10 hover:bg-zinc-500/5 has-[a:focus-visible]:rounded-md has-[a:focus-visible]:ring-1 has-[a:focus-visible]:ring-violet-500/70 dark:hover:bg-zinc-500/10"
     >
-      {mine && (
-        <span
-          aria-hidden
-          data-testid="attention-mark"
-          className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-amber-500 shadow-[0_0_6px_1px] shadow-amber-500/60"
-        />
-      )}
+      {mine && <AttentionMark />}
       <div className="flex items-center gap-3">
         <div className="flex shrink-0 items-center gap-1.5">
           <div data-testid="task-status" className="flex w-20 shrink-0">

@@ -51,9 +51,19 @@ type Task = {
   accept: string[]
   delivered_at: string | null
   summary: string
+  // The last delivery's report; null with a summary alone.
+  report: Report | null
   accepted_by: string
   created_at: string
   updated_at: string
+}
+
+type Report = {
+  criteria: { met: 'yes' | 'no' | 'partly'; note: string }[]
+  changes?: { branch: string; sha: string; files?: number }
+  checks: { name: string; passed: boolean; note: string }[]
+  left_out: { what: string; why: string }[]
+  needs: string[]
 }
 
 // A sandbox row plus the runtime's word for it (running, stopped,
@@ -256,6 +266,7 @@ function createState() {
       accept: [],
       delivered_at: null,
       summary: '',
+      report: null,
       accepted_by: '',
       created_at: at,
       updated_at: at,
@@ -500,9 +511,27 @@ function createState() {
         manager: 'agent-composer-da',
         owner: 'franco',
         for: 'attach-rulesets-to-task-specs',
-        accept: ['`go test ./...` passes', 'every finding is posted in #review-42'],
+        accept: [
+          '`go test ./...` passes',
+          'every finding is posted in #review-42',
+          'the PR is approved or has changes requested',
+        ],
         delivered_at: iso(Date.now() - 5 * 60_000),
         summary: 'Reviewed PR 42: two findings, both fixed on agc/review-42.',
+        report: {
+          criteria: [
+            { met: 'yes', note: 'All packages pass on agc/review-42.' },
+            { met: 'partly', note: 'Two of three posted; the flaky one is only in the summary.' },
+            { met: 'no', note: 'Not approved: needs a maintainer with write access.' },
+          ],
+          changes: { branch: 'agc/review-42', sha: '3f9c2ab71e04d5c8b6a1f0e2d4c7b9a8e5f1d203', files: 4 },
+          checks: [
+            { name: 'go test ./...', passed: true, note: '312 tests' },
+            { name: 'go vet ./...', passed: false, note: 'workflow/loop.go: unreachable code' },
+          ],
+          left_out: [{ what: 'The flaky third failure', why: 'Did not reproduce in 20 runs.' }],
+          needs: ['Approve PR 42 on GitHub', 'Decide whether the vet warning blocks the merge'],
+        },
       },
       40 * 60_000,
     )
@@ -535,6 +564,7 @@ function createState() {
       'docs-pass',
       {
         brief: 'Bring docs/ up to date with the REST API.',
+        accept: ['every route in docs/openapi.yaml is described in docs/'],
         assignee: 'codex_cli',
         model: 'gpt-6.1-sol',
         manager: 'franco',
@@ -829,6 +859,7 @@ async function tasksAPI(state: State, method: string, rest: string[], req: Incom
     }
     task.delivered_at = iso()
     task.summary = summary
+    task.report = body.report && typeof body.report === 'object' ? (body.report as Report) : null
     task.updated_at = task.delivered_at
     state.post('#' + task.name, state.agc(), `Delivered: ${summary}`)
     return state.taskView(task)

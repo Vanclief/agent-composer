@@ -226,35 +226,132 @@ test('allocate compute from a saved spec adds a starting sandbox', async ({ page
   await expect(page.getByRole('region', { name: 'Task work' }).getByText('No sandbox allocated yet')).toBeVisible()
 })
 
-test('the rail lists the criteria as unchecked boxes, and hides them when there are none', async ({
+test('the rail lists the criteria as unchecked boxes until delivered, and hides them when there are none', async ({
   page,
   request,
 }) => {
-  await page.goto('/panel/tasks/review-42')
+  await page.goto('/panel/tasks/flaky-ci')
   const criteria = page.getByRole('region', { name: 'Accepted when' })
   await expect(criteria.getByRole('heading', { name: 'Accepted when' })).toBeVisible()
   await expect(criteria).toContainText('agc does not check these; the manager or owner does')
   const boxes = criteria.getByRole('checkbox')
-  await expect(boxes).toHaveCount(2)
-  await expect(criteria.getByTestId('criterion')).toHaveText([
-    '`go test ./...` passes',
-    'every finding is posted in #review-42',
-  ])
-  for (const box of await boxes.all()) {
-    await expect(box).not.toBeChecked()
-  }
-  // Delivered, not accepted: the summary shows, no verdict yet.
+  await expect(boxes).toHaveCount(1)
+  await expect(criteria.getByTestId('criterion')).toHaveText(['CI passes ten runs in a row'])
+  await expect(boxes).not.toBeChecked()
+  await expect(page.getByRole('region', { name: 'Review' })).toHaveCount(0)
+
+  // Delivered: the Review section takes the criteria; the summary shows, no
+  // verdict yet.
+  await page.goto('/panel/tasks/review-42')
+  await expect(page.getByRole('region', { name: 'Accepted when' })).toHaveCount(0)
   await expect(page.getByTestId('summary')).toHaveText('Reviewed PR 42: two findings, both fixed on agc/review-42.')
   await expect(page.getByTestId('accepted')).toHaveCount(0)
-
-  await page.goto('/panel/tasks/flaky-ci')
-  await expect(page.getByRole('region', { name: 'Accepted when' }).getByRole('checkbox')).toHaveCount(1)
 
   const plain = await createTask(request, unique('No criteria'))
   await page.goto(`/panel/tasks/${plain.name}`)
   await expect(page.getByTestId('brief')).toHaveText('Do it.')
   await expect(page.getByRole('region', { name: 'Accepted when' })).toHaveCount(0)
   await expect(page.getByRole('region', { name: 'Delivery' })).toHaveCount(0)
+})
+
+// ---------- review: what the reviewer accepts ----------
+
+test('review lists each criterion with the report answer as a light, in order', async ({ page }) => {
+  await page.goto('/panel/tasks/review-42')
+  const review = page.getByRole('region', { name: 'Review' })
+  const rows = review.getByTestId('criterion')
+  await expect(rows).toHaveCount(3)
+  await expect(rows.nth(0)).toHaveAttribute('data-met', 'yes')
+  await expect(rows.nth(1)).toHaveAttribute('data-met', 'partly')
+  await expect(rows.nth(2)).toHaveAttribute('data-met', 'no')
+  await expect(rows.nth(0)).toContainText('`go test ./...` passes')
+  await expect(rows.nth(0)).toContainText('All packages pass on agc/review-42.')
+  await expect(rows.nth(2).locator('[data-light="no"]')).toBeVisible()
+  await expect(review.getByTestId('empty-light')).toHaveCount(0)
+
+  // The section sits above the brief, and the summary right under it.
+  const reviewBox = (await review.boundingBox())!
+  const summaryBox = (await page.getByTestId('summary').boundingBox())!
+  const briefBox = (await page.getByTestId('brief').boundingBox())!
+  expect(reviewBox.y + reviewBox.height).toBeLessThanOrEqual(summaryBox.y)
+  expect(summaryBox.y).toBeLessThan(briefBox.y)
+
+  // Checks, left out: one row each, the failed check lit red.
+  await expect(review.getByTestId('check')).toHaveCount(2)
+  await expect(review.locator('[data-testid="check"][data-passed="false"] [data-light="no"]')).toHaveCount(1)
+  await expect(review.getByTestId('check').nth(1)).toContainText('go vet ./...')
+  await expect(review.getByTestId('left-out')).toHaveText(['The flaky third failureDid not reproduce in 20 runs.'])
+})
+
+test('review links the branch to the GitHub compare and shows the short sha', async ({ page }) => {
+  await page.goto('/panel/tasks/review-42')
+  const branch = page.getByTestId('changes-branch')
+  await expect(branch).toHaveText('agc/review-42')
+  await expect(branch).toHaveAttribute(
+    'href',
+    'https://github.com/vanclief/agent-composer/compare/master...agc/review-42',
+  )
+  await expect(branch).toHaveAttribute('target', '_blank')
+  await expect(page.getByTestId('changes-sha')).toHaveText('3f9c2ab')
+  await expect(page.getByTestId('changes-files')).toHaveText('4 files')
+})
+
+test('needs you rows carry the attention mark', async ({ page }) => {
+  await page.goto('/panel/tasks/review-42')
+  const needs = page.getByRole('region', { name: 'Review' }).getByTestId('need')
+  await expect(needs).toHaveText(['Approve PR 42 on GitHub', 'Decide whether the vet warning blocks the merge'])
+  for (const need of await needs.all()) {
+    await expect(need.getByTestId('attention-mark')).toHaveCount(1)
+  }
+})
+
+test('a report with a no puts a dim not-met count next to Accept, which stays enabled', async ({ page }) => {
+  await page.goto('/panel/tasks/review-42')
+  const header = page.getByTestId('task-header')
+  await expect(header.getByTestId('not-met')).toHaveText('1 not met')
+  await expect(header.getByRole('button', { name: 'Accept', exact: true })).toBeEnabled()
+})
+
+test('with no report every criterion shows an empty slot and no report parts', async ({ page, request }) => {
+  // A done fixture delivered before reports: its criterion has a slot.
+  await page.goto('/panel/tasks/docs-pass')
+  const done = page.getByRole('region', { name: 'Review' })
+  await expect(done.getByTestId('criterion')).toHaveText(['every route in docs/openapi.yaml is described in docs/'])
+  await expect(done.getByTestId('empty-light')).toHaveCount(1)
+
+  const task = await createTask(request, unique('No report'), { accept: ['one thing', 'another thing'] })
+  const delivered = await request.post(`/api/tasks/${task.name}/deliver`, { data: { summary: 'Done.' } })
+  expect((await delivered.json()).report).toBeNull()
+  await page.goto(`/panel/tasks/${task.name}`)
+  const review = page.getByRole('region', { name: 'Review' })
+  const rows = review.getByTestId('criterion')
+  await expect(rows).toHaveText(['one thing', 'another thing'])
+  await expect(review.getByTestId('empty-light')).toHaveCount(2)
+  await expect(rows.first()).not.toHaveAttribute('data-met')
+  await expect(review.getByTestId('changes')).toHaveCount(0)
+  await expect(review.getByTestId('need')).toHaveCount(0)
+  await expect(page.getByTestId('not-met')).toHaveCount(0)
+})
+
+test('a delivered report with two no answers counts both', async ({ page, request }) => {
+  const task = await createTask(request, unique('Two no'), { accept: ['a', 'b', 'c'] })
+  const report = {
+    criteria: [
+      { met: 'no', note: '' },
+      { met: 'yes', note: '' },
+      { met: 'no', note: '' },
+    ],
+    checks: [],
+    left_out: [],
+    needs: [],
+  }
+  await request.post(`/api/tasks/${task.name}/deliver`, { data: { summary: 'Done.', report } })
+  await page.goto(`/panel/tasks/${task.name}`)
+  await expect(page.getByTestId('not-met')).toHaveText('2 not met')
+  // Empty lists show nothing, not even a label.
+  const review = page.getByRole('region', { name: 'Review' })
+  await expect(review.getByRole('heading', { name: 'Checks' })).toHaveCount(0)
+  await expect(review.getByRole('heading', { name: 'Needs you' })).toHaveCount(0)
 })
 
 test('the review status shows verbatim in its own amber pill', async ({ page }) => {
