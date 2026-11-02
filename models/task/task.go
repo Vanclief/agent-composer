@@ -151,7 +151,9 @@ func (t *Task) MarkDone(ctx context.Context, db bun.IDB) error {
 		return nil
 	}
 
-	now := time.Now().UTC()
+	// The database keeps microseconds, so the returned done_at matches a
+	// later read of it.
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	t.DoneAt = &now
 	t.UpdatedAt = now
 

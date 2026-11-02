@@ -381,9 +381,17 @@ func TestDeleteRemovesSandboxesThenTask(t *testing.T) {
 		t.Fatalf("delete response %+v", deleted)
 	}
 
+	// The two boots run concurrently, so their creates come in either
+	// order; the delete then goes newest first.
 	calls := env.rt.Calls()
-	wantCalls := []string{"create review-42", "create review-42-2", "stop review-42-2", "remove review-42-2", "stop review-42", "remove review-42"}
-	if !reflect.DeepEqual(calls, wantCalls) {
+	creates := map[string]bool{}
+	if len(calls) > 2 {
+		creates[calls[0]] = true
+		creates[calls[1]] = true
+	}
+	wantCreates := map[string]bool{"create review-42": true, "create review-42-2": true}
+	wantDeletes := []string{"stop review-42-2", "remove review-42-2", "stop review-42", "remove review-42"}
+	if len(calls) != 6 || !reflect.DeepEqual(creates, wantCreates) || !reflect.DeepEqual(calls[2:], wantDeletes) {
 		t.Fatalf("calls = %q", calls)
 	}
 

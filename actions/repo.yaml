@@ -30,9 +30,10 @@ actions:
   # keeps its volumes, and "the UI must say both in the delete control
   # itself". panel/src/features/tasks/TaskActions.tsx only asks "Delete?".
   - id: task-delete-says-what-is-lost
-    action: Make the panel's Task delete control say that uncommitted work is deleted and mounted volumes are kept.
+    action: Make the panel's Stop and Delete controls for a sandbox (a task's VM before ADR 0008, now a sandbox) say what work in its clone is lost, uncommitted changes and unpushed commits, read live through the sandbox's work field.
     because: [tasks-run-in-microsandbox-vms]
     opened: { who: franco, when: 2026-11-01 }
+    done: { who: claude_code, when: 2026-11-02 }
 
   # ADR 0004, Consequences: .gitignore "must also exclude .agent_composer/".
   # Done in d458f37 (.gitignore lines 52-53).

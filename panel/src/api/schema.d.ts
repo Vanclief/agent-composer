@@ -301,7 +301,7 @@ export interface paths {
         };
         /**
          * List sandboxes
-         * @description Returns every sandbox, newest first, each with its task and status.
+         * @description Returns every sandbox, newest first, each with its task and status. `work` is null unless `work=1` asks for it, since checking runs git in every running sandbox.
          */
         get: operations["listSandboxes"];
         put?: never;
@@ -319,7 +319,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Retrieve a sandbox */
+        /**
+         * Retrieve a sandbox
+         * @description The sandbox with its status and, when it is running and has a repo, the work in its clone.
+         */
         get: operations["getSandbox"];
         put?: never;
         post?: never;
@@ -872,6 +875,16 @@ export interface components {
             stopped_at: string | null;
             /** Format: date-time */
             created_at: string;
+            /** @description What stopping or deleting the sandbox would lose (ADR 0008 item 6), read live from its clone. Set by GET /sandboxes/{id} and by the list with work=1 when the sandbox is running and has a repo; null otherwise, and null when the check failed. */
+            work: components["schemas"]["SandboxWork"] | null;
+        };
+        SandboxWork: {
+            /** @description The clone has uncommitted changes (git status --porcelain printed a line). */
+            dirty: boolean;
+            /** @description Commits reachable from HEAD that are on no remote branch (git rev-list --count HEAD --not --remotes), with or without an upstream. */
+            unpushed: number;
+            /** Format: date-time */
+            checked_at: string;
         };
         DeleteSandboxResponse: {
             deleted: boolean;
@@ -1948,7 +1961,10 @@ export interface operations {
     };
     listSandboxes: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 1 to check each running clone for unpushed work. */
+                work?: "1" | "true";
+            };
             header?: never;
             path?: never;
             cookie?: never;

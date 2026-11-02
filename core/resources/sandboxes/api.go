@@ -138,6 +138,10 @@ type SandboxView struct {
 	BootedAt     *time.Time `json:"booted_at"`
 	StoppedAt    *time.Time `json:"stopped_at"`
 	CreatedAt    time.Time  `json:"created_at"`
+	// Work is the clone's unpushed work, set only by Get and by List with
+	// Work, when the sandbox is running and has a repo; null otherwise
+	// and when the check fails.
+	Work *Work `json:"work"`
 }
 
 // validateRef checks a request names a sandbox by exactly one of id or

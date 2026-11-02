@@ -8,7 +8,12 @@ import (
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 )
 
-type ListRequest struct{}
+// ListRequest lists every sandbox. Work also checks each running clone for
+// unpushed work, which runs git in every running sandbox, so it is off by
+// default.
+type ListRequest struct {
+	Work bool `json:"-"`
+}
 
 func (r ListRequest) Validate() error {
 	return nil
@@ -35,6 +40,9 @@ func (api *API) List(ctx context.Context, requester interface{}, request *ListRe
 		view, err := api.view(ctx, &records[i], owners.of(&records[i]))
 		if err != nil {
 			return nil, ez.Wrap(err)
+		}
+		if request.Work {
+			api.addWork(ctx, view)
 		}
 		views = append(views, *view)
 	}

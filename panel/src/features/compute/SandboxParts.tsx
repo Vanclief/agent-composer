@@ -8,21 +8,11 @@ import type { SandboxView } from '@/api/tasks'
 import { conceptIcons } from '@/components/concept-icons'
 import { ErrorText } from '@/components/error-text'
 import { IconChip } from '@/components/icon-chip'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 import { formatMemory, sandboxMoment, shortAge } from './format'
+import { ConfirmSandbox } from './LostWork'
 
 // The task the sandbox was allocated to: its icon and title, linking to it.
 export function TaskChip({ task, title, className }: { task: string; title?: string; className?: string }) {
@@ -122,7 +112,8 @@ type SandboxActionsProps = {
 }
 
 // Stop when running, Start when stopped or unknown, and Delete always,
-// behind a dialog. A failed sandbox only gets Delete.
+// behind a dialog. Stop and Delete ask first, saying what work the clone
+// would lose. A failed sandbox only gets Delete.
 export function SandboxActions({ sandbox, onDeleted, className }: SandboxActionsProps) {
   const stop = useStopSandbox()
   const start = useStartSandbox()
@@ -136,10 +127,18 @@ export function SandboxActions({ sandbox, onDeleted, className }: SandboxActions
     <div className={cn('flex flex-col items-end gap-2', className)}>
       <div className="flex items-center gap-2">
         {canStop && (
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => stop.mutate(sandbox.name)}>
-            {stop.isPending ? <Loader2 className="animate-spin" /> : <Square />}
-            Stop
-          </Button>
+          <ConfirmSandbox
+            sandbox={sandbox.name}
+            verb="Stop"
+            icon={Square}
+            onConfirm={() => stop.mutate(sandbox.name)}
+            trigger={
+              <Button variant="outline" size="sm" disabled={busy}>
+                {stop.isPending ? <Loader2 className="animate-spin" /> : <Square />}
+                Stop
+              </Button>
+            }
+          />
         )}
         {canStart && (
           <Button variant="outline" size="sm" disabled={busy} onClick={() => start.mutate(sandbox.name)}>
@@ -147,8 +146,13 @@ export function SandboxActions({ sandbox, onDeleted, className }: SandboxActions
             Start
           </Button>
         )}
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
+        <ConfirmSandbox
+          sandbox={sandbox.name}
+          verb="Delete"
+          icon={Trash2}
+          destructive
+          onConfirm={() => remove.mutate(sandbox.name, { onSuccess: () => onDeleted?.() })}
+          trigger={
             <Button
               variant="outline"
               size="sm"
@@ -159,24 +163,8 @@ export function SandboxActions({ sandbox, onDeleted, className }: SandboxActions
               {remove.isPending ? <Loader2 className="animate-spin" /> : <Trash2 />}
               Delete
             </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete {sandbox.name}?</AlertDialogTitle>
-              <AlertDialogDescription>Uncommitted work in the sandbox is lost.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                variant="destructive"
-                onClick={() => remove.mutate(sandbox.name, { onSuccess: () => onDeleted?.() })}
-              >
-                <Trash2 />
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          }
+        />
       </div>
       <ErrorText error={error} className="text-xs" />
     </div>

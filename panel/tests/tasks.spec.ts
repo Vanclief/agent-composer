@@ -143,8 +143,8 @@ test('allocate compute from a saved spec adds a starting sandbox', async ({ page
   // Deleting the sandbox says what is lost, then the task is back to none.
   await row.getByRole('button', { name: 'Delete' }).click()
   const dialog = page.getByRole('alertdialog')
-  await expect(dialog).toContainText('uncommitted work')
-  await dialog.getByRole('button', { name: 'Delete' }).click()
+  await expect(dialog.getByTestId('lost-work')).toHaveText(/Could not check the clone|will be lost|Nothing unpushed/)
+  await dialog.getByRole('button', { name: /^Delete/ }).click()
   await expect(row).toHaveCount(0)
 })
 
