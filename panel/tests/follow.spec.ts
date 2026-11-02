@@ -1,7 +1,7 @@
 // Following (src/features/messages/follow.ts): the Talk sidebar lists only
 // channels I opened, posted in or was mentioned in, my inbox and my DMs;
 // Browse lists every channel; notifications only for what is addressed to me.
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test'
 
 function suffix() {
   return `${Date.now().toString(36)}${Math.floor(Math.random() * 1000)}`
@@ -36,6 +36,13 @@ async function actAs(page: Page) {
   const me = `me-${suffix()}`
   await page.addInitScript((n) => localStorage.setItem('agc.panel.human', n), me)
   return me
+}
+
+// Other workers post into the shared mock, so a toast can sit over the
+// top-right controls; dispatch the click instead of moving the mouse.
+async function clickPastToasts(locator: Locator) {
+  await expect(locator).toBeVisible()
+  await locator.dispatchEvent('click')
 }
 
 async function openLive(page: Page, path: string) {
@@ -98,7 +105,7 @@ test('a mention in an unfollowed channel follows it and toasts', async ({ page, 
 
   // Unfollowing drops it until the next mention.
   await row(page, channel).click()
-  await page.getByTestId('follow-toggle').click()
+  await clickPastToasts(page.getByTestId('follow-toggle'))
   await expect(page.getByTestId('follow-toggle')).toHaveText('Follow')
   await expect(row(page, channel)).toHaveCount(0)
   await post(request, agent.id, channel, 'plain follow-up')
@@ -149,10 +156,10 @@ test('Browse lists every channel, filters by name, and the toggle follows and un
   const releases = browse.locator('[data-channel="#releases"]')
   const toggle = releases.getByTestId('follow-toggle')
   await expect(toggle).toHaveText('Follow')
-  await toggle.click()
+  await clickPastToasts(toggle)
   await expect(toggle).toHaveText('Following')
   await expect(row(page, '#releases')).toBeVisible()
-  await toggle.click()
+  await clickPastToasts(toggle)
   await expect(toggle).toHaveText('Follow')
   await expect(row(page, '#releases')).toHaveCount(0)
 
