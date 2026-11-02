@@ -133,3 +133,9 @@ able to read or disrupt everything.
   presence remain out.
 - When a Task is deleted its channel is kept with its history; a new Task
   with the same name continues the same channel. The UI says so on delete.
+
+## Amendment (2026-11-01)
+
+Messages carry a `kind`, `message` or `question`; a reply from anyone other than the asker answers a question.
+This is the one typed message we take on, because an agent that needs an answer must be able to say so,
+and the owner or manager must see what is waiting on them (`GET /api/msg/questions`) instead of rereading channels.

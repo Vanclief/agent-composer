@@ -47,8 +47,9 @@ func TestInstructions(t *testing.T) {
 				"  `agc msg ask '#fix-login' <question>` (or start your answer with\n" +
 				"  `QUESTION:`) so the question shows up as waiting on them, then keep\n" +
 				"  working on what does not depend on the answer.\n" +
-				"- If something needs a decision only franco can make, post it in\n" +
-				"  `#franco` (their inbox) and say so in `#fix-login`; do not wait idle.\n" +
+				"- If something needs a decision only franco can make, ask it in\n" +
+				"  `#franco` (their inbox) with `agc msg ask '#franco' <question>` so it\n" +
+				"  shows up as waiting on them, and say so in `#fix-login`; do not wait idle.\n" +
 				"- Do not modify files outside the repository, and never print secret values.\n" +
 				"- When the work is finished, end by running `agc task deliver \"<summary>\"`\n" +
 				"  (or start your answer with `DONE:` followed by the summary). The task\n" +
@@ -79,8 +80,9 @@ func TestInstructions(t *testing.T) {
 				"  `agc msg ask '#call-the-bank' <question>` (or start your answer with\n" +
 				"  `QUESTION:`) so the question shows up as waiting on them, then keep\n" +
 				"  working on what does not depend on the answer.\n" +
-				"- If something needs a decision only franco can make, post it in\n" +
-				"  `#franco` (their inbox) and say so in `#call-the-bank`; do not wait idle.\n" +
+				"- If something needs a decision only franco can make, ask it in\n" +
+				"  `#franco` (their inbox) with `agc msg ask '#franco' <question>` so it\n" +
+				"  shows up as waiting on them, and say so in `#call-the-bank`; do not wait idle.\n" +
 				"- Do not modify files outside the repository, and never print secret values.\n" +
 				"- When the work is finished, end by running `agc task deliver \"<summary>\"`\n" +
 				"  (or start your answer with `DONE:` followed by the summary). The task\n" +

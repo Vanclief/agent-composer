@@ -348,8 +348,9 @@ func Instructions(owner *taskmodels.Task, spec task.Spec) string {
 	b.WriteString("  working on what does not depend on the answer.\n")
 
 	if owner.Owner != "" {
-		b.WriteString("- If something needs a decision only " + owner.Owner + " can make, post it in\n")
-		b.WriteString("  `#" + owner.Owner + "` (their inbox) and say so in `#" + name + "`; do not wait idle.\n")
+		b.WriteString("- If something needs a decision only " + owner.Owner + " can make, ask it in\n")
+		b.WriteString("  `#" + owner.Owner + "` (their inbox) with `agc msg ask '#" + owner.Owner + "' <question>` so it\n")
+		b.WriteString("  shows up as waiting on them, and say so in `#" + name + "`; do not wait idle.\n")
 	}
 
 	b.WriteString("- Do not modify files outside the repository, and never print secret values.\n")
