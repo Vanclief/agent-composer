@@ -105,6 +105,9 @@ or partly; `changes` with the branch you pushed; `checks` you ran;
 
     agc task deliver "<one or two sentences>" --report report.json
 
+The flag may also come first, as `agc task deliver --report report.json "<summary>"`;
+both orders store the report.
+
 `--report -` reads the report from stdin. agc posts "Delivered: <summary>"
 in `#<task>` followed by the report as a checklist, stores the report on the
 task, and the task is in review; the sandbox keeps running. A report that
