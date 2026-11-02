@@ -92,13 +92,16 @@ function ThinkPage({ kind }: { kind: Kind }) {
               Showing labels without {without.join(', ')}
             </div>
           )}
-          <span
-            title={title}
-            className="inline-flex items-center gap-1.5 text-sm text-zinc-500 tabular-nums dark:text-zinc-400"
-          >
-            <Icon className="size-4" />
-            {data ? itemsOf(data, kind).length : '–'}
-          </span>
+          <div data-testid="think-strip" className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <span
+              title={title}
+              className="inline-flex items-center gap-1.5 text-sm text-zinc-500 tabular-nums dark:text-zinc-400"
+            >
+              <Icon className="size-4" />
+              {data ? itemsOf(data, kind).length : '–'}
+            </span>
+            {data && <LabelCounts kind={kind} data={data} />}
+          </div>
           <ErrorText error={query.error} />
           {query.isPending && (
             <div className="flex flex-col gap-2" aria-label={`Loading ${kind}`}>
@@ -115,6 +118,36 @@ function ThinkPage({ kind }: { kind: Kind }) {
       </div>
       {id && data && <DetailPane key={`${kind}/${id}`} kind={kind} id={id} data={data} without={asked} />}
     </div>
+  )
+}
+
+// The header strip's counts: how many items carry each label, the
+// server's words verbatim, in the order they first appear; evidence has no
+// label, so it counts the retracted pieces.
+function LabelCounts({ kind, data }: { kind: Kind; data: Knowledge }) {
+  const counts = new Map<string, number>()
+  if (kind === 'evidence') {
+    const retracted = data.evidence.filter((e) => e.retracted).length
+    if (retracted > 0) {
+      counts.set('retracted', retracted)
+    }
+  } else {
+    for (const item of itemsOf(data, kind) as { label: string }[]) {
+      counts.set(item.label, (counts.get(item.label) ?? 0) + 1)
+    }
+  }
+  if (counts.size === 0) {
+    return null
+  }
+  return (
+    <span data-testid="label-counts" className="inline-flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+      {[...counts].map(([label, n]) => (
+        <span key={label} data-label-count={label} className="inline-flex items-center gap-1.5">
+          {kind === 'evidence' ? <span className="font-mono">{label}</span> : <LabelMark label={label} />}
+          <b className="font-mono tabular-nums">{String(n).padStart(2, '0')}</b>
+        </span>
+      ))}
+    </span>
   )
 }
 
