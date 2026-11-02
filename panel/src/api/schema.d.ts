@@ -216,13 +216,13 @@ export interface paths {
         };
         /**
          * List tasks
-         * @description Returns every task, newest first, each with its live status.
+         * @description Returns every task, newest first, each with its computed status and its sandboxes.
          */
         get: operations["listTasks"];
         put?: never;
         /**
          * Create a task
-         * @description Creates and boots the sandbox, clones the repo and runs setup. If clone or setup fails the sandbox is removed and the error says so. Missing secrets fail before anything is created, naming the secret.
+         * @description Inserts the task and returns at once. With `sandbox`, a sandbox is allocated after the insert, as POST /tasks/{id}/sandboxes does, and comes back `starting`. Missing secrets fail before anything is created, naming the secret.
          */
         post: operations["createTask"];
         delete?: never;
@@ -244,7 +244,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a task
-         * @description Stops the sandbox if needed and removes it with its disk and uncommitted work. Volumes and the task's channel history are kept.
+         * @description Deletes every sandbox of the task (stopping it if needed, with its disk and uncommitted work), then the task. Volumes and the task's channel history are kept.
          */
         delete: operations["deleteTask"];
         options?: never;
@@ -252,7 +252,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/tasks/{id}/stop": {
+    "/tasks/{id}/done": {
         parameters: {
             query?: never;
             header?: never;
@@ -262,17 +262,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Stop a task
-         * @description Shuts the sandbox down and keeps its disk. The status becomes `stopped`.
+         * Mark a task done
+         * @description Sets `done_at`, the only thing that does; a task already done keeps its first `done_at`. Its sandboxes are left as they are.
          */
-        post: operations["stopTask"];
+        post: operations["doneTask"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/tasks/{id}/start": {
+    "/tasks/{id}/sandboxes": {
         parameters: {
             query?: never;
             header?: never;
@@ -282,10 +282,135 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Start a stopped task
-         * @description Boots the sandbox from its disk with secrets read again from the secrets file.
+         * Allocate compute to a task
+         * @description Inserts a sandbox and returns it `starting`. The first sandbox of a task is named after it, later ones `<task>-2`, `<task>-3`. In the background agc creates the VM, clones the repo, answers the harnesses' first-run prompts, writes /home/agent/TASK.md (title, brief and the instruction to push a branch `agc/<task>` and post in `#<task>`), runs setup, sets `booted_at`, then starts `command` as the first terminal. A failure sets `failed` with `status_error` and removes the VM. Missing secrets fail before anything is created.
          */
-        post: operations["startTask"];
+        post: operations["allocateSandbox"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List sandboxes
+         * @description Returns every sandbox, newest first, each with its task and status.
+         */
+        get: operations["listSandboxes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Retrieve a sandbox */
+        get: operations["getSandbox"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a sandbox
+         * @description Cancels a boot in progress, stops the VM if needed and removes it with its disk and uncommitted work. Volumes and the task's channel history are kept.
+         */
+        delete: operations["deleteSandbox"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/{id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop a sandbox
+         * @description Shuts the VM down and keeps its disk. The status becomes `stopped`. Refused (409) while the sandbox is `starting` or `failed`.
+         */
+        post: operations["stopSandbox"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/{id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a stopped sandbox
+         * @description Boots the VM from its disk with secrets read again from the secrets file. Refused (409) while the sandbox is `starting` or `failed`.
+         */
+        post: operations["startSandbox"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/{id}/terminals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a sandbox's terminals
+         * @description The sandbox's jobs as the runtime reports them.
+         */
+        get: operations["listTerminals"];
+        put?: never;
+        /**
+         * Start a terminal
+         * @description Starts a TTY job in the sandbox that outlives the request and the browser tab.
+         */
+        post: operations["startTerminal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/{id}/terminals/{job}/ws": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Attach to a terminal over WebSocket
+         * @description Upgrades to a WebSocket. Binary frames carry terminal bytes both ways; a text frame {"type":"resize","rows":N,"cols":N} resizes. Recent output is replayed first. The socket closes normally with reason "job completed" when the program exits; closing it detaches and the job keeps running.
+         */
+        get: operations["attachTerminal"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -301,7 +426,7 @@ export interface paths {
         };
         /**
          * List saved specs
-         * @description Saved specs are reusable task.yaml files in ~/.agent_composer/config/specs/<name>.yaml, sorted by name.
+         * @description Saved specs are reusable sandbox specs in ~/.agent_composer/config/specs/<name>.yaml, sorted by name.
          */
         get: operations["listSavedSpecs"];
         put?: never;
@@ -326,7 +451,7 @@ export interface paths {
         get: operations["getSavedSpec"];
         /**
          * Save a spec
-         * @description Validates the YAML as a task.yaml and stores it verbatim, comments included, replacing a saved spec of the same name. The name may be free text; it is saved as its slug ("Backend review" becomes backend-review), which the response returns.
+         * @description Validates the YAML as a sandbox spec and stores it verbatim, comments included, replacing a saved spec of the same name. The name may be free text; it is saved as its slug ("Backend review" becomes backend-review), which the response returns.
          */
         put: operations["saveSpec"];
         post?: never;
@@ -645,7 +770,7 @@ export interface components {
             /** @description Unsaved proposed spec, when one exists. */
             draft?: string;
         };
-        /** @description The task.yaml spec. Secrets are names only, never values. */
+        /** @description The environment block a sandbox boots from (ADR 0003): the sandbox block of a task.yaml without command. Secrets are names only, never values. */
         TaskSpec: {
             /** @description OCI image, default agc-agent. */
             image?: string;
@@ -673,29 +798,85 @@ export interface components {
             id: string;
             /** @description What a human calls the task. */
             title: string;
-            /** @description Slug, also the sandbox name, the task's channel and its socket file. */
+            /** @description Slug, also the task's channel and its first sandbox's name. */
             name: string;
-            spec: components["schemas"]["TaskSpec"];
-            /** @description The runtime's status word, verbatim (for example running or stopped), or unknown when the runtime cannot be asked. */
-            status: string;
-            /** @description Why the status is unknown. */
-            status_error?: string;
+            /** @description What to do and what done looks like, markdown. */
+            brief: string;
+            /** @description A harness id (claude_code, codex_cli) or a person's name; empty is unassigned. */
+            assignee: string;
+            /** @description Id of the knowledge action or decision the task serves; empty for none. */
+            for: string;
+            /**
+             * @description Computed: done when done_at is set, otherwise running when a sandbox is running, otherwise open.
+             * @enum {string}
+             */
+            status: "open" | "running" | "done";
+            /** Format: date-time */
+            done_at: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description The task's sandboxes, newest first. */
+            sandboxes: components["schemas"]["Sandbox"][];
         };
-        /** @description At least one of title or name is required. */
+        /** @description At least one of title or name is required. brief is required unless sandbox is set. */
         CreateTaskRequest: {
             /** @description Up to 120 characters. Defaults to the name. */
             title?: string;
             /** @description 1-63 lowercase letters, digits or -, starting with a letter, and not a UUID. Defaults to the title's slug ("Review facebook ads" becomes review-facebook-ads). */
             name?: string;
+            brief?: string;
+            assignee?: string;
+            for?: string;
+            sandbox?: components["schemas"]["SandboxRequest"];
+        };
+        /** @description The environment fields inline, plus the command the sandbox runs for the task. */
+        SandboxRequest: components["schemas"]["TaskSpec"] & {
+            /** @description Started as the first terminal once booted, split on whitespace, in the repo (or /home/agent without one). Empty starts nothing. */
+            command?: string;
+        };
+        Sandbox: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            task_id: string;
+            /** @description The task's name. */
+            task: string;
+            /** @description The runtime's sandbox name, also its socket file. <task>, then <task>-2, <task>-3. */
+            name: string;
             spec: components["schemas"]["TaskSpec"];
+            command: string;
+            /** @description starting until booted, failed when the boot failed (status_error says why), otherwise the runtime's word verbatim (running, stopped), or unknown when the runtime cannot be asked (status_error says why). */
+            status: string;
+            /** @description Why the status is failed or unknown. */
+            status_error?: string;
+            /** Format: date-time */
+            booted_at: string | null;
+            /** Format: date-time */
+            stopped_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        DeleteSandboxResponse: {
+            deleted: boolean;
+            name: string;
+        };
+        /** @description One interactive job in a sandbox. */
+        Terminal: {
+            id: string;
+            command: string[];
+            running: boolean;
+        };
+        StartTerminalRequest: {
+            /** @description Split on whitespace, e.g. "claude --resume". */
+            command: string;
+            /** @description Working directory. Empty means the sandbox user's default. */
+            dir?: string;
         };
         SavedSpec: {
             name: string;
-            /** @description The task.yaml text, verbatim. */
+            /** @description The sandbox spec YAML, verbatim. */
             yaml: string;
         };
         Secret: {
@@ -1048,6 +1229,8 @@ export interface components {
         WorkflowSlugParam: string;
         /** @description Task UUID or task name. A value that parses as a UUID is looked up by id. */
         TaskIdParam: string;
+        /** @description Sandbox UUID or sandbox name. A value that parses as a UUID is looked up by id. */
+        SandboxIdParam: string;
         /** @description A belief, decision, rule or action id for why; a belief, decision, rule or evidence id for doubt. */
         KnowledgeIdParam: string;
     };
@@ -1652,7 +1835,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The task with its live status. */
+            /** @description The task with its status and sandboxes. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1692,7 +1875,7 @@ export interface operations {
             500: components["responses"]["Error"];
         };
     };
-    stopTask: {
+    doneTask: {
         parameters: {
             query?: never;
             header?: never;
@@ -1704,7 +1887,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The task with its live status. */
+            /** @description The task, now `done`. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1718,7 +1901,7 @@ export interface operations {
             500: components["responses"]["Error"];
         };
     };
-    startTask: {
+    allocateSandbox: {
         parameters: {
             query?: never;
             header?: never;
@@ -1728,18 +1911,235 @@ export interface operations {
             };
             cookie?: never;
         };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxRequest"];
+            };
+        };
+        responses: {
+            /** @description The sandbox, `starting`. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sandbox"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    listSandboxes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         requestBody?: never;
         responses: {
-            /** @description The task with its live status. */
+            /** @description Sandboxes. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Task"];
+                    "application/json": {
+                        sandboxes: components["schemas"]["Sandbox"][];
+                    };
+                };
+            };
+            500: components["responses"]["Error"];
+        };
+    };
+    getSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox UUID or sandbox name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["SandboxIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sandbox with its status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sandbox"];
                 };
             };
             400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    deleteSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox UUID or sandbox name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["SandboxIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The deleted sandbox. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteSandboxResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    stopSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox UUID or sandbox name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["SandboxIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sandbox with its status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sandbox"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    startSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox UUID or sandbox name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["SandboxIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sandbox with its status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sandbox"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    listTerminals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox UUID or sandbox name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["SandboxIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Terminals. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        terminals: components["schemas"]["Terminal"][];
+                    };
+                };
+            };
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    startTerminal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox UUID or sandbox name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["SandboxIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartTerminalRequest"];
+            };
+        };
+        responses: {
+            /** @description The new terminal's job id. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    attachTerminal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox UUID or sandbox name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["SandboxIdParam"];
+                /** @description Terminal job id. */
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Switching to the WebSocket protocol. */
+            101: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             404: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };
@@ -1806,7 +2206,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @description The task.yaml text. */
+                    /** @description The sandbox spec, the sandbox block of a task.yaml at top level. */
                     yaml: string;
                 };
             };
