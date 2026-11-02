@@ -524,6 +524,25 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
+  /defaults:
+    get:
+      tags: [Tasks]
+      operationId: getDefaults
+      summary: Get the task defaults
+      description: >
+        The harness, model and owner a new task gets when it leaves them empty (ADR 0009), after
+        the config file's `defaults:` and AGC_DEFAULT_HARNESS, AGC_DEFAULT_MODEL and
+        AGC_DEFAULT_OWNER; harness and model fall back to built-ins, an unset owner is "".
+        `system` is the messaging name agc itself posts as.
+      responses:
+        '200':
+          description: Defaults.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Defaults'
+        '500':
+          $ref: '#/components/responses/Error'
   /tasks:
     get:
       tags: [Tasks]
@@ -1661,6 +1680,26 @@ components:
           schema:
             $ref: '#/components/schemas/MsgErrorResponse'
   schemas:
+    Defaults:
+      type: object
+      properties:
+        harness:
+          type: string
+          description: Default harness id, e.g. claude_code.
+        model:
+          type: string
+          description: Default model.
+        owner:
+          type: string
+          description: Default owner, "" when unset.
+        system:
+          type: string
+          description: The participant agc posts as (agc).
+      required:
+        - harness
+        - model
+        - owner
+        - system
     ErrorResponse:
       type: object
       properties:

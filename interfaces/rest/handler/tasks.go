@@ -136,3 +136,12 @@ func (h *Handler) DeleteTask(c echo.Context) error {
 
 	return h.JSONResponse(c, op, request, &tasks.DeleteRequest{ID: id, Name: name})
 }
+
+// GET /defaults
+func (h *Handler) GetDefaults(c echo.Context) error {
+	const op = "Handler.GetDefaults"
+
+	request := requests.New(c.Request().Header, c.RealIP())
+
+	return h.JSONResponse(c, op, request, &tasks.GetDefaultsRequest{})
+}

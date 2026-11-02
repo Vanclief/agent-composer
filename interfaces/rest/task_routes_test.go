@@ -50,6 +50,15 @@ func newTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *task
 	t.Setenv("AGC_DEFAULT_HARNESS", "")
 	t.Setenv("AGC_DEFAULT_MODEL", "")
 	t.Setenv("AGC_DEFAULT_OWNER", "franco")
+
+	return serveTaskRoutes(t, rt, secretsPath)
+}
+
+// serveTaskRoutes is newTaskRoutes with the AGC_DEFAULT_* environment left
+// as the caller set it.
+func serveTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *taskRoutes {
+	t.Helper()
+
 	volumes := t.TempDir()
 	t.Setenv(sandboxes.EnvVolumeRoot, volumes)
 
