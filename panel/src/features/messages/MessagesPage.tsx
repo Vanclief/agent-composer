@@ -26,8 +26,10 @@ function InboxHeader() {
       data-testid="inbox-header"
       className="flex items-center gap-1.5 border-b border-border px-4 py-2 text-xs text-muted-foreground"
     >
-      <Icon aria-hidden className={cn('size-3.5', conceptColors.inbox.text)} />
-      {INBOX_LINE}
+      <span data-slot="channel-tab" className="inline-flex items-center gap-1.5">
+        <Icon aria-hidden className={cn('size-3.5', conceptColors.inbox.text)} />
+        {INBOX_LINE}
+      </span>
     </p>
   )
 }
@@ -38,8 +40,10 @@ function FollowHeader({ channel, dm }: { channel: string; dm: boolean }) {
   const color = dm ? conceptColors.human : conceptColors.channel
   return (
     <div data-testid="channel-header" className="flex items-center gap-1.5 border-b border-border px-4 py-1.5 text-xs">
-      <Icon aria-hidden className={cn('size-3.5', color.text)} />
-      <span className="font-mono">{channel}</span>
+      <span data-slot="channel-tab" className="inline-flex items-center gap-1.5">
+        <Icon aria-hidden className={cn('size-3.5', color.text)} />
+        <span className="font-mono">{channel}</span>
+      </span>
       {dm && <span className="text-muted-foreground">Direct · task {dmTask(channel)}</span>}
       <FollowToggle channel={channel} className="ml-auto" />
     </div>

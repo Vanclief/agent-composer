@@ -65,6 +65,8 @@ function IdentityChip({
       }}
       title={joined ? 'Posting as this name. Click to change.' : 'Not joined. Click to change the name.'}
       aria-label={`Identity @${identity.name}`}
+      data-slot="identity"
+      data-joined={joined}
       className={cn(
         'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-xs',
         joined
@@ -118,7 +120,7 @@ export function Composer({ channel, identity, replyTo }: { channel: string; iden
   }
 
   return (
-    <div className="flex shrink-0 flex-col gap-2 border-t border-border p-3">
+    <div data-slot="composer" className="flex shrink-0 flex-col gap-2 border-t border-border p-3">
       {identity.error && !thread && (
         <div className="flex items-start gap-2">
           <ErrorText error={identity.error} className="flex-1" />
@@ -141,7 +143,13 @@ export function Composer({ channel, identity, replyTo }: { channel: string; iden
       />
       <div className="flex items-center gap-2">
         {!thread && <IdentityChip key={identity.name} identity={identity} editing={editing} onEdit={setEditing} />}
-        <Button className={cn('ml-auto', conceptColors.message.solid)} size="sm" disabled={disabled} onClick={send}>
+        <Button
+          data-act="send"
+          className={cn('ml-auto', conceptColors.message.solid)}
+          size="sm"
+          disabled={disabled}
+          onClick={send}
+        >
           <Send /> {label}
         </Button>
       </div>

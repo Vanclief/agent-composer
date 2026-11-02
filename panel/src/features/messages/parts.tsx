@@ -7,6 +7,7 @@ import { Link } from 'react-router'
 
 import type { Message } from '@/api/msg'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
+import { Avatar } from '@/components/avatar'
 import { ErrorText } from '@/components/error-text'
 import { IconChip } from '@/components/icon-chip'
 import { Button } from '@/components/ui/button'
@@ -35,7 +36,7 @@ function RelativeTime({ iso, className }: { iso: string; className?: string }) {
   )
 }
 
-// A human or an agent (its task's icon), in the gutter left of the header.
+// A human or an agent (its task's icon), after the sender's name.
 function SenderIcon({ message }: { message: Message }) {
   const human = !message.task
   const Icon = human ? conceptIcons.human : conceptIcons.task
@@ -43,16 +44,19 @@ function SenderIcon({ message }: { message: Message }) {
     <Icon
       aria-hidden
       data-concept={human ? 'human' : 'task'}
-      className={cn('ml-auto size-4', human ? conceptColors.human.text : conceptColors.task.text)}
+      data-slot="sender-icon"
+      className={cn('size-3.5 shrink-0', human ? conceptColors.human.text : conceptColors.task.text)}
     />
   )
 }
 
-// @name in mono, the agent's task as a link, and when.
-function Header({ message }: { message: Message }) {
+// The sender's avatar, @name, its kind (a human or a task's icon), the
+// agent's task as a link, and when unless the row's time column has it.
+function Header({ message, time = true }: { message: Message; time?: boolean }) {
   const human = !message.task
   return (
-    <div className="flex items-center gap-2">
+    <div data-slot="header" className="flex items-center gap-2">
+      <Avatar name={message.from} size="xs" human={human} />
       <span
         data-testid="author"
         data-kind={human ? 'human' : 'agent'}
@@ -61,6 +65,7 @@ function Header({ message }: { message: Message }) {
       >
         @{message.from}
       </span>
+      <SenderIcon message={message} />
       {!human && (
         <Link to={`/tasks/${encodeURIComponent(message.task)}`} title={`Task ${message.task}`}>
           <IconChip icon={conceptIcons.task} concept="task" className="hover:brightness-125">
@@ -68,7 +73,7 @@ function Header({ message }: { message: Message }) {
           </IconChip>
         </Link>
       )}
-      <RelativeTime iso={message.created_at} />
+      {time && <RelativeTime iso={message.created_at} />}
     </div>
   )
 }
@@ -127,9 +132,9 @@ export function MessageRow({ message, first, inThread }: { message: Message; fir
       data-message-id={message.id}
       className="group relative flex gap-2 rounded-md px-1 py-0.5 hover:bg-zinc-100 dark:hover:bg-zinc-800/40"
     >
-      <div className="flex w-11 shrink-0 justify-end pt-0.5">
+      <div data-slot="stamp" className="flex w-11 shrink-0 justify-end pt-0.5">
         {first ? (
-          <SenderIcon message={message} />
+          <RelativeTime iso={message.created_at} className="text-[10px]" />
         ) : (
           <time
             dateTime={message.created_at}
@@ -141,7 +146,7 @@ export function MessageRow({ message, first, inThread }: { message: Message; fir
         )}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5" title={`#${message.id}`}>
-        {first && <Header message={message} />}
+        {first && <Header message={message} time={false} />}
         <MessageBody body={message.body} />
         {replies.length > 0 && <ThreadFooter message={message} replies={replies} />}
       </div>
@@ -203,8 +208,8 @@ export function SystemLine({ message }: { message: Message }) {
       data-message-id={message.id}
       className="group relative flex gap-2 rounded-md px-1 py-0.5 text-xs text-muted-foreground"
     >
-      <div className="flex w-11 shrink-0 justify-end pt-px">
-        <AgcMark />
+      <div data-slot="stamp" className="flex w-11 shrink-0 justify-end pt-px">
+        <RelativeTime iso={message.created_at} className="text-[10px]" />
       </div>
       <div
         data-testid="system-line"
@@ -215,6 +220,7 @@ export function SystemLine({ message }: { message: Message }) {
         <span data-testid="author" className="sr-only">
           @{message.from}
         </span>
+        <AgcMark />
         {StatusIcon && <StatusIcon aria-hidden data-status-icon={kind} className="mt-0.5 size-3.5 shrink-0" />}
         {kind === 'instructions' ? (
           <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -238,7 +244,6 @@ export function SystemLine({ message }: { message: Message }) {
         ) : (
           <MarkdownText body={message.body} className="flex-1 text-xs leading-4" />
         )}
-        <RelativeTime iso={message.created_at} className="shrink-0 text-[10px]" />
       </div>
     </div>
   )
@@ -297,6 +302,7 @@ function AnswerBox({ question }: { question: Message }) {
           disabled={disabled}
           onClick={answer}
           variant="outline"
+          data-act="answer"
           className={conceptColors.question.selected}
         >
           <conceptIcons.message /> {label}
@@ -319,8 +325,8 @@ export function QuestionCard({ message }: { message: Message }) {
   const color = conceptColors.question
   return (
     <div data-testid="message" data-message-id={message.id} className="group relative flex gap-2 px-1 py-1">
-      <div className="flex w-11 shrink-0 justify-end pt-2">
-        <SenderIcon message={message} />
+      <div data-slot="stamp" className="flex w-11 shrink-0 justify-end pt-2">
+        <RelativeTime iso={message.created_at} className="text-[10px]" />
       </div>
       <div
         data-testid="question-card"
@@ -332,8 +338,11 @@ export function QuestionCard({ message }: { message: Message }) {
         )}
       >
         <div className="flex items-center gap-2">
-          <Icon aria-hidden className={cn('size-4 shrink-0', answeredBy ? 'text-muted-foreground' : color.text)} />
-          <Header message={message} />
+          <span data-slot="kind" className="inline-flex shrink-0 items-center gap-1 text-xs">
+            <Icon aria-hidden className={cn('size-4 shrink-0', answeredBy ? 'text-muted-foreground' : color.text)} />
+            {message.kind}
+          </span>
+          <Header message={message} time={false} />
         </div>
         <MessageBody body={message.body} />
         {answeredBy ? (
