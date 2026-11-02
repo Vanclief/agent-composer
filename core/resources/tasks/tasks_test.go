@@ -25,11 +25,13 @@ import (
 	"github.com/vanclief/agent-composer/task"
 )
 
-// fakeRuntime boots every sandbox as running and records removals.
+// fakeRuntime boots every sandbox as running and records removals. A
+// non-nil gate holds every Create until it is closed.
 type fakeRuntime struct {
 	mu       sync.Mutex
 	statuses map[string]string
 	calls    []string
+	gate     chan struct{}
 }
 
 func (f *fakeRuntime) record(call string) {
@@ -46,6 +48,9 @@ func (f *fakeRuntime) Calls() []string {
 
 func (f *fakeRuntime) Create(ctx context.Context, spec sandbox.Spec) (sandboxes.Sandbox, error) {
 	f.record("create " + spec.Name)
+	if f.gate != nil {
+		<-f.gate
+	}
 	f.mu.Lock()
 	f.statuses[spec.Name] = "running"
 	f.mu.Unlock()
@@ -369,6 +374,60 @@ func TestDeliverAcceptAndReject(t *testing.T) {
 	calls := env.rt.Calls()
 	if len(calls) != 2 || calls[1] != "stop review-42" {
 		t.Fatalf("calls = %q", calls)
+	}
+}
+
+// ADR 0010 item 4: a sandbox still booting when the task is accepted is
+// stopped, with its disk, as soon as its boot finishes.
+func TestAcceptStopsASandboxOnceItHasBooted(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	env.rt.gate = make(chan struct{})
+
+	_, err := env.api.Create(ctx, nil, &CreateRequest{Manager: "orchestrator", Name: "slow", Sandbox: &task.Sandbox{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	view, err := env.api.Accept(ctx, nil, &AcceptRequest{Name: "slow"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Status != StatusDone || view.Sandboxes[0].Status != sandboxes.StatusStarting {
+		t.Fatalf("accepted while booting: %+v", view)
+	}
+
+	close(env.rt.gate)
+	env.api.Sandboxes.Wait()
+
+	view, err = env.api.Get(ctx, nil, &GetRequest{Name: "slow"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sb := view.Sandboxes[0]
+	if sb.Status != sandboxes.StatusStopped || sb.BootedAt == nil || sb.StoppedAt == nil {
+		t.Fatalf("sandbox after its boot: %+v", sb)
+	}
+
+	// Stopped once, never removed: the disk is kept.
+	calls := env.rt.Calls()
+	if !reflect.DeepEqual(calls, []string{"create slow", "stop slow"}) {
+		t.Fatalf("calls = %q", calls)
+	}
+
+	// A boot that ends before any accept is left running.
+	env.rt.gate = nil
+
+	_, err = env.api.Create(ctx, nil, &CreateRequest{Manager: "orchestrator", Name: "quick", Sandbox: &task.Sandbox{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.api.Sandboxes.Wait()
+
+	view, err = env.api.Get(ctx, nil, &GetRequest{Name: "quick"})
+	if err != nil || view.Sandboxes[0].Status != sandboxes.StatusRunning {
+		t.Fatalf("quick: %+v, err %v", view, err)
 	}
 }
 

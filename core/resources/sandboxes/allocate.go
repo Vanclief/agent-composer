@@ -121,9 +121,17 @@ func (api *API) AllocateFor(ctx context.Context, owner *taskmodels.Task, request
 		defer api.boots.Done()
 		defer close(done)
 		defer cancel()
-		defer api.endBoot(record.Name)
 
-		api.boot(bootCtx, record, owner, spec, bindings)
+		booted := api.boot(bootCtx, record, owner, spec, bindings)
+
+		// The boot leaves the booting set before the task is read, so an
+		// accept either sees it booting and leaves it here, or sees it
+		// booted and stops it itself.
+		api.endBoot(record.Name)
+
+		if booted {
+			api.stopIfTaskDone(context.WithoutCancel(bootCtx), record, owner)
+		}
 	}()
 
 	return view, nil
@@ -168,6 +176,15 @@ type boot struct {
 	done   chan struct{}
 }
 
+// isBooting reports whether this process is booting the sandbox.
+func (api *API) isBooting(name string) bool {
+	api.mu.Lock()
+	defer api.mu.Unlock()
+
+	_, ok := api.booting[name]
+	return ok
+}
+
 func (api *API) endBoot(name string) {
 	api.mu.Lock()
 	delete(api.booting, name)
@@ -189,11 +206,12 @@ func (api *API) cancelBoot(name string) {
 	<-b.done
 }
 
-// boot runs the allocation and records a failure as boot_error.
-func (api *API) boot(ctx context.Context, record *taskmodels.Sandbox, owner *taskmodels.Task, spec task.Spec, bindings []secrets.Binding) {
+// boot runs the allocation, records a failure as boot_error, and reports
+// whether the sandbox booted.
+func (api *API) boot(ctx context.Context, record *taskmodels.Sandbox, owner *taskmodels.Task, spec task.Spec, bindings []secrets.Binding) bool {
 	err := api.bootSandbox(ctx, record, owner, spec, bindings)
 	if err == nil {
-		return
+		return true
 	}
 
 	msg := ez.ErrorMessage(err)
@@ -203,6 +221,8 @@ func (api *API) boot(ctx context.Context, record *taskmodels.Sandbox, owner *tas
 	if err != nil {
 		log.Error().Err(err).Str("sandbox", record.Name).Str("boot_error", msg).Msg("cannot record sandbox boot error")
 	}
+
+	return false
 }
 
 func (api *API) bootSandbox(ctx context.Context, record *taskmodels.Sandbox, owner *taskmodels.Task, spec task.Spec, bindings []secrets.Binding) error {

@@ -77,6 +77,8 @@ type API struct {
 	// the tasks API sets it with OnDeliver.
 	deliver DeliverFunc
 
+	// stopping serializes stopOnce.
+	stopping sync.Mutex
 	// naming serializes picking a sandbox name and inserting it.
 	naming sync.Mutex
 	// boots counts allocations still booting.
