@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -110,10 +109,19 @@ func TestSetupAddsTitleToOldTasksTable(t *testing.T) {
 		t.Fatalf("existing task title = %q, want empty", oldTitle)
 	}
 
+	// ADR 0008 gave the old task's spec to a sandbox of the same name.
+	sandbox, err := taskmodels.GetSandboxByName(ctx, controller.DB, "old-task")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(sandbox.Spec) != "{}" || sandbox.BootedAt == nil {
+		t.Fatalf("migrated sandbox = %+v", sandbox)
+	}
+
 	task := &taskmodels.Task{
 		Title: "Review facebook ads",
 		Name:  "review-facebook-ads",
-		Spec:  json.RawMessage(`{}`),
+		Brief: "Find the ads that lose money.",
 	}
 
 	err = task.Insert(ctx, controller.DB)
@@ -140,8 +148,8 @@ func TestSetupOnFreshDatabaseKeepsSingleTitleColumn(t *testing.T) {
 		t.Fatal("fresh tasks table should have exactly one title column")
 	}
 
-	if countAppliedMigrations(t, controller) != 1 {
-		t.Fatal("the title migration should be recorded as applied")
+	if countAppliedMigrations(t, controller) != 2 {
+		t.Fatal("the title and sandboxes migrations should be recorded as applied")
 	}
 }
 

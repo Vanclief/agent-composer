@@ -85,6 +85,7 @@ func Run(ctx context.Context, args []string) error {
 			workflowCommand(),
 			msgCommand(),
 			taskCommand(),
+			sandboxCommand(),
 			rulesCommand(),
 			beliefsCommand(),
 			evidenceCommand(),

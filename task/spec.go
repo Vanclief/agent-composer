@@ -1,6 +1,7 @@
-// Package task defines the Task spec: the YAML block that says what a Task
-// VM boots from and what it may reach
-// (docs/decisions/0003-tasks-run-in-microsandbox-vms.md).
+// Package task defines the task.yaml file and the environment block a
+// sandbox boots from and what it may reach
+// (docs/decisions/0003-tasks-run-in-microsandbox-vms.md,
+// docs/decisions/0008-tasks-allocate-compute.md).
 package task
 
 import (
@@ -25,11 +26,15 @@ import (
 )
 
 const (
-	// LabelKey marks a sandbox as a Task. Its value is the Task name.
+	// LabelKey marks a sandbox as allocated to a Task. Its value is the
+	// Task name.
 	LabelKey = "agc.task"
+	// LabelSandbox carries the sandbox name.
+	LabelSandbox = "agc.sandbox"
 	// HomeDir is the sandbox user's home, where the repo is cloned.
 	HomeDir = "/home/agent"
-	// EnvTask and EnvMsgVsockPort are set by agc in every Task.
+	// EnvTask and EnvMsgVsockPort are set by agc in every sandbox. EnvTask
+	// is the Task name.
 	EnvTask         = "AGC_TASK"
 	EnvMsgVsockPort = "AGC_MSG_VSOCK_PORT"
 )
@@ -39,7 +44,8 @@ var (
 	volumeNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
 )
 
-// Spec is a Task spec. Secrets are names only, never values.
+// Spec is the environment block a sandbox boots from. Secrets are names
+// only, never values.
 type Spec struct {
 	Image    string            `yaml:"image" json:"image"`
 	CPUs     uint8             `yaml:"cpus" json:"cpus"`
@@ -53,19 +59,28 @@ type Spec struct {
 	Channels []string          `yaml:"channels" json:"channels"` // "#name" or "#name:read"
 }
 
-// file is a task.yaml: the spec at top level, with an optional name and
-// title.
-type file struct {
-	Name  string `yaml:"name"`
-	Title string `yaml:"title"`
-	Spec  `yaml:",inline"`
+// Sandbox is the sandbox: block of a task.yaml and the body of an
+// allocation: the environment plus the command the sandbox runs for the
+// task, split on whitespace. A saved spec has the same shape.
+type Sandbox struct {
+	Spec    `yaml:",inline"`
+	Command string `yaml:"command" json:"command"`
 }
 
-// File is a parsed task.yaml.
+// Validate checks the environment block.
+func (s Sandbox) Validate() error {
+	return s.Spec.Validate()
+}
+
+// File is a parsed task.yaml (ADR 0008 item 7). Sandbox is nil when the
+// file has no sandbox: block.
 type File struct {
-	Name  string
-	Title string
-	Spec  Spec
+	Name     string   `yaml:"name"`
+	Title    string   `yaml:"title"`
+	Brief    string   `yaml:"brief"`
+	Assignee string   `yaml:"assignee"`
+	For      string   `yaml:"for"`
+	Sandbox  *Sandbox `yaml:"sandbox"`
 }
 
 // LoadFile reads a task.yaml.
@@ -86,15 +101,43 @@ func LoadFile(filePath string) (File, error) {
 // ParseFile parses a task.yaml. Unknown keys are rejected so a typo does
 // not silently fall back to a default.
 func ParseFile(data []byte) (File, error) {
-	var f file
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	decoder.KnownFields(true)
-	err := decoder.Decode(&f)
-	if err != nil && !errors.Is(err, io.EOF) {
-		return File{}, ez.New(ez.EINVALID, err.Error(), err)
+	var f File
+
+	err := decodeStrict(data, &f)
+	if err != nil {
+		return File{}, ez.Wrap(err)
 	}
 
-	return File{Name: strings.TrimSpace(f.Name), Title: strings.TrimSpace(f.Title), Spec: f.Spec}, nil
+	f.Name = strings.TrimSpace(f.Name)
+	f.Title = strings.TrimSpace(f.Title)
+	f.Assignee = strings.TrimSpace(f.Assignee)
+	f.For = strings.TrimSpace(f.For)
+
+	return f, nil
+}
+
+// ParseSandbox parses a saved spec: a sandbox block at top level.
+func ParseSandbox(data []byte) (Sandbox, error) {
+	var s Sandbox
+
+	err := decodeStrict(data, &s)
+	if err != nil {
+		return Sandbox{}, ez.Wrap(err)
+	}
+
+	return s, nil
+}
+
+func decodeStrict(data []byte, out interface{}) error {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+
+	err := decoder.Decode(out)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return ez.New(ez.EINVALID, err.Error(), err)
+	}
+
+	return nil
 }
 
 // Validate rejects entries the Task cannot honor and names the bad entry.
@@ -171,14 +214,15 @@ func (s Spec) RepoURL() (string, string, error) {
 	return cloneURL, path.Join(HomeDir, name), nil
 }
 
-// SandboxSpec is the sandbox the Task named name runs in. The guest reaches
-// agc messaging on vsockPort, which the runtime connects to vsockPath.
-func (s Spec) SandboxSpec(name string, bindings []secrets.Binding, vsockPath string, vsockPort uint32) (sandbox.Spec, error) {
+// SandboxSpec is the sandbox called name, allocated to the Task called
+// taskName. The guest reaches agc messaging on vsockPort, which the runtime
+// connects to vsockPath.
+func (s Spec) SandboxSpec(taskName string, name string, bindings []secrets.Binding, vsockPath string, vsockPort uint32) (sandbox.Spec, error) {
 	env := map[string]string{}
 	for k, v := range s.Env {
 		env[k] = v
 	}
-	env[EnvTask] = name
+	env[EnvTask] = taskName
 	env[EnvMsgVsockPort] = strconv.FormatUint(uint64(vsockPort), 10)
 
 	volumes := []sandbox.Volume{}
@@ -200,7 +244,7 @@ func (s Spec) SandboxSpec(name string, bindings []secrets.Binding, vsockPath str
 		Volumes:   volumes,
 		VsockPath: vsockPath,
 		VsockPort: vsockPort,
-		Labels:    map[string]string{LabelKey: name},
+		Labels:    map[string]string{LabelKey: taskName, LabelSandbox: name},
 	}, nil
 }
 

@@ -16,7 +16,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/vanclief/ez"
 
-	"github.com/vanclief/agent-composer/core/resources/tasks"
+	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/executor"
 	"github.com/vanclief/agent-composer/executor/sandbox"
 	"github.com/vanclief/agent-composer/interfaces/rest/handler"
@@ -29,11 +29,11 @@ type fakeRuntime struct {
 	sb *fakeSandbox
 }
 
-func (f *fakeRuntime) Create(ctx context.Context, spec sandbox.Spec) (tasks.Sandbox, error) {
+func (f *fakeRuntime) Create(ctx context.Context, spec sandbox.Spec) (sandboxes.Sandbox, error) {
 	return f.sb, nil
 }
 
-func (f *fakeRuntime) Connect(ctx context.Context, name string) (tasks.Sandbox, error) {
+func (f *fakeRuntime) Connect(ctx context.Context, name string) (sandboxes.Sandbox, error) {
 	return f.sb, nil
 }
 
@@ -53,8 +53,8 @@ func (f *fakeRuntime) Status(ctx context.Context, name string) (string, error) {
 	return "stopped", nil
 }
 
-// fakeSandbox implements Run, the terminal methods and Detach. Any other
-// method panics on the nil embedded interface.
+// fakeSandbox implements Run, WriteFile, the terminal methods and Detach.
+// Any other method panics on the nil embedded interface.
 type fakeSandbox struct {
 	executor.TerminalExecutor
 
@@ -63,9 +63,14 @@ type fakeSandbox struct {
 	detaches int
 }
 
-// Run succeeds, so task creation can write the agent config.
+// Run succeeds, so a boot can write the agent config.
 func (s *fakeSandbox) Run(ctx context.Context, cmd executor.Command) (*executor.Result, error) {
 	return &executor.Result{}, nil
+}
+
+// WriteFile succeeds, so a boot can write TASK.md.
+func (s *fakeSandbox) WriteFile(ctx context.Context, path string, data []byte) error {
+	return nil
 }
 
 func (s *fakeSandbox) StartTerminal(ctx context.Context, cmd executor.Command) (*executor.Terminal, error) {
@@ -90,10 +95,18 @@ func (s *fakeSandbox) Detach(ctx context.Context) error {
 
 func TestTerminalRoutes(t *testing.T) {
 	sb := &fakeSandbox{}
-	e, db := newTaskRoutes(t, &fakeRuntime{sb: sb}, "")
+	routes := newTaskRoutes(t, &fakeRuntime{sb: sb}, "")
+	e := routes.e
 
-	record := &taskmodels.Task{Title: "Review 42", Name: "review-42", Spec: []byte(`{}`)}
-	err := record.Insert(context.Background(), db)
+	owner := &taskmodels.Task{Title: "Review 42", Name: "review-42", Brief: "b"}
+	err := owner.Insert(context.Background(), routes.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now()
+	record := &taskmodels.Sandbox{TaskID: owner.ID, Name: "review-42", Spec: []byte(`{}`), BootedAt: &now}
+	err = record.Insert(context.Background(), routes.db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,11 +118,11 @@ func TestTerminalRoutes(t *testing.T) {
 		status int
 		want   string
 	}{
-		{http.MethodGet, "/api/tasks/review-42/terminals", "", http.StatusOK, `{"terminals":[{"id":"job_1","command":["bash"],"running":true}]}`},
-		{http.MethodGet, "/api/tasks/" + record.ID.String() + "/terminals", "", http.StatusOK, `"id":"job_1"`},
-		{http.MethodGet, "/api/tasks/missing/terminals", "", http.StatusNotFound, "task missing not found"},
-		{http.MethodPost, "/api/tasks/review-42/terminals", `{"command":"claude --resume","dir":"/home/agent/x"}`, http.StatusOK, `{"id":"job_2"}`},
-		{http.MethodPost, "/api/tasks/review-42/terminals", `{"command":"  "}`, http.StatusBadRequest, "command is required"},
+		{http.MethodGet, "/api/sandboxes/review-42/terminals", "", http.StatusOK, `{"terminals":[{"id":"job_1","command":["bash"],"running":true}]}`},
+		{http.MethodGet, "/api/sandboxes/" + record.ID.String() + "/terminals", "", http.StatusOK, `"id":"job_1"`},
+		{http.MethodGet, "/api/sandboxes/missing/terminals", "", http.StatusNotFound, "sandbox missing not found"},
+		{http.MethodPost, "/api/sandboxes/review-42/terminals", `{"command":"claude --resume","dir":"/home/agent/x"}`, http.StatusOK, `{"id":"job_2"}`},
+		{http.MethodPost, "/api/sandboxes/review-42/terminals", `{"command":"  "}`, http.StatusBadRequest, "command is required"},
 	}
 
 	for _, tc := range cases {
@@ -218,7 +231,7 @@ func TestTerminalSocket(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/tasks/review-42/terminals/job_1/ws"
+	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/sandboxes/review-42/terminals/job_1/ws"
 	conn, _, err := websocket.Dial(ctx, url, nil)
 	if err != nil {
 		t.Fatal(err)

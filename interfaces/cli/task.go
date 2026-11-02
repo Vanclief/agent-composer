@@ -18,23 +18,24 @@ import (
 func taskCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "task",
-		Usage:  "Task commands: isolated VMs agents work in (ADR 0003)",
+		Usage:  "Task commands: work to be done, allocated compute as sandboxes (ADR 0008)",
 		Before: quietLogs,
 		Subcommands: []*cli.Command{
 			{
 				Name:  "create",
-				Usage: "Create and boot a task from a task.yaml or a saved spec",
+				Usage: "Create a task from a task.yaml, booting its sandbox: when it has one",
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "file", Aliases: []string{"f"}, Usage: "Path to the task.yaml"},
-					&cli.StringFlag{Name: "from", Usage: "Name of a saved spec (agc task spec ls)"},
+					&cli.StringFlag{Name: "from", Usage: "Name of a saved spec to boot as the task's sandbox (agc task spec ls)"},
 					&cli.StringFlag{Name: "title", Usage: "Task title (defaults to title: in the file)"},
 					&cli.StringFlag{Name: "name", Usage: "Task name (defaults to name: in the file, else made from the title)"},
+					&cli.StringFlag{Name: "brief", Usage: "What to do and what done looks like (defaults to brief: in the file)"},
 				},
 				Action: taskCreate,
 			},
 			{
 				Name:  "spec",
-				Usage: "Saved specs: reusable task.yaml files in ~/.agent_composer/config/specs",
+				Usage: "Saved specs: reusable sandbox specs in ~/.agent_composer/config/specs",
 				Subcommands: []*cli.Command{
 					{
 						Name:    "ls",
@@ -44,10 +45,10 @@ func taskCommand() *cli.Command {
 					},
 					{
 						Name:      "save",
-						Usage:     "Save a task.yaml as a spec, replacing one of the same name",
+						Usage:     "Save a sandbox spec, replacing one of the same name",
 						ArgsUsage: "<name> -f <file>",
 						Flags: []cli.Flag{
-							&cli.StringFlag{Name: "file", Aliases: []string{"f"}, Usage: "Path to the task.yaml"},
+							&cli.StringFlag{Name: "file", Aliases: []string{"f"}, Usage: "Path to the sandbox spec"},
 						},
 						Action: taskSpecSave,
 					},
@@ -60,43 +61,39 @@ func taskCommand() *cli.Command {
 				},
 			},
 			{
-				Name:    "ls",
-				Aliases: []string{"list"},
-				Usage:   "List tasks with their live status",
+				Name:    "list",
+				Aliases: []string{"ls"},
+				Usage:   "List tasks with their status and sandboxes",
 				Action:  taskList,
 			},
 			{
 				Name:      "get",
-				Usage:     "Show a task with its live status",
+				Usage:     "Show a task with its status and sandboxes",
 				ArgsUsage: "<name>",
 				Action:    taskGet,
 			},
 			{
-				Name:      "stop",
-				Usage:     "Stop a task and keep its disk",
+				Name:      "done",
+				Usage:     "Mark a task done; its sandboxes are left as they are",
 				ArgsUsage: "<name>",
-				Action:    taskStop,
+				Action:    taskDone,
 			},
 			{
-				Name:      "start",
-				Usage:     "Boot a stopped task from its disk",
-				ArgsUsage: "<name>",
-				Action:    taskStart,
-			},
-			{
-				Name:      "rm",
-				Usage:     "Delete a task: its sandbox disk and uncommitted work; volumes and messages are kept",
+				Name:      "delete",
+				Aliases:   []string{"rm"},
+				Usage:     "Delete a task and its sandboxes: their disks and uncommitted work; volumes and messages are kept",
 				ArgsUsage: "<name>",
 				Flags: []cli.Flag{
 					&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "Do not ask for confirmation"},
 				},
-				Action: taskRemove,
+				Action: taskDelete,
 			},
 		},
 	}
 }
 
-// withTasks runs fn against an in-process stack, like workflow run.
+// withTasks runs fn against an in-process stack, like workflow run. A
+// sandbox boots in this process, so fn waits for it before returning.
 func withTasks(c *cli.Context, fn func(ctx context.Context, api *tasks.API) (any, error)) error {
 	stack, err := core.NewStack(c.Context, core.StackOptions{ProjectDir: c.String("project")})
 	if err != nil {
@@ -112,9 +109,10 @@ func withTasks(c *cli.Context, fn func(ctx context.Context, api *tasks.API) (any
 	return printJSON(result)
 }
 
-// taskArg returns the single task name. urfave/cli stops reading flags at
-// the first argument, so a --yes written after the name is picked out here.
-func taskArg(c *cli.Context) (string, bool, error) {
+// refArg returns the single name argument. urfave/cli stops reading flags
+// at the first argument, so a --yes written after the name is picked out
+// here.
+func refArg(c *cli.Context, command string) (string, bool, error) {
 	yes := c.Bool("yes")
 	names := []string{}
 	for _, arg := range c.Args().Slice() {
@@ -126,18 +124,29 @@ func taskArg(c *cli.Context) (string, bool, error) {
 	}
 
 	if len(names) != 1 {
-		return "", false, ez.New(ez.EINVALID, "usage: agc task "+c.Command.Name+" <name>", nil)
+		return "", false, ez.New(ez.EINVALID, "usage: agc "+command+" "+c.Command.Name+" <name>", nil)
 	}
 
 	return names[0], yes, nil
 }
 
+// confirm asks on stderr and returns an error unless the answer is yes.
+func confirm(what string) error {
+	fmt.Fprint(os.Stderr, "Delete it? [y/N] ")
+
+	// A read error such as EOF leaves no answer, which is a no.
+	answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	answer = strings.ToLower(strings.TrimSpace(answer))
+	if answer != "y" && answer != "yes" {
+		return ez.New(ez.EINVALID, what+" was not deleted: answer y or pass --yes", nil)
+	}
+
+	return nil
+}
+
 func taskCreate(c *cli.Context) error {
 	filePath := c.String("file")
 	from := strings.TrimSpace(c.String("from"))
-	if (filePath == "") == (from == "") {
-		return ez.New(ez.EINVALID, "pass exactly one of -f <file> or --from <saved spec>", nil)
-	}
 
 	return withTasks(c, func(ctx context.Context, api *tasks.API) (any, error) {
 		parsed, err := loadTaskFile(ctx, api, filePath, from)
@@ -145,35 +154,69 @@ func taskCreate(c *cli.Context) error {
 			return nil, err
 		}
 
-		title := strings.TrimSpace(c.String("title"))
-		if title == "" {
-			title = parsed.Title
+		request := &tasks.CreateRequest{
+			Title:    firstNonEmpty(c.String("title"), parsed.Title),
+			Name:     firstNonEmpty(c.String("name"), parsed.Name),
+			Brief:    firstNonEmpty(c.String("brief"), parsed.Brief),
+			Assignee: parsed.Assignee,
+			For:      parsed.For,
+			Sandbox:  parsed.Sandbox,
 		}
 
-		name := strings.TrimSpace(c.String("name"))
-		if name == "" {
-			name = parsed.Name
-		}
-
-		if title == "" && name == "" {
+		if request.Title == "" && request.Name == "" {
 			return nil, ez.New(ez.EINVALID, "the task needs a title: pass --title or set title: in the file", nil)
 		}
 
-		label := name
-		if label == "" {
-			label = title
+		created, err := api.Create(ctx, nil, request)
+		if err != nil {
+			return nil, err
 		}
-		fmt.Fprintf(os.Stderr, "Creating task %s…\n", label)
 
-		return api.Create(ctx, nil, &tasks.CreateRequest{Title: title, Name: name, Spec: parsed.Spec})
+		if len(created.Sandboxes) == 0 {
+			return created, nil
+		}
+
+		fmt.Fprintf(os.Stderr, "Task %s created, booting sandbox %s…\n", created.Name, created.Sandboxes[0].Name)
+		api.Sandboxes.Wait()
+
+		return api.Get(ctx, nil, &tasks.GetRequest{ID: created.ID})
 	})
 }
 
-// loadTaskFile reads the task.yaml at filePath, or the saved spec called
-// from when filePath is empty.
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+
+	return ""
+}
+
+// loadTaskFile reads the task.yaml at filePath, and the saved spec called
+// from as its sandbox. Either may be empty, not both.
 func loadTaskFile(ctx context.Context, api *tasks.API, filePath string, from string) (task.File, error) {
+	if filePath == "" && from == "" {
+		return task.File{}, ez.New(ez.EINVALID, "pass -f <file>, --from <saved spec>, or both", nil)
+	}
+
+	parsed := task.File{}
+
 	if filePath != "" {
-		return task.LoadFile(filePath)
+		loaded, err := task.LoadFile(filePath)
+		if err != nil {
+			return task.File{}, err
+		}
+		parsed = loaded
+	}
+
+	if from == "" {
+		return parsed, nil
+	}
+
+	if parsed.Sandbox != nil {
+		return task.File{}, ez.New(ez.EINVALID, "the file already has a sandbox: drop it or --from", nil)
 	}
 
 	saved, err := api.GetSpec(ctx, nil, &tasks.GetSpecRequest{Name: from})
@@ -181,10 +224,11 @@ func loadTaskFile(ctx context.Context, api *tasks.API, filePath string, from str
 		return task.File{}, err
 	}
 
-	parsed, err := task.ParseFile([]byte(saved.YAML))
+	sandbox, err := task.ParseSandbox([]byte(saved.YAML))
 	if err != nil {
 		return task.File{}, ez.New(ez.EINVALID, "saved spec "+from+": "+ez.ErrorMessage(err), err)
 	}
+	parsed.Sandbox = &sandbox
 
 	return parsed, nil
 }
@@ -216,7 +260,7 @@ func taskSpecSave(c *cli.Context) error {
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return ez.New(ez.EINVALID, "cannot read task file "+filePath, err)
+		return ez.New(ez.EINVALID, "cannot read spec file "+filePath, err)
 	}
 
 	return withTasks(c, func(ctx context.Context, api *tasks.API) (any, error) {
@@ -242,7 +286,7 @@ func taskList(c *cli.Context) error {
 }
 
 func taskGet(c *cli.Context) error {
-	name, _, err := taskArg(c)
+	name, _, err := refArg(c, "task")
 	if err != nil {
 		return err
 	}
@@ -252,44 +296,29 @@ func taskGet(c *cli.Context) error {
 	})
 }
 
-func taskStop(c *cli.Context) error {
-	name, _, err := taskArg(c)
+func taskDone(c *cli.Context) error {
+	name, _, err := refArg(c, "task")
 	if err != nil {
 		return err
 	}
 
 	return withTasks(c, func(ctx context.Context, api *tasks.API) (any, error) {
-		return api.Stop(ctx, nil, &tasks.StopRequest{Name: name})
+		return api.Done(ctx, nil, &tasks.DoneRequest{Name: name})
 	})
 }
 
-func taskStart(c *cli.Context) error {
-	name, _, err := taskArg(c)
+func taskDelete(c *cli.Context) error {
+	name, yes, err := refArg(c, "task")
 	if err != nil {
 		return err
 	}
 
-	return withTasks(c, func(ctx context.Context, api *tasks.API) (any, error) {
-		return api.Start(ctx, nil, &tasks.StartRequest{Name: name})
-	})
-}
-
-func taskRemove(c *cli.Context) error {
-	name, yes, err := taskArg(c)
-	if err != nil {
-		return err
-	}
-
-	fmt.Fprintf(os.Stderr, "Deleting task %s deletes the sandbox disk and uncommitted work; volumes and messages are kept.\n", name)
+	fmt.Fprintf(os.Stderr, "Deleting task %s deletes its sandboxes' disks and uncommitted work; volumes and messages are kept.\n", name)
 
 	if !yes {
-		fmt.Fprint(os.Stderr, "Delete it? [y/N] ")
-
-		// A read error such as EOF leaves no answer, which is a no.
-		answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-		answer = strings.ToLower(strings.TrimSpace(answer))
-		if answer != "y" && answer != "yes" {
-			return ez.New(ez.EINVALID, "task "+name+" was not deleted: answer y or pass --yes", nil)
+		err = confirm("task " + name)
+		if err != nil {
+			return err
 		}
 	}
 

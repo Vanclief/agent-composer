@@ -11,6 +11,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/harnessinfo"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
 	knowledgeapi "github.com/vanclief/agent-composer/core/resources/knowledge"
+	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	settingsapi "github.com/vanclief/agent-composer/core/resources/settings"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
@@ -35,6 +36,7 @@ type Server struct {
 	HarnessesAPI  *harnessinfo.API
 	SettingsAPI   *settingsapi.API
 	TasksAPI      *tasks.API
+	SandboxesAPI  *sandboxes.API
 	KnowledgeAPI  *knowledgeapi.API
 	Messaging     *messaging.Service
 }
@@ -56,6 +58,7 @@ func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.A
 		HarnessesAPI:  harnessinfo.NewAPI(),
 		SettingsAPI:   settingsapi.NewAPI(),
 		TasksAPI:      tasksAPI,
+		SandboxesAPI:  tasksAPI.Sandboxes,
 		KnowledgeAPI:  knowledgeAPI,
 		Messaging:     msg,
 	}
@@ -149,29 +152,42 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.TasksAPI.List(request.GetContext(), nil, body)
 	case *tasks.GetRequest:
 		return s.TasksAPI.Get(request.GetContext(), nil, body)
+	// Creating a task and allocating a sandbox return at once; the boot
+	// runs in the background with its own context (ADR 0008).
 	case *tasks.CreateRequest:
-		// Booting, cloning and setup outlive the default request timeout.
-		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 30*time.Minute)
-		defer cancel()
-		return s.TasksAPI.Create(ctx, nil, body)
-	// Booting and shutting a VM down can outlive the default request
-	// timeout, and cutting msb off mid-boot leaves the sandbox half up.
-	case *tasks.StopRequest:
-		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
-		defer cancel()
-		return s.TasksAPI.Stop(ctx, nil, body)
-	case *tasks.StartRequest:
-		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
-		defer cancel()
-		return s.TasksAPI.Start(ctx, nil, body)
-	case *tasks.ListTerminalsRequest:
-		return s.TasksAPI.ListTerminals(request.GetContext(), nil, body)
-	case *tasks.StartTerminalRequest:
-		return s.TasksAPI.StartTerminal(request.GetContext(), nil, body)
+		return s.TasksAPI.Create(request.GetContext(), nil, body)
+	case *tasks.DoneRequest:
+		return s.TasksAPI.Done(request.GetContext(), nil, body)
 	case *tasks.DeleteRequest:
-		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
+		// Every sandbox of the task is stopped and removed.
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 5*time.Minute)
 		defer cancel()
 		return s.TasksAPI.Delete(ctx, nil, body)
+
+	case *sandboxes.AllocateRequest:
+		return s.SandboxesAPI.Allocate(request.GetContext(), nil, body)
+	case *sandboxes.ListRequest:
+		return s.SandboxesAPI.List(request.GetContext(), nil, body)
+	case *sandboxes.GetRequest:
+		return s.SandboxesAPI.Get(request.GetContext(), nil, body)
+	// Booting and shutting a VM down can outlive the default request
+	// timeout, and cutting msb off mid-boot leaves the sandbox half up.
+	case *sandboxes.StopRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
+		defer cancel()
+		return s.SandboxesAPI.Stop(ctx, nil, body)
+	case *sandboxes.StartRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
+		defer cancel()
+		return s.SandboxesAPI.Start(ctx, nil, body)
+	case *sandboxes.DeleteRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
+		defer cancel()
+		return s.SandboxesAPI.Delete(ctx, nil, body)
+	case *sandboxes.ListTerminalsRequest:
+		return s.SandboxesAPI.ListTerminals(request.GetContext(), nil, body)
+	case *sandboxes.StartTerminalRequest:
+		return s.SandboxesAPI.StartTerminal(request.GetContext(), nil, body)
 	case *tasks.ListSpecsRequest:
 		return s.TasksAPI.ListSpecs(request.GetContext(), nil, body)
 	case *tasks.GetSpecRequest:

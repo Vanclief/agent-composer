@@ -7,17 +7,18 @@ import (
 	"github.com/vanclief/ez"
 )
 
-type StopRequest struct {
+type DoneRequest struct {
 	ID   uuid.UUID `json:"id"`
 	Name string    `json:"name"`
 }
 
-func (r StopRequest) Validate() error {
+func (r DoneRequest) Validate() error {
 	return validateRef(r.ID, r.Name)
 }
 
-// Stop shuts the sandbox down and keeps its disk, then stops the listener.
-func (api *API) Stop(ctx context.Context, requester interface{}, request *StopRequest) (*TaskView, error) {
+// Done sets done_at, the only thing that does. Its sandboxes are left as
+// they are. A task already done keeps its first done_at.
+func (api *API) Done(ctx context.Context, requester interface{}, request *DoneRequest) (*TaskView, error) {
 	err := request.Validate()
 	if err != nil {
 		return nil, ez.Wrap(err)
@@ -28,12 +29,10 @@ func (api *API) Stop(ctx context.Context, requester interface{}, request *StopRe
 		return nil, ez.Wrap(err)
 	}
 
-	err = api.rt.Stop(ctx, record.Name)
+	err = record.MarkDone(ctx, api.db)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
-
-	api.stopListener(record.Name)
 
 	return api.view(ctx, record)
 }

@@ -1,4 +1,4 @@
-package tasks
+package sandboxes
 
 import (
 	"context"
@@ -11,14 +11,14 @@ import (
 	"github.com/vanclief/agent-composer/executor"
 )
 
-// Terminal is one interactive job in a Task's VM.
+// Terminal is one interactive job in a sandbox.
 type Terminal struct {
 	ID      string   `json:"id"`
 	Command []string `json:"command"`
 	Running bool     `json:"running"`
 }
 
-// TerminalExecutor finds a task by id or name and connects to its VM.
+// TerminalExecutor finds a sandbox by id or name and connects to its VM.
 // release detaches the handle. The VM and its jobs keep running.
 func (api *API) TerminalExecutor(ctx context.Context, id uuid.UUID, name string) (executor.TerminalExecutor, func(), error) {
 	record, err := api.find(ctx, id, name)
@@ -34,7 +34,7 @@ func (api *API) TerminalExecutor(ctx context.Context, id uuid.UUID, name string)
 	release := func() {
 		err := sb.Detach(context.Background())
 		if err != nil {
-			log.Warn().Err(err).Str("task", record.Name).Msg("cannot release sandbox handle")
+			log.Warn().Err(err).Str("sandbox", record.Name).Msg("cannot release sandbox handle")
 		}
 	}
 
@@ -54,7 +54,7 @@ type ListTerminalsResponse struct {
 	Terminals []Terminal `json:"terminals"`
 }
 
-// ListTerminals lists the jobs in a Task's VM as the runtime reports them.
+// ListTerminals lists the jobs in a sandbox as the runtime reports them.
 func (api *API) ListTerminals(ctx context.Context, requester interface{}, request *ListTerminalsRequest) (*ListTerminalsResponse, error) {
 	err := request.Validate()
 	if err != nil {
@@ -80,9 +80,10 @@ func (api *API) ListTerminals(ctx context.Context, requester interface{}, reques
 	return &ListTerminalsResponse{Terminals: views}, nil
 }
 
+// StartTerminalRequest names the sandbox by ID or Name, from the path.
 type StartTerminalRequest struct {
-	ID   uuid.UUID `json:"id"`
-	Name string    `json:"name"`
+	ID   uuid.UUID `json:"-"`
+	Name string    `json:"-"`
 	// Command is split on whitespace, e.g. "claude --resume".
 	Command string `json:"command"`
 	// Dir is the working directory. Empty means the VM user's default.
@@ -106,7 +107,7 @@ type StartTerminalResponse struct {
 	ID string `json:"id"`
 }
 
-// StartTerminal starts a TTY job in a Task's VM that outlives the request.
+// StartTerminal starts a TTY job in a sandbox that outlives the request.
 func (api *API) StartTerminal(ctx context.Context, requester interface{}, request *StartTerminalRequest) (*StartTerminalResponse, error) {
 	err := request.Validate()
 	if err != nil {

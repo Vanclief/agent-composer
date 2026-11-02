@@ -10,7 +10,7 @@ import (
 	"github.com/vanclief/ez"
 )
 
-const savedYAML = "# reviews the backend\ntitle: Backend review\nrepo: github.com/o/n\n"
+const savedYAML = "# reviews the backend\nrepo: github.com/o/n\ncommand: claude\n"
 
 func TestStoreSaveGetListDelete(t *testing.T) {
 	store := Store{Dir: filepath.Join(t.TempDir(), "config", "specs")}
@@ -92,6 +92,7 @@ func TestStoreSaveRejectsBadInput(t *testing.T) {
 	}{
 		{"Bad Name", "image: debian\n", "is invalid"},
 		{"ok", "image: debian\ncpu: 2\n", "cpu"},
+		{"ok", "title: Not a sandbox field\n", "title"},
 		{"ok", "ref: master\n", "ref is set but repo is not"},
 		{"ok", "repo: [unclosed\n", ""},
 	}

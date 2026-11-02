@@ -27,7 +27,7 @@ func NewHandler(server *restserver.Server) *Handler {
 		ctrl:        server.Ctrl,
 		ConnectTerminal: func(ctx context.Context, ref string) (executor.TerminalExecutor, func(), error) {
 			id, name := parseTaskRef(ref)
-			return server.TasksAPI.TerminalExecutor(ctx, id, name)
+			return server.SandboxesAPI.TerminalExecutor(ctx, id, name)
 		},
 	}
 }

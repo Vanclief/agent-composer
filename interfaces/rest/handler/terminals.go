@@ -11,35 +11,41 @@ import (
 	"github.com/vanclief/compose/components/rest/requests"
 	"github.com/vanclief/ez"
 
-	"github.com/vanclief/agent-composer/core/resources/tasks"
+	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/executor"
 )
 
 // replayBytes is how much recent output a new attachment replays.
 const replayBytes = 64 * 1024
 
-// ConnectTerminal connects to the VM of the task named by ref, a task UUID
+// ConnectTerminal connects to the sandbox named by ref, a sandbox UUID
 // or name. release frees the handle and leaves the VM and its jobs running.
 type ConnectTerminal func(ctx context.Context, ref string) (exe executor.TerminalExecutor, release func(), err error)
 
-// GET /tasks/:id/terminals
+// GET /sandboxes/:id/terminals
 func (h *Handler) ListTerminals(c echo.Context) error {
 	const op = "Handler.ListTerminals"
 
 	request := requests.New(c.Request().Header, c.RealIP())
 	id, name := taskRef(c)
 
-	return h.JSONResponse(c, op, request, &tasks.ListTerminalsRequest{ID: id, Name: name})
+	return h.JSONResponse(c, op, request, &sandboxes.ListTerminalsRequest{ID: id, Name: name})
 }
 
-// POST /tasks/:id/terminals
+// POST /sandboxes/:id/terminals
 func (h *Handler) StartTerminal(c echo.Context) error {
 	const op = "Handler.StartTerminal"
 
 	request := requests.New(c.Request().Header, c.RealIP())
-	id, name := taskRef(c)
 
-	return h.BindedJSONResponse(c, op, request, &tasks.StartTerminalRequest{ID: id, Name: name})
+	body := &sandboxes.StartTerminalRequest{}
+	err := c.Bind(body)
+	if err != nil {
+		return h.ManageError(c, op, request, err)
+	}
+	body.ID, body.Name = taskRef(c)
+
+	return h.JSONResponse(c, op, request, body)
 }
 
 // resizeMessage is the one text frame the client sends.
@@ -49,7 +55,7 @@ type resizeMessage struct {
 	Cols uint16 `json:"cols"`
 }
 
-// GET /tasks/:id/terminals/:job/ws
+// GET /sandboxes/:id/terminals/:job/ws
 //
 // Binary frames carry terminal bytes both ways. A text frame
 // {"type":"resize","rows":N,"cols":N} resizes the terminal. The socket closes
@@ -77,7 +83,7 @@ func (h *Handler) TerminalSocket(c echo.Context) error {
 	defer stream.Close()
 
 	// Default options authorize only the request's own host as Origin, which
-	// is the control panel. Other sites cannot open a shell in a Task.
+	// is the control panel. Other sites cannot open a shell in a sandbox.
 	conn, err := websocket.Accept(c.Response(), c.Request(), nil)
 	if err != nil {
 		// Accept has already written the HTTP error.

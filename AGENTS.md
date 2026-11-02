@@ -29,19 +29,19 @@
 
 ## Repo map
 
-- `core/resources/<x>`: resource APIs (business logic), one file per verb.
+- `core/resources/<x>`: resource APIs (business logic), one file per verb. `tasks` is the work (title, brief, assignee, done; status computed); `sandboxes` is the compute a task is allocated (one VM each: async boot, stop/start/delete, terminals, the per-sandbox messaging socket), ADR 0008.
 - `core/resources/knowledge`: read-only REST over `knowledge/`, loading `evidence/ beliefs/ decisions/ rules/ actions/` under `<home>/knowledge` (or `AGC_KNOWLEDGE_DIR`) on every request; list (`?without=`), why, doubt and conflicts.
 - `interfaces/rest`: echo server; routes in `api_routes.go`, handlers in `handler/`, dispatch type switch in `server/server.go`.
 - `interfaces/cli`: the `agc` command-line interface.
 - `models`: bun models; every table is registered in `ALL` in `models/db_registry.go`.
 - `models/migrations`: schema migrations as Go files named `YYYYMMDDHHMMSS_name.go`, run automatically at startup; see its README.
 - `executor`: host and sandbox executors.
-- `task`: task runtime.
+- `task`: the task.yaml file and the sandbox environment spec (`Spec`, `Sandbox`), saved specs.
 - `secrets`: secret placeholders bound to hosts.
 - `messaging`: messaging transport and identity.
 - `images/agc-agent`: the agent image that runs inside sandboxes.
 - `panel/`: React control panel, see `panel/CLAUDE.md`. `web/` is the older workflow builder UI.
-- `docs/decisions`: ADRs 0001–0005; read the relevant one before changing that area.
+- `docs/decisions`: ADRs 0001–0009 (tasks and sandboxes: 0003, 0008); read the relevant one before changing that area.
 - `docs/openapi.yaml`: REST API spec.
 
 ## Adding a REST endpoint, checklist

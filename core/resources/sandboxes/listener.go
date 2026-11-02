@@ -1,4 +1,4 @@
-package tasks
+package sandboxes
 
 import (
 	"context"
@@ -18,27 +18,29 @@ import (
 	"github.com/vanclief/agent-composer/task"
 )
 
-// Each Task has its own unix socket. The sandbox connects guest vsock port
-// msgVsockPort to it, so every request on it comes from that Task
-// (docs/decisions/0005-messaging-transport-and-identity.md).
+// Each sandbox has its own unix socket, named after it. The VM connects
+// guest vsock port msgVsockPort to it, so every request on it comes from
+// that sandbox, speaking for its task: the caller's Task is the task name,
+// so the sandbox posts in #<task> (ADR 0005, ADR 0008).
 
 func (api *API) socketPath(name string) string {
 	return filepath.Join(api.socketDir, name+".sock")
 }
 
-func (api *API) startTaskListener(name string, spec task.Spec) error {
+func (api *API) startSandboxListener(name string, taskName string, spec task.Spec) error {
 	grants, err := spec.Grants()
 	if err != nil {
 		return ez.Wrap(err)
 	}
 
-	return api.startListener(name, grants)
+	return api.startListener(name, taskName, grants)
 }
 
-// startListener serves messaging for the task on its socket, unless this
-// process already does, or another agc process does (the socket answers).
-// A socket nobody answers is stale and replaced.
-func (api *API) startListener(name string, grants []messaging.Grant) error {
+// startListener serves messaging for the sandbox called name, as the task
+// called taskName, on the sandbox's socket, unless this process already
+// does, or another agc process does (the socket answers). A socket nobody
+// answers is stale and replaced.
+func (api *API) startListener(name string, taskName string, grants []messaging.Grant) error {
 	api.mu.Lock()
 	defer api.mu.Unlock()
 
@@ -71,14 +73,14 @@ func (api *API) startListener(name string, grants []messaging.Grant) error {
 	}
 
 	caller := func(*http.Request) (messaging.Caller, error) {
-		return messaging.Caller{Task: name, Grants: grants}, nil
+		return messaging.Caller{Task: taskName, Grants: grants}, nil
 	}
 	srv := &http.Server{Handler: httpapi.New(api.msg, caller), ReadHeaderTimeout: 10 * time.Second}
 
 	go func() {
 		err := srv.Serve(ln)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Warn().Err(err).Str("task", name).Msg("task messaging listener stopped")
+			log.Warn().Err(err).Str("sandbox", name).Msg("sandbox messaging listener stopped")
 		}
 	}()
 
@@ -87,7 +89,7 @@ func (api *API) startListener(name string, grants []messaging.Grant) error {
 	return nil
 }
 
-// stopListener stops this process's listener for the task, if any.
+// stopListener stops this process's listener for the sandbox, if any.
 // Closing the listener removes its socket file. It is closed here as well
 // as by Serve, so the file is gone when this returns even if Serve has not
 // started yet, and a later listener on the same path is never unlinked.

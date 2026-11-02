@@ -23,8 +23,12 @@ tags:
     description: Inspect installed workflows.
   - name: Tasks
     description: >
-      Tasks are microsandbox VMs agents work in (ADR 0003). Status is read live from the
-      runtime and passed through verbatim.
+      A task is work to be done, in words (ADR 0008). It allocates compute as sandboxes. Its
+      status is computed: done, running or open.
+  - name: Sandboxes
+    description: >
+      A sandbox is the compute a task is allocated: one microsandbox VM (ADR 0003, ADR 0008).
+      Once booted, its status is read live from the runtime and passed through verbatim.
   - name: Knowledge
     description: >
       Evidence, beliefs, decisions and rules (ADR 0006), read only. Labels are computed on every
@@ -511,7 +515,7 @@ paths:
       tags: [Tasks]
       operationId: listTasks
       summary: List tasks
-      description: Returns every task, newest first, each with its live status.
+      description: Returns every task, newest first, each with its computed status and its sandboxes.
       responses:
         '200':
           description: Tasks.
@@ -533,9 +537,9 @@ paths:
       operationId: createTask
       summary: Create a task
       description: >
-        Creates and boots the sandbox, clones the repo and runs setup. If clone or setup fails
-        the sandbox is removed and the error says so. Missing secrets fail before anything is
-        created, naming the secret.
+        Inserts the task and returns at once. With `sandbox`, a sandbox is allocated after the
+        insert, as POST /tasks/{id}/sandboxes does, and comes back `starting`. Missing secrets
+        fail before anything is created, naming the secret.
       requestBody:
         required: true
         content:
@@ -566,7 +570,7 @@ paths:
         - $ref: '#/components/parameters/TaskIdParam'
       responses:
         '200':
-          description: The task with its live status.
+          description: The task with its status and sandboxes.
           content:
             application/json:
               schema:
@@ -582,8 +586,8 @@ paths:
       operationId: deleteTask
       summary: Delete a task
       description: >
-        Stops the sandbox if needed and removes it with its disk and uncommitted work. Volumes
-        and the task's channel history are kept.
+        Deletes every sandbox of the task (stopping it if needed, with its disk and uncommitted
+        work), then the task. Volumes and the task's channel history are kept.
       parameters:
         - $ref: '#/components/parameters/TaskIdParam'
       responses:
@@ -599,17 +603,19 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
-  /tasks/{id}/stop:
+  /tasks/{id}/done:
     post:
       tags: [Tasks]
-      operationId: stopTask
-      summary: Stop a task
-      description: Shuts the sandbox down and keeps its disk. The status becomes `stopped`.
+      operationId: doneTask
+      summary: Mark a task done
+      description: >
+        Sets `done_at`, the only thing that does; a task already done keeps its first `done_at`.
+        Its sandboxes are left as they are.
       parameters:
         - $ref: '#/components/parameters/TaskIdParam'
       responses:
         '200':
-          description: The task with its live status.
+          description: The task, now `done`.
           content:
             application/json:
               schema:
@@ -620,23 +626,231 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
-  /tasks/{id}/start:
+  /tasks/{id}/sandboxes:
     post:
-      tags: [Tasks]
-      operationId: startTask
-      summary: Start a stopped task
-      description: Boots the sandbox from its disk with secrets read again from the secrets file.
+      tags: [Sandboxes]
+      operationId: allocateSandbox
+      summary: Allocate compute to a task
+      description: >
+        Inserts a sandbox and returns it `starting`. The first sandbox of a task is named after
+        it, later ones `<task>-2`, `<task>-3`. In the background agc creates the VM, clones the
+        repo, answers the harnesses' first-run prompts, writes /home/agent/TASK.md (title, brief
+        and the instruction to push a branch `agc/<task>` and post in `#<task>`), runs setup, sets
+        `booted_at`, then starts `command` as the first terminal. A failure sets `failed` with
+        `status_error` and removes the VM. Missing secrets fail before anything is created.
       parameters:
         - $ref: '#/components/parameters/TaskIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SandboxRequest'
       responses:
-        '200':
-          description: The task with its live status.
+        '201':
+          description: The sandbox, `starting`.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Task'
+                $ref: '#/components/schemas/Sandbox'
         '400':
           $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /sandboxes:
+    get:
+      tags: [Sandboxes]
+      operationId: listSandboxes
+      summary: List sandboxes
+      description: Returns every sandbox, newest first, each with its task and status.
+      responses:
+        '200':
+          description: Sandboxes.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sandboxes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Sandbox'
+                required:
+                  - sandboxes
+        '500':
+          $ref: '#/components/responses/Error'
+  /sandboxes/{id}:
+    get:
+      tags: [Sandboxes]
+      operationId: getSandbox
+      summary: Retrieve a sandbox
+      parameters:
+        - $ref: '#/components/parameters/SandboxIdParam'
+      responses:
+        '200':
+          description: The sandbox with its status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sandbox'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Sandboxes]
+      operationId: deleteSandbox
+      summary: Delete a sandbox
+      description: >
+        Cancels a boot in progress, stops the VM if needed and removes it with its disk and
+        uncommitted work. Volumes and the task's channel history are kept.
+      parameters:
+        - $ref: '#/components/parameters/SandboxIdParam'
+      responses:
+        '200':
+          description: The deleted sandbox.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteSandboxResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /sandboxes/{id}/stop:
+    post:
+      tags: [Sandboxes]
+      operationId: stopSandbox
+      summary: Stop a sandbox
+      description: >
+        Shuts the VM down and keeps its disk. The status becomes `stopped`. Refused (409) while
+        the sandbox is `starting` or `failed`.
+      parameters:
+        - $ref: '#/components/parameters/SandboxIdParam'
+      responses:
+        '200':
+          description: The sandbox with its status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sandbox'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /sandboxes/{id}/start:
+    post:
+      tags: [Sandboxes]
+      operationId: startSandbox
+      summary: Start a stopped sandbox
+      description: >
+        Boots the VM from its disk with secrets read again from the secrets file. Refused (409)
+        while the sandbox is `starting` or `failed`.
+      parameters:
+        - $ref: '#/components/parameters/SandboxIdParam'
+      responses:
+        '200':
+          description: The sandbox with its status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sandbox'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /sandboxes/{id}/terminals:
+    get:
+      tags: [Sandboxes]
+      operationId: listTerminals
+      summary: List a sandbox's terminals
+      description: The sandbox's jobs as the runtime reports them.
+      parameters:
+        - $ref: '#/components/parameters/SandboxIdParam'
+      responses:
+        '200':
+          description: Terminals.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  terminals:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Terminal'
+                required:
+                  - terminals
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [Sandboxes]
+      operationId: startTerminal
+      summary: Start a terminal
+      description: Starts a TTY job in the sandbox that outlives the request and the browser tab.
+      parameters:
+        - $ref: '#/components/parameters/SandboxIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartTerminalRequest'
+      responses:
+        '200':
+          description: The new terminal's job id.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                required:
+                  - id
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /sandboxes/{id}/terminals/{job}/ws:
+    get:
+      tags: [Sandboxes]
+      operationId: attachTerminal
+      summary: Attach to a terminal over WebSocket
+      description: >
+        Upgrades to a WebSocket. Binary frames carry terminal bytes both ways; a text frame
+        {"type":"resize","rows":N,"cols":N} resizes. Recent output is replayed first. The socket
+        closes normally with reason "job completed" when the program exits; closing it detaches
+        and the job keeps running.
+      parameters:
+        - $ref: '#/components/parameters/SandboxIdParam'
+        - name: job
+          in: path
+          required: true
+          description: Terminal job id.
+          schema:
+            type: string
+      responses:
+        '101':
+          description: Switching to the WebSocket protocol.
         '404':
           $ref: '#/components/responses/Error'
         '500':
@@ -647,7 +861,7 @@ paths:
       operationId: listSavedSpecs
       summary: List saved specs
       description: >
-        Saved specs are reusable task.yaml files in ~/.agent_composer/config/specs/<name>.yaml,
+        Saved specs are reusable sandbox specs in ~/.agent_composer/config/specs/<name>.yaml,
         sorted by name.
       responses:
         '200':
@@ -695,7 +909,7 @@ paths:
       operationId: saveSpec
       summary: Save a spec
       description: >
-        Validates the YAML as a task.yaml and stores it verbatim, comments included, replacing a
+        Validates the YAML as a sandbox spec and stores it verbatim, comments included, replacing a
         saved spec of the same name. The name may be free text; it is saved as its slug
         ("Backend review" becomes backend-review), which the response returns.
       requestBody:
@@ -709,7 +923,7 @@ paths:
               properties:
                 yaml:
                   type: string
-                  description: The task.yaml text.
+                  description: The sandbox spec, the sandbox block of a task.yaml at top level.
       responses:
         '200':
           description: The saved spec.
@@ -928,6 +1142,13 @@ components:
       in: path
       required: true
       description: Task UUID or task name. A value that parses as a UUID is looked up by id.
+      schema:
+        type: string
+    SandboxIdParam:
+      name: id
+      in: path
+      required: true
+      description: Sandbox UUID or sandbox name. A value that parses as a UUID is looked up by id.
       schema:
         type: string
     KnowledgeIdParam:
@@ -1405,7 +1626,9 @@ components:
         - spec
     TaskSpec:
       type: object
-      description: The task.yaml spec. Secrets are names only, never values.
+      description: >
+        The environment block a sandbox boots from (ADR 0003): the sandbox block of a task.yaml
+        without command. Secrets are names only, never values.
       properties:
         image:
           type: string
@@ -1454,36 +1677,52 @@ components:
           description: What a human calls the task.
         name:
           type: string
-          description: Slug, also the sandbox name, the task's channel and its socket file.
-        spec:
-          $ref: '#/components/schemas/TaskSpec'
+          description: Slug, also the task's channel and its first sandbox's name.
+        brief:
+          type: string
+          description: What to do and what done looks like, markdown.
+        assignee:
+          type: string
+          description: A harness id (claude_code, codex_cli) or a person's name; empty is unassigned.
+        for:
+          type: string
+          description: Id of the knowledge action or decision the task serves; empty for none.
         status:
           type: string
+          enum: [open, running, done]
           description: >
-            The runtime's status word, verbatim (for example running or stopped), or unknown when
-            the runtime cannot be asked.
-        status_error:
+            Computed: done when done_at is set, otherwise running when a sandbox is running,
+            otherwise open.
+        done_at:
           type: string
-          description: Why the status is unknown.
+          format: date-time
+          nullable: true
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
+        sandboxes:
+          type: array
+          description: The task's sandboxes, newest first.
+          items:
+            $ref: '#/components/schemas/Sandbox'
       required:
         - id
         - title
         - name
-        - spec
+        - brief
+        - assignee
+        - for
         - status
+        - done_at
         - created_at
         - updated_at
+        - sandboxes
     CreateTaskRequest:
       type: object
-      description: At least one of title or name is required.
-      required:
-        - spec
+      description: At least one of title or name is required. brief is required unless sandbox is set.
       properties:
         title:
           type: string
@@ -1493,8 +1732,112 @@ components:
           description: >
             1-63 lowercase letters, digits or -, starting with a letter, and not a UUID. Defaults
             to the title's slug ("Review facebook ads" becomes review-facebook-ads).
+        brief:
+          type: string
+        assignee:
+          type: string
+        for:
+          type: string
+        sandbox:
+          $ref: '#/components/schemas/SandboxRequest'
+    SandboxRequest:
+      description: The environment fields inline, plus the command the sandbox runs for the task.
+      allOf:
+        - $ref: '#/components/schemas/TaskSpec'
+        - type: object
+          properties:
+            command:
+              type: string
+              description: >
+                Started as the first terminal once booted, split on whitespace, in the repo (or
+                /home/agent without one). Empty starts nothing.
+    Sandbox:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        task_id:
+          type: string
+          format: uuid
+        task:
+          type: string
+          description: The task's name.
+        name:
+          type: string
+          description: The runtime's sandbox name, also its socket file. <task>, then <task>-2, <task>-3.
         spec:
           $ref: '#/components/schemas/TaskSpec'
+        command:
+          type: string
+        status:
+          type: string
+          description: >
+            starting until booted, failed when the boot failed (status_error says why), otherwise
+            the runtime's word verbatim (running, stopped), or unknown when the runtime cannot be
+            asked (status_error says why).
+        status_error:
+          type: string
+          description: Why the status is failed or unknown.
+        booted_at:
+          type: string
+          format: date-time
+          nullable: true
+        stopped_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - task_id
+        - task
+        - name
+        - spec
+        - command
+        - status
+        - booted_at
+        - stopped_at
+        - created_at
+    DeleteSandboxResponse:
+      type: object
+      properties:
+        deleted:
+          type: boolean
+        name:
+          type: string
+      required:
+        - deleted
+        - name
+    Terminal:
+      type: object
+      description: One interactive job in a sandbox.
+      properties:
+        id:
+          type: string
+        command:
+          type: array
+          items:
+            type: string
+        running:
+          type: boolean
+      required:
+        - id
+        - command
+        - running
+    StartTerminalRequest:
+      type: object
+      required:
+        - command
+      properties:
+        command:
+          type: string
+          description: Split on whitespace, e.g. "claude --resume".
+        dir:
+          type: string
+          description: Working directory. Empty means the sandbox user's default.
     SavedSpec:
       type: object
       properties:
@@ -1502,7 +1845,7 @@ components:
           type: string
         yaml:
           type: string
-          description: The task.yaml text, verbatim.
+          description: The sandbox spec YAML, verbatim.
       required:
         - name
         - yaml
