@@ -1,0 +1,72 @@
+name: panel-eva-think
+title: "Eva look: the Think pages (beliefs, decisions, rules, actions, evidence)"
+manager: franco
+owner: franco
+assignee: claude_code
+model: claude-opus-5-5
+for: panel-reads-like-an-instrument
+brief: |
+  Apply the panel's design system (docs/design/panel.md, Franco's
+  decision of 2026-11-02: the panel reads like an instrument) to this area.
+
+  Read first: docs/design/panel.md (the design system; it is the spec),
+  panel/CLAUDE.md, panel/src/index.css (the Eva rules on the shell and the
+  Tasks list are the reference implementation: unlayered CSS under `.dark`
+  keyed on the markup's own attributes, chamfered plates drawn with
+  clip-path and a pseudo-element fill, status tabs fused into a plate's
+  edge, filled orange tabs, rulers, indexes with CSS counters), then
+  panel/src/features/tasks/TaskRow.tsx and TasksPage.tsx to see how little
+  markup the look needed, and rules/panel.yaml.
+
+  Bring Think (panel/src/features/think) to the design system: every item
+  as an indexed chamfered plate whose left tab carries its computed label
+  (grounded, opinion, judgment, contested, in doubt, open, done, passed,
+  failed, needs a human: the backend's words) with an LED in the system's
+  colors (green grounded or passed, yellow needs a human or in review, red
+  contested, failed or in doubt, dim opinion, cyan judgment is acceptable
+  as "a person's word"), the sentence as the title line in pale text, ids
+  and who/when in monospace, the why chain as a rail of plates indented
+  under the item, what-if as a filled yellow tab across the top of the page
+  while active, and a header strip with counts by label and a ruler. Keep
+  the labels verbatim and the data-testids the think spec uses.
+
+  How: put your CSS in panel/src/styles/eva-think.css (it exists, empty, and is
+  already imported from index.css); do not edit index.css, status-pill.tsx,
+  TaskRow.tsx, TasksPage.tsx, the shell, panel/src/api/schema.d.ts (it is
+  generated) or any test outside your area. Change markup only in your
+  area's files and only where CSS cannot reach (a wrapper, a data
+  attribute, moving a control to the right edge); keep every data-testid,
+  data-tier, data-status and aria attribute the tests use. No new
+  dependency: system fonts and CSS. Statuses stay the backend's words.
+  Reuse the shared variables (--eva, --eva-dim, --eva-faint, --eva-red,
+  --eva-green, --eva-yellow, --eva-cyan, --eva-ink, --cut) and the LED pill
+  as they are. Dark only; do not touch the light theme or its toggle.
+
+  Verify: `make panel-check` passes with no test changed except color or
+  shape assertions in your own area's spec; `npm run shot -- <route>` for
+  each of your routes, and look at the PNGs yourself before delivering,
+  then put their paths in your delivery. Work on branch agc/panel-eva-think from
+  feat/tasks-microsandbox, push, never merge. Post progress in #panel-eva-think;
+  deliver with `agc task deliver` and a summary of what changed, what you
+  verified, and anything in the look you were unsure about.
+
+  Never print, echo, grep or read environment variables or secret values
+  (no env, printenv, gh auth status, cat of credential files): the secrets
+  in your environment are placeholders bound to hosts, and once one appears
+  in your context the secret policy blocks your own model calls and your
+  session is dead.
+
+  Routes to shoot: /think/beliefs, /think/decisions, /think/rules, /think/actions, /think/evidence.
+accept:
+  - "Each Think page lists its items as indexed chamfered plates with the computed label as the left tab, the why chain as an indented rail, and a header strip with counts and a ruler"
+  - "What-if shows as a filled yellow tab across the page while active; labels stay verbatim"
+  - "Only panel/src/features/think/** and panel/src/styles/eva-think.css changed, apart from color or shape assertions in that area's spec; make panel-check passes"
+  - "Branch agc/panel-eva-think is pushed and not merged; the delivery lists the screenshot paths"
+sandbox:
+  image: agc-agent
+  cpus: 2
+  memory: 4096
+  repo: https://github.com/vanclief/agent-composer
+  ref: feat/tasks-microsandbox
+  setup: cd panel && npm ci
+  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]

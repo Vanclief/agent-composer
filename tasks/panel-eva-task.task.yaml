@@ -1,0 +1,75 @@
+name: panel-eva-task
+title: "Eva look: the task page and the New task dialog"
+manager: franco
+owner: franco
+assignee: claude_code
+model: claude-opus-5-5
+for: panel-reads-like-an-instrument
+brief: |
+  Apply the panel's design system (docs/design/panel.md, Franco's
+  decision of 2026-11-02: the panel reads like an instrument) to this area.
+
+  Read first: docs/design/panel.md (the design system; it is the spec),
+  panel/CLAUDE.md, panel/src/index.css (the Eva rules on the shell and the
+  Tasks list are the reference implementation: unlayered CSS under `.dark`
+  keyed on the markup's own attributes, chamfered plates drawn with
+  clip-path and a pseudo-element fill, status tabs fused into a plate's
+  edge, filled orange tabs, rulers, indexes with CSS counters), then
+  panel/src/features/tasks/TaskRow.tsx and TasksPage.tsx to see how little
+  markup the look needed, and rules/panel.yaml.
+
+  Bring the task page (panel/src/features/tasks/TaskPage.tsx and
+  ComputeTab.tsx only) and the New task dialog
+  (panel/src/features/create-task) to the design system: the task header
+  as a plate with the status tab fused into its left edge, the title in
+  condensed uppercase, name, assignee, model, manager, owner and age as
+  monospace readouts in columns, the acts (Accept, Reject, Allocate, Stop)
+  as filled blocks at the far right of the header; the brief and the
+  accepted-when list as plates with a filled section tab and a ruler; the
+  compute tab's sandboxes as indexed plates. The New task dialog as a
+  chamfered plate with a title tab, its fields in one-pixel frames with
+  condensed uppercase labels, the knowledge and sandbox cards as plates,
+  Create as the filled block. Do not touch TaskRail.tsx, attention.tsx,
+  src/api/tasks.ts, the mock or tests/tasks.spec.ts: another task
+  (panel-review) is editing them; the rail follows in a later task.
+
+  How: put your CSS in panel/src/styles/eva-task.css (it exists, empty, and is
+  already imported from index.css); do not edit index.css, status-pill.tsx,
+  TaskRow.tsx, TasksPage.tsx, the shell, panel/src/api/schema.d.ts (it is
+  generated) or any test outside your area. Change markup only in your
+  area's files and only where CSS cannot reach (a wrapper, a data
+  attribute, moving a control to the right edge); keep every data-testid,
+  data-tier, data-status and aria attribute the tests use. No new
+  dependency: system fonts and CSS. Statuses stay the backend's words.
+  Reuse the shared variables (--eva, --eva-dim, --eva-faint, --eva-red,
+  --eva-green, --eva-yellow, --eva-cyan, --eva-ink, --cut) and the LED pill
+  as they are. Dark only; do not touch the light theme or its toggle.
+
+  Verify: `make panel-check` passes with no test changed except color or
+  shape assertions in your own area's spec; `npm run shot -- <route>` for
+  each of your routes, and look at the PNGs yourself before delivering,
+  then put their paths in your delivery. Work on branch agc/panel-eva-task from
+  feat/tasks-microsandbox, push, never merge. Post progress in #panel-eva-task;
+  deliver with `agc task deliver` and a summary of what changed, what you
+  verified, and anything in the look you were unsure about.
+
+  Never print, echo, grep or read environment variables or secret values
+  (no env, printenv, gh auth status, cat of credential files): the secrets
+  in your environment are placeholders bound to hosts, and once one appears
+  in your context the secret policy blocks your own model calls and your
+  session is dead.
+
+  Routes to shoot: /tasks/review-42, /tasks/docs-pass and /tasks with the New task dialog open if the shot script can do it; otherwise describe the dialog.
+accept:
+  - "The task page header is a plate with the status tab on the left and the acts at the far right; brief and accepted-when are plates with section tabs"
+  - "The New task dialog follows the system (chamfered plate, title tab, framed fields, filled Create); the create-task spec passes"
+  - "Only panel/src/features/tasks/TaskPage.tsx, panel/src/features/tasks/ComputeTab.tsx, panel/src/features/create-task/** and panel/src/styles/eva-task.css changed, apart from color or shape assertions in that area's spec; make panel-check passes"
+  - "Branch agc/panel-eva-task is pushed and not merged; the delivery lists the screenshot paths"
+sandbox:
+  image: agc-agent
+  cpus: 2
+  memory: 4096
+  repo: https://github.com/vanclief/agent-composer
+  ref: feat/tasks-microsandbox
+  setup: cd panel && npm ci
+  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]

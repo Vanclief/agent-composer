@@ -1,0 +1,76 @@
+name: panel-eva-base
+title: "Eva look: the shadcn base components (buttons, inputs, dialogs, tabs, badges, toasts)"
+manager: franco
+owner: franco
+assignee: claude_code
+model: claude-opus-5-5
+for: panel-reads-like-an-instrument
+brief: |
+  Apply the panel's design system (docs/design/panel.md, Franco's
+  decision of 2026-11-02: the panel reads like an instrument) to this area.
+
+  Read first: docs/design/panel.md (the design system; it is the spec),
+  panel/CLAUDE.md, panel/src/index.css (the Eva rules on the shell and the
+  Tasks list are the reference implementation: unlayered CSS under `.dark`
+  keyed on the markup's own attributes, chamfered plates drawn with
+  clip-path and a pseudo-element fill, status tabs fused into a plate's
+  edge, filled orange tabs, rulers, indexes with CSS counters), then
+  panel/src/features/tasks/TaskRow.tsx and TasksPage.tsx to see how little
+  markup the look needed, and rules/panel.yaml.
+
+  Bring the shared components in panel/src/components/ui/ to the design
+  system, since every page is built from them: radius zero everywhere;
+  buttons as outlined orange blocks that fill on hover, the primary one
+  filled with ink text, destructive red, all cut at the top right (6px);
+  inputs, textareas and selects as one-pixel frames on the plate color with
+  a cyan focus ring and uppercase condensed labels; dialogs and alert
+  dialogs as chamfered plates with a filled title tab and a ruler under the
+  header; tabs as outlined blocks with the active one filled; badges square
+  and monospace; switches and toggles square; tooltips, dropdown menus and
+  the command palette as plates with one-pixel frames; skeletons as dim
+  frames; toasts (sonner) as plates whose frame color is the event's color.
+  The components' props and class hooks stay as they are, so no page breaks;
+  prefer tokens and your CSS file over rewriting component code, and touch
+  a component file only where its hard-coded rounded or zinc classes
+  cannot be overridden.
+
+  How: put your CSS in panel/src/styles/eva-base.css (it exists, empty, and is
+  already imported from index.css); do not edit index.css, status-pill.tsx,
+  TaskRow.tsx, TasksPage.tsx, the shell, panel/src/api/schema.d.ts (it is
+  generated) or any test outside your area. Change markup only in your
+  area's files and only where CSS cannot reach (a wrapper, a data
+  attribute, moving a control to the right edge); keep every data-testid,
+  data-tier, data-status and aria attribute the tests use. No new
+  dependency: system fonts and CSS. Statuses stay the backend's words.
+  Reuse the shared variables (--eva, --eva-dim, --eva-faint, --eva-red,
+  --eva-green, --eva-yellow, --eva-cyan, --eva-ink, --cut) and the LED pill
+  as they are. Dark only; do not touch the light theme or its toggle.
+
+  Verify: `make panel-check` passes with no test changed except color or
+  shape assertions in your own area's spec; `npm run shot -- <route>` for
+  each of your routes, and look at the PNGs yourself before delivering,
+  then put their paths in your delivery. Work on branch agc/panel-eva-base from
+  feat/tasks-microsandbox, push, never merge. Post progress in #panel-eva-base;
+  deliver with `agc task deliver` and a summary of what changed, what you
+  verified, and anything in the look you were unsure about.
+
+  Never print, echo, grep or read environment variables or secret values
+  (no env, printenv, gh auth status, cat of credential files): the secrets
+  in your environment are placeholders bound to hosts, and once one appears
+  in your context the secret policy blocks your own model calls and your
+  session is dead.
+
+  Routes to shoot: /tasks, /tasks/review-42, /compute, /messages/review-42 and the New task dialog (open it in a shot of /tasks with --wait if the shot script cannot click; otherwise describe it).
+accept:
+  - "Every component in panel/src/components/ui renders with radius zero, the palette of docs/design/panel.md and a cyan focus ring; buttons, dialogs and tabs carry the cut corner"
+  - "No component prop, export or class hook changes; make panel-check passes with no test edited"
+  - "Only panel/src/components/ui/*.tsx and panel/src/styles/eva-base.css changed, apart from color or shape assertions in that area's spec; make panel-check passes"
+  - "Branch agc/panel-eva-base is pushed and not merged; the delivery lists the screenshot paths"
+sandbox:
+  image: agc-agent
+  cpus: 2
+  memory: 4096
+  repo: https://github.com/vanclief/agent-composer
+  ref: feat/tasks-microsandbox
+  setup: cd panel && npm ci
+  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
