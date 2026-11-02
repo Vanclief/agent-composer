@@ -372,6 +372,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sandboxes/gc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Collect the sandboxes of done tasks
+         * @description Deletes, through the same path as DELETE /sandboxes/{id}, every sandbox that is stopped, is not an agent's home and belongs to a task done longer than keep ago; with dry_run only lists them. Volumes and messages are kept. agc rest runs the same collection every 10 minutes with keep_done (ADR 0008 "Garbage collection"). A failed delete is listed with its error and the rest go on.
+         */
+        post: operations["gcSandboxes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sandboxes/{id}": {
         parameters: {
             query?: never;
@@ -1526,6 +1546,13 @@ export interface components {
             /** @description The runtime's sandbox name, also its socket file. <task>, then <task>-2, <task>-3; an agent's home is named after the agent the same way and keeps its name when the agent is renamed. */
             name: string;
             spec: components["schemas"]["TaskSpec"];
+            /** @description The size of the sandbox's private /home/agent disk, the spec's disk or the default 20G, such as 20G or 512M. */
+            disk: string;
+            /**
+             * Format: int64
+             * @description The same size in MiB, to sum across sandboxes.
+             */
+            disk_mib: number;
             command: string;
             /** @description The TASK.md written into the sandbox at /home/agent/TASK.md, byte for byte (ADR 0009); for an agent's home, its template's instructions, written as /home/agent/AGENT.md. */
             instructions: string;
@@ -1682,6 +1709,34 @@ export interface components {
             unpushed: number;
             /** Format: date-time */
             checked_at: string;
+        };
+        SandboxGCRequest: {
+            /** @description Only list what would be deleted. */
+            dry_run?: boolean;
+            /** @description Grace period after the task is done, a Go duration such as 48h, or 0. Empty is the configured keep_done, or 24h when keep_done is 0 (the collector off). */
+            keep?: string;
+        };
+        SandboxGCItem: {
+            name: string;
+            task: string;
+            /** @description How long ago the task was done, such as 26h3m0s. */
+            done_for: string;
+            disk: string;
+            /** Format: int64 */
+            disk_mib: number;
+            /** @description Why the delete failed; absent when it did not. */
+            error?: string;
+        };
+        SandboxGCResponse: {
+            dry_run: boolean;
+            /** @description The grace period applied, such as 24h0m0s. */
+            keep: string;
+            /** @description What was deleted (or, on a dry run, would be), with any failed delete. */
+            sandboxes: components["schemas"]["SandboxGCItem"][];
+            /** @description How many sandboxes were deleted; 0 on a dry run. */
+            freed: number;
+            /** @description The disk of the deleted sandboxes, such as 40G. */
+            freed_disk: string;
         };
         DeleteSandboxResponse: {
             deleted: boolean;
@@ -3187,6 +3242,32 @@ export interface operations {
                     };
                 };
             };
+            500: components["responses"]["Error"];
+        };
+    };
+    gcSandboxes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SandboxGCRequest"];
+            };
+        };
+        responses: {
+            /** @description What was deleted, or would be. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxGCResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };
     };

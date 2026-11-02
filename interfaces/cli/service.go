@@ -42,6 +42,9 @@ type taskService interface {
 	StopSandbox(ctx context.Context, ref string) (*sandboxes.SandboxView, error)
 	StartSandbox(ctx context.Context, ref string) (*sandboxes.SandboxView, error)
 	DeleteSandbox(ctx context.Context, ref string) (*sandboxes.DeleteResponse, error)
+	// GCSandboxes deletes, or with DryRun lists, the stopped sandboxes of
+	// tasks done longer than Keep ago (ADR 0008).
+	GCSandboxes(ctx context.Context, request *sandboxes.GCRequest) (*sandboxes.GCResponse, error)
 
 	ListSpecs(ctx context.Context) (*tasks.ListSpecsResponse, error)
 	GetSpec(ctx context.Context, name string) (*task.Saved, error)
@@ -207,6 +210,10 @@ func (s localService) StartSandbox(ctx context.Context, ref string) (*sandboxes.
 
 func (s localService) DeleteSandbox(ctx context.Context, ref string) (*sandboxes.DeleteResponse, error) {
 	return s.api.Sandboxes.Delete(ctx, nil, &sandboxes.DeleteRequest{Name: ref})
+}
+
+func (s localService) GCSandboxes(ctx context.Context, request *sandboxes.GCRequest) (*sandboxes.GCResponse, error) {
+	return s.api.Sandboxes.GC(ctx, nil, request)
 }
 
 func (s localService) ListSpecs(ctx context.Context) (*tasks.ListSpecsResponse, error) {

@@ -24,4 +24,7 @@ type Config struct {
 	SQLite   sqlite.ConnectionConfig   `mapstructure:"sqlite"`
 	// Defaults fill in a task's assignee, model and owner (ADR 0009).
 	Defaults DefaultsSettings `mapstructure:"defaults"`
+	// Sandboxes holds keep_done, the grace period before a done task's
+	// stopped sandbox is collected (ADR 0008).
+	Sandboxes SandboxesSettings `mapstructure:"sandboxes"`
 }

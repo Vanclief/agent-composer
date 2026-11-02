@@ -11,6 +11,7 @@ import (
 
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
+	"github.com/vanclief/agent-composer/executor/sandbox"
 )
 
 // output prints value as JSON under --json, else as the lines human
@@ -102,8 +103,37 @@ func writeSandboxes(w io.Writer, list *sandboxes.ListResponse) {
 		return
 	}
 
-	fmt.Fprintln(w, "NAME\tSTATUS\tTASK")
+	var total uint32
+	fmt.Fprintln(w, "NAME\tSTATUS\tDISK\tTASK")
 	for _, view := range list.Sandboxes {
-		fmt.Fprintf(w, "%s\t%s\t%s\n", view.Name, sandboxStatus(view), view.Task)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", view.Name, sandboxStatus(view), view.Disk, view.Task)
+		total += view.DiskMiB
 	}
+	fmt.Fprintf(w, "%d sandboxes, %s of disk\n", len(list.Sandboxes), sandbox.FormatSize(total))
+}
+
+// writeGC prints what the collector deleted, or would with --dry-run.
+func writeGC(w io.Writer, collected *sandboxes.GCResponse) {
+	if len(collected.Sandboxes) == 0 {
+		fmt.Fprintf(w, "No stopped sandbox of a task done more than %s ago.\n", collected.Keep)
+		return
+	}
+
+	var disk uint32
+	fmt.Fprintln(w, "NAME\tTASK\tDONE FOR\tDISK")
+	for _, item := range collected.Sandboxes {
+		line := fmt.Sprintf("%s\t%s\t%s\t%s", item.Name, item.Task, item.DoneFor, item.Disk)
+		if item.Error != "" {
+			line += "\tnot deleted: " + item.Error
+		}
+		fmt.Fprintln(w, line)
+		disk += item.DiskMiB
+	}
+
+	if collected.DryRun {
+		fmt.Fprintf(w, "Would delete %d sandboxes, %s of disk; volumes are kept.\n", len(collected.Sandboxes), sandbox.FormatSize(disk))
+		return
+	}
+
+	fmt.Fprintf(w, "Deleted %d sandboxes, %s of disk; volumes are kept.\n", collected.Freed, collected.FreedDisk)
 }

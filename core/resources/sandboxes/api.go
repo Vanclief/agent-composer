@@ -99,6 +99,14 @@ type API struct {
 
 	// events gets sandbox.status on every status change, nil drops them.
 	events *events.Bus
+
+	// keepDone is how long a done task's stopped sandbox is kept before
+	// the collector deletes it, 0 when the collector is off (ADR 0008).
+	keepDone time.Duration
+	// collecting serializes collector runs.
+	collecting sync.Mutex
+	// now is the clock, replaced in tests.
+	now func() time.Time
 }
 
 // StatusEvent is the data of sandbox.status.
@@ -167,7 +175,16 @@ func NewAPI(rootCtx context.Context, ctrl *controller.Controller, msg *messaging
 		panic("Controller reference is nil")
 	}
 
-	return New(rootCtx, ctrl.DB, msg, rt, secretsPath, socketDir)
+	api := New(rootCtx, ctrl.DB, msg, rt, secretsPath, socketDir)
+
+	keep, err := ctrl.KeepDone()
+	if err != nil {
+		log.Error().Err(err).Dur("keep_done", controller.BuiltinKeepDone).Msg("sandboxes: bad keep_done, using the built-in one")
+		keep = controller.BuiltinKeepDone
+	}
+	api.keepDone = keep
+
+	return api
 }
 
 // New is NewAPI over a bare database, for tests.
@@ -192,6 +209,8 @@ func New(rootCtx context.Context, db bun.IDB, msg *messaging.Service, rt Runtime
 		rootCtx:     rootCtx,
 		listeners:   map[string]*listener{},
 		booting:     map[string]*boot{},
+		keepDone:    controller.BuiltinKeepDone,
+		now:         time.Now,
 	}
 }
 
@@ -205,10 +224,14 @@ type SandboxView struct {
 	Task string `json:"task"`
 	// Agent is the name of the persistent agent whose home this is
 	// (ADR 0016), empty for a task's sandbox.
-	Agent   string    `json:"agent"`
-	Name    string    `json:"name"`
-	Spec    task.Spec `json:"spec"`
-	Command string    `json:"command"`
+	Agent string    `json:"agent"`
+	Name  string    `json:"name"`
+	Spec  task.Spec `json:"spec"`
+	// Disk is the size of the sandbox's private /home/agent disk, the
+	// spec's disk or the default 20G; DiskMiB is the same in MiB, to sum.
+	Disk    string `json:"disk"`
+	DiskMiB uint32 `json:"disk_mib"`
+	Command string `json:"command"`
 	// Instructions is the TASK.md written into the sandbox, verbatim.
 	Instructions string `json:"instructions"`
 	// Volume is the named volume holding the harness homes and their
@@ -296,6 +319,8 @@ func baseView(record *taskmodels.Sandbox, owner *taskmodels.Task) (*SandboxView,
 		return nil, ez.Wrap(err)
 	}
 
+	disk, diskMiB := diskOf(record)
+
 	view := &SandboxView{
 		ID:           record.ID,
 		TaskID:       record.TaskID,
@@ -303,6 +328,8 @@ func baseView(record *taskmodels.Sandbox, owner *taskmodels.Task) (*SandboxView,
 		Agent:        record.Agent,
 		Name:         record.Name,
 		Spec:         spec,
+		Disk:         disk,
+		DiskMiB:      diskMiB,
 		Command:      record.Command,
 		Instructions: record.Instructions,
 		Volume:       record.Volume,

@@ -822,6 +822,34 @@ paths:
                   - sandboxes
         '500':
           $ref: '#/components/responses/Error'
+  /sandboxes/gc:
+    post:
+      tags: [Sandboxes]
+      operationId: gcSandboxes
+      summary: Collect the sandboxes of done tasks
+      description: >
+        Deletes, through the same path as DELETE /sandboxes/{id}, every sandbox that is stopped,
+        is not an agent's home and belongs to a task done longer than keep ago; with dry_run only
+        lists them. Volumes and messages are kept. agc rest runs the same collection every 10
+        minutes with keep_done (ADR 0008 "Garbage collection"). A failed delete is listed with
+        its error and the rest go on.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SandboxGCRequest'
+      responses:
+        '200':
+          description: What was deleted, or would be.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxGCResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
   /sandboxes/{id}:
     get:
       tags: [Sandboxes]
@@ -3046,6 +3074,15 @@ components:
             is renamed.
         spec:
           $ref: '#/components/schemas/TaskSpec'
+        disk:
+          type: string
+          description: >
+            The size of the sandbox's private /home/agent disk, the spec's disk or the default 20G,
+            such as 20G or 512M.
+        disk_mib:
+          type: integer
+          format: int64
+          description: The same size in MiB, to sum across sandboxes.
         command:
           type: string
         instructions:
@@ -3094,6 +3131,8 @@ components:
         - agent
         - name
         - spec
+        - disk
+        - disk_mib
         - command
         - instructions
         - volume
@@ -3363,6 +3402,66 @@ components:
         - dirty
         - unpushed
         - checked_at
+    SandboxGCRequest:
+      type: object
+      properties:
+        dry_run:
+          type: boolean
+          description: Only list what would be deleted.
+        keep:
+          type: string
+          description: >
+            Grace period after the task is done, a Go duration such as 48h, or 0. Empty is the
+            configured keep_done, or 24h when keep_done is 0 (the collector off).
+    SandboxGCItem:
+      type: object
+      properties:
+        name:
+          type: string
+        task:
+          type: string
+        done_for:
+          type: string
+          description: How long ago the task was done, such as 26h3m0s.
+        disk:
+          type: string
+        disk_mib:
+          type: integer
+          format: int64
+        error:
+          type: string
+          description: Why the delete failed; absent when it did not.
+      required:
+        - name
+        - task
+        - done_for
+        - disk
+        - disk_mib
+    SandboxGCResponse:
+      type: object
+      properties:
+        dry_run:
+          type: boolean
+        keep:
+          type: string
+          description: The grace period applied, such as 24h0m0s.
+        sandboxes:
+          type: array
+          description: What was deleted (or, on a dry run, would be), with any failed delete.
+          items:
+            $ref: '#/components/schemas/SandboxGCItem'
+        freed:
+          type: integer
+          description: How many sandboxes were deleted; 0 on a dry run.
+        freed_disk:
+          type: string
+          description: The disk of the deleted sandboxes, such as 40G.
+      required:
+        - dry_run
+        - keep
+        - sandboxes
+        - freed
+        - freed_disk
     DeleteSandboxResponse:
       type: object
       properties:

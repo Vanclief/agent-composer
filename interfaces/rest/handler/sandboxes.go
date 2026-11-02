@@ -99,3 +99,23 @@ func (h *Handler) GetTranscript(c echo.Context) error {
 
 	return nil
 }
+
+// POST /sandboxes/gc
+//
+// Deletes, or with dry_run lists, the stopped sandboxes of tasks done
+// longer than keep ago (ADR 0008 "Garbage collection").
+func (h *Handler) GCSandboxes(c echo.Context) error {
+	const op = "Handler.GCSandboxes"
+
+	request := requests.New(c.Request().Header, c.RealIP())
+	body := &sandboxes.GCRequest{}
+
+	if c.Request().ContentLength != 0 {
+		err := c.Bind(body)
+		if err != nil {
+			return h.ManageError(c, op, request, err)
+		}
+	}
+
+	return h.JSONResponse(c, op, request, body)
+}
