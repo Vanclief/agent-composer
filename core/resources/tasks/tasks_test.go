@@ -25,11 +25,13 @@ import (
 	"github.com/vanclief/agent-composer/task"
 )
 
-// fakeRuntime boots every sandbox as running and records removals.
+// fakeRuntime boots every sandbox as running and records removals. A
+// non-nil gate holds every Create until it is closed.
 type fakeRuntime struct {
 	mu       sync.Mutex
 	statuses map[string]string
 	calls    []string
+	gate     chan struct{}
 }
 
 func (f *fakeRuntime) record(call string) {
@@ -46,6 +48,9 @@ func (f *fakeRuntime) Calls() []string {
 
 func (f *fakeRuntime) Create(ctx context.Context, spec sandbox.Spec) (sandboxes.Sandbox, error) {
 	f.record("create " + spec.Name)
+	if f.gate != nil {
+		<-f.gate
+	}
 	f.mu.Lock()
 	f.statuses[spec.Name] = "running"
 	f.mu.Unlock()
@@ -292,28 +297,170 @@ func TestCreateMissingSecretLeavesNoTask(t *testing.T) {
 	}
 }
 
-func TestDone(t *testing.T) {
+func TestDeliverAcceptAndReject(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := context.Background()
 
-	_, err := env.api.Create(ctx, nil, &CreateRequest{Manager: "orchestrator", Name: "review-42", Sandbox: &task.Sandbox{}})
+	created, err := env.api.Create(ctx, nil, &CreateRequest{Manager: "orchestrator", Name: "review-42", Accept: []string{" findings posted "}, Sandbox: &task.Sandbox{}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	env.api.Sandboxes.Wait()
 
-	view, err := env.api.Done(ctx, nil, &DoneRequest{Name: "review-42"})
+	if len(created.Accept) != 1 || created.Accept[0] != "findings posted" {
+		t.Fatalf("accept = %q", created.Accept)
+	}
+
+	view, err := env.api.Deliver(ctx, nil, &DeliverRequest{Name: "review-42", Summary: "first"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if view.Status != "done" || view.DoneAt == nil || view.Sandboxes[0].Status != "running" {
-		t.Fatalf("view = %+v", view)
+	view, err = env.api.Deliver(ctx, nil, &DeliverRequest{ID: view.ID, Summary: " Posted 3 findings. "})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Status != StatusReview || view.DeliveredAt == nil || view.Summary != "Posted 3 findings." || view.Sandboxes[0].Status != "running" {
+		t.Fatalf("delivered: %+v", view)
+	}
+
+	view, err = env.api.Reject(ctx, nil, &RejectRequest{Name: "review-42", By: "orchestrator", Why: "finding 2 is wrong"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Status != StatusRunning || view.DeliveredAt != nil || view.Summary != "Posted 3 findings." {
+		t.Fatalf("rejected: %+v", view)
+	}
+
+	// By defaults to the owner.
+	view, err = env.api.Accept(ctx, nil, &AcceptRequest{Name: "review-42"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Status != StatusDone || view.DoneAt == nil || view.AcceptedBy != "franco" || view.DeliveredAt != nil {
+		t.Fatalf("accepted: %+v", view)
+	}
+	if view.Sandboxes[0].Status != "stopped" {
+		t.Fatalf("sandbox not stopped: %+v", view.Sandboxes[0])
 	}
 
 	first := *view.DoneAt
-	view, err = env.api.Done(ctx, nil, &DoneRequest{ID: view.ID})
-	if err != nil || !view.DoneAt.Equal(first) {
-		t.Fatalf("second done: %+v, err %v", view, err)
+	view, err = env.api.Accept(ctx, nil, &AcceptRequest{ID: view.ID, By: "orchestrator"})
+	if err != nil || !view.DoneAt.Equal(first) || view.AcceptedBy != "franco" {
+		t.Fatalf("second accept: %+v, err %v", view, err)
+	}
+
+	_, err = env.api.Reject(ctx, nil, &RejectRequest{Name: "review-42", Why: "late"})
+	if ez.ErrorCode(err) != ez.ECONFLICT {
+		t.Fatalf("reject after accept: %v", err)
+	}
+	_, err = env.api.Deliver(ctx, nil, &DeliverRequest{Name: "review-42", Summary: "again"})
+	if ez.ErrorCode(err) != ez.ECONFLICT {
+		t.Fatalf("deliver after accept: %v", err)
+	}
+
+	messages, err := env.msg.Read(ctx, messaging.Caller{Human: true}, "#review-42", 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := []string{}
+	for _, m := range messages[2:] {
+		got = append(got, m.From+": "+m.Body)
+	}
+	want := []string{"agc: Delivered: first", "agc: Delivered: Posted 3 findings.", "agc: Rejected by orchestrator: finding 2 is wrong", "agc: Accepted by franco."}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("messages = %q", got)
+	}
+
+	calls := env.rt.Calls()
+	if len(calls) != 2 || calls[1] != "stop review-42" {
+		t.Fatalf("calls = %q", calls)
+	}
+}
+
+// ADR 0010 item 4: a sandbox still booting when the task is accepted is
+// stopped, with its disk, as soon as its boot finishes.
+func TestAcceptStopsASandboxOnceItHasBooted(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	env.rt.gate = make(chan struct{})
+
+	_, err := env.api.Create(ctx, nil, &CreateRequest{Manager: "orchestrator", Name: "slow", Sandbox: &task.Sandbox{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	view, err := env.api.Accept(ctx, nil, &AcceptRequest{Name: "slow"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Status != StatusDone || view.Sandboxes[0].Status != sandboxes.StatusStarting {
+		t.Fatalf("accepted while booting: %+v", view)
+	}
+
+	close(env.rt.gate)
+	env.api.Sandboxes.Wait()
+
+	view, err = env.api.Get(ctx, nil, &GetRequest{Name: "slow"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sb := view.Sandboxes[0]
+	if sb.Status != sandboxes.StatusStopped || sb.BootedAt == nil || sb.StoppedAt == nil {
+		t.Fatalf("sandbox after its boot: %+v", sb)
+	}
+
+	// Stopped once, never removed: the disk is kept.
+	calls := env.rt.Calls()
+	if !reflect.DeepEqual(calls, []string{"create slow", "stop slow"}) {
+		t.Fatalf("calls = %q", calls)
+	}
+
+	// A boot that ends before any accept is left running.
+	env.rt.gate = nil
+
+	_, err = env.api.Create(ctx, nil, &CreateRequest{Manager: "orchestrator", Name: "quick", Sandbox: &task.Sandbox{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.api.Sandboxes.Wait()
+
+	view, err = env.api.Get(ctx, nil, &GetRequest{Name: "quick"})
+	if err != nil || view.Sandboxes[0].Status != sandboxes.StatusRunning {
+		t.Fatalf("quick: %+v, err %v", view, err)
+	}
+}
+
+func TestAcceptRejectAndDeliverValidate(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"deliver without summary", DeliverRequest{Name: "x", Summary: " "}.Validate()},
+		{"reject without why", RejectRequest{Name: "x", Why: "\n"}.Validate()},
+		{"accept by a bad name", AcceptRequest{Name: "x", By: "Not A Name"}.Validate()},
+		{"create with an empty criterion", CreateRequest{Name: "x", Brief: "b", Manager: "m", Accept: []string{"ok", "  "}}.Validate()},
+	}
+
+	for _, tc := range cases {
+		if ez.ErrorCode(tc.err) != ez.EINVALID {
+			t.Fatalf("%s: %v", tc.name, tc.err)
+		}
+	}
+
+	// Without an owner, by has nothing to default to.
+	env := newTestEnv(t)
+	ctx := context.Background()
+	env.api.defaults.Owner = ""
+
+	_, err := env.api.Create(ctx, nil, &CreateRequest{Manager: "orchestrator", Name: "ownerless", Brief: "b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = env.api.Accept(ctx, nil, &AcceptRequest{Name: "ownerless"})
+	if ez.ErrorCode(err) != ez.EINVALID {
+		t.Fatalf("accept without by or owner: %v", err)
 	}
 }
 
@@ -335,9 +482,20 @@ func TestListAndStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	_, err = env.api.Create(ctx, nil, &CreateRequest{Manager: "orchestrator", Name: "delivered", Sandbox: &task.Sandbox{}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	env.api.Sandboxes.Wait()
 
 	_, err = env.api.Sandboxes.Stop(ctx, nil, &sandboxes.StopRequest{Name: "stopped"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A delivered task is in review even with its sandbox running.
+	_, err = env.api.Deliver(ctx, nil, &DeliverRequest{Name: "delivered", Summary: "done it"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +510,7 @@ func TestListAndStatus(t *testing.T) {
 		got = append(got, view.Name+"="+view.Status)
 	}
 
-	want := []string{"busy=running", "stopped=open", "human=open"}
+	want := []string{"delivered=review", "busy=running", "stopped=open", "human=open"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q", got)
 	}

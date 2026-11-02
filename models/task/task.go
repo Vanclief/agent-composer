@@ -47,10 +47,20 @@ type Task struct {
 	// Notify asks the panel for a toast and a chime when the task starts
 	// and when it is done. No default tag: bun would insert DEFAULT for
 	// false. Existing rows got true from the migration.
-	Notify    bool       `bun:"notify,notnull" json:"notify"`
-	DoneAt    *time.Time `bun:"done_at" json:"done_at"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	Notify bool `bun:"notify,notnull" json:"notify"`
+	// Accept is what accepted means: ordered criteria, text agc does not
+	// evaluate (ADR 0010 item 1). Stored as a JSON array.
+	Accept []string `bun:"accept,type:jsonb,notnull,default:'[]'" json:"accept"`
+	// DeliveredAt is when the agent last delivered, nil when it has not or
+	// its delivery was rejected (ADR 0010 items 2 and 5).
+	DeliveredAt *time.Time `bun:"delivered_at" json:"delivered_at"`
+	// Summary is the last delivery's summary, kept after a rejection.
+	Summary string `bun:"summary,notnull,default:''" json:"summary"`
+	// AcceptedBy names who accepted the task, set with DoneAt.
+	AcceptedBy string     `bun:"accepted_by,notnull,default:''" json:"accepted_by"`
+	DoneAt     *time.Time `bun:"done_at" json:"done_at"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
 }
 
 func ValidateName(name string) error {
@@ -136,6 +146,10 @@ func (t *Task) Insert(ctx context.Context, db bun.IDB) error {
 	}
 	t.UpdatedAt = now
 
+	if t.Accept == nil {
+		t.Accept = []string{}
+	}
+
 	err := t.Validate()
 	if err != nil {
 		return ez.Wrap(err)
@@ -149,19 +163,72 @@ func (t *Task) Insert(ctx context.Context, db bun.IDB) error {
 	return nil
 }
 
-// MarkDone sets DoneAt to now. A Task already done keeps its first DoneAt.
-func (t *Task) MarkDone(ctx context.Context, db bun.IDB) error {
+// now is the current time as the database keeps it, to the microsecond,
+// so a returned time matches a later read of it.
+func now() time.Time {
+	return time.Now().UTC().Truncate(time.Microsecond)
+}
+
+// MarkAccepted sets DoneAt to now and AcceptedBy to by (ADR 0010 item 4),
+// and reports whether this call did. A Task already done keeps its first
+// DoneAt and AcceptedBy: when another accept stored them first, t is
+// reloaded with them and the result is false.
+func (t *Task) MarkAccepted(ctx context.Context, db bun.IDB, by string) (bool, error) {
 	if t.DoneAt != nil {
-		return nil
+		return false, nil
 	}
 
-	// The database keeps microseconds, so the returned done_at matches a
-	// later read of it.
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	t.DoneAt = &now
-	t.UpdatedAt = now
+	at := now()
+	t.DoneAt = &at
+	t.AcceptedBy = by
+	t.UpdatedAt = at
 
-	_, err := db.NewUpdate().Model(t).Column("done_at", "updated_at").WherePK().Exec(ctx)
+	result, err := db.NewUpdate().Model(t).Column("done_at", "accepted_by", "updated_at").WherePK().Where("done_at IS NULL").Exec(ctx)
+	if err != nil {
+		return false, ez.Wrap(err)
+	}
+
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return false, ez.Wrap(err)
+	}
+
+	if changed > 0 {
+		return true, nil
+	}
+
+	stored, err := GetTaskByID(ctx, db, t.ID)
+	if err != nil {
+		return false, ez.Wrap(err)
+	}
+
+	*t = *stored
+
+	return false, nil
+}
+
+// MarkDelivered sets DeliveredAt to now and Summary to summary; the last
+// delivery wins (ADR 0010 item 3).
+func (t *Task) MarkDelivered(ctx context.Context, db bun.IDB, summary string) error {
+	at := now()
+	t.DeliveredAt = &at
+	t.Summary = summary
+	t.UpdatedAt = at
+
+	_, err := db.NewUpdate().Model(t).Column("delivered_at", "summary", "updated_at").WherePK().Exec(ctx)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// MarkRejected clears DeliveredAt and keeps Summary (ADR 0010 item 5).
+func (t *Task) MarkRejected(ctx context.Context, db bun.IDB) error {
+	t.DeliveredAt = nil
+	t.UpdatedAt = now()
+
+	_, err := db.NewUpdate().Model(t).Column("delivered_at", "updated_at").WherePK().Exec(ctx)
 	if err != nil {
 		return ez.Wrap(err)
 	}

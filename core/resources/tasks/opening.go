@@ -31,7 +31,7 @@ func OpeningMessage(record *taskmodels.Task, allocated *sandboxes.SandboxView) s
 
 	if allocated == nil {
 		b.WriteString("Assigned to " + worker + ", no sandbox.\n")
-		b.WriteString("Post /done to close the task.")
+		b.WriteString("Post /accept to accept the task.")
 		return b.String()
 	}
 
@@ -39,13 +39,13 @@ func OpeningMessage(record *taskmodels.Task, allocated *sandboxes.SandboxView) s
 
 	if record.Owner == "" {
 		b.WriteString("The agent's instructions are the next message. Reply here to talk to it.\n")
-		b.WriteString("Post /done to close the task.")
+		b.WriteString("Post /accept to accept the task, /reject <why> to send it back.")
 		return b.String()
 	}
 
 	b.WriteString("The agent's instructions are the next message. Reply here to talk to it;\n")
-	b.WriteString("it escalates to #" + record.Owner + " when only the owner can decide. Post /done to\n")
-	b.WriteString("close the task.")
+	b.WriteString("it escalates to #" + record.Owner + " when only the owner can decide. Post /accept\n")
+	b.WriteString("to accept the task, /reject <why> to send it back.")
 
 	return b.String()
 }

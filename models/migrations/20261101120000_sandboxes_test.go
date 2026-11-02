@@ -74,6 +74,11 @@ spec BLOB, created_at TIMESTAMP NOT NULL, updated_at TIMESTAMP NOT NULL)`)
 		t.Fatal(err)
 	}
 
+	err = taskAcceptance(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	record, err := task.GetTaskByName(ctx, db, "stop-icon")
 	if err != nil {
 		t.Fatal(err)

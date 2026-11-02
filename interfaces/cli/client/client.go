@@ -88,10 +88,25 @@ func (c *Client) GetTask(ctx context.Context, ref string) (*tasks.TaskView, erro
 	return out, nil
 }
 
-// DoneTask marks the task done.
-func (c *Client) DoneTask(ctx context.Context, ref string) (*tasks.TaskView, error) {
+// DeliverTask delivers the task with summary (ADR 0010 item 2).
+func (c *Client) DeliverTask(ctx context.Context, ref string, summary string) (*tasks.TaskView, error) {
+	return c.taskCall(ctx, ref, "/deliver", &tasks.DeliverRequest{Summary: summary})
+}
+
+// AcceptTask accepts the task as by, or as its owner when by is empty,
+// which stops its sandboxes (ADR 0010 item 4).
+func (c *Client) AcceptTask(ctx context.Context, ref string, by string) (*tasks.TaskView, error) {
+	return c.taskCall(ctx, ref, "/accept", &tasks.AcceptRequest{By: by})
+}
+
+// RejectTask sends the task back with why (ADR 0010 item 5).
+func (c *Client) RejectTask(ctx context.Context, ref string, by string, why string) (*tasks.TaskView, error) {
+	return c.taskCall(ctx, ref, "/reject", &tasks.RejectRequest{By: by, Why: why})
+}
+
+func (c *Client) taskCall(ctx context.Context, ref string, suffix string, in any) (*tasks.TaskView, error) {
 	out := &tasks.TaskView{}
-	err := c.do(ctx, http.MethodPost, "/api/tasks/"+url.PathEscape(ref)+"/done", nil, out)
+	err := c.do(ctx, http.MethodPost, "/api/tasks/"+url.PathEscape(ref)+suffix, in, out)
 	if err != nil {
 		return nil, err
 	}

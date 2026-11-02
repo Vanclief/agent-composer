@@ -2,7 +2,7 @@
 // Work (tasks and their compute) and Talk (channels). The active mode comes
 // from the route; the last one used is kept in localStorage so / opens it
 // again.
-import { useEffect } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { Link, Navigate, useLocation } from 'react-router'
 
@@ -88,7 +88,8 @@ export function HomeRedirect() {
 
 // Vertical list, one row per mode: icon and one-word label, the active row
 // in its mode's color. It sits at the top of the sidebar and never moves.
-export function ModeSwitch({ mode }: { mode: Mode }) {
+// badges puts something at a row's right end (Talk: its unread count).
+export function ModeSwitch({ mode, badges }: { mode: Mode; badges?: Partial<Record<Mode, ReactNode>> }) {
   return (
     <nav aria-label="Mode" className="flex flex-col gap-0.5">
       {(Object.keys(MODES) as Mode[]).map((m) => {
@@ -110,6 +111,11 @@ export function ModeSwitch({ mode }: { mode: Mode }) {
           >
             <Icon aria-hidden className="size-4" />
             {label}
+            {badges?.[m] ? (
+              <span data-testid={`mode-badge-${m}`} className="ml-auto flex">
+                {badges[m]}
+              </span>
+            ) : null}
           </Link>
         )
       })}

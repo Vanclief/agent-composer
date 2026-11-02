@@ -23,10 +23,12 @@ export type OrderForm = {
   for: string
   // Toast and sound when the task starts and when it is done.
   notify: boolean
+  // ADR 0010: the acceptance criteria, one per line.
+  accept: string
 }
 
 export function blankOrder(): OrderForm {
-  return { title: '', name: null, brief: '', for: '', notify: true }
+  return { title: '', name: null, brief: '', for: '', notify: true, accept: '' }
 }
 
 type ForOption = { id: string; kind: 'action' | 'decision'; text: string; done: boolean }
@@ -137,6 +139,7 @@ export function OrderCard({
           className="field-sizing-fixed min-h-24 pl-9"
         />
       </div>
+      <AcceptField value={order.accept} onChange={(accept) => update({ accept })} />
       <ForPicker value={order.for} onChange={(id) => update({ for: id })} open={pickingFor} onOpen={onPickingFor} />
       <NotifySwitch checked={order.notify} onChange={(notify) => update({ notify })} />
     </Card>
@@ -155,6 +158,35 @@ function NotifySwitch({ checked, onChange }: { checked: boolean; onChange: (chec
         Notify me
       </label>
     </Tip>
+  )
+}
+
+// The criteria the manager or owner accepts the task on, one per line;
+// empty lines are dropped.
+export function acceptLines(text: string) {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+function AcceptField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const Icon = conceptIcons.criteria
+  return (
+    <div className="relative">
+      <Tip tip="Accepted when: one criterion per line; the manager or owner checks them, agc does not">
+        <Icon aria-hidden className={cn('absolute top-2.5 left-2.5 size-4', conceptColors.criteria.text)} />
+      </Tip>
+      <Textarea
+        data-accept
+        aria-label="Accepted when"
+        rows={2}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="`npm run check` passes"
+        className="field-sizing-fixed min-h-16 pl-9"
+      />
+    </div>
   )
 }
 

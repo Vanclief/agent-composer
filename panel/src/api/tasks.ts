@@ -4,9 +4,10 @@
 // these routes; then these can become aliases of components['schemas'].
 import { apiFetch, type TaskSpec } from './client'
 
-// Computed by the server: done when done_at is set, otherwise running when
-// one of its sandboxes runs, otherwise open. Show it verbatim.
-export type TaskStatus = 'open' | 'running' | 'done'
+// Computed by the server (ADR 0010 item 3): done when done_at is set, else
+// review when delivered_at is set, else running when one of its sandboxes
+// runs, else open. Show it verbatim.
+export type TaskStatus = 'open' | 'running' | 'review' | 'done'
 
 // starting until booted, failed with status_error when the boot failed,
 // otherwise the runtime's word. Show it verbatim.
@@ -71,6 +72,16 @@ export type TaskView = {
   notify: boolean
   status: TaskStatus
   done_at: string | null
+  // ADR 0010: what accepted means, one criterion per entry, in order; agc
+  // does not evaluate them. May be empty.
+  accept: string[]
+  // When the agent last delivered (agc task deliver); null when it has not,
+  // or a reject sent it back.
+  delivered_at: string | null
+  // The last delivery's summary; kept after a reject.
+  summary: string
+  // Who accepted the task; empty until done.
+  accepted_by: string
   created_at: string
   updated_at: string
   // Newest first.
@@ -95,6 +106,8 @@ export type CreateTaskRequest = {
   for: string
   // Toast and sound when the task starts and is done; default true.
   notify?: boolean
+  // ADR 0010: the acceptance criteria, one per entry.
+  accept?: string[]
   // Allocates a sandbox right after the task is written.
   sandbox?: SandboxRequest
 }
@@ -115,8 +128,17 @@ export const tasks = {
   create(request: CreateTaskRequest) {
     return apiFetch<TaskView>('POST', '/tasks', request)
   },
-  done(ref: string) {
-    return apiFetch<TaskView>('POST', `/tasks/${enc(ref)}/done`)
+  // ADR 0010 item 2: the agent says the work is ready for review.
+  deliver(ref: string, summary: string) {
+    return apiFetch<TaskView>('POST', `/tasks/${enc(ref)}/deliver`, { summary })
+  },
+  // Sets done_at and accepted_by, then stops the task's running sandboxes.
+  accept(ref: string, by: string) {
+    return apiFetch<TaskView>('POST', `/tasks/${enc(ref)}/accept`, { by })
+  },
+  // Clears delivered_at and sends the task back to its agent with why.
+  reject(ref: string, by: string, why: string) {
+    return apiFetch<TaskView>('POST', `/tasks/${enc(ref)}/reject`, { by, why })
   },
   // 201 with the new sandbox, status starting.
   allocate(ref: string, request: SandboxRequest) {

@@ -43,8 +43,10 @@ task itself persists so what happened can be read later and a VM revived.
    panel. All four set `done_at` and `accepted_by`, post
    "Accepted by <name>." in `#<task>`, and then stop every `running` or
    `starting` sandbox of the task through the same path as
-   `POST /api/sandboxes/{id}/stop`. The agent loop sees the stop as its exit
-   (ADR 0009 item 2) and posts its closing summary first. Nothing is
+   `POST /api/sandboxes/{id}/stop` (a `starting` one as soon as its boot
+   finishes, keeping its disk). The agent loop exits on "Accepted by" or
+   the stop, with no closing turn: the last delivery's summary is the
+   record. Nothing is
    deleted: the task row, its criteria, summary, messages and sandbox rows
    stay, and a stopped sandbox can be started again (ADR 0008 item 4).
 

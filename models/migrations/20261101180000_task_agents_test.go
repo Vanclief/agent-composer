@@ -66,6 +66,11 @@ participant_id TEXT NOT NULL, task TEXT NOT NULL, reply_to INTEGER, body TEXT NO
 		t.Fatal(err)
 	}
 
+	err = taskAcceptance(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	record, err := task.GetTaskByName(ctx, db, "stop-icon")
 	if err != nil {
 		t.Fatal(err)

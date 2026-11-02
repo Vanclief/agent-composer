@@ -139,7 +139,9 @@ agc task create -f task.yaml          # returns at once: task open, sandbox star
 agc task create -f task.yaml --wait   # polls until the sandbox is running or failed
 agc task list
 agc task get fix-login
-agc task done fix-login
+agc task deliver --task fix-login "Fixed 2FA; branch agc/fix-login"
+agc task reject fix-login --why "the login test still fails"
+agc task accept fix-login             # done; its sandboxes are stopped, not deleted
 agc task delete fix-login --yes
 
 agc sandbox allocate fix-login -f sandbox.yaml [--wait]

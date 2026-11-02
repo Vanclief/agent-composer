@@ -241,7 +241,8 @@ func TestEventsSandboxStatusAndTaskDone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	status, body = routes.do(http.MethodPost, "/api/tasks/fix-login/done", "")
+	// Never delivered: the summary falls back to the agent's last words.
+	status, body = routes.do(http.MethodPost, "/api/tasks/fix-login/accept", "")
 	if status != http.StatusOK {
 		t.Fatalf("status %d, body %s", status, body)
 	}
@@ -275,7 +276,7 @@ func TestEventsSandboxStatusAndTaskDone(t *testing.T) {
 	}
 }
 
-func TestEventsDoneSummaryEmptyWithoutAgent(t *testing.T) {
+func TestEventsAcceptSummaryEmptyWithoutAgent(t *testing.T) {
 	routes := newTaskRoutes(t, sandboxes.SandboxRuntime{}, "")
 	stream := openEvents(t, routes)
 
@@ -284,27 +285,34 @@ func TestEventsDoneSummaryEmptyWithoutAgent(t *testing.T) {
 		t.Fatalf("status %d, body %s", status, body)
 	}
 
-	// The manager, an agent, closes it with /done: a command, not a
-	// summary, and agc's own messages never count.
+	// The manager, an agent in its own sandbox, posts /accept: from a
+	// sandbox it is an ordinary message, not a command, so the manager
+	// accepts over REST. The /accept it posted is still no summary, and
+	// agc's own messages never count.
 	ctx := context.Background()
 	managerCaller := messaging.Caller{Task: "lead", Grants: []messaging.Grant{{Channel: "#fix-login"}}}
 	manager, err := routes.server.Messaging.Join(ctx, managerCaller, "orchestrator")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = routes.server.Messaging.Post(ctx, managerCaller, manager.ID, "#fix-login", "/done", nil)
+	_, err = routes.server.Messaging.Post(ctx, managerCaller, manager.ID, "#fix-login", "/accept", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	status, body = routes.do(http.MethodPost, "/api/tasks/fix-login/accept", `{"by":"orchestrator"}`)
+	if status != http.StatusOK {
+		t.Fatalf("status %d, body %s", status, body)
+	}
+
 	var done tasks.DoneEvent
 	stream.next(t, "task.done", &done)
-	if done.Task.Name != "fix-login" || done.Task.DoneAt == nil || done.Summary != "" {
+	if done.Task.Name != "fix-login" || done.Task.AcceptedBy != "orchestrator" || done.Summary != "" {
 		t.Fatalf("task.done %+v, summary %q", done.Task, done.Summary)
 	}
 
-	// Done again publishes nothing: the next task.done would be a new one.
-	status, _ = routes.do(http.MethodPost, "/api/tasks/fix-login/done", "")
+	// Accepting again publishes nothing: the next task.done would be a new one.
+	status, _ = routes.do(http.MethodPost, "/api/tasks/fix-login/accept", "")
 	if status != http.StatusOK {
 		t.Fatalf("status %d", status)
 	}
@@ -321,5 +329,112 @@ func TestEventsDoneSummaryEmptyWithoutAgent(t *testing.T) {
 	_, again := stream.take("task.done")
 	if again {
 		t.Fatal("a second task.done for a task already done")
+	}
+}
+
+// Accepting a delivered task publishes task.done with the delivered
+// summary, not the agent's later words, and sandbox.status stopped for the
+// running sandbox the accept stops.
+func TestEventsAcceptPublishesDeliveredSummaryAndStop(t *testing.T) {
+	rt := &statefulRuntime{sb: &fakeSandbox{}, statuses: map[string]string{}}
+	routes := newTaskRoutes(t, rt, "")
+	stream := openEvents(t, routes)
+
+	status, body := routes.do(http.MethodPost, "/api/tasks", `{"title":"Stop icon","manager":"orchestrator","sandbox":{}}`)
+	if status != http.StatusOK {
+		t.Fatalf("status %d, body %s", status, body)
+	}
+
+	var starting sandboxes.StatusEvent
+	stream.next(t, "sandbox.status", &starting)
+	if starting.Sandbox.Status != "starting" {
+		t.Fatalf("sandbox.status %+v", starting.Sandbox)
+	}
+
+	var running sandboxes.StatusEvent
+	stream.next(t, "sandbox.status", &running)
+	if running.Sandbox.Name != "stop-icon" || running.Sandbox.Status != "running" {
+		t.Fatalf("sandbox.status after boot %+v", running.Sandbox)
+	}
+	routes.server.SandboxesAPI.Wait()
+
+	status, body = routes.do(http.MethodPost, "/api/tasks/stop-icon/deliver", `{"summary":"Filled the icon."}`)
+	if status != http.StatusOK {
+		t.Fatalf("status %d, body %s", status, body)
+	}
+
+	ctx := context.Background()
+	agentCaller := messaging.Caller{Task: "stop-icon"}
+	agent, err := routes.server.Messaging.Join(ctx, agentCaller, "fixer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = routes.server.Messaging.Post(ctx, agentCaller, agent.ID, "#stop-icon", "waiting for review", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	status, body = routes.do(http.MethodPost, "/api/tasks/stop-icon/accept", `{"by":"orchestrator"}`)
+	if status != http.StatusOK {
+		t.Fatalf("status %d, body %s", status, body)
+	}
+
+	var stopped sandboxes.StatusEvent
+	stream.next(t, "sandbox.status", &stopped)
+	if stopped.Sandbox.Name != "stop-icon" || stopped.Sandbox.Status != "stopped" || stopped.Sandbox.StoppedAt == nil {
+		t.Fatalf("sandbox.status after accept %+v", stopped.Sandbox)
+	}
+
+	var done tasks.DoneEvent
+	stream.next(t, "task.done", &done)
+	if done.Task.Name != "stop-icon" || done.Task.Status != "done" || done.Task.AcceptedBy != "orchestrator" {
+		t.Fatalf("task.done %+v", done.Task)
+	}
+	if done.Summary != "Filled the icon." {
+		t.Fatalf("task.done summary %q", done.Summary)
+	}
+}
+
+// A sandbox still booting when its task is accepted stops once booted, and
+// that stop is published too.
+func TestEventsAcceptStopsABootingSandboxVisibly(t *testing.T) {
+	rt := &statefulRuntime{sb: &fakeSandbox{}, statuses: map[string]string{}, gate: make(chan struct{})}
+	routes := newTaskRoutes(t, rt, "")
+	stream := openEvents(t, routes)
+
+	status, body := routes.do(http.MethodPost, "/api/tasks", `{"title":"Slow","manager":"orchestrator","sandbox":{}}`)
+	if status != http.StatusOK {
+		t.Fatalf("status %d, body %s", status, body)
+	}
+
+	var starting sandboxes.StatusEvent
+	stream.next(t, "sandbox.status", &starting)
+	if starting.Sandbox.Status != "starting" {
+		t.Fatalf("sandbox.status %+v", starting.Sandbox)
+	}
+
+	status, body = routes.do(http.MethodPost, "/api/tasks/slow/accept", "")
+	if status != http.StatusOK {
+		t.Fatalf("status %d, body %s", status, body)
+	}
+
+	var done tasks.DoneEvent
+	stream.next(t, "task.done", &done)
+	if done.Task.Name != "slow" || done.Summary != "" {
+		t.Fatalf("task.done %+v, summary %q", done.Task, done.Summary)
+	}
+
+	close(rt.gate)
+
+	var running sandboxes.StatusEvent
+	stream.next(t, "sandbox.status", &running)
+	if running.Sandbox.Status != "running" {
+		t.Fatalf("sandbox.status after boot %+v", running.Sandbox)
+	}
+
+	var stopped sandboxes.StatusEvent
+	stream.next(t, "sandbox.status", &stopped)
+	if stopped.Sandbox.Name != "slow" || stopped.Sandbox.Status != "stopped" || stopped.Sandbox.StoppedAt == nil {
+		t.Fatalf("sandbox.status after the boot of an accepted task %+v", stopped.Sandbox)
 	}
 }

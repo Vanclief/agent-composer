@@ -3,7 +3,7 @@
 // it is left, so joining the same name again from a new mount or reload
 // would be refused with 409. The panel never leaves on unmount for the same
 // reason; it leaves only when the human switches to another name.
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
 import { ApiError } from '@/api/client'
 import { useJoin, useLeave } from '@/api/hooks'
@@ -16,7 +16,29 @@ const DEFAULT_NAME = 'franco'
 const inflight = new Map<string, Promise<string>>()
 
 function readName() {
-  return localStorage.getItem(NAME_KEY) || DEFAULT_NAME
+  try {
+    return localStorage.getItem(NAME_KEY) || DEFAULT_NAME
+  } catch {
+    return DEFAULT_NAME
+  }
+}
+
+// Views that only need the name (unread counts, notifications) follow
+// renames through these listeners, without joining.
+const nameListeners = new Set<() => void>()
+
+function subscribeName(listener: () => void) {
+  nameListeners.add(listener)
+  window.addEventListener('storage', listener)
+  return () => {
+    nameListeners.delete(listener)
+    window.removeEventListener('storage', listener)
+  }
+}
+
+// The signed-in person's name, without the @.
+export function useMyName() {
+  return useSyncExternalStore(subscribeName, readName)
 }
 
 // The stored participant id, only when it was joined under name.
@@ -95,6 +117,9 @@ export function useIdentity() {
     }
     localStorage.setItem(NAME_KEY, next)
     localStorage.removeItem(PARTICIPANT_KEY)
+    for (const listener of nameListeners) {
+      listener()
+    }
     setName(next)
     setParticipantID('')
     joinAs(next)
@@ -114,4 +139,10 @@ export function useIdentity() {
     rename,
     rejoin,
   }
+}
+
+// The signed-in human's name, without joining: what the task page sends as
+// `by` when accepting or rejecting (ADR 0010).
+export function humanName() {
+  return readName()
 }

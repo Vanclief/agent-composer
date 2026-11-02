@@ -15,13 +15,20 @@ import (
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 )
 
-// fakeHarness records every turn and answers "answer N" on session s1.
+// fakeHarness records every turn and answers "answer N" on session s1,
+// or the scripted answer for turn N when there is one.
 type fakeHarness struct {
-	turns []string
+	turns   []string
+	answers map[int]string
 }
 
 func (h *fakeHarness) Run(ctx context.Context, prompt string, session string) (string, string, error) {
 	h.turns = append(h.turns, session+"|"+prompt)
+
+	answer, ok := h.answers[len(h.turns)]
+	if ok {
+		return answer, "s1", nil
+	}
 
 	return fmt.Sprintf("answer %d", len(h.turns)), "s1", nil
 }
@@ -30,15 +37,18 @@ func (h *fakeHarness) Run(ctx context.Context, prompt string, session string) (s
 // joins, posts, waits and leaves. When the script runs out it cancels the
 // loop's context.
 type fakeMessenger struct {
-	script  [][]msgmodels.Message
-	cancel  context.CancelFunc
-	taken   map[string]bool
-	joined  []string
-	posts   []string
-	waits   []int64
-	left    bool
-	nextID  int64
-	lastIDs map[string]int64
+	script [][]msgmodels.Message
+	cancel context.CancelFunc
+	taken  map[string]bool
+	joined []string
+	posts  []string
+	// delivered records deliveries; deliverErr fails them.
+	delivered  []string
+	deliverErr error
+	waits      []int64
+	left       bool
+	nextID     int64
+	lastIDs    map[string]int64
 }
 
 func (m *fakeMessenger) Join(ctx context.Context, name string) (*msgmodels.Participant, error) {
@@ -61,6 +71,16 @@ func (m *fakeMessenger) Post(ctx context.Context, participantID, channel, body s
 	m.posts = append(m.posts, channel+" "+participantID+": "+body)
 
 	return &msgmodels.Message{ID: m.nextID, Channel: channel, ParticipantID: participantID, Body: body}, nil
+}
+
+func (m *fakeMessenger) Deliver(ctx context.Context, summary string, out any) error {
+	if m.deliverErr != nil {
+		return m.deliverErr
+	}
+
+	m.delivered = append(m.delivered, summary)
+
+	return nil
 }
 
 func (m *fakeMessenger) Wait(ctx context.Context, channel string, after int64, timeout time.Duration) (*httpapi.MessagesResponse, error) {
@@ -90,6 +110,11 @@ func message(id int64, from string, participantID string, body string) msgmodels
 	return msgmodels.Message{ID: id, Channel: "#fix-login", From: from, ParticipantID: participantID, Body: body}
 }
 
+// fromAgc is a message agc itself posted.
+func fromAgc(id int64, body string) msgmodels.Message {
+	return message(id, "agc", "p-agc", body)
+}
+
 func TestAgentLoop(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -102,13 +127,21 @@ func TestAgentLoop(t *testing.T) {
 		script: [][]msgmodels.Message{
 			// Its own first answer, then the manager's reply.
 			{message(3, "fix-login-2", "me", "answer 1"), message(4, "orchestrator", "p-orch", "Please also add tests.")},
-			// Its own answer, /done from someone who may not close the
-			// task, then /done from the owner.
-			{message(5, "fix-login-2", "me", "answer 2"), message(6, "tester", "p-test", "/done"), message(7, "franco", "p-franco", " /done\n")},
-			{message(8, "orchestrator", "p-orch", "never read")},
+			// agc reports the delivery; /reject from someone who may not
+			// reject is an ordinary message; the owner's /reject is not a
+			// turn, agc's answer to it is.
+			{
+				fromAgc(5, "Delivered: added tests"),
+				message(6, "tester", "p-test", "/reject nope"),
+				message(7, "franco", "p-franco", "/reject the icon is hollow"),
+				fromAgc(8, "Rejected by franco: the icon is hollow"),
+			},
+			// The owner accepts: agc's acceptance ends the loop.
+			{message(9, "franco", "p-franco", " /accept\n"), fromAgc(10, "Accepted by franco."), message(11, "orchestrator", "p-orch", "never read")},
+			{message(12, "orchestrator", "p-orch", "never read")},
 		},
 	}
-	harness := &fakeHarness{}
+	harness := &fakeHarness{answers: map[int]string{2: "DONE: added tests"}}
 
 	var joined *msgmodels.Participant
 	loop := &agentLoop{
@@ -137,31 +170,57 @@ func TestAgentLoop(t *testing.T) {
 	wantTurns := []string{
 		"|# Fix login\n",
 		"s1|@orchestrator in #fix-login:\n\nPlease also add tests.",
-		"s1|@tester in #fix-login:\n\n/done",
-		"s1|@franco closed the task with /done. Write a short closing summary for #fix-login: what you changed, what you verified, where the work is (branch and commits), and what is left undone.",
+		"s1|@tester in #fix-login:\n\n/reject nope",
+		"s1|@agc in #fix-login:\n\nRejected by franco: the icon is hollow",
 	}
 	if !reflect.DeepEqual(harness.turns, wantTurns) {
 		t.Fatalf("turns:\n%s", strings.Join(harness.turns, "\n---\n"))
 	}
 
+	// The DONE: answer is delivered, not posted.
 	wantPosts := []string{
 		"#fix-login me: answer 1",
-		"#fix-login me: answer 2",
 		"#fix-login me: answer 3",
 		"#fix-login me: answer 4",
 	}
 	if !reflect.DeepEqual(msg.posts, wantPosts) {
 		t.Fatalf("posts = %q", msg.posts)
 	}
+	if !reflect.DeepEqual(msg.delivered, []string{"added tests"}) {
+		t.Fatalf("delivered = %q", msg.delivered)
+	}
 
 	// It waits after the channel's last message, then after each batch,
-	// and stops at /done without reading the third batch.
-	if !reflect.DeepEqual(msg.waits, []int64{2, 4}) || len(msg.script) != 1 {
+	// and stops at the acceptance without reading the last batch.
+	if !reflect.DeepEqual(msg.waits, []int64{2, 4, 8}) || len(msg.script) != 1 {
 		t.Fatalf("waits = %v, script left %d", msg.waits, len(msg.script))
 	}
 
 	if !msg.left {
 		t.Fatal("the loop did not leave")
+	}
+}
+
+func TestAgentLoopPostsADeliveryThatFails(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	msg := &fakeMessenger{cancel: cancel, deliverErr: ez.New(ez.EINVALID, "summary is required", nil)}
+	loop := &agentLoop{
+		harness: &fakeHarness{answers: map[int]string{1: "DONE:"}},
+		msg:     msg,
+		task:    "fix-login",
+		name:    "fix-login",
+		brief:   "# Fix login\n",
+	}
+
+	err := loop.run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(msg.posts) != 1 || msg.posts[0] != "#fix-login me: DONE:" {
+		t.Fatalf("posts = %q", msg.posts)
 	}
 }
 

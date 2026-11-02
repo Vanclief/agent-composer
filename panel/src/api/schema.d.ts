@@ -252,7 +252,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/tasks/{id}/done": {
+    "/tasks/{id}/deliver": {
         parameters: {
             query?: never;
             header?: never;
@@ -262,10 +262,50 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Mark a task done
-         * @description Sets `done_at`, the only thing that does; a task already done keeps its first `done_at`. Its sandboxes are left as they are. The first time, publishes `task.done` on GET /events.
+         * Deliver a task for review
+         * @description Sets `delivered_at` and `summary` and posts "Delivered: <summary>" in #<task> as agc (ADR 0010 item 2). The sandboxes are left as they are; the agent keeps waiting for review. A task can be delivered more than once; the last summary wins. Inside a sandbox `agc task deliver` reaches the same call over the sandbox's messaging socket. 409 when the task is done.
          */
-        post: operations["doneTask"];
+        post: operations["deliverTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept a task
+         * @description Sets `done_at` and `accepted_by`, posts "Accepted by <name>." in #<task> as agc, then stops every running sandbox of the task as POST /sandboxes/{id}/stop does, and every starting one as soon as its boot finishes, keeping its disk; a sandbox that cannot be stopped is logged and does not fail the accept (ADR 0010 item 4). Nothing is deleted, and a stopped sandbox can be started again. A task already done is returned as it is. The body is optional. `/accept` posted in #<task> by the manager or the owner, and `/accept <task>` posted by the owner in #<owner>, do the same. The first accept publishes `task.done` on GET /events, and each sandbox it stops `sandbox.status`.
+         */
+        post: operations["acceptTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a delivered task back
+         * @description Clears `delivered_at`, keeps `summary`, and posts "Rejected by <name>: <why>" in #<task> as agc, which the agent takes as its next turn (ADR 0010 item 5). `/reject <why>` posted in #<task> by the manager or the owner does the same. 409 when the task is done.
+         */
+        post: operations["rejectTask"];
         delete?: never;
         options?: never;
         head?: never;
@@ -283,7 +323,7 @@ export interface paths {
         put?: never;
         /**
          * Allocate compute to a task
-         * @description Inserts a sandbox and returns it `starting`. The first sandbox of a task is named after it, later ones `<task>-2`, `<task>-3`. In the background agc creates the VM, clones the repo, answers the harnesses' first-run prompts, writes /home/agent/TASK.md (title, brief and the instruction to push a branch `agc/<task>` and post in `#<task>`), runs setup, sets `booted_at`, then starts `command` as the first terminal. A failure sets `failed` with `status_error` and removes the VM. Missing secrets fail before anything is created.
+         * @description Inserts a sandbox and returns it `starting`. The first sandbox of a task is named after it, later ones `<task>-2`, `<task>-3`. In the background agc creates the VM, clones the repo, answers the harnesses' first-run prompts, writes /home/agent/TASK.md (title, brief, "Accepted when" with the task's criteria, and the instructions to push a branch `agc/<task>`, post in `#<task>` and end with `agc task deliver`), runs setup, sets `booted_at`, then starts `command` as the first terminal. A failure sets `failed` with `status_error` and removes the VM. Missing secrets fail before anything is created.
          */
         post: operations["allocateSandbox"];
         delete?: never;
@@ -571,7 +611,7 @@ export interface paths {
         };
         /**
          * Stream live events
-         * @description Server-sent events (`text/event-stream`, `Cache-Control: no-cache`) until the client goes away. Each event is `id: <n>` (the event number), `event: <type>` and `data: <json>`; the server sends the comment `: ping` every 20 seconds as a heartbeat. Missed events are never replayed: after a reconnect, refetch. A client that falls too far behind is disconnected. Types and their data: `task.created` (TaskCreatedEvent) when a task is created, after its sandbox, if any, is allocated; `task.done` (TaskDoneEvent) when a task is first marked done; `sandbox.status` (SandboxStatusEvent) on every status change: allocated (starting), booted, failed, stopped, started, and deleted (status `deleted`); `message.posted` (MessagePostedEvent) for every message stored in any channel, agc's included.
+         * @description Server-sent events (`text/event-stream`, `Cache-Control: no-cache`) until the client goes away. Each event is `id: <n>` (the event number), `event: <type>` and `data: <json>`; the server sends the comment `: ping` every 20 seconds as a heartbeat. Missed events are never replayed: after a reconnect, refetch. A client that falls too far behind is disconnected. Types and their data: `task.created` (TaskCreatedEvent) when a task is created, after its sandbox, if any, is allocated; `task.done` (TaskDoneEvent) when a task is accepted, the first time only; `sandbox.status` (SandboxStatusEvent) on every status change: allocated (starting), booted, failed, stopped (by POST /sandboxes/{id}/stop or by the task's accept, also right after a boot that finished once the task was accepted), started, and deleted (status `deleted`); `message.posted` (MessagePostedEvent) for every message stored in any channel, agc's included.
          */
         get: operations["streamEvents"];
         put?: never;
@@ -825,6 +865,8 @@ export interface components {
             name: string;
             /** @description What to do and what done looks like, markdown. */
             brief: string;
+            /** @description What accepted means, in order: criteria agc shows in TASK.md under "Accepted when" and does not evaluate (ADR 0010 item 1). Always an array, possibly empty. */
+            accept: string[];
             /** @description A harness id (claude_code, codex_cli) or a person's name; empty is unassigned. */
             assignee: string;
             /** @description The harness model when the assignee is a harness, empty for a person (ADR 0009). */
@@ -838,12 +880,24 @@ export interface components {
             /** @description The panel shows a toast and plays a chime when the task starts (task.created) and when it is done (task.done). */
             notify: boolean;
             /**
-             * @description Computed: done when done_at is set, otherwise running when a sandbox is running, otherwise open.
+             * @description Computed: done when done_at is set, otherwise review when delivered_at is set, otherwise running when a sandbox is running, otherwise open (ADR 0010 item 3).
              * @enum {string}
              */
-            status: "open" | "running" | "done";
-            /** Format: date-time */
+            status: "open" | "running" | "review" | "done";
+            /**
+             * Format: date-time
+             * @description When the task was accepted.
+             */
             done_at: string | null;
+            /** @description Who accepted the task; empty until accepted. */
+            accepted_by: string;
+            /**
+             * Format: date-time
+             * @description When the agent last delivered; null before a delivery and after a rejection.
+             */
+            delivered_at: string | null;
+            /** @description The last delivery's summary, kept after a rejection. */
+            summary: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -858,11 +912,13 @@ export interface components {
             /** @description 1-63 lowercase letters, digits or -, starting with a letter, and not a UUID. Defaults to the title's slug ("Review facebook ads" becomes review-facebook-ads). */
             name?: string;
             brief?: string;
+            /** @description Criteria for accepting the task, one sentence each, in order; each must be non-empty after trimming. Shown in TASK.md under "Accepted when"; omitted there when empty. */
+            accept?: string[];
             /** @description A harness id or a person's name. Defaults to the configured harness (claude_code). */
             assignee?: string;
             /** @description Defaults to the configured model (claude-opus-5-5) when the assignee is a harness; must be empty for a person. */
             model?: string;
-            /** @description The creator's messaging name, who runs the task day to day and may post /done. */
+            /** @description The creator's messaging name, who runs the task day to day and may post /accept and /reject <why>. */
             manager: string;
             /** @description The human the task answers to, a messaging name. Defaults to the configured owner; its sandboxes may post in #<owner>. */
             owner?: string;
@@ -873,6 +929,20 @@ export interface components {
              */
             notify: boolean;
             sandbox?: components["schemas"]["SandboxRequest"];
+        };
+        DeliverTaskRequest: {
+            /** @description What was done and where the work is; required, non-empty after trimming. */
+            summary: string;
+        };
+        AcceptTaskRequest: {
+            /** @description Messaging name of who accepts. Defaults to the task's owner; 400 when it has none. */
+            by?: string;
+        };
+        RejectTaskRequest: {
+            /** @description Messaging name of who rejects. Defaults to the task's owner; 400 when it has none. */
+            by?: string;
+            /** @description Why the task goes back; required, non-empty after trimming. */
+            why: string;
         };
         /** @description The environment fields inline, plus the command the sandbox runs for the task. */
         SandboxRequest: components["schemas"]["TaskSpec"] & {
@@ -931,7 +1001,7 @@ export interface components {
         /** @description Data of `task.done`. */
         TaskDoneEvent: {
             task: components["schemas"]["Task"];
-            /** @description The body of the last message in #<task> from neither a human nor agc (a bare /done skipped), cut to 500 characters; empty when there is none. */
+            /** @description The task's `summary` when it is delivered; otherwise the body of the last message in #<task> from neither a human nor agc (`/accept` and `/reject` commands skipped). Cut to 500 characters; empty when there is none. */
             summary: string;
         };
         /** @description Data of `sandbox.status`; status is `deleted` once the sandbox is gone. */
@@ -1967,7 +2037,7 @@ export interface operations {
             500: components["responses"]["Error"];
         };
     };
-    doneTask: {
+    deliverTask: {
         parameters: {
             query?: never;
             header?: never;
@@ -1977,7 +2047,42 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliverTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description The task, now `review`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    acceptTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Task UUID or task name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["TaskIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AcceptTaskRequest"];
+            };
+        };
         responses: {
             /** @description The task, now `done`. */
             200: {
@@ -1990,6 +2095,37 @@ export interface operations {
             };
             400: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    rejectTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Task UUID or task name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["TaskIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RejectTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description The task, back to `running` or `open`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };
     };

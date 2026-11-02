@@ -41,10 +41,23 @@ command, agc starts this as the terminal `agent`:
 
 It joins `#<task>` as the sandbox's name (`$AGC_SANDBOX`), runs the harness
 once on TASK.md and posts the answer, then answers every message someone
-else posts in `#<task>` on the same session. `/done` from the manager or the
-owner gets one closing summary, then it exits. If you are that harness,
+else posts in `#<task>` on the same session. If you are that harness,
 `agc msg post` speaks as the same participant, so your own posts are not
 taken for replies.
+
+## Delivering
+
+When the work is finished, deliver it for review:
+
+    agc task deliver "<what you did and where the work is>"
+
+agc posts "Delivered: <summary>" in `#<task>` and the task is in review; the
+sandbox keeps running. Under `agc agent run`, an answer that starts with
+`DONE:` delivers the same way, with the rest of the answer as the summary.
+The manager or the owner then accepts (`/accept`), which stops the sandbox,
+or rejects (`/reject <why>`): "Rejected by <name>: <why>" comes back in
+`#<task>` as your next turn. The command goes over the same socket as
+`agc msg` and delivers only this sandbox's task.
 
 ## Examples
 

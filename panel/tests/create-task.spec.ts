@@ -279,6 +279,7 @@ test('Create sends the spec and opens the new task', async ({ page }) => {
       owner: 'franco',
       for: 'release-builds-with-cgo',
       notify: true,
+      accept: [],
       sandbox: { ...spec, command: 'bash -l' },
     }),
   )
@@ -389,4 +390,27 @@ test('screenshot', async ({ page }) => {
     await dialog.locator('[data-person]').fill('alice')
     await shoot(`${dir}/newtask-person-${theme}.png`)
   }
+})
+
+test('"Accepted when" sends one criterion per line, empty lines dropped', async ({ page }) => {
+  const dialog = await openDialog(page)
+  const stamp = Date.now()
+  const name = `criteria-check-${stamp}`
+  await dialog.getByRole('textbox', { name: 'Title' }).fill(`Criteria check ${stamp}`)
+  await dialog.locator('[data-compute]').click()
+  await dialog.locator('[data-brief]').fill('Polish the stop icon.')
+  const accept = dialog.getByRole('textbox', { name: 'Accepted when' })
+  await expect(accept).toHaveAttribute('placeholder', '`npm run check` passes')
+  await accept.fill('`npm run check` passes\n\n  the Stop icon is filled  \n\n')
+
+  const posted = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith('/api/tasks'))
+  await dialog.locator('[data-create]').click()
+  const body = JSON.parse((await posted).postData() ?? '{}')
+  expect(body.accept).toEqual(['`npm run check` passes', 'the Stop icon is filled'])
+
+  await expect(page).toHaveURL(new RegExp(`/panel/tasks/${name}/brief$`))
+  await expect(page.getByRole('region', { name: 'Accepted when' }).getByTestId('criterion')).toHaveText([
+    '`npm run check` passes',
+    'the Stop icon is filled',
+  ])
 })

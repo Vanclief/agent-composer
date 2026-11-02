@@ -40,6 +40,9 @@ export const queryKeys = {
   conflicts: ['knowledge', 'conflicts'] as const,
   participants: (channel: string) => ['msg', 'participants', channel] as const,
   sandboxWork: (ref: string) => ['sandboxes', ref, 'work'] as const,
+  // A channel's messages after the read cursor, up to its last id
+  // (src/features/messages/unread.ts).
+  unread: (channel: string, after: number, last: number) => ['msg', 'unread', channel, after, last] as const,
 }
 
 // ---------- tasks and sandboxes (ADR 0008) ----------
@@ -82,8 +85,17 @@ export function useCreateTask() {
   return useWorkMutation((request: CreateTaskRequest) => tasks.create(request))
 }
 
-export function useDoneTask() {
-  return useWorkMutation((ref: string) => tasks.done(ref))
+// ADR 0010: deliver, accept and reject a task.
+export function useDeliverTask() {
+  return useWorkMutation(({ ref, summary }: { ref: string; summary: string }) => tasks.deliver(ref, summary))
+}
+
+export function useAcceptTask() {
+  return useWorkMutation(({ ref, by }: { ref: string; by: string }) => tasks.accept(ref, by))
+}
+
+export function useRejectTask() {
+  return useWorkMutation(({ ref, by, why }: { ref: string; by: string; why: string }) => tasks.reject(ref, by, why))
 }
 
 // Deletes the task's sandboxes, then the task.

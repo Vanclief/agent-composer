@@ -10,7 +10,7 @@ import (
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 )
 
-// ADR 0009: defaults, manager and owner, the opening messages and /done.
+// ADR 0009: defaults, manager and owner, the opening messages and /accept.
 func TestTaskAgentRoutes(t *testing.T) {
 	routes := newTaskRoutes(t, &fakeRuntime{sb: &fakeSandbox{}}, "")
 
@@ -62,8 +62,8 @@ func TestTaskAgentRoutes(t *testing.T) {
 	opening := "@orchestrator (manager), @franco (owner): task `fix-login` is open: Fix login.\n" +
 		"Agent: claude_code (claude-opus-5-5) on sandbox `fix-login`, starting.\n" +
 		"The agent's instructions are the next message. Reply here to talk to it;\n" +
-		"it escalates to #franco when only the owner can decide. Post /done to\n" +
-		"close the task."
+		"it escalates to #franco when only the owner can decide. Post /accept\n" +
+		"to accept the task, /reject <why> to send it back."
 	if read.Messages[0].Body != opening || read.Messages[1].Body != created.Instructions {
 		t.Fatalf("messages = %s", body)
 	}
@@ -79,7 +79,7 @@ func TestTaskAgentRoutes(t *testing.T) {
 		{http.MethodGet, "/api/tasks/fix-login", "", http.StatusOK, `"model":"claude-opus-5-5","manager":"orchestrator","owner":"franco"`},
 	})
 
-	// The owner posts /done from the panel.
+	// The owner posts /accept from the panel.
 	status, body = routes.do(http.MethodPost, "/api/msg/join", `{"name":"franco"}`)
 	if status != http.StatusOK {
 		t.Fatalf("join: status %d, body %s", status, body)
@@ -92,7 +92,9 @@ func TestTaskAgentRoutes(t *testing.T) {
 	}
 
 	routes.check(t, []routeCase{
-		{http.MethodPost, "/api/msg/post", `{"participant_id":"` + franco.ID + `","channel":"#fix-login","body":"/done"}`, http.StatusOK, `"human":true`},
-		{http.MethodGet, "/api/tasks/fix-login", "", http.StatusOK, `"status":"done","done_at":"20`},
+		{http.MethodPost, "/api/msg/post", `{"participant_id":"` + franco.ID + `","channel":"#fix-login","body":"/accept"}`, http.StatusOK, `"human":true`},
+		{http.MethodGet, "/api/tasks/fix-login", "", http.StatusOK, `"done_at":"20`},
+		{http.MethodGet, "/api/tasks/fix-login", "", http.StatusOK, `"accepted_by":"franco"`},
+		{http.MethodGet, "/api/tasks/fix-login", "", http.StatusOK, `"status":"done"`},
 	})
 }

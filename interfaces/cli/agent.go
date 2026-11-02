@@ -14,6 +14,7 @@ import (
 	cli "github.com/urfave/cli/v2"
 	"github.com/vanclief/ez"
 
+	"github.com/vanclief/agent-composer/core/resources/tasks"
 	"github.com/vanclief/agent-composer/messaging/httpapi"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 	"github.com/vanclief/agent-composer/runtime/harnesses"
@@ -24,8 +25,13 @@ const (
 	agentWaitTimeout = time.Minute
 	// agentRetryDelay is the pause after a failed wait before trying again.
 	agentRetryDelay = 5 * time.Second
-	// doneCommand closes a task when the manager or the owner posts it.
-	doneCommand = "/done"
+	// deliverPrefix starts an answer that delivers the task (ADR 0010
+	// item 2); the rest of the answer is the summary.
+	deliverPrefix = "DONE:"
+	// agc posts these in #<task> when the task is accepted or rejected
+	// (core/resources/tasks).
+	acceptedPrefix = "Accepted by "
+	rejectedPrefix = "Rejected by "
 )
 
 // agentHarness runs one turn: prompt on session, or a new session when
@@ -41,19 +47,24 @@ type agentMessenger interface {
 	Post(ctx context.Context, participantID, channel, body string, replyTo *int64) (*msgmodels.Message, error)
 	Wait(ctx context.Context, channel string, after int64, timeout time.Duration) (*httpapi.MessagesResponse, error)
 	Channels(ctx context.Context) (*httpapi.ChannelsResponse, error)
+	// Deliver is agc task deliver on the sandbox's socket.
+	Deliver(ctx context.Context, summary string, out any) error
 }
 
-// agentLoop is `agc agent run` (ADR 0009 item 2): it joins #<task>, runs
-// the harness on the brief, posts the answer, then answers every message
-// from someone else on the same session until the manager or the owner
-// posts /done, which gets one closing summary.
+// agentLoop is `agc agent run` (ADR 0009 item 2, ADR 0010): it joins
+// #<task>, runs the harness on the brief, posts the answer, then answers
+// every message from someone else on the same session. An answer starting
+// with DONE: delivers the task instead of being posted, and the loop keeps
+// waiting for review: a rejection is its next turn, an acceptance ends it
+// (the sandbox is being stopped).
 type agentLoop struct {
 	harness agentHarness
 	msg     agentMessenger
 	task    string
 	name    string
 	brief   string
-	// closers may close the task with /done: its manager and owner.
+	// closers may accept or reject the task: its manager and owner. Their
+	// /accept and /reject are not turns; agc's answer to them is.
 	closers map[string]bool
 	log     io.Writer
 	// joined is called with the participant once joined.
@@ -67,15 +78,15 @@ func agentCommand() *cli.Command {
 		Subcommands: []*cli.Command{
 			{
 				Name:  "run",
-				Usage: "Join #<task>, run the harness on the brief, then answer every message in the channel until /done",
+				Usage: "Join #<task>, run the harness on the brief, then answer every message in the channel until the task is accepted",
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "harness", Usage: "claude_code or codex_cli", Required: true},
 					&cli.StringFlag{Name: "model", Usage: "Model the harness runs"},
 					&cli.StringFlag{Name: "task", Usage: "Task name; its channel is #<task> (default $AGC_TASK)"},
 					&cli.StringFlag{Name: "brief", Usage: "Path to the instructions", Value: "/home/agent/TASK.md"},
 					&cli.StringFlag{Name: "name", Usage: "Messaging name to join as (default $AGC_SANDBOX, else the task name)"},
-					&cli.StringFlag{Name: "manager", Usage: "Messaging name of the task's manager, who may post /done"},
-					&cli.StringFlag{Name: "owner", Usage: "Messaging name of the task's owner, who may post /done"},
+					&cli.StringFlag{Name: "manager", Usage: "Messaging name of the task's manager, who may post /accept and /reject"},
+					&cli.StringFlag{Name: "owner", Usage: "Messaging name of the task's owner, who may post /accept and /reject"},
 				},
 				Action: agentRun,
 			},
@@ -176,12 +187,13 @@ func (l *agentLoop) run(ctx context.Context) error {
 				continue
 			}
 
-			if strings.TrimSpace(m.Body) == doneCommand && l.closers[m.From] {
-				l.logf("@%s posted /done, closing summary", m.From)
-				prompt := "@" + m.From + " closed the task with /done. Write a short closing summary for " + l.channel() +
-					": what you changed, what you verified, where the work is (branch and commits), and what is left undone."
-				l.turn(ctx, p, prompt, session)
+			if isSystem(m) && strings.HasPrefix(m.Body, acceptedPrefix) {
+				l.logf("the task is accepted (%s), exiting", strings.TrimSpace(m.Body))
 				return nil
+			}
+
+			if !l.isTurn(m) {
+				continue
 			}
 
 			prompt := "@" + m.From + " in " + l.channel() + ":\n\n" + m.Body
@@ -194,6 +206,32 @@ func (l *agentLoop) run(ctx context.Context) error {
 			session = l.turn(ctx, p, prompt, session)
 		}
 	}
+}
+
+// isTurn reports whether m, not the loop's own, is the agent's next turn.
+// agc's posts are not, except a rejection; the manager's and the owner's
+// /accept and /reject are not either, since agc answers them in the
+// channel.
+func (l *agentLoop) isTurn(m msgmodels.Message) bool {
+	if isSystem(m) {
+		return strings.HasPrefix(m.Body, rejectedPrefix)
+	}
+
+	if !l.closers[m.From] {
+		return true
+	}
+
+	command, ok := tasks.ParseCommand(m.Body)
+	if !ok {
+		return true
+	}
+
+	return command.Verb == tasks.AcceptCommand && command.Arg != ""
+}
+
+// isSystem reports whether agc itself posted m.
+func isSystem(m msgmodels.Message) bool {
+	return m.From == msgmodels.SystemName && m.Task == "" && !m.Human
 }
 
 // join takes the sandbox's name, or name-2 … name-5 when an earlier run
@@ -253,8 +291,9 @@ func (l *agentLoop) lastID(ctx context.Context) (int64, error) {
 }
 
 // turn runs the harness once and posts the answer, or the failure, in the
-// channel. It returns the session to continue, which stays the old one
-// when the harness gave none.
+// channel; an answer starting with DONE: delivers instead, and is posted
+// only when the delivery fails. It returns the session to continue, which
+// stays the old one when the harness gave none.
 func (l *agentLoop) turn(ctx context.Context, p *msgmodels.Participant, prompt string, session string) string {
 	answer, next, err := l.harness.Run(ctx, prompt, session)
 	if next == "" {
@@ -270,6 +309,19 @@ func (l *agentLoop) turn(ctx context.Context, p *msgmodels.Participant, prompt s
 	}
 	if len(body) > msgmodels.MaxBodyBytes {
 		body = body[:msgmodels.MaxBodyBytes-100] + "\n\n(cut: the answer was longer than a message allows)"
+	}
+
+	if err == nil && strings.HasPrefix(body, deliverPrefix) {
+		summary := strings.TrimSpace(strings.TrimPrefix(body, deliverPrefix))
+
+		var view any
+		err = l.msg.Deliver(ctx, summary, &view)
+		if err == nil {
+			l.logf("delivered, waiting for review")
+			return next
+		}
+
+		l.logf("cannot deliver, posting the answer: %s", ez.ErrorMessage(err))
 	}
 
 	_, err = l.msg.Post(ctx, p.ID, l.channel(), body, nil)

@@ -77,10 +77,32 @@ func taskCommand() *cli.Command {
 				Action:    taskGet,
 			},
 			{
-				Name:      "done",
-				Usage:     "Mark a task done; its sandboxes are left as they are",
+				Name:      "deliver",
+				Usage:     "Deliver a task for review: posts \"Delivered: <summary>\" in #<task> (ADR 0010); inside a sandbox it delivers the sandbox's own task",
+				ArgsUsage: "<summary>",
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "task", Usage: "Task to deliver (default $" + task.EnvTask + ")"},
+				},
+				Action: taskDeliver,
+			},
+			{
+				Name:      "accept",
+				Usage:     "Accept a task: marks it done and stops its running sandboxes; nothing is deleted",
 				ArgsUsage: "<name>",
-				Action:    taskDone,
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "by", Usage: "Who accepts (default the task's owner)"},
+				},
+				Action: taskAccept,
+			},
+			{
+				Name:      "reject",
+				Usage:     "Send a delivered task back with a reason; the agent takes it as its next turn",
+				ArgsUsage: "<name> --why <reason>",
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "why", Usage: "Why the task is sent back"},
+					&cli.StringFlag{Name: "by", Usage: "Who rejects (default the task's owner)"},
+				},
+				Action: taskReject,
 			},
 			{
 				Name:      "delete",
@@ -101,6 +123,9 @@ var valueFlags = map[string]string{
 	"--server": "server",
 	"--file":   "file",
 	"-f":       "file",
+	"--by":     "by",
+	"--why":    "why",
+	"--task":   "task",
 }
 
 // leafArgs returns the positional arguments. urfave/cli stops reading
@@ -532,14 +557,14 @@ func taskGet(c *cli.Context) error {
 	})
 }
 
-func taskDone(c *cli.Context) error {
+func taskAccept(c *cli.Context) error {
 	name, _, err := refArg(c, "task")
 	if err != nil {
 		return err
 	}
 
 	return withService(c, func(ctx context.Context, svc taskService) error {
-		view, err := svc.DoneTask(ctx, name)
+		view, err := svc.AcceptTask(ctx, name, c.String("by"))
 		if err != nil {
 			return err
 		}
@@ -548,6 +573,94 @@ func taskDone(c *cli.Context) error {
 			writeTask(w, view)
 		})
 	})
+}
+
+func taskReject(c *cli.Context) error {
+	name, _, err := refArg(c, "task")
+	if err != nil {
+		return err
+	}
+
+	why := strings.TrimSpace(c.String("why"))
+	if why == "" {
+		return ez.New(ez.EINVALID, "usage: agc task reject <name> --why <reason>", nil)
+	}
+
+	return withService(c, func(ctx context.Context, svc taskService) error {
+		view, err := svc.RejectTask(ctx, name, c.String("by"), why)
+		if err != nil {
+			return err
+		}
+
+		return output(c, view, func(w io.Writer) {
+			writeTask(w, view)
+		})
+	})
+}
+
+// taskDeliver delivers through the server when one is set, else, inside a
+// sandbox, through the sandbox's messaging socket, which speaks for its
+// own task only, else in-process.
+func taskDeliver(c *cli.Context) error {
+	words, _, err := leafArgs(c)
+	if err != nil {
+		return err
+	}
+
+	summary := strings.TrimSpace(strings.Join(words, " "))
+	if summary == "" {
+		return ez.New(ez.EINVALID, "usage: agc task deliver <summary>", nil)
+	}
+
+	sandboxTask := strings.TrimSpace(os.Getenv(task.EnvTask))
+	name := firstNonEmpty(c.String("task"), sandboxTask)
+
+	if serverURL(c) == "" && insideSandbox() {
+		if name != sandboxTask {
+			return ez.New(ez.EINVALID, "inside a sandbox agc task deliver delivers only its own task, "+sandboxTask, nil)
+		}
+
+		view := &tasks.TaskView{}
+		err = newMsgClient().Deliver(c.Context, summary, view)
+		if err != nil {
+			return err
+		}
+
+		return output(c, view, func(w io.Writer) {
+			writeTask(w, view)
+		})
+	}
+
+	if name == "" {
+		return ez.New(ez.EINVALID, "pass --task <name> or set "+task.EnvTask, nil)
+	}
+
+	return withService(c, func(ctx context.Context, svc taskService) error {
+		view, err := svc.DeliverTask(ctx, name, summary)
+		if err != nil {
+			return err
+		}
+
+		return output(c, view, func(w io.Writer) {
+			writeTask(w, view)
+		})
+	})
+}
+
+// insideSandbox reports whether this agc runs in a task's sandbox: the
+// sandbox sets AGC_TASK and messaging reaches the host over vsock (or
+// AGC_MSG_URL, for tests).
+func insideSandbox() bool {
+	if os.Getenv(task.EnvTask) == "" {
+		return false
+	}
+
+	if os.Getenv("AGC_MSG_URL") != "" {
+		return true
+	}
+
+	_, err := os.Stat("/dev/vsock")
+	return err == nil
 }
 
 func taskDelete(c *cli.Context) error {
