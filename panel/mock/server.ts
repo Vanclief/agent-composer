@@ -139,7 +139,7 @@ const SECRETS = [
 // harness reads, preferred first.
 const SECRET_HARNESSES = [
   { id: 'claude_code', reads: ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'] },
-  { id: 'codex_cli', reads: ['OPENAI_API_KEY'] },
+  { id: 'codex_cli', reads: ['CODEX_API_KEY'] },
   { id: 'pi', reads: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'] },
 ]
 

@@ -467,7 +467,7 @@ test('a picked secret no harness reads offers the harness variables, and one bec
 
   // Another harness offers its own variables.
   await dialog.locator('[data-card="agent"]').getByRole('radio', { name: 'codex_cli' }).click()
-  await expect(as).toHaveText(['OPENAI_API_KEY'])
+  await expect(as).toHaveText(['CODEX_API_KEY'])
   await dialog.locator('[data-card="agent"]').getByRole('radio', { name: 'claude_code' }).click()
 
   await dialog.locator('[data-secret-as="ANTHROPIC_WORK"] [data-env="CLAUDE_CODE_OAUTH_TOKEN"]').click()

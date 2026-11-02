@@ -539,7 +539,7 @@ Saved spec `backend-review`. Secrets
 hosts) and `ANTHROPIC_WORK` (`api.anthropic.com`, read by no harness);
 `GET /api/secrets` also answers `harnesses: [{ id, reads }]` (claude_code
 reads `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`; codex_cli
-`OPENAI_API_KEY`; pi both API keys), typed ahead of the Go side as
+`CODEX_API_KEY`; pi both API keys), typed ahead of the Go side as
 `SecretHarness` with `useSecretHarnesses()` in `@/api/hooks`. In the create
 dialog a picked secret no harness reads, bound to no host or only to a
 provider's API, offers the task harness's variables as toggle chips
