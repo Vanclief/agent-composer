@@ -128,6 +128,11 @@ func (s *fakeSandbox) StartTerminal(ctx context.Context, cmd executor.Command) (
 	return &executor.Terminal{ID: "job_1", Running: true}, nil
 }
 
+// ListTerminals lists nothing: a home only starts from stopped.
+func (s *fakeSandbox) ListTerminals(ctx context.Context) ([]executor.Terminal, error) {
+	return nil, nil
+}
+
 func (s *fakeSandbox) Detach(ctx context.Context) error {
 	return nil
 }
@@ -501,14 +506,16 @@ func TestStateFollowsTheHomeSandbox(t *testing.T) {
 		t.Fatalf("sleep while asleep: %v, want ECONFLICT", err)
 	}
 
-	// A stopped home is started, not allocated again.
+	// A stopped home is started, not allocated again, and its agent loop
+	// runs again.
 	again := env.wake(t, "reviewer-1")
 	if again.State != StateAwake {
 		t.Fatalf("state = %s, want awake", again.State)
 	}
 	calls := env.rt.Calls()
-	if calls[len(calls)-1] != "start reviewer-1" {
-		t.Fatalf("calls = %q, want a start last", calls)
+	wantLast := []string{"start reviewer-1", wantCalls[2]}
+	if len(calls) < 2 || !reflect.DeepEqual(calls[len(calls)-2:], wantLast) {
+		t.Fatalf("calls = %q, want %q last", calls, wantLast)
 	}
 
 	// Any other status of the home is the agent's state, verbatim.
@@ -807,7 +814,7 @@ func TestWakeHookWakesOnlyMatchingAsleepAgents(t *testing.T) {
 		env.postAs(t, messaging.Caller{Agent: "reviewer-1", Grants: []messaging.Grant{{Channel: "#ci-main"}}}, "reviewer-1", "#ci-main", "looked at it")
 
 		calls = env.rt.Calls()
-		if calls[len(calls)-1] != "start watcher-1" {
+		if !slices.Contains(calls[before:], "start watcher-1") {
 			t.Fatalf("calls = %q, want watcher-1 started", calls)
 		}
 	})

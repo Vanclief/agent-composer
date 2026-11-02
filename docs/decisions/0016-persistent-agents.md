@@ -47,7 +47,8 @@ that mock a backend and settles what it left open.
 4. **The home sandbox is one VM, stopped by default.** The first wake
    allocates a sandbox named after the agent from the template's `sandbox`,
    with the repo and secrets the template names; later wakes start it again
-   (ADR 0008 `start`). The state the panel shows is computed from the home
+   (ADR 0008 `start`), which relaunches the home's job, `agc agent run
+   --agent`, on every start, since a boot from disk runs no job. The state the panel shows is computed from the home
    sandbox, never stored: `asleep` when there is no home or it is `stopped`,
    `waking` while it is `starting`, `awake` while it is `running`, and the
    sandbox's own `failed` when it died. `POST /api/agents/{name}/wake` and
