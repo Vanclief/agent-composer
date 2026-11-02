@@ -21,17 +21,14 @@ import (
 const (
 	// mainRole keeps one session for everything (ADR 0016 item 7).
 	mainRole = "main"
-	// mainSessionKey is main's session in the sessions file.
-	mainSessionKey = "main"
 	// defaultAgentIdle is the idle time when GET /agent gives none.
 	defaultAgentIdle = 15 * time.Minute
 	// defaultHarnessDir is the kept volume of the home sandbox (ADR 0008
 	// "Disk and transcripts"): what is written there survives the VM.
 	defaultHarnessDir = "/home/agent/.harness"
-	// sessionsFile maps "<channel>:<root id>" (or "main") to a harness
-	// session id; cursorFile holds the last message id the loop handled.
-	sessionsFile = "agc-sessions.json"
-	cursorFile   = "agc-cursor.json"
+	// cursorFile holds the last message id the loop handled; the sessions
+	// are in sessionsFile (sessions.go).
+	cursorFile = "agc-cursor.json"
 	// maxThreadDepth bounds following reply_to to a thread's root.
 	maxThreadDepth = 100
 	// deliveredPrefix is how agc reports a delivery in #<task>
@@ -129,7 +126,7 @@ type homeLoop struct {
 
 	me       *msgmodels.Participant
 	role     string
-	sessions map[string]string
+	sessions *sessionStore
 	// parents maps a message id to the id it replies to, 0 for none.
 	parents map[int64]int64
 }
@@ -165,9 +162,9 @@ func (l *homeLoop) run(ctx context.Context) error {
 	l.role = info.Agent.Role
 	idle := parseIdle(info.Idle)
 
-	sessions, err := l.loadSessions()
+	sessions, err := loadSessionStore(l.dir)
 	if err != nil {
-		return err
+		l.logf("%s", ez.ErrorMessage(err))
 	}
 	l.sessions = sessions
 	l.parents = map[int64]int64{}
@@ -321,7 +318,7 @@ func (l *homeLoop) plan(ctx context.Context, messages []msgmodels.Message, since
 		}
 
 		root := l.root(ctx, m)
-		key := fmt.Sprintf("%s:%d", m.Channel, root)
+		key := threadSessionKey(m.Channel, root)
 		if l.role == mainRole {
 			key = mainSessionKey
 		}
@@ -391,7 +388,7 @@ func (l *homeLoop) fetchParent(ctx context.Context, channel string, id int64) (i
 // brief; a known one resumes. A failing harness is reported in the
 // thread.
 func (l *homeLoop) take(ctx context.Context, t homeTurn) {
-	session := l.sessions[t.key]
+	session := l.sessions.Get(t.key)
 
 	var prompt string
 	if l.role == mainRole {
@@ -409,9 +406,7 @@ func (l *homeLoop) take(ctx context.Context, t homeTurn) {
 
 	answer, next, err := l.harness.Run(ctx, prompt, session)
 	if next != "" && next != session {
-		l.sessions[t.key] = next
-
-		saveErr := l.saveSessions()
+		saveErr := l.sessions.Set(t.key, next)
 		if saveErr != nil {
 			l.logf("cannot save the sessions: %s", ez.ErrorMessage(saveErr))
 		}
@@ -456,29 +451,6 @@ func parseIdle(value string) time.Duration {
 	}
 
 	return idle
-}
-
-func (l *homeLoop) loadSessions() (map[string]string, error) {
-	sessions := map[string]string{}
-
-	data, err := os.ReadFile(filepath.Join(l.dir, sessionsFile))
-	if errors.Is(err, os.ErrNotExist) {
-		return sessions, nil
-	}
-	if err != nil {
-		return nil, ez.Wrap(err)
-	}
-
-	err = json.Unmarshal(data, &sessions)
-	if err != nil {
-		return nil, ez.New(ez.EINVALID, "sessions file "+filepath.Join(l.dir, sessionsFile)+" is unreadable", err)
-	}
-
-	return sessions, nil
-}
-
-func (l *homeLoop) saveSessions() error {
-	return writeJSONFile(filepath.Join(l.dir, sessionsFile), l.sessions)
 }
 
 type cursorState struct {
