@@ -162,6 +162,9 @@ type AgentView struct {
 	Name  string `json:"name"`
 	Role  string `json:"role"`
 	Owner string `json:"owner"`
+	// Home is the home sandbox's name, which messages the agent posts
+	// carry as agent.
+	Home string `json:"home"`
 }
 
 // AgentResponse is GET /agent on a home sandbox's socket: the agent, the

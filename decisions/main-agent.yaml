@@ -1,0 +1,11 @@
+# ADR 0015: the main agent. One decision, the ADR's, on the beliefs that
+# made ADR 0007's gates.
+decisions:
+  - id: main-agent-talks-and-dispatches-under-gates
+    decision: >-
+      The main agent reads every channel in batches, only talks and creates, accepts or rejects
+      tasks, runs with no tool but agc's message, task and knowledge commands, and asks a human
+      before each task act unless a gate with proposes: task says otherwise.
+    because: [proposals-pass-through-human-gates, authority-without-legibility-is-ritual, unread-digests-remove-the-human, agents-can-exfiltrate-what-they-read, done-needs-criteria-before-an-agent-says-it]
+    adr: docs/decisions/0015-main-agent.md
+    decided: { who: franco, when: 2026-11-02 }

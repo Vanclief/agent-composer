@@ -28,7 +28,7 @@ func taskCommand() *cli.Command {
 				Name:  "create",
 				Usage: "Create a task from a task.yaml, booting its sandbox: when it has one",
 				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "file", Aliases: []string{"f"}, Usage: "Path to the task.yaml"},
+					&cli.StringFlag{Name: "file", Aliases: []string{"f"}, Usage: "Path to the task.yaml, or - to read it from stdin"},
 					&cli.StringFlag{Name: "from", Usage: "Name of a saved spec to boot as the task's sandbox (agc task spec ls)"},
 					&cli.StringFlag{Name: "title", Usage: "Task title (defaults to title: in the file)"},
 					&cli.StringFlag{Name: "name", Usage: "Task name (defaults to name: in the file, else made from the title)"},
@@ -261,6 +261,7 @@ func taskCreate(c *cli.Context) error {
 			Title:    firstNonEmpty(c.String("title"), parsed.Title),
 			Name:     firstNonEmpty(c.String("name"), parsed.Name),
 			Brief:    firstNonEmpty(c.String("brief"), parsed.Brief),
+			Accept:   parsed.Accept,
 			Assignee: parsed.Assignee,
 			Model:    parsed.Model,
 			Manager:  parsed.Manager,
@@ -456,7 +457,20 @@ func loadTaskFile(ctx context.Context, svc taskService, filePath string, from st
 
 	parsed := task.File{}
 
-	if filePath != "" {
+	if filePath == "-" {
+		// The main agent has no file tools (ADR 0015): it pipes the
+		// exact task yaml it asked about.
+		data, err := io.ReadAll(io.LimitReader(os.Stdin, 1<<20))
+		if err != nil {
+			return task.File{}, ez.New(ez.EINVALID, "cannot read the task yaml from stdin", err)
+		}
+
+		loaded, err := task.ParseFile(data)
+		if err != nil {
+			return task.File{}, ez.New(ez.EINVALID, "task yaml on stdin: "+ez.ErrorMessage(err), err)
+		}
+		parsed = loaded
+	} else if filePath != "" {
 		loaded, err := task.LoadFile(filePath)
 		if err != nil {
 			return task.File{}, err

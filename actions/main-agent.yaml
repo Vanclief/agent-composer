@@ -1,0 +1,30 @@
+# What ADR 0015 leaves open.
+actions:
+  # ADR 0015, "Left open": the watchdog that restarts or reports a stuck
+  # task covers task sandboxes; nothing watches main itself.
+  - id: watchdog-covers-the-main-agent
+    action: >-
+      Watch the main agent itself: report in #<owner> when its home has failed, its loop has
+      exited without sleeping, or a batch has waited longer than its idle time with no turn.
+    because: [main-agent-talks-and-dispatches-under-gates, unread-digests-remove-the-human]
+    opened: { who: franco, when: 2026-11-02 }
+
+  # ADR 0015, "Left open": main's memory is its one harness session and
+  # what it reads again with agc msg and agc task; a compaction or a lost
+  # session forgets the rest.
+  - id: main-memory-beyond-the-session
+    action: >-
+      Give the main agent a memory beyond its harness session: what it has asked, who said yes,
+      and which tasks it dispatched for which message, read back after a compaction or a new
+      session.
+    because: [main-agent-talks-and-dispatches-under-gates]
+    opened: { who: franco, when: 2026-11-02 }
+
+  # ADR 0015, "Left open": the tier is followed by main's rules, not
+  # enforced by agc.
+  - id: home-task-routes-enforce-the-gate
+    action: >-
+      Enforce the task gate on the home's task routes: at decide, refuse POST /tasks and accept
+      or reject from main unless they cite a question in #<owner> a human answered yes.
+    because: [main-agent-talks-and-dispatches-under-gates, authority-without-legibility-is-ritual]
+    opened: { who: franco, when: 2026-11-02 }

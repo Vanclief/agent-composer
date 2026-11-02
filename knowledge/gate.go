@@ -37,14 +37,17 @@ const (
 var tiers = []Tier{Decide, Observe, Delegated}
 
 // Proposable lists what a proposal may propose. A goal is not on it on
-// purpose: what we want is never proposed, only how to get there.
-var Proposable = []string{"rule", "belief", "evidence", "decision", "action", "gate", "code"}
+// purpose: what we want is never proposed, only how to get there. A task
+// is an agent's act on agc tasks, creating, accepting or rejecting one
+// (ADR 0015): the main agent asks, acts and says, or acts quietly by the
+// tier a gate with proposes: task gives it.
+var Proposable = []string{"rule", "belief", "evidence", "decision", "action", "gate", "code", "task"}
 
 // acts lists the kinds of proposal that do something when they land, so
 // one of them resting on nothing cannot be read: there is no why to
 // follow before accepting it. A belief or a piece of evidence resting on
 // nothing is an opinion, which is a readable thing to be.
-var acts = []string{"rule", "decision", "action", "gate", "code"}
+var acts = []string{"rule", "decision", "action", "gate", "code", "task"}
 
 // stricter says whether a is at least as strict as b.
 func stricter(a Tier, b Tier) bool {
@@ -158,6 +161,29 @@ func (s *Set) gateFor(proposal Proposal) (Gate, bool) {
 	}
 
 	return chosen, covered
+}
+
+// TierFor is the tier an act of kind by by gets now, with the gate that
+// gives it, empty when none covers it and the default, decide, applies.
+// It is Review for an act that is not written down as a proposal, such as
+// the main agent creating a task (ADR 0015): the gate's tier, pulled to
+// decide by a rejection under it. Nothing is sampled: there is no
+// proposal id to hash.
+func (s *Set) TierFor(kind string, by string) (Tier, string) {
+	if kind == "gate" {
+		return Decide, ""
+	}
+
+	gate, covered := s.gateFor(Proposal{Proposes: kind, By: by})
+	if !covered {
+		return Decide, ""
+	}
+
+	if len(s.tightenedBy(gate)) > 0 {
+		return Decide, gate.ID
+	}
+
+	return gate.Tier, gate.ID
 }
 
 func (gate Gate) covers(proposal Proposal) bool {

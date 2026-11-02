@@ -1,0 +1,33 @@
+# What ADR 0015 puts forward. The gates are Franco's to add (rule
+# agents-never-edit-gates); until he does, every task act of main is
+# decide, which is correct.
+proposals:
+  - id: main-task-acts-observed
+    proposes: gate
+    proposal: >-
+      Add a gate proposes: task, by: [main], tier: observe, sample: 5, since the day it is added,
+      so main creates, accepts and rejects tasks and says each in #franco, with about one in five
+      still asked first, once its transcript shows its questions were the right ones.
+    because: [main-agent-talks-and-dispatches-under-gates, unread-digests-remove-the-human]
+    by: claude_code
+    when: 2026-11-02
+
+  - id: main-task-acts-decided
+    proposes: gate
+    proposal: >-
+      Add a gate proposes: task, by: [main], tier: decide, written down rather than left to the
+      default, so `agc gates show` lists main's task acts and counts the yeses: the count is what
+      says when to move it to observe.
+    because: [main-agent-talks-and-dispatches-under-gates, authority-without-legibility-is-ritual]
+    by: claude_code
+    when: 2026-11-02
+
+  - id: main-agent-code
+    proposes: code
+    proposal: >-
+      Run the main role of ADR 0016 as ADR 0015 says: batches inline and spilled, a harness held
+      to agc commands in an empty directory, rules and gates read each turn, task acts gated.
+    because: [main-agent-talks-and-dispatches-under-gates]
+    change: agc/main-agent
+    by: claude_code
+    when: 2026-11-02

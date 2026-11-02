@@ -34,9 +34,39 @@ type Judge struct {
 // agents agc can run as judges; keep them in step with the catalog.
 var harnessIDs = []string{"codex_cli", "claude_code", "pi"}
 
+// agentRoles are the persistent agents' roles a rule may trust by name
+// (ADR 0015, ADR 0016): main judges the rules of its own conduct, run on
+// the harness of its template, roleHarness.
+var agentRoles = []string{"main"}
+
+// roleHarness is the harness each trusted role runs on as a judge, the
+// harness of agents/<role>.yaml.
+var roleHarness = map[string]string{"main": "claude_code"}
+
 // IsHarness says whether name is a harness agc can run as a judge.
 func IsHarness(name string) bool {
 	return slices.Contains(harnessIDs, name)
+}
+
+// IsAgentRole says whether name is a persistent agent's role a rule may
+// trust, such as main.
+func IsAgentRole(name string) bool {
+	return slices.Contains(agentRoles, name)
+}
+
+// JudgeHarness is the harness that judges as name: name itself for a
+// harness id, the role's harness for an agent role, empty for a person.
+func JudgeHarness(name string) string {
+	if IsHarness(name) {
+		return name
+	}
+
+	return roleHarness[name]
+}
+
+// judgeIDs is every name agc can run as a judge, for messages.
+func judgeIDs() []string {
+	return append(append([]string{}, harnessIDs...), agentRoles...)
 }
 
 // IsAgent says whether name is a model or an agent harness rather than a
@@ -130,8 +160,8 @@ type Asker func(ctx context.Context, rule Rule, prompt string) (string, error)
 // person, whom agc cannot run. A judge that fails to answer gives an
 // unclear verdict, so the other rules are still judged.
 func (s *Set) Judge(ctx context.Context, by string, subject Subject, ask Asker) ([]Judgment, error) {
-	if !IsHarness(by) && !slices.Contains(s.Judges(), by) {
-		msg := "unknown judge " + by + ": not a harness id (" + strings.Join(harnessIDs, ", ") + ") nor named in any judge: trusted list"
+	if !IsHarness(by) && !IsAgentRole(by) && !slices.Contains(s.Judges(), by) {
+		msg := "unknown judge " + by + ": not a harness id or agent role (" + strings.Join(judgeIDs(), ", ") + ") nor named in any judge: trusted list"
 		return nil, ez.New(ez.EINVALID, msg, nil)
 	}
 

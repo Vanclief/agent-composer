@@ -181,9 +181,14 @@ func validateEvidence(evidence Evidence) error {
 // witness. An LLM is a great parser and a terrible sensor: a model can
 // translate a source into evidence but never be the source. The names are
 // the harness ids and model families in runtime/harnesses/catalog.go
-// (codex_cli, claude_code, pi; claude-*, gpt-*) plus generic words for a
-// model; keep them in step when the catalog grows.
+// (codex_cli, claude_code, pi; claude-*, gpt-*), the agent roles a rule
+// may trust (main), plus generic words for a model; keep them in step when
+// the catalog grows.
 func isModel(who string) bool {
+	if IsAgentRole(strings.TrimSpace(who)) {
+		return true
+	}
+
 	name := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(who)), "_", "-")
 	models := []string{"claude-code", "codex-cli", "pi", "claude", "codex", "gpt", "gemini", "llm", "model", "agent"}
 	if slices.Contains(models, name) {
@@ -301,8 +306,8 @@ func validateJudge(rule Rule) error {
 		if strings.TrimSpace(name) == "" {
 			return invalid(rule.File, "rule", rule.ID, "judge: trusted has an empty name")
 		}
-		if isModel(name) && !slices.Contains(harnessIDs, name) {
-			msg := "judge: trusted names " + name + ", a model but not a harness id; use one of " + strings.Join(harnessIDs, ", ") + ", or a person"
+		if isModel(name) && !IsHarness(name) && !IsAgentRole(name) {
+			msg := "judge: trusted names " + name + ", a model but not a harness id or agent role; use one of " + strings.Join(judgeIDs(), ", ") + ", or a person"
 			return invalid(rule.File, "rule", rule.ID, msg)
 		}
 	}

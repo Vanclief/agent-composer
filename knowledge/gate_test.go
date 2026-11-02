@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -513,5 +514,91 @@ proposals:
 	err = Accept(notProposals, "yes", "franco", "2026-11-04")
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("Accept in a beliefs file: %v", err)
+	}
+}
+
+// A gate may say proposes: task (ADR 0015): the main agent's creating,
+// accepting and rejecting tasks. TierFor gives the tier such an act gets
+// without a proposal written down; a rejected task proposal under an
+// observe gate pulls it to decide like any other.
+func TestTaskActsAreGated(t *testing.T) {
+	files := map[string]string{
+		"beliefs.yaml": "beliefs:\n  - id: b\n    belief: B.\n",
+		"gates.yaml":   "gates:\n  - id: main-tasks-observed\n    proposes: task\n    by: [main]\n    tier: observe\n    since: 2026-11-02\n    because: [b]\n",
+	}
+	set := load(t, writeFiles(t, files))
+
+	tier, gate := set.TierFor("task", "main")
+	if tier != Observe || gate != "main-tasks-observed" {
+		t.Fatalf("TierFor(task, main) = %s, %q", tier, gate)
+	}
+
+	tier, gate = set.TierFor("task", "codex_cli")
+	if tier != Decide || gate != "" {
+		t.Fatalf("TierFor(task, codex_cli) = %s, %q", tier, gate)
+	}
+
+	tier, gate = set.TierFor("gate", "main")
+	if tier != Decide || gate != "" {
+		t.Fatalf("TierFor(gate, main) = %s, %q", tier, gate)
+	}
+
+	files["proposals.yaml"] = `proposals:
+  - id: task-ads-retry
+    proposes: task
+    proposal: Retry the ads job.
+    because: [b]
+    by: main
+    when: 2026-11-02
+    rejected: { who: franco, when: 2026-11-03, why: Not before I look. }
+`
+	set = load(t, writeFiles(t, files))
+
+	tier, gate = set.TierFor("task", "main")
+	if tier != Decide || gate != "main-tasks-observed" {
+		t.Fatalf("TierFor after a rejection = %s, %q", tier, gate)
+	}
+
+	reviewed := review(t, set, "task-ads-retry")
+	if reviewed.Gate != "main-tasks-observed" || reviewed.Tier != Decide || len(reviewed.TightenedBy) != 1 {
+		t.Fatalf("review = %+v", reviewed)
+	}
+
+	line := set.ProposalLine(reviewed)
+	if !strings.Contains(line.Text, "the task act to retry the ads job") {
+		t.Fatalf("ProposalLine = %+v", line)
+	}
+
+	// A task act resting on nothing cannot be read, so it is decide.
+	illegible := writeFiles(t, map[string]string{
+		"gates.yaml":     "gates:\n  - id: g\n    proposes: task\n    tier: delegated\n",
+		"proposals.yaml": "proposals:\n  - id: p\n    proposes: task\n    proposal: Do it.\n    by: main\n    when: 2026-11-02\n",
+	})
+	unread := review(t, load(t, illegible), "p")
+	if !unread.Illegible || unread.Tier != Decide {
+		t.Fatalf("illegible task act = %+v", unread)
+	}
+}
+
+// main is an agent role a rule may trust, and never a witness.
+func TestMainIsATrustedJudgeAndNotAWitness(t *testing.T) {
+	rules := "subject: the main agent\nrules:\n  - id: r\n    rule: Stay quiet.\n    judge:\n      trusted: [main]\n"
+	set := load(t, writeFiles(t, map[string]string{"rules.yaml": rules}))
+	if JudgeNote(set.Rulesets[0].Rules[0]) != "needs main" || JudgeHarness("main") != "claude_code" || JudgeHarness("franco") != "" {
+		t.Fatalf("note = %q", JudgeNote(set.Rulesets[0].Rules[0]))
+	}
+
+	_, err := Load(writeFiles(t, map[string]string{"e.yaml": "evidence:\n  - id: e\n    evidence: Saw it.\n    who: main\n    when: 2026-11-02\n"}))
+	if err == nil || !strings.Contains(err.Error(), "evidence e") {
+		t.Fatalf("evidence by main: %v", err)
+	}
+
+	asked := []string{}
+	judgments, err := set.Judge(context.Background(), "main", Subject{Name: "a batch", Text: "x"}, func(ctx context.Context, rule Rule, prompt string) (string, error) {
+		asked = append(asked, rule.ID)
+		return "VERDICT: pass — it stayed quiet.", nil
+	})
+	if err != nil || len(judgments) != 1 || judgments[0].Verdict != Pass || !slices.Equal(asked, []string{"r"}) {
+		t.Fatalf("Judge as main = %+v, %v", judgments, err)
 	}
 }

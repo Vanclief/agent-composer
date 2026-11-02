@@ -711,6 +711,8 @@ func (s *Set) proposed(proposal Proposal) string {
 		return "the code change to " + text
 	case "gate":
 		return "the gate change to " + text
+	case "task":
+		return "the task act to " + text
 	}
 
 	return "the " + proposal.Proposes + " that " + text
@@ -821,6 +823,8 @@ func plural(kind string) string {
 		return "evidence"
 	case "code":
 		return "code changes"
+	case "task":
+		return "task acts"
 	}
 
 	return kind + "s"

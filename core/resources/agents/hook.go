@@ -16,15 +16,18 @@ func fromSystem(m *msgmodels.Message) bool {
 }
 
 // onPost is the wake hook (ADR 0016 item 6): every asleep agent that reads
-// the message's channel is woken, except for agc's own posts and an
-// agent's own posts. Wakes run in the background so a post never waits on
-// a VM.
+// the message's channel is woken, except by an agent's own posts. agc's
+// own posts wake only the main role (ADR 0015: triggers land as agc's
+// messages, ADR 0014), and agc's sleep notice wakes nobody, or main's own
+// sleep would wake it. Wakes run in the background so a post never waits
+// on a VM.
 func (api *API) onPost(ctx context.Context, m *msgmodels.Message) {
-	if fromSystem(m) {
+	system := fromSystem(m)
+	if system && strings.TrimSpace(m.Body) == SleepNotice {
 		return
 	}
 
-	woken := api.toWake(ctx, m)
+	woken := api.toWake(ctx, m, system)
 
 	for i := range woken {
 		record := woken[i]
@@ -42,8 +45,9 @@ func (api *API) onPost(ctx context.Context, m *msgmodels.Message) {
 }
 
 // toWake returns the asleep agents whose channels match the message's,
-// leaving out the agent that posted it.
-func (api *API) toWake(ctx context.Context, m *msgmodels.Message) []agent.Agent {
+// leaving out the agent that posted it, and, for one of agc's own posts
+// (system), every agent but main.
+func (api *API) toWake(ctx context.Context, m *msgmodels.Message, system bool) []agent.Agent {
 	records, err := agent.ListAgents(ctx, api.db)
 	if err != nil {
 		log.Warn().Err(err).Msg("cannot list agents for the wake hook")
@@ -55,6 +59,10 @@ func (api *API) toWake(ctx context.Context, m *msgmodels.Message) []agent.Agent 
 		record := &records[i]
 
 		if m.Agent != "" && m.Agent == record.Home {
+			continue
+		}
+
+		if system && !strings.EqualFold(record.Role, MainRole) {
 			continue
 		}
 

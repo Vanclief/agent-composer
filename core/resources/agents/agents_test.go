@@ -810,6 +810,35 @@ func TestWakeHookWakesOnlyMatchingAsleepAgents(t *testing.T) {
 		}
 	})
 
+	t.Run("agc's posts wake main, except its sleep notice", func(t *testing.T) {
+		env := newTestEnv(t)
+		env.create(t, "main")
+		env.create(t, "watcher")
+
+		_, err := env.msg.PostAsSystem(ctx, "#ci-main", SleepNotice)
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.api.Wait()
+		env.sbx.Wait()
+		woken := env.woken("main-1", "watcher-1")
+		if len(woken) != 0 {
+			t.Fatalf("the sleep notice woke %q", woken)
+		}
+
+		// A trigger (ADR 0014) is agc's post; it wakes main only.
+		_, err = env.msg.PostAsSystem(ctx, "#ci-main", "Trigger: the build is red.")
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.api.Wait()
+		env.sbx.Wait()
+		woken = env.woken("main-1", "watcher-1")
+		if !reflect.DeepEqual(woken, []string{"main-1"}) {
+			t.Fatalf("woken = %q, want main-1 only", woken)
+		}
+	})
+
 	t.Run("awake agents are left to their loop", func(t *testing.T) {
 		env := newTestEnv(t)
 		env.create(t, "main")
@@ -1012,5 +1041,26 @@ func TestShippedTemplatesLoad(t *testing.T) {
 	}
 	if !reflect.DeepEqual(main.Reads, []string{"*"}) || main.Instructions == "" {
 		t.Fatalf("main = %+v", main)
+	}
+}
+
+// The templates the repo ships load, and main's names the knowledge clone
+// its loop reads rules and gates from (ADR 0015).
+func TestRepoTemplatesLoad(t *testing.T) {
+	dir := filepath.Join("..", "..", "..", "agents")
+	for _, role := range []string{"reviewer", "main", "developer"} {
+		tmpl, err := LoadTemplate(dir, role)
+		if err != nil {
+			t.Fatalf("%s: %v", role, err)
+		}
+
+		if role != "main" {
+			continue
+		}
+
+		_, repoDir, err := tmpl.Sandbox.RepoURL()
+		if err != nil || tmpl.Harness != "claude_code" || tmpl.Sandbox.Env["AGC_KNOWLEDGE_DIR"] != repoDir {
+			t.Fatalf("main: harness %s, repo dir %s, env %v, %v", tmpl.Harness, repoDir, tmpl.Sandbox.Env, err)
+		}
 	}
 }

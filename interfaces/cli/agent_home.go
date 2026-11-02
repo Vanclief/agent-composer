@@ -45,6 +45,7 @@ type AgentRecord struct {
 	Kind      string    `json:"kind"`
 	Human     bool      `json:"human"`
 	Body      string    `json:"body"`
+	ReplyTo   *int64    `json:"reply_to,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -56,6 +57,7 @@ func newAgentRecord(m msgmodels.Message) AgentRecord {
 		Kind:      m.Kind,
 		Human:     m.Human,
 		Body:      m.Body,
+		ReplyTo:   m.ReplyTo,
 		CreatedAt: m.CreatedAt,
 	}
 }
@@ -78,11 +80,41 @@ func RenderRecords(records []AgentRecord) string {
 	return b.String()
 }
 
-// BatchPrompt is the prompt the main role gets for a batch of new
-// messages across its channels. It is the one place to change how main
-// sees a batch (ADR 0015); the loop only calls it.
+// BatchPrompt is the batch section of the main role's prompt (ADR 0015),
+// inline and spill: per message its id, channel, sender (and whether a
+// human), kind, the message it replies to, and the first 300 characters
+// of its body, with the command that reads the rest. It is the one place
+// to change how main sees a batch; MainPrompt only calls it.
 func BatchPrompt(records []AgentRecord) string {
-	return RenderRecords(records) + "\nRead more of a channel with: agc msg read '<channel>' --after <id>\n"
+	var b strings.Builder
+	fmt.Fprintf(&b, "## New messages since your last turn (%d)\n\n", len(records))
+
+	for _, r := range records {
+		kind := r.Kind
+		if kind == "" {
+			kind = msgmodels.KindMessage
+		}
+
+		sender := "@" + r.From
+		if r.Human {
+			sender += " (human)"
+		}
+
+		head := fmt.Sprintf("- id %d · %s · %s · %s", r.ID, r.Channel, sender, kind)
+		if r.ReplyTo != nil {
+			head += fmt.Sprintf(" · reply to %d", *r.ReplyTo)
+		}
+
+		body, left := inline(r.Body)
+		fmt.Fprintf(&b, "%s\n  %s\n", head, strings.ReplaceAll(body, "\n", "\n  "))
+		if left > 0 {
+			fmt.Fprintf(&b, "  … %d more characters: agc msg read '%s' --after %d --limit 1\n", left, r.Channel, r.ID-1)
+		}
+	}
+
+	b.WriteString("\nRead around a message with: agc msg read '<channel>' --after <id>\n")
+
+	return b.String()
 }
 
 // threadPrompt is the prompt for a turn in one thread: the new messages
@@ -124,8 +156,15 @@ type homeLoop struct {
 	// now is the clock, swapped in tests.
 	now func() time.Time
 
-	me       *msgmodels.Participant
-	role     string
+	// main is what the role main adds (ADR 0015), nil for other roles.
+	main *mainMode
+
+	me   *msgmodels.Participant
+	role string
+	// home is the home sandbox's name and owner the agent's owner, from
+	// GET /agent.
+	home     string
+	owner    string
 	sessions *sessionStore
 	// parents maps a message id to the id it replies to, 0 for none.
 	parents map[int64]int64
@@ -160,7 +199,13 @@ func (l *homeLoop) run(ctx context.Context) error {
 	}
 
 	l.role = info.Agent.Role
+	l.home = info.Agent.Home
+	l.owner = info.Agent.Owner
 	idle := parseIdle(info.Idle)
+
+	if l.role == mainRole && l.main != nil && l.main.err != nil {
+		return l.main.err
+	}
 
 	sessions, err := loadSessionStore(l.dir)
 	if err != nil {
@@ -216,6 +261,7 @@ func (l *homeLoop) run(ctx context.Context) error {
 		} else {
 			info = fresh
 			idle = parseIdle(info.Idle)
+			l.owner = info.Agent.Owner
 		}
 
 		quiet := l.clock().Sub(lastTurn)
@@ -313,7 +359,10 @@ func (l *homeLoop) plan(ctx context.Context, messages []msgmodels.Message, since
 	index := map[string]int{}
 
 	for _, m := range messages {
-		if !l.isTurn(m, since) {
+		if l.role == mainRole && !l.isMainTurn(m, since) {
+			continue
+		}
+		if l.role != mainRole && !l.isTurn(m, since) {
 			continue
 		}
 
@@ -388,15 +437,13 @@ func (l *homeLoop) fetchParent(ctx context.Context, channel string, id int64) (i
 // brief; a known one resumes. A failing harness is reported in the
 // thread.
 func (l *homeLoop) take(ctx context.Context, t homeTurn) {
-	session := l.sessions.Get(t.key)
-
-	var prompt string
 	if l.role == mainRole {
-		prompt = BatchPrompt(t.records)
-		prompt += fmt.Sprintf("Your answer is posted in %s as a reply to message %d; post anywhere else with agc msg post.\n", t.channel, t.root)
-	} else {
-		prompt = threadPrompt(t.records, t.channel, t.root)
+		l.takeMain(ctx, t)
+		return
 	}
+
+	session := l.sessions.Get(t.key)
+	prompt := threadPrompt(t.records, t.channel, t.root)
 
 	if session == "" {
 		prompt = l.brief + "\n\n---\n\n" + prompt

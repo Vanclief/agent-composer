@@ -1,12 +1,10 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -94,6 +92,7 @@ func agentCommand() *cli.Command {
 					&cli.StringFlag{Name: "owner", Usage: "Messaging name of the task's owner, who may post /accept and /reject"},
 					&cli.StringFlag{Name: "agent", Usage: "Persistent agent to run as, in its home sandbox (default $AGC_AGENT when no task is given)"},
 					&cli.StringFlag{Name: "sessions", Usage: "With --agent, directory of the sessions and cursor files (the kept volume)", Value: defaultHarnessDir},
+					&cli.StringFlag{Name: "knowledge", Usage: "With --agent for the role main, the clone whose rules/ and gates/ main follows, pulled before every turn (ADR 0015)", EnvVars: []string{"AGC_KNOWLEDGE_DIR"}},
 				},
 				Action: agentRun,
 			},
@@ -167,11 +166,13 @@ func agentHomeRun(c *cli.Context, name string) error {
 
 	loop := &homeLoop{
 		harness: harness,
-		msg:     newMsgClient(),
-		name:    name,
-		brief:   string(brief),
-		dir:     c.String("sessions"),
-		log:     os.Stdout,
+		// Used only if GET /agent says the role is main (ADR 0015).
+		main:  newMainMode(c.String("harness"), c.String("model"), mainWorkDir, c.String("knowledge")),
+		msg:   newMsgClient(),
+		name:  name,
+		brief: string(brief),
+		dir:   c.String("sessions"),
+		log:   os.Stdout,
 		joined: func(p *msgmodels.Participant) error {
 			return saveMsgState(msgState{ParticipantID: p.ID, Name: p.Name})
 		},
@@ -426,23 +427,7 @@ func newAgentHarness(harness string, model string) (agentHarness, error) {
 // this process's stderr, the terminal log, as well as into the error; a
 // harness that says nothing on stderr is quoted from stdout.
 func runHarness(ctx context.Context, name string, args []string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
-
-	err := cmd.Run()
-	if err != nil {
-		msg := firstNonEmpty(stderr.String(), stdout.String(), err.Error())
-		if len(msg) > 2000 {
-			msg = "..." + msg[len(msg)-2000:]
-		}
-		return "", ez.New(ez.EINTERNAL, name+" failed: "+msg, err)
-	}
-
-	return stdout.String(), nil
+	return runHarnessIn(ctx, "", name, args)
 }
 
 type claudeAgent struct {

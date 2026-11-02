@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -35,6 +36,11 @@ var idsFlag = &cli.BoolFlag{
 	Usage: "Print the compact id form, a stable format for scripts and agents, instead of sentences",
 }
 
+var trustedFlag = &cli.StringFlag{
+	Name:  "trusted",
+	Usage: "Print only the rules whose judge: trusted names this harness id, agent role or person (the main agent reads its own with --trusted main)",
+}
+
 var withoutFlag = &cli.StringSliceFlag{
 	Name:  "without",
 	Usage: "Judge as if this evidence or belief were retracted or absent (repeatable); nothing is written",
@@ -55,8 +61,8 @@ func rulesCommand() *cli.Command {
 			{
 				Name:      "show",
 				Usage:     "Print the rules as a markdown checklist without running checks",
-				ArgsUsage: "[path...] [--beliefs <path>] [--without <id>] [--ids]",
-				Flags:     []cli.Flag{beliefsFlag, withoutFlag, idsFlag},
+				ArgsUsage: "[path...] [--beliefs <path>] [--without <id>] [--ids] [--trusted <judge>]",
+				Flags:     []cli.Flag{beliefsFlag, withoutFlag, idsFlag, trustedFlag},
 				Action:    rulesShow,
 			},
 			{
@@ -179,6 +185,9 @@ type knowledgeArgs struct {
 	// proposals accept and reject only.
 	by  string
 	why string
+
+	// rules show only.
+	trusted string
 }
 
 func parseArgs(args []string, c *cli.Context) knowledgeArgs {
@@ -189,8 +198,9 @@ func parseArgs(args []string, c *cli.Context) knowledgeArgs {
 	parsed.record = c.Bool("record")
 	parsed.by = c.String("by")
 	parsed.why = c.String("why")
+	parsed.trusted = c.String("trusted")
 	values := map[string]*[]string{"--without": &parsed.without, "--beliefs": &parsed.beliefs}
-	singles := map[string]*string{"--as": &parsed.as, "--on": &parsed.on, "--model": &parsed.model, "--by": &parsed.by, "--why": &parsed.why}
+	singles := map[string]*string{"--as": &parsed.as, "--on": &parsed.on, "--model": &parsed.model, "--by": &parsed.by, "--why": &parsed.why, "--trusted": &parsed.trusted}
 
 	for i := 0; i < len(args); i++ {
 		name, value, hasValue := strings.Cut(args[i], "=")
@@ -221,8 +231,12 @@ func parseArgs(args []string, c *cli.Context) knowledgeArgs {
 
 // existing returns the paths that exist.
 func existing(paths ...string) []string {
+	root := knowledgeRoot()
+
 	found := []string{}
 	for _, path := range paths {
+		path = filepath.Join(root, path)
+
 		_, err := os.Stat(path)
 		if err == nil {
 			found = append(found, path)
@@ -230,6 +244,31 @@ func existing(paths ...string) []string {
 	}
 
 	return found
+}
+
+// knowledgeKinds are the directories a knowledge root holds (ADR 0006,
+// ADR 0007).
+var knowledgeKinds = []string{"evidence", "beliefs", "decisions", "rules", "actions", "proposals", "gates"}
+
+// knowledgeRoot is where the knowledge commands look when given no paths:
+// the current directory when it holds any knowledge directory, else
+// $AGC_KNOWLEDGE_DIR when set. The main agent's harness runs in an empty
+// directory with AGC_KNOWLEDGE_DIR on its home's clone (ADR 0015), so
+// agc gates show works there without a path.
+func knowledgeRoot() string {
+	for _, kind := range knowledgeKinds {
+		_, err := os.Stat(kind)
+		if err == nil {
+			return "."
+		}
+	}
+
+	dir := strings.TrimSpace(os.Getenv("AGC_KNOWLEDGE_DIR"))
+	if dir == "" {
+		return "."
+	}
+
+	return dir
 }
 
 // loadDefault loads paths, or evidence/ beliefs/ decisions/ rules/
@@ -354,12 +393,28 @@ func rulesShow(c *cli.Context) error {
 	for _, ruleset := range set.Rulesets {
 		results := []knowledge.Result{}
 		for _, rule := range ruleset.Rules {
+			if !trusts(rule, parsed.trusted) {
+				continue
+			}
 			results = append(results, knowledge.Result{Rule: rule})
+		}
+		if len(results) == 0 {
+			continue
 		}
 		printChecklist(set, ruleset, results, true, parsed.ids)
 	}
 
 	return nil
+}
+
+// trusts says whether rule's judge trusts name; every rule passes an
+// empty name.
+func trusts(rule knowledge.Rule, name string) bool {
+	if name == "" {
+		return true
+	}
+
+	return rule.Judge != nil && slices.Contains(rule.Judge.Trusted, name)
 }
 
 func mark(result knowledge.Result) string {
@@ -919,14 +974,17 @@ func printUnclear(judgment knowledge.Judgment) {
 }
 
 // harnessAsker runs the judge through the same harness code workflows use,
-// on this machine, read only (the harnesses' default permissions). A
-// person has no asker: knowledge.Judge says so.
+// on this machine, read only (the harnesses' default permissions). An
+// agent role such as main runs on its template's harness, judging the
+// rules that trust the role. A person has no asker: knowledge.Judge says
+// so.
 func harnessAsker(ctx context.Context, as string, model string) (knowledge.Asker, error) {
-	if !knowledge.IsHarness(as) {
+	harnessID := knowledge.JudgeHarness(as)
+	if harnessID == "" {
 		return nil, nil
 	}
 
-	kind := agent.Harness(as)
+	kind := agent.Harness(harnessID)
 	for _, info := range harnesses.ListHarnessInfo(ctx) {
 		if info.ID != kind {
 			continue

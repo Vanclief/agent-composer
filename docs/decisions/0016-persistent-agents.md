@@ -133,6 +133,13 @@ that mock a backend and settles what it left open.
   every file gets a light parse of line envelopes on each request and only
   the files holding the requested page are parsed in full.
 
+## Notes from ADR 0015 (task `main-agent`, 2026-11-02)
+
+- The wake hook of item 6 now wakes role `main` on agc's own posts
+  (triggers, ADR 0014), never another role, and nobody on the sleep notice
+  `Asleep.`; the loop's `main` mode is `interfaces/cli/agent_main.go`. See
+  ADR 0015, "Changes to ADR 0016's runner and hook".
+
 ## Rationale
 
 - Rows not processes because a stopped agent costs nothing and the list of

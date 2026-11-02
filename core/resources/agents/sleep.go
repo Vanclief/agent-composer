@@ -24,6 +24,10 @@ func (r SleepRequest) Validate() error {
 	return nil
 }
 
+// SleepNotice is what agc posts in an agent's DM when it sleeps. It wakes
+// nobody (hook.go), and the main agent's loop takes no turn on it.
+const SleepNotice = "Asleep."
+
 // Sleep stops an awake agent's home and posts "Asleep." in its DM channel
 // so the thread shows where the VM stopped (ADR 0016 item 4). An agent
 // that is not awake answers 409.
@@ -77,7 +81,7 @@ func (api *API) sleep(ctx context.Context, record *agent.Agent) error {
 
 	// TODO(ADR 0011): @<owner>/<name> is not a valid channel until ADR 0011 lands; this post fails until then.
 	// The VM is already stopped, so a failed post is logged, not returned.
-	_, err = api.msg.PostAsSystem(ctx, dm, "Asleep.")
+	_, err = api.msg.PostAsSystem(ctx, dm, SleepNotice)
 	if err != nil {
 		log.Warn().Err(err).Str("agent", record.Name).Str("channel", dm).Msg("cannot post Asleep. in the agent's DM channel")
 	}

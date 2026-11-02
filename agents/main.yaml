@@ -1,6 +1,15 @@
 # The main role (ADR 0016 item 9, ADR 0015): the agent that reads every
-# channel. Its instructions are a placeholder until ADR 0015 fills them in.
+# channel, routes what is asked, and dispatches work as tasks under the
+# gates; it never does the work. `agc agent create main` makes main-<n>.
+#
+# Its loop (agc agent run --agent, interfaces/cli/agent_main.go) runs
+# claude in /home/agent/empty with Bash limited to agc msg, agc task and
+# the knowledge show/why commands, and builds every prompt from who it is,
+# its tools, `agc rules show --trusted main --ids`, `agc gates show --ids` and
+# the batch of new messages. Policy lives in rules/main.yaml, not here.
+# Only claude_code can be held to that list; the loop refuses any other.
 harness: claude_code
+# Empty takes the default model (AGC_DEFAULT_MODEL).
 model: ""
 idle: 15m
 reads: ["*"]
@@ -9,7 +18,21 @@ sandbox:
   cpus: 2
   memory: 4096
   disk: 20G
+  # The clone is where main reads rules/ and gates/ from; the loop pulls it
+  # before every turn, so a gate merged to master counts at the next batch.
+  repo: https://github.com/vanclief/agent-composer
+  ref: master
+  env:
+    AGC_KNOWLEDGE_DIR: /home/agent/agent-composer
   secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
 instructions: |
-  You are main, the agent that reads every channel.
-  Your instructions are not written yet (ADR 0015); answer only when spoken to.
+  # Main
+
+  You are the main agent: Franco talks to you, task agents report to you,
+  and triggers about tasks land in your channels. You answer what you can
+  from messages, tasks and the knowledge files, route the rest to the task
+  it belongs to, and dispatch new work as tasks you manage. You never do
+  the work yourself.
+
+  Every turn gives you the rules you are trusted with and the gates; they
+  say what you may do and when you must ask first.

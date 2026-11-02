@@ -332,52 +332,6 @@ func TestHomeLoopResumesKnownThreadsAfterAWake(t *testing.T) {
 	}
 }
 
-func TestHomeLoopMainKeepsOneSession(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	msg := &fakeHomeMessenger{
-		cancel: cancel,
-		nextID: 100,
-		agent:  msgclient.AgentResponse{Agent: msgclient.AgentView{Name: "main-1", Role: "main"}, Channels: []string{"#a", "#b"}, Idle: "15m"},
-		script: [][]msgmodels.Message{
-			{homeMsg(1, "#a", "franco", 0, "one"), homeMsg(2, "#b", "alice", 0, "two")},
-			{homeMsg(3, "#a", "franco", 1, "three")},
-		},
-	}
-	harness := &homeHarness{}
-	loop, _ := newHomeLoop(t, msg, harness)
-	loop.name = "main-1"
-
-	err := loop.run(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	records := []AgentRecord{
-		{ID: 1, Channel: "#a", From: "franco", Kind: "message", Human: true, Body: "one", CreatedAt: homeT0},
-		{ID: 2, Channel: "#b", From: "alice", Kind: "message", Body: "two", CreatedAt: homeT0},
-	}
-	first := "# Reviewer\n\n\n---\n\n" + BatchPrompt(records) + "Your answer is posted in #b as a reply to message 2; post anywhere else with agc msg post.\n"
-
-	if len(harness.turns) != 2 || harness.turns[0] != (homeHarnessTurn{"", first}) {
-		t.Fatalf("turns = %#v", harness.turns)
-	}
-	if harness.turns[1].session != "s1" || strings.Contains(harness.turns[1].prompt, "# Reviewer") || !strings.Contains(harness.turns[1].prompt, "(3): three") {
-		t.Fatalf("second turn = %#v", harness.turns[1])
-	}
-
-	sessions := map[string]string{}
-	readJSONFile(t, filepath.Join(loop.dir, sessionsFile), &sessions)
-	if !reflect.DeepEqual(sessions, map[string]string{"main": "s1"}) {
-		t.Fatalf("sessions = %v", sessions)
-	}
-
-	if msg.posts[0].replyTo != 2 || msg.posts[1].replyTo != 1 || msg.posts[1].channel != "#a" {
-		t.Fatalf("posts = %+v", msg.posts)
-	}
-}
-
 func TestHomeLoopSleepsWhenIdleAndSurvivesAFailingTurn(t *testing.T) {
 	msg := &fakeHomeMessenger{
 		idle:   true,
@@ -407,12 +361,12 @@ func TestHomeLoopSleepsWhenIdleAndSurvivesAFailingTurn(t *testing.T) {
 }
 
 func TestRenderRecords(t *testing.T) {
-	got := BatchPrompt([]AgentRecord{
+	got := RenderRecords([]AgentRecord{
 		{ID: 7, Channel: "#a", From: "franco", Kind: "question", Body: "square\nor round?"},
 		{ID: 9, Channel: "#b", From: "bob", Body: "hi"},
 	})
 
-	want := "@franco in #a [question] (7): square\n  or round?\n@bob in #b [message] (9): hi\n\nRead more of a channel with: agc msg read '<channel>' --after <id>\n"
+	want := "@franco in #a [question] (7): square\n  or round?\n@bob in #b [message] (9): hi\n"
 	if got != want {
 		t.Fatalf("got %q", got)
 	}
