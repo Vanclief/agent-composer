@@ -1,9 +1,6 @@
 // Small pieces shared by the agents list and an agent's page.
 import { BadgeCheck } from 'lucide-react'
 
-import type { AgentView } from '@/api/agents'
-import { conceptIcons } from '@/components/concept-icons'
-import { IconChip } from '@/components/icon-chip'
 import { cn } from '@/lib/utils'
 
 // The role an agent was made from, as a plain chip.
@@ -19,16 +16,6 @@ export function RoleChip({ role, className }: { role: string; className?: string
     >
       {role}
     </span>
-  )
-}
-
-// harness (model), like a task's assignee chip.
-export function HarnessChip({ agent }: { agent: AgentView }) {
-  return (
-    <IconChip icon={conceptIcons.agent} concept="agent" title="Harness (model)">
-      {agent.harness}
-      {agent.model ? ` (${agent.model})` : ''}
-    </IconChip>
   )
 }
 

@@ -49,7 +49,7 @@ export function AgentPage() {
 
   const a = agent.data
   return (
-    <div className="flex flex-col gap-4 p-6">
+    <div data-agent-page={a.name} className="flex flex-col gap-4 p-6">
       <header
         data-testid="agent-header"
         className={cn(
@@ -98,16 +98,16 @@ function AgentActions({ agent }: { agent: AgentView }) {
   const waking = agent.state === 'waking'
 
   return (
-    <div className="flex flex-col items-end gap-2">
+    <div data-slot="acts" className="ml-auto flex flex-col items-end gap-2">
       <div className="flex items-center gap-2">
         {agent.state === 'asleep' && (
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => wake.mutate()}>
+          <Button data-act="wake" variant="outline" size="sm" disabled={busy} onClick={() => wake.mutate()}>
             {wake.isPending ? <Loader2 className="animate-spin" /> : <Sun />}
             Wake
           </Button>
         )}
         {(agent.state === 'awake' || waking) && (
-          <Button variant="outline" size="sm" disabled={busy || waking} onClick={() => sleep.mutate()}>
+          <Button data-act="sleep" variant="outline" size="sm" disabled={busy || waking} onClick={() => sleep.mutate()}>
             {sleep.isPending || waking ? <Loader2 className="animate-spin" /> : <Moon />}
             {waking ? 'Waking…' : 'Sleep'}
           </Button>
@@ -115,7 +115,7 @@ function AgentActions({ agent }: { agent: AgentView }) {
         <KeepAgentDialog
           agent={agent}
           trigger={
-            <Button variant="outline" size="sm" disabled={busy}>
+            <Button data-act="keep" variant="outline" size="sm" disabled={busy}>
               {agent.kept ? <Pencil /> : <UserCheck />}
               {agent.kept ? 'Rename…' : 'Keep…'}
             </Button>
