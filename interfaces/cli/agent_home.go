@@ -180,7 +180,15 @@ func (l *homeLoop) run(ctx context.Context) error {
 		_, _ = l.msg.Leave(ctx, l.prior.ParticipantID)
 	}
 
-	p, err := joinAs(ctx, l.msg, l.name)
+	// The home joins as the agent's name, never <name>-2: who wakes whom
+	// (msgmodels.TurnFor), mentions and the manager's filters all use it.
+	// Messaging hands it a name a stale participant holds (its home gone
+	// or stopped); a running home's or a human's it refuses, and so does
+	// this loop.
+	p, err := l.msg.Join(ctx, l.name)
+	if ez.ErrorCode(err) == ez.ECONFLICT {
+		return ez.New(ez.ECONFLICT, "cannot join as @"+l.name+": "+ez.ErrorMessage(err), err)
+	}
 	if err != nil {
 		return err
 	}

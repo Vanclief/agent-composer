@@ -151,7 +151,9 @@ func (api *API) startBoot(ctx context.Context, record *taskmodels.Sandbox, owner
 // (or the home of an agent) is named after base, later ones <base>-2,
 // <base>-3: the first free name. A name is taken while a sandbox has it or
 // while a deleted sandbox's volume (task.VolumeName) is still on the host,
-// so a new sandbox never inherits another's transcripts.
+// so a new sandbox never inherits another's transcripts. The sandbox's
+// volume is task.VolumeName of its name, unless record.Volume is already
+// set (an agent's home keeps the agent's volume across homes).
 func (api *API) insert(ctx context.Context, base string, record *taskmodels.Sandbox) error {
 	api.naming.Lock()
 	defer api.naming.Unlock()
@@ -181,7 +183,9 @@ func (api *API) insert(ctx context.Context, base string, record *taskmodels.Sand
 	}
 
 	record.Name = name
-	record.Volume = task.VolumeName(name)
+	if record.Volume == "" {
+		record.Volume = task.VolumeName(name)
+	}
 
 	err := record.Insert(ctx, api.db)
 	if err != nil {
@@ -252,7 +256,7 @@ func (api *API) boot(ctx context.Context, record *taskmodels.Sandbox, owner *tas
 func (api *API) bootSandbox(ctx context.Context, record *taskmodels.Sandbox, owner *taskmodels.Task, spec task.Spec, bindings []secrets.Binding) error {
 	name := record.Name
 
-	sandboxSpec, err := spec.SandboxSpec(owner.Name, name, bindings, api.socketPath(name), msgVsockPort)
+	sandboxSpec, err := spec.SandboxSpec(owner.Name, name, record.Volume, bindings, api.socketPath(name), msgVsockPort)
 	if err != nil {
 		return ez.Wrap(err)
 	}
