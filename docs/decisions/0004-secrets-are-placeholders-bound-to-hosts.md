@@ -73,11 +73,14 @@ not.
 
 5. **Harness authentication is environment-based inside Tasks.** Claude Code
    through `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` (from
-   `claude setup-token`); Codex through `OPENAI_API_KEY`. Interactive
+   `claude setup-token`); Codex through `CODEX_API_KEY` (read by `codex
+   exec`). Interactive
    `claude login` inside a Task is possible but writes a token to the Task's
    disk, is not substituted, and is lost on delete, so the UI does not offer
    it. Codex on a ChatGPT subscription needs its rotating `auth.json` and
-   therefore falls into `files`.
+   therefore falls into `files`. (2026-11-02, Franco: list what the current
+   Codex CLI reads; `codex exec` authenticates with `CODEX_API_KEY`, and
+   reads `OPENAI_API_KEY` only to prefill the TUI login prompt.)
 
 6. **Git uses HTTPS with the credential helper baked into the base image**,
    reading `GITHUB_TOKEN`. SSH remotes are not supported inside Tasks.

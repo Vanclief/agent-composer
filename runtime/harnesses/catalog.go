@@ -33,10 +33,14 @@ type HarnessReads struct {
 
 // Credential variables per harness, in order of preference.
 //
-// Codex: agc runs `codex exec`, and codex-rs/login reads CODEX_API_KEY first
-// ("takes precedence over any other auth method"); the Codex docs state
-// "CODEX_API_KEY is only supported in codex exec" and show OPENAI_API_KEY
-// only piped into `codex login --with-api-key`, not read by the CLI itself.
+// Codex: agc runs `codex exec`. In openai/codex main at 6c4fa86 (2026-11-02)
+// codex-rs/exec/src/lib.rs builds its session with
+// enable_codex_api_key_env: true, and load_auth in
+// codex-rs/login/src/auth/manager.rs reads CODEX_API_KEY first ("API key via
+// env var takes precedence over any other auth method"). OPENAI_API_KEY is
+// read only to prefill the TUI login prompt (codex-rs/tui/src/onboarding/auth.rs)
+// and by codex doctor and auth telemetry, and codex exec does not authenticate
+// with it.
 //
 // Claude Code: the subscription token from `claude setup-token`, then an API
 // key.
