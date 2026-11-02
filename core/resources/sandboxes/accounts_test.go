@@ -197,7 +197,7 @@ func TestAllocateHomeBindsTheProviderDefault(t *testing.T) {
 // The shipped templates (agents/*.yaml) name no credential, so a home
 // allocated from one gets the anthropic oauth default next to GITHUB_TOKEN.
 func TestAllocateHomeFromShippedTemplateBindsTheDefault(t *testing.T) {
-	for _, role := range []string{"reviewer", "main", "developer"} {
+	for _, role := range []string{"reviewer", "main", "developer", "designer"} {
 		t.Run(role, func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join("..", "..", "..", "agents", role+".yaml"))
 			if err != nil {
