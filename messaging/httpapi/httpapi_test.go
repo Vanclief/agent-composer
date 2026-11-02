@@ -205,3 +205,44 @@ func TestReadMarksHumanSeen(t *testing.T) {
 		t.Fatalf("want 404 for an unknown participant, got %d %+v", status, failure)
 	}
 }
+
+func TestWaitOnSeveralChannels(t *testing.T) {
+	grants := func(*http.Request) (messaging.Caller, error) {
+		return messaging.Caller{Task: "review-42", Grants: []messaging.Grant{{Channel: "#releases"}}}, nil
+	}
+	server, _ := newServerAs(t, grants)
+
+	var p msgmodels.Participant
+	call(t, http.MethodPost, server.URL+"/join", `{"name":"reviewer"}`, &p)
+
+	for _, channel := range []string{"#releases", "#review-42", "#releases"} {
+		var m msgmodels.Message
+		status := call(t, http.MethodPost, server.URL+"/post", `{"participant_id":"`+p.ID+`","channel":"`+channel+`","body":"x"}`, &m)
+		if status != http.StatusOK {
+			t.Fatalf("post in %s: status %d", channel, status)
+		}
+	}
+
+	var waited MessagesResponse
+	status := call(t, http.MethodGet, server.URL+"/wait?channels=%23review-42,%23releases&after=0&timeout=1s", "", &waited)
+	if status != http.StatusOK || len(waited.Messages) != 3 || waited.Cursor != waited.Messages[2].ID {
+		t.Fatalf("wait: status %d, response %+v", status, waited)
+	}
+	for i, want := range []string{"#releases", "#review-42", "#releases"} {
+		if waited.Messages[i].Channel != want || (i > 0 && waited.Messages[i].ID <= waited.Messages[i-1].ID) {
+			t.Fatalf("message %d: %+v", i, waited.Messages[i])
+		}
+	}
+
+	var read MessagesResponse
+	status = call(t, http.MethodGet, server.URL+"/read?channel=%23review-42&channels=%23releases&after=1", "", &read)
+	if status != http.StatusOK || len(read.Messages) != 2 {
+		t.Fatalf("read: status %d, response %+v", status, read)
+	}
+
+	var failure ErrorResponse
+	status = call(t, http.MethodGet, server.URL+"/wait?channels=%23review-42,%23secret&timeout=10ms", "", &failure)
+	if status != http.StatusForbidden || !strings.Contains(failure.Error, "#secret") {
+		t.Fatalf("refused channel: status %d, error %q", status, failure.Error)
+	}
+}

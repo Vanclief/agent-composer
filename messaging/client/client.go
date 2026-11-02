@@ -56,6 +56,11 @@ func (c *Client) Ask(ctx context.Context, participantID, channel, body string) (
 	return c.post(ctx, httpapi.PostRequest{ParticipantID: participantID, Channel: channel, Body: body, Kind: msgmodels.KindQuestion})
 }
 
+// AskReply is Ask inside a thread: the question replies to replyTo.
+func (c *Client) AskReply(ctx context.Context, participantID, channel, body string, replyTo *int64) (*msgmodels.Message, error) {
+	return c.post(ctx, httpapi.PostRequest{ParticipantID: participantID, Channel: channel, Body: body, ReplyTo: replyTo, Kind: msgmodels.KindQuestion})
+}
+
 func (c *Client) post(ctx context.Context, req httpapi.PostRequest) (*msgmodels.Message, error) {
 	m := &msgmodels.Message{}
 
@@ -84,8 +89,14 @@ func (c *Client) Read(ctx context.Context, channel string, after int64, limit in
 }
 
 func (c *Client) Wait(ctx context.Context, channel string, after int64, timeout time.Duration) (*httpapi.MessagesResponse, error) {
+	return c.WaitChannels(ctx, []string{channel}, after, timeout)
+}
+
+// WaitChannels blocks until any of channels has a message after the
+// cursor, and returns those of all of them in id order (ADR 0016).
+func (c *Client) WaitChannels(ctx context.Context, channels []string, after int64, timeout time.Duration) (*httpapi.MessagesResponse, error) {
 	query := url.Values{}
-	query.Set("channel", channel)
+	query.Set("channels", strings.Join(channels, ","))
 	query.Set("after", strconv.FormatInt(after, 10))
 	query.Set("timeout", timeout.String())
 
@@ -145,6 +156,51 @@ func (c *Client) Deliver(ctx context.Context, summary string, out any) error {
 	return nil
 }
 
+// AgentPath and AgentSleepPath are served on a persistent agent's home
+// sandbox socket (ADR 0016), by core/resources/agents, not by httpapi.
+const (
+	AgentPath      = "/agent"
+	AgentSleepPath = "/agent/sleep"
+)
+
+// AgentView is the agent row as GET /agent returns it; only the fields
+// the loop reads.
+type AgentView struct {
+	Name  string `json:"name"`
+	Role  string `json:"role"`
+	Owner string `json:"owner"`
+}
+
+// AgentResponse is GET /agent on a home sandbox's socket: the agent, the
+// channels it reads right now and how long it may sit idle ("15m").
+type AgentResponse struct {
+	Agent    AgentView `json:"agent"`
+	Channels []string  `json:"channels"`
+	Idle     string    `json:"idle"`
+}
+
+// Agent reads the agent whose home this is, on the sandbox's socket.
+func (c *Client) Agent(ctx context.Context) (*AgentResponse, error) {
+	res := &AgentResponse{}
+
+	err := c.do(ctx, http.MethodGet, AgentPath, nil, nil, res)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return res, nil
+}
+
+// Sleep asks agc to stop the home sandbox this runs in.
+func (c *Client) Sleep(ctx context.Context) error {
+	err := c.do(ctx, http.MethodPost, AgentSleepPath, nil, nil, nil)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
 // do sends one request and decodes the JSON answer into out. Error
 // answers come back as ez errors with the code the status maps to.
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, in, out any) error {
@@ -183,7 +239,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode != http.StatusOK {
+	if res.StatusCode < 200 || res.StatusCode > 299 {
 		failure := httpapi.ErrorResponse{}
 		_ = json.NewDecoder(res.Body).Decode(&failure)
 		if failure.Error == "" {
@@ -191,6 +247,10 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		}
 
 		return ez.New(ez.HTTPStatusToError(res.StatusCode), failure.Error, nil)
+	}
+
+	if out == nil || res.StatusCode == http.StatusNoContent {
+		return nil
 	}
 
 	err = json.NewDecoder(res.Body).Decode(out)

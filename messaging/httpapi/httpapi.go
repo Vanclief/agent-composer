@@ -6,7 +6,9 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/vanclief/ez"
@@ -176,7 +178,7 @@ func (a *api) read(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	messages, err := a.svc.Read(r.Context(), caller, query.Get("channel"), after, int(limit))
+	messages, err := a.svc.ReadChannels(r.Context(), caller, channelsParam(query), after, int(limit))
 	if err != nil {
 		WriteError(w, err)
 		return
@@ -214,7 +216,7 @@ func (a *api) wait(w http.ResponseWriter, r *http.Request) {
 	// Mark before blocking too, so a long wait counts as being here.
 	a.svc.Seen(r.Context(), caller, query.Get("participant"))
 
-	messages, err := a.svc.Wait(r.Context(), caller, query.Get("channel"), after, timeout)
+	messages, err := a.svc.WaitChannels(r.Context(), caller, channelsParam(query), after, timeout)
 	if err != nil {
 		WriteError(w, err)
 		return
@@ -322,6 +324,24 @@ func DecodeBody(w http.ResponseWriter, r *http.Request, dst any) error {
 	}
 
 	return nil
+}
+
+// channelsParam is the channels a read or wait names: `channel` (one) and
+// `channels` (comma separated, ADR 0016), together, in that order.
+func channelsParam(query url.Values) []string {
+	channels := []string{}
+	if query.Get("channel") != "" {
+		channels = append(channels, query.Get("channel"))
+	}
+
+	for _, channel := range strings.Split(query.Get("channels"), ",") {
+		trimmed := strings.TrimSpace(channel)
+		if trimmed != "" {
+			channels = append(channels, trimmed)
+		}
+	}
+
+	return channels
 }
 
 func parseInt(value, name string) (int64, error) {

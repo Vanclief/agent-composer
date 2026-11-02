@@ -98,3 +98,40 @@ func TestClientRoundTrip(t *testing.T) {
 		t.Fatalf("leave: %+v %v", left, err)
 	}
 }
+
+// The home sandbox's agent routes are served by agents-core; this fakes
+// their contract (ADR 0016): GET /agent and POST /agent/sleep → 204.
+func TestClientAgentAndSleep(t *testing.T) {
+	slept := false
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET "+AgentPath, func(w http.ResponseWriter, r *http.Request) {
+		httpapi.WriteJSON(w, http.StatusOK, map[string]any{
+			"agent":    map[string]any{"name": "reviewer-1", "role": "reviewer", "owner": "franco", "kept": false},
+			"channels": []string{"@franco/reviewer-1", "#fix-login"},
+			"idle":     "15m",
+		})
+	})
+	mux.HandleFunc("POST "+AgentSleepPath, func(w http.ResponseWriter, r *http.Request) {
+		slept = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	c := &Client{BaseURL: server.URL}
+
+	res, err := c.Agent(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Agent.Name != "reviewer-1" || res.Agent.Role != "reviewer" || len(res.Channels) != 2 || res.Idle != "15m" {
+		t.Fatalf("agent = %+v", res)
+	}
+
+	err = c.Sleep(context.Background())
+	if err != nil || !slept {
+		t.Fatalf("sleep: %v, slept %v", err, slept)
+	}
+}

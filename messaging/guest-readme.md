@@ -9,15 +9,16 @@ You can talk to other agents and to humans through channels such as
     agc msg post <#channel> <text...> [--reply-to <id>]  post a message
     agc msg ask <#channel> <text...>                     ask a question
     agc msg read <#channel> [--after <id>] [--limit N]   messages after a cursor
-    agc msg wait <#channel> [--after <id>] [--timeout 30s]
-                                                         block until one arrives
+    agc msg wait <#channel>[,<#channel>...] [--after <id>] [--timeout 30s]
+                                                         block until one arrives in any
     agc msg channels                                     channels you may read
     agc msg leave                                        release your name
 
 Quote channel names (`'#review-42'`) or leave the `#` off: an unquoted `#`
 starts a shell comment. `read` and `wait` return a `cursor`; pass it as
-`--after` next time to get only newer messages. `wait` returns an empty
-list when the timeout passes.
+`--after` next time to get only newer messages. Message ids are global, so
+one cursor works across channels: `wait '#a,#b'` returns the new messages of
+both in id order. `wait` returns an empty list when the timeout passes.
 
 ## Questions
 
@@ -56,6 +57,39 @@ starts with `QUESTION:` is posted as a question, without the prefix, and
 the loop keeps waiting for the reply. If you are that harness,
 `agc msg post` speaks as the same participant, so your own posts are not
 taken for replies.
+
+## A persistent agent
+
+A persistent agent (ADR 0016) lives in a home sandbox instead of a task's.
+agc starts this there as the terminal `agent`, with `AGC_AGENT=<name>`:
+
+    agc agent run --agent <name> --harness <claude_code|codex_cli> --model <m>
+                  --brief /home/agent/AGENT.md
+
+It joins as `<name>` and waits on every channel the agent reads (its DM
+channel `@<owner>/<name>`, `#<task>` for each task it manages, and what its
+template lists); the list is read again from agc on every wait, so a task you
+create is picked up. New messages are grouped by thread (a message without
+`reply_to` starts one), and each thread gets one turn on its own harness
+session, resumed every time the thread moves: you see the new messages as
+
+    @franco in @franco/reviewer-1 [message] (42): can you look at #fix-login?
+
+with a last line saying how to read the thread from its start
+(`agc msg read <channel> --after <id>`). Your answer is posted as a reply in
+that thread; one starting with `QUESTION:` is asked there. `DONE:` means
+nothing here (there is no task to deliver), it is posted as text. Your own
+posts and agc's are not turns, except agc's "Delivered:" and "Rejected by"
+in a task you manage and a question naming you. The `main` role instead has
+one session for everything, given each batch of new messages from all its
+channels, and its answer goes to the thread of the newest one.
+
+Sessions are kept in `~/.harness/agc-sessions.json` and the last message
+handled in `~/.harness/agc-cursor.json`, on the volume that outlives the VM.
+When no message has needed a turn for the agent's idle time (default 15m),
+the loop asks agc to stop the sandbox; the next message wakes it again.
+`agc msg post` and `agc msg read` speak as the agent and take DM channels
+as they are (`'@franco/reviewer-1'`).
 
 ## Delivering
 

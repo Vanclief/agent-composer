@@ -771,6 +771,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/msg/wait": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Wait for messages in one or several channels
+         * @description Blocks until a channel named in `channel` or `channels` has a message with an id greater than `after`, or the timeout passes, and returns every such message from all of them in id order (message ids are global, so one cursor serves them all; ADR 0016). An empty list means the timeout passed. The caller must be allowed to read every channel named, or the whole wait is refused. Inside a sandbox this is the socket's `GET /wait`, which `agc msg wait` and `agc agent run --agent` call; `GET /read` takes the same channel parameters and does not block.
+         */
+        get: operations["waitMessages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/msg/questions": {
         parameters: {
             query?: never;
@@ -1189,7 +1209,7 @@ export interface components {
         ChannelMessage: {
             /**
              * Format: int64
-             * @description Also the read cursor; ids are totally ordered per channel.
+             * @description Also the read cursor; ids are global and totally ordered across channels.
              */
             id: number;
             channel: string;
@@ -1706,7 +1726,7 @@ export interface components {
         MsgMessage: {
             /**
              * Format: int64
-             * @description Also the read cursor; ids are totally ordered per channel.
+             * @description Also the read cursor; ids are global and totally ordered across channels.
              */
             id: number;
             channel: string;
@@ -1722,6 +1742,14 @@ export interface components {
             kind: components["schemas"]["MsgKind"];
             /** Format: date-time */
             created_at: string;
+        };
+        MsgMessagesResponse: {
+            messages: components["schemas"]["MsgMessage"][];
+            /**
+             * Format: int64
+             * @description The id to pass as `after` next time; the given `after` when empty.
+             */
+            cursor: number;
         };
         MsgQuestion: components["schemas"]["MsgMessage"] & {
             /**
@@ -3300,6 +3328,40 @@ export interface operations {
             400: components["responses"]["MsgError"];
             401: components["responses"]["MsgError"];
             404: components["responses"]["MsgError"];
+            500: components["responses"]["MsgError"];
+        };
+    };
+    waitMessages: {
+        parameters: {
+            query?: {
+                /** @description One channel, e.g. `#fix-login`. */
+                channel?: string;
+                /** @description Comma-separated channels, read together with `channel`. */
+                channels?: string;
+                /** @description Only messages with an id greater than this; 0 or absent for all. */
+                after?: number;
+                /** @description How long to block, a Go duration such as `30s` (default 30s). */
+                timeout?: string;
+                /** @description The waiting participant's id, marked as seen while it waits. */
+                participant?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The messages after the cursor, oldest first, and the cursor to pass next. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MsgMessagesResponse"];
+                };
+            };
+            400: components["responses"]["MsgError"];
+            403: components["responses"]["MsgError"];
             500: components["responses"]["MsgError"];
         };
     };
