@@ -129,7 +129,7 @@
 }
 
 /* The status tab: the plate's left edge, top to bottom, the word running
-   up the edge; filled in its color for alive and dead, dim otherwise. */
+   up the edge. The word is the light; its colors are the shared ones below. */
 .dark aside[data-testid='task-header'] span[data-status][data-tier] {
   grid-column: 1;
   grid-row: 1 / 8;
@@ -140,40 +140,63 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 10px;
   padding: 12px 0;
   border: 0;
-  border-left: 1px solid var(--eva-dim);
   font-size: 0.8rem;
   letter-spacing: 0.2em;
-  color: var(--muted-foreground);
-  background: var(--eva-faint);
   /* Rotated half a turn: the cut at the top right lands at the bottom left. */
   clip-path: polygon(0 0, calc(100% - var(--cut) + 1px) 0, 100% calc(var(--cut) - 1px), 100% 100%, 0 100%);
 }
+
+/* The word is the light (docs/design/panel.md, Lights; Franco 2026-11-02,
+   second round), in the rail's tab and the sandboxes' tabs alike, as on the
+   Tasks list: running filled green and a machine in transition filled blue,
+   both steady; not running a green outline (done full, open and unknown
+   dim); failed a steady red outline. Only review (yellow) and crashed (red)
+   blink, the whole tab, with index.css's hard tab-blink. */
+.dark aside[data-testid='task-header'] span[data-status][data-tier],
+.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status][data-tier] {
+  color: var(--muted-foreground);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px oklch(0.8 0.2 150 / 45%);
+}
+.dark aside[data-testid='task-header'] span[data-status][data-tier='off'],
+.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status][data-tier='off'] {
+  color: var(--eva-green);
+  box-shadow: inset 0 0 0 1px var(--eva-green);
+}
 .dark aside[data-testid='task-header'] span[data-status][data-tier='lit'],
-.dark aside[data-testid='task-header'] span[data-status][data-tier='attention'] {
+.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status][data-tier='lit'] {
   color: var(--eva-ink);
   font-weight: 700;
-  border-left-color: transparent;
+  box-shadow: none;
+  background: oklch(0.78 0.12 220);
 }
-.dark aside[data-testid='task-header'] span[data-status='running'][data-tier='lit'] {
+.dark aside[data-testid='task-header'] span[data-status='running'][data-tier='lit'],
+.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status='running'][data-tier='lit'] {
   background: var(--eva-green);
 }
-.dark aside[data-testid='task-header'] span[data-status='review'][data-tier='lit'] {
-  background: var(--eva-yellow);
+.dark aside[data-testid='task-header'] span[data-status='review'][data-tier='lit'],
+.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status='review'][data-tier='lit'] {
+  --tab: var(--eva-yellow);
+  animation: tab-blink 1s steps(1, end) infinite;
+}
+.dark aside[data-testid='task-header'] span[data-status][data-tier='attention'],
+.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status][data-tier='attention'] {
+  --tab: var(--eva-red);
+  color: var(--tab);
+  font-weight: 700;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--tab);
 }
 .dark
   aside[data-testid='task-header']
-  span[data-status][data-tier='lit']:not([data-status='running']):not([data-status='review']) {
-  background: oklch(0.78 0.12 220);
-}
-.dark aside[data-testid='task-header'] span[data-status][data-tier='attention'] {
-  background: var(--eva-red);
-}
-.dark aside[data-testid='task-header'] span[data-status][data-tier='lit'] [aria-hidden] > span,
-.dark aside[data-testid='task-header'] span[data-status][data-tier='attention'] [aria-hidden] > span {
-  box-shadow: 0 0 0 1px oklch(0.1 0 0 / 60%);
+  span[data-status][data-tier='attention']:not([data-status='failed']):not([data-status='error']),
+.dark
+  ul[aria-label='Sandboxes']
+  [data-status-tab]
+  span[data-status][data-tier='attention']:not([data-status='failed']):not([data-status='error']) {
+  animation: tab-blink 1s steps(1, end) infinite;
 }
 
 /* Readouts: a condensed uppercase label in orange, then the value in
@@ -631,26 +654,6 @@
   font-size: 0.75rem;
   letter-spacing: 0.12em;
   padding: 0 8px 0 12px;
-  color: var(--muted-foreground);
-  background: var(--eva-faint);
-}
-.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status][data-tier='lit'],
-.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status][data-tier='attention'] {
-  color: var(--eva-ink);
-  font-weight: 700;
-}
-.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status='running'][data-tier='lit'] {
-  background: var(--eva-green);
-}
-.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status][data-tier='lit']:not([data-status='running']) {
-  background: oklch(0.78 0.12 220);
-}
-.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status][data-tier='attention'] {
-  background: var(--eva-red);
-}
-.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status][data-tier='lit'] [aria-hidden] > span,
-.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status][data-tier='attention'] [aria-hidden] > span {
-  box-shadow: 0 0 0 1px oklch(0.1 0 0 / 60%);
 }
 /* The selected sandbox's parts: Stop is an act, a filled orange block. */
 .dark [data-testid='sandbox-parts'] button:has(> svg.lucide-square) {
@@ -1003,4 +1006,12 @@
   background: transparent;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+/* The report's "N not met" beside Accept: a dim mono readout, not an act. */
+.dark aside[data-testid='task-header'] [data-testid='not-met'] {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--muted-foreground);
 }
