@@ -574,6 +574,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/accounts/{name}/signin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Begin signing an account in
+         * @description ADR 0018 "Sign-in". Starts the OAuth login Claude Code runs, for an anthropic oauth account: a random state and a PKCE S256 verifier, kept in memory for 10 minutes, one per account (a new one replaces the last). Open `url`; after signing in, the page shows `code#state` to paste into `signin/complete`. The login is used only to read usage and identity; sandboxes keep the account's own token.
+         */
+        post: operations["beginAccountSignin"];
+        /**
+         * Sign an account out
+         * @description Removes the account's login line (ACCOUNT_<NAME>_LOGIN) from secrets.env, forgets its access token and clears `signed_in_at`; usage is read with the account's own token again.
+         */
+        delete: operations["signoutAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accounts/{name}/signin/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish signing an account in with the pasted code
+         * @description Exchanges the pasted code for tokens, writes the refresh token to secrets.env as ACCOUNT_<NAME>_LOGIN, keeps the access token in memory, sets `signed_in_at`, reads the account's usage at once and sets `email` from the profile when it was empty. Neither token nor the code is ever returned or logged. 400 when nothing is pending ("no sign-in pending for this account; start again"), when the state does not match, or when the token endpoint refuses the code (its HTTP status, never its body).
+         */
+        post: operations["completeAccountSignin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents": {
         parameters: {
             query?: never;
@@ -2155,7 +2205,12 @@ export interface components {
             default: boolean;
             /** Format: date-time */
             created_at: string;
-            /** @description Usage for anthropic oauth accounts once the usage fetcher is wired, else null. */
+            /**
+             * Format: date-time
+             * @description When the account last signed in through agc (ADR 0018 "Sign-in"), null when it has no login.
+             */
+            signed_in_at: string | null;
+            /** @description Usage for anthropic oauth accounts once the usage fetcher is wired, else null. `error` starts with "inference-only token" when the account's own token cannot read usage, and with "sign-in expired" when its login was refused: both ask for a sign-in. */
             usage: components["schemas"]["AccountUsage"] | null;
         };
         /** @enum {string} */
@@ -2199,6 +2254,20 @@ export interface components {
             /** @description The token or key, written to secrets.env and never returned. */
             value: string;
             email?: string;
+        };
+        /** @description A begun sign-in. */
+        AccountSignin: {
+            /** @description The authorize page to open. */
+            url: string;
+            /**
+             * Format: date-time
+             * @description When the sign-in lapses and must be begun again.
+             */
+            expires_at: string;
+        };
+        CompleteAccountSigninRequest: {
+            /** @description What the page showed after signing in, `code#state`; a bare code is accepted while one sign-in is pending. Never returned or logged. */
+            code: string;
         };
         Schedule: {
             /** Format: uuid */
@@ -3580,6 +3649,88 @@ export interface operations {
                 };
             };
             404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    beginAccountSignin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page to open. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountSignin"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    signoutAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
+            };
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    completeAccountSignin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteAccountSigninRequest"];
+            };
+        };
+        responses: {
+            /** @description The account. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };
     };

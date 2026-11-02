@@ -60,9 +60,19 @@ type Account struct {
 	Email    string    `bun:"email,notnull,default:''" json:"email"`
 	// Default marks the provider's default account, bound to a sandbox
 	// whose spec names no credential of its harness.
-	Default   bool      `bun:"is_default,notnull,default:false" json:"default"`
-	CreatedAt time.Time `bun:"created_at,notnull" json:"created_at"`
-	UpdatedAt time.Time `bun:"updated_at,notnull" json:"updated_at"`
+	Default bool `bun:"is_default,notnull,default:false" json:"default"`
+	// SignedInAt is when the account last signed in through agc (ADR 0018
+	// "Sign-in"), nil when it has no login: its refresh token is then not
+	// in secrets.env.
+	SignedInAt *time.Time `bun:"signed_in_at" json:"signed_in_at"`
+	CreatedAt  time.Time  `bun:"created_at,notnull" json:"created_at"`
+	UpdatedAt  time.Time  `bun:"updated_at,notnull" json:"updated_at"`
+}
+
+// LoginSecretName is the secrets.env name holding the account's sign-in
+// refresh token: its secret name and _LOGIN.
+func LoginSecretName(name string) string {
+	return SecretName(name) + "_LOGIN"
 }
 
 // ValidateName checks an account's name: lowercase letters, digits and
@@ -219,6 +229,36 @@ func (a *Account) SetDefault(ctx context.Context, db bun.IDB, on bool) error {
 	a.UpdatedAt = at
 
 	_, err := db.NewUpdate().Model(a).Column("is_default", "updated_at").WherePK().Exec(ctx)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// SetSignedIn records a sign-in at at, or none with nil, and sets the
+// email when email is not empty.
+func (a *Account) SetSignedIn(ctx context.Context, db bun.IDB, at *time.Time, email string) error {
+	a.SignedInAt = at
+	if email != "" {
+		a.Email = email
+	}
+	a.UpdatedAt = now()
+
+	_, err := db.NewUpdate().Model(a).Column("signed_in_at", "email", "updated_at").WherePK().Exec(ctx)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// SetEmail sets the account's email.
+func (a *Account) SetEmail(ctx context.Context, db bun.IDB, email string) error {
+	a.Email = email
+	a.UpdatedAt = now()
+
+	_, err := db.NewUpdate().Model(a).Column("email", "updated_at").WherePK().Exec(ctx)
 	if err != nil {
 		return ez.Wrap(err)
 	}

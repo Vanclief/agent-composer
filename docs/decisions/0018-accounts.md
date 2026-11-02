@@ -65,6 +65,50 @@ System default entry and the other accounts, and "Manage Accounts…".
    (`docs/openapi.yaml`, tag Accounts). The panel's provider card, "Switch
    to" list and "Manage Accounts…" are built on it.
 
+## Sign-in
+
+A token from `claude setup-token`, what `POST /api/accounts` stores, is
+inference-only. The Claude Code 2.1.316 bundle says so ("Long-lived tokens
+(from `claude setup-token` or CLAUDE_CODE_OAUTH_TOKEN) are limited to
+inference-only"), and `GET /api/oauth/profile` and `GET /api/oauth/usage`
+need the `user:profile` scope: on the rig the first poll of account
+`holaemma` read `usage: HTTP 429, profile: HTTP 403`. The interactive login
+Claude Code runs (`claude auth login`) grants full scopes and a refresh
+token, so agc runs the same login per account
+(`core/resources/accounts/oauth`, the values read from the bundle cited
+there): the claude.ai authorize page with PKCE S256 and a random state,
+the manual redirect (the page shows `code#state` to paste), the production
+client id, scopes `user:profile user:inference`.
+
+- **Where it lives.** The refresh token is the `secrets.env` line
+  `ACCOUNT_<NAME>_LOGIN`, written by the same helpers as the account's
+  own line, replaced when a refresh rotates it, removed on sign-out and
+  when the account is deleted. The row gains `signed_in_at` (null: no
+  login). The access token and its expiry, and a begun sign-in's state and
+  verifier (10 minutes, one per account), are in memory only; after a
+  restart the first poll refreshes from the refresh token. No route, error
+  or log line holds a token or the pasted code. A sign-in whose line name
+  is another account's secret (account `x` beside an account `x-login`)
+  is refused.
+- **What it is for.** Only usage and identity: the poller reads both
+  endpoints with the login's access token, refreshing it when missing or
+  within 5 minutes of expiry; a refresh refused with 400 or 401 reads
+  `sign-in expired: sign in again` and changes nothing else. An account
+  with no login is read with its own token as before, and a 403 on profile
+  or a 401, 403 or 429 on usage reads `inference-only token: sign in for
+  usage`. Sandboxes keep getting the account's own token: an access token
+  expires in hours and a sandbox's environment is fixed at boot, so
+  running inference on the login is a later ADR.
+- **Endpoints.** `POST /api/accounts/{name}/signin` → `{ url, expires_at }`
+  (anthropic oauth accounts only); `POST /api/accounts/{name}/signin/complete
+  { code }` takes `code#state` (a bare code while one sign-in is pending),
+  exchanges it, writes the line, sets `signed_in_at` and, when empty,
+  `email` from the profile, polls the account once and returns the
+  account; a missing or lapsed sign-in, a state that does not match or a
+  refused exchange (its HTTP status, never its body) is a 400.
+  `DELETE /api/accounts/{name}/signin` signs out. `AccountView` carries
+  `signed_in_at`.
+
 ## Consequences
 
 - Which account a task runs on is a choice made once, per provider, in
@@ -78,10 +122,9 @@ System default entry and the other accounts, and "Manage Accounts…".
 
 ## Follow-ups
 
-- **Sign in by device flow.** Today the value is pasted; signing in from
-  the panel (an OAuth device flow, `claude setup-token` style) would write
-  the same line and row, and let a greyed "Sign in again to use this
-  account" entry refresh an expired token.
+- **Sign in by device flow.** Done as "Sign-in" above, for usage and
+  identity only; the account's value is still pasted, and running
+  sandboxes on the login is a later ADR.
 - **Usage.** Anthropic oauth usage is filled by a poller
   (`core/resources/accounts/usage`) that only `agc rest` runs, every 10
   minutes; `core.NewStack` connects it (`SetLister` with the accounts API,

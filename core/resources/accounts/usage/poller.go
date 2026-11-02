@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"github.com/vanclief/ez"
 
+	"github.com/vanclief/agent-composer/core/resources/accounts/oauth"
 	"github.com/vanclief/agent-composer/secrets"
 )
 
@@ -21,6 +23,9 @@ type Account struct {
 	Kind     string
 	// Secret is the name in secrets.env holding the token.
 	Secret string
+	// Login is true when the account signed in through agc: its usage is
+	// read with the login's access token, not Secret's.
+	Login bool
 }
 
 // Lister lists the accounts rows. The accounts package implements it; the
@@ -46,6 +51,14 @@ type UsageSource interface {
 	Email(account string) string
 }
 
+// LoginSource hands out a signed-in account's access token, refreshing
+// it when missing or about to expire (ADR 0018 "Sign-in"). The accounts
+// API implements it. An error oauth.Expired accepts, or ENOTFOUND, means
+// the login is gone.
+type LoginSource interface {
+	AccessToken(ctx context.Context, name string) (string, error)
+}
+
 // Tokens looks a secret's value up by name; *secrets.Store implements it.
 type Tokens interface {
 	Lookup(name string) (string, bool)
@@ -66,6 +79,7 @@ type Poller struct {
 
 	listerMu sync.Mutex
 	lister   Lister
+	logins   LoginSource
 
 	// polling serializes rounds: a Poll waits for the one before it.
 	polling sync.Mutex
@@ -103,6 +117,22 @@ func (p *Poller) SetLister(lister Lister) {
 	defer p.listerMu.Unlock()
 
 	p.lister = lister
+}
+
+// SetLogins makes the poller read signed-in accounts with their login's
+// access token.
+func (p *Poller) SetLogins(logins LoginSource) {
+	p.listerMu.Lock()
+	defer p.listerMu.Unlock()
+
+	p.logins = logins
+}
+
+func (p *Poller) currentLogins() LoginSource {
+	p.listerMu.Lock()
+	defer p.listerMu.Unlock()
+
+	return p.logins
 }
 
 func (p *Poller) currentLister() Lister {
@@ -178,27 +208,121 @@ func (p *Poller) Poll(ctx context.Context) {
 			return
 		}
 
-		token, ok := tokens.Lookup(a.Secret)
-		if !ok || token == "" {
-			p.store(a.Name, Result{Usage: UsageView{Error: "secret not found in secrets.env"}})
+		ok := p.pollOne(ctx, a, tokens)
+		if !ok {
 			failed++
+		}
+	}
+}
+
+// PollAccount reads the account called name now, when it is listed and
+// polled, and returns the email its profile last gave ("" when unknown).
+func (p *Poller) PollAccount(ctx context.Context, name string) string {
+	p.polling.Lock()
+	defer p.polling.Unlock()
+
+	accounts, err := p.currentLister().ListAccounts(ctx)
+	if err != nil {
+		log.Warn().Err(err).Msg("accounts usage: listing accounts failed")
+		return p.Email(name)
+	}
+
+	for _, a := range accounts {
+		if a.Name != name || !Polled(a) {
 			continue
 		}
 
-		result, err := p.Fetch(ctx, token)
+		tokens, err := p.LoadTokens()
+		if err != nil {
+			log.Warn().Err(err).Msg("accounts usage: reading the secrets file failed")
+			p.store(a.Name, Result{Usage: UsageView{Error: "secrets file unreadable"}})
+			return p.Email(name)
+		}
+
+		p.pollOne(ctx, a, tokens)
+	}
+
+	return p.Email(name)
+}
+
+// pollOne reads account a and stores the reading; false when the reading
+// has an error. A signed-in account is read with its login's access
+// token; any other with its secret, and a refusal that says the token is
+// inference-only is reported as such.
+func (p *Poller) pollOne(ctx context.Context, a Account, tokens Tokens) bool {
+	logins := p.currentLogins()
+
+	var token string
+	if a.Login && logins != nil {
+		access, err := logins.AccessToken(ctx, a.Name)
 		if err != nil {
 			if ctx.Err() != nil {
-				return
+				return false
 			}
-			result = Result{Usage: UsageView{Error: "fetch failed"}}
+			if oauth.Expired(err) || ez.ErrorCode(err) == ez.ENOTFOUND {
+				p.storeError(a.Name, ErrSignInExpired)
+				return false
+			}
+			p.store(a.Name, Result{Usage: UsageView{Error: "sign-in: refreshing the access token failed"}})
+			return false
 		}
-
-		if result.Usage.Error != "" {
-			failed++
+		token = access
+	} else {
+		value, ok := tokens.Lookup(a.Secret)
+		if !ok || value == "" {
+			p.store(a.Name, Result{Usage: UsageView{Error: "secret not found in secrets.env"}})
+			return false
 		}
-
-		p.store(a.Name, result)
+		token = value
 	}
+
+	result, err := p.Fetch(ctx, token)
+	if err != nil {
+		if ctx.Err() != nil {
+			return false
+		}
+		result = Result{Usage: UsageView{Error: "fetch failed"}}
+	}
+
+	if !a.Login && inferenceOnly(result) {
+		result.Usage.Error = ErrInferenceOnly
+	}
+
+	p.store(a.Name, result)
+
+	return result.Usage.Error == ""
+}
+
+// inferenceOnly reports whether the API refused a token the way it
+// refuses one from `claude setup-token`: 403 on profile, or 401, 403 or
+// 429 on usage.
+func inferenceOnly(result Result) bool {
+	if result.profileStatus == http.StatusForbidden {
+		return true
+	}
+
+	switch result.usageStatus {
+	case http.StatusUnauthorized, http.StatusForbidden, http.StatusTooManyRequests:
+		return true
+	}
+
+	return false
+}
+
+// storeError sets why as name's usage error and changes nothing else of
+// its last reading.
+func (p *Poller) storeError(name, why string) {
+	p.mu.Lock()
+	previous, ok := p.results[name]
+	p.mu.Unlock()
+
+	if !ok {
+		p.store(name, Result{Usage: UsageView{Error: why}})
+		return
+	}
+
+	previous.Usage.Error = why
+	p.store(name, previous)
 }
 
 // Polled reports whether the poller reads account: anthropic oauth only.
