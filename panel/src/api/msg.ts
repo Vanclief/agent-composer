@@ -1,7 +1,8 @@
 // Messaging, /api/msg/*. Not in docs/openapi.yaml, so typed by hand from
 // messaging/httpapi/httpapi.go and models/messaging (ADR 0005). Errors are
 // {"error":"..."}; apiFetch turns them into ApiError with that text.
-// Routes: POST join, leave, post; GET read, wait, channels, participants.
+// Routes: POST join, leave, post; GET read, wait, channels, participants,
+// questions.
 import { apiFetch } from './client'
 
 // A name agc handed out on join. The id is the identity; the name is only
@@ -25,8 +26,31 @@ export type Message = {
   // Empty when a human posted.
   task: string
   reply_to?: number
+  // A question waits for an answer: a reply_to it from someone else.
+  // Absent on servers that predate kinds; treat it as 'message'.
+  kind?: MessageKind
   body: string
   created_at: string
+}
+
+export type MessageKind = 'message' | 'question'
+
+// GET /api/msg/questions: a question with who answered it first.
+// Hand-typed ahead of the Go side.
+export type Question = Message & {
+  // Empty while open.
+  answered_by: string
+  answered_at: string | null
+}
+
+export type QuestionsParams = {
+  // "#name"; omitted: every channel.
+  channel?: string
+  // 1: only questions nobody answered yet.
+  open?: 1
+  // Only questions addressed to this person: in their inbox, or in task
+  // channels they manage or own.
+  for?: string
 }
 
 export type ChannelInfo = {
@@ -48,6 +72,7 @@ export type PostRequest = {
   channel: string
   body: string
   reply_to?: number
+  kind?: MessageKind
 }
 
 export type ReadParams = {
@@ -108,5 +133,8 @@ export const msg = {
       undefined,
       signal,
     )
+  },
+  questions(params: QuestionsParams, signal?: AbortSignal) {
+    return apiFetch<{ questions: Question[] }>('GET', '/msg/questions?' + query(params), undefined, signal)
   },
 }

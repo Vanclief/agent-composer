@@ -2,7 +2,6 @@
 // sends, Shift+Enter is a new line.
 import { useState, type KeyboardEvent } from 'react'
 
-import { usePostMessage } from '@/api/hooks'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { ErrorText } from '@/components/error-text'
 import { Button } from '@/components/ui/button'
@@ -10,7 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 
-import { isStaleParticipant, type Identity } from './identity'
+import type { Identity } from './identity'
+import { useSend } from './send'
 
 function IdentityChip({
   identity,
@@ -78,11 +78,15 @@ function IdentityChip({
   )
 }
 
-export function Composer({ channel, identity }: { channel: string; identity: Identity }) {
+// replyTo makes it a thread's composer: it posts with reply_to, and the
+// identity chip stays with the channel's composer below the feed.
+export function Composer({ channel, identity, replyTo }: { channel: string; identity: Identity; replyTo?: number }) {
   const Send = conceptIcons.message
-  const post = usePostMessage()
+  const post = useSend(identity)
   const [draft, setDraft] = useState('')
   const [editing, setEditing] = useState(false)
+  const thread = replyTo !== undefined
+  const box = thread ? 'Reply in thread' : `Message ${channel}`
 
   const joined = Boolean(identity.participantID)
   const empty = draft.trim() === ''
@@ -100,25 +104,10 @@ export function Composer({ channel, identity }: { channel: string; identity: Ide
     if (disabled) {
       return
     }
-    const body = draft
-    try {
-      await post.mutateAsync({ participant_id: identity.participantID, channel, body })
-    } catch (error) {
-      if (!isStaleParticipant(error)) {
-        return
-      }
-      const id = await identity.rejoin()
-      if (!id) {
-        return
-      }
-      try {
-        await post.mutateAsync({ participant_id: id, channel, body })
-      } catch {
-        // Shown by post.error.
-        return
-      }
+    const posted = await post.send({ channel, body: draft, reply_to: replyTo })
+    if (posted) {
+      setDraft('')
     }
-    setDraft('')
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -130,7 +119,7 @@ export function Composer({ channel, identity }: { channel: string; identity: Ide
 
   return (
     <div className="flex shrink-0 flex-col gap-2 border-t border-border p-3">
-      {identity.error && (
+      {identity.error && !thread && (
         <div className="flex items-start gap-2">
           <ErrorText error={identity.error} className="flex-1" />
           {!editing && (
@@ -142,16 +131,16 @@ export function Composer({ channel, identity }: { channel: string; identity: Ide
       )}
       <ErrorText error={post.error} />
       <Textarea
-        aria-label={`Message ${channel}`}
+        aria-label={box}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={onKeyDown}
-        placeholder={`Message ${channel}`}
+        placeholder={box}
         rows={2}
         className="max-h-48 min-h-14 resize-none"
       />
       <div className="flex items-center gap-2">
-        <IdentityChip key={identity.name} identity={identity} editing={editing} onEdit={setEditing} />
+        {!thread && <IdentityChip key={identity.name} identity={identity} editing={editing} onEdit={setEditing} />}
         <Button className={cn('ml-auto', conceptColors.message.solid)} size="sm" disabled={disabled} onClick={send}>
           <Send /> {label}
         </Button>

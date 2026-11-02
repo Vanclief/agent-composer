@@ -7,7 +7,7 @@ import { useLiveEvents, type LiveEvent } from '@/api/events'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { ChannelRows } from '@/features/messages/ChannelRows'
 import { useMessageNotifications } from '@/features/messages/notifications'
-import { UnreadBadge } from '@/features/messages/UnreadBadge'
+import { TalkBadges } from '@/features/messages/QuestionBadge'
 import { useUnread } from '@/features/messages/unread'
 import { cn } from '@/lib/utils'
 
@@ -43,7 +43,7 @@ export function Layout() {
           agc
         </div>
         <div className="border-b border-border p-2">
-          <ModeSwitch mode={mode} badges={{ talk: <UnreadBadge count={unread.total} mention={unread.mention} /> }} />
+          <ModeSwitch mode={mode} badges={{ talk: <TalkBadges count={unread.total} mention={unread.mention} /> }} />
         </div>
         <nav aria-label="Main" className="flex-1 overflow-y-auto p-2">
           <ul className="flex flex-col gap-0.5">
