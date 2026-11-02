@@ -87,14 +87,17 @@ function NotMet({ task }: { task: TaskView }) {
   if (count === 0) {
     return null
   }
+  // A div, normal case and tracking: the dark theme's
+  // `aside > div:first-child` label rules (meant for the sidebar logo) also
+  // reach this row and would paint a direct span as the orange logo tile.
   return (
-    <span
+    <div
       data-testid="not-met"
       title={`The agent's report says ${count === 1 ? 'one criterion is' : `${count} criteria are`} not met`}
-      className="-ml-0.5 text-[11px] whitespace-nowrap text-muted-foreground"
+      className="-ml-0.5 text-[11px] font-normal tracking-normal whitespace-nowrap text-muted-foreground normal-case"
     >
       {count} not met
-    </span>
+    </div>
   )
 }
 

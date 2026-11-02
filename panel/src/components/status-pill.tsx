@@ -1,18 +1,13 @@
-// The backend's status word with a colored shape (rtsdesign rule 5: color
-// AND shape), in one of four light tiers (`data-tier`):
-// - lit: alive (running: a glowing green dot; starting, stopping, creating:
-//   a pulsing blue dot; review: an amber dot);
-// - off: ended well (done, stopped: the green light turned off, a thin ring,
-//   with a check for done; dim text);
-// - attention: died or needs a hand (failed, crashed, error, or any word with
-//   a detail): a red triangle, the only red on screen;
-// - idle: not started. open is a hollow sky ring, the transition hue but
-//   empty and still (no fill, no pulse), so open → starting → running reads
-//   hollow blue → pulsing blue → lit green, and stays quieter than
-//   starting. A word not listed is a hollow grey ring (attention with a
-//   detail).
+// The backend's status word with an LED, in one of four light tiers
+// (`data-tier`). The LEDs are Franco's (2026-11-02), a test of the panel's
+// look on the Tasks page:
+// - lit: running, green blinking; review, yellow blinking; starting,
+//   stopping, creating: blue pulsing;
+// - off: done, green on; stopped, green off;
+// - attention: crashed (or any word with a detail), red blinking; failed,
+//   error: red on;
+// - idle: open, and any word not listed: green off.
 // The word is printed exactly as sent, never relabeled.
-import { Check, Triangle } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
@@ -30,60 +25,66 @@ type StatusStyle = {
   pill: string
 }
 
+// An LED: a 10px disc. Lit ones glow; off ones are the same disc, dark.
 const dot = 'block size-2.5 shrink-0 rounded-full'
+const BLINK = 'animate-led-blink'
+const GREEN_ON = 'bg-emerald-400 shadow-[0_0_6px_2px] shadow-emerald-400/70 ring-1 ring-emerald-200/50 ring-inset'
+const GREEN_OFF = 'bg-emerald-950 ring-1 ring-emerald-800/70 ring-inset dark:bg-emerald-950/80'
+const YELLOW_ON = 'bg-yellow-400 shadow-[0_0_6px_2px] shadow-yellow-400/70 ring-1 ring-yellow-100/60 ring-inset'
+const RED_ON = 'bg-red-500 shadow-[0_0_6px_2px] shadow-red-500/70 ring-1 ring-red-200/50 ring-inset'
 
+// Running: the green LED blinking.
 const RUNNING: StatusStyle = {
   tier: 'lit',
-  shape: <span className={cn(dot, 'bg-emerald-500 shadow-[0_0_6px_1px] shadow-emerald-500/60')} />,
+  shape: <span className={cn(dot, GREEN_ON, BLINK)} />,
   pill: 'border-emerald-500/40 text-emerald-700 dark:text-emerald-400',
 }
 const TRANSITION: StatusStyle = {
   tier: 'lit',
-  shape: <span className={cn(dot, 'animate-pulse bg-sky-500')} />,
+  shape: <span className={cn(dot, 'animate-pulse bg-sky-400 shadow-[0_0_6px_2px] shadow-sky-400/60')} />,
   pill: 'border-sky-500/40 text-sky-700 dark:text-sky-400',
 }
-// A task delivered and waiting for review (ADR 0010).
+// Review: the yellow LED blinking, a delivery waiting for a human (ADR 0010).
 const REVIEW: StatusStyle = {
   tier: 'lit',
-  shape: <span className={cn(dot, 'bg-amber-500')} />,
-  pill: 'border-amber-500/40 text-amber-700 dark:text-amber-400',
+  shape: <span className={cn(dot, YELLOW_ON, BLINK)} />,
+  pill: 'border-yellow-500/40 text-yellow-700 dark:text-yellow-400',
 }
-// Ended well: the running dot turned off.
+// Done: the green LED on, steady.
 const OFF_PILL = 'border-zinc-400/30 text-emerald-800/60 dark:border-zinc-700 dark:text-emerald-300/50'
-const OFF_RING = 'border border-emerald-600/50 dark:border-emerald-400/40'
 const DONE: StatusStyle = {
   tier: 'off',
-  shape: (
-    <span className={cn(dot, OFF_RING, 'grid place-items-center')}>
-      <Check
-        className="size-[7px] text-emerald-700/70 dark:text-emerald-400/70"
-        strokeWidth={1.5}
-        absoluteStrokeWidth
-      />
-    </span>
-  ),
-  pill: OFF_PILL,
+  shape: <span className={cn(dot, GREEN_ON)} />,
+  pill: 'border-emerald-500/30 text-emerald-700/80 dark:text-emerald-400/80',
 }
+// Stopped: the green LED off.
 const STOPPED: StatusStyle = {
   tier: 'off',
-  shape: <span className={cn(dot, OFF_RING)} />,
+  shape: <span className={cn(dot, GREEN_OFF)} />,
   pill: OFF_PILL,
 }
-const FAILED: StatusStyle = {
+// Crashed: the red LED blinking, it needs a hand now.
+const CRASHED: StatusStyle = {
   tier: 'attention',
-  shape: <Triangle className="size-2.5 shrink-0 fill-red-500 text-red-500" strokeWidth={2.5} />,
+  shape: <span className={cn(dot, RED_ON, BLINK)} />,
   pill: 'border-red-500/60 text-red-700 dark:text-red-400',
 }
-// Not started: the sky ring of the transition dot, hollow and still.
+// Failed: the red LED on, steady; dead and not coming back by itself.
+const FAILED: StatusStyle = {
+  tier: 'attention',
+  shape: <span className={cn(dot, RED_ON)} />,
+  pill: 'border-red-500/60 text-red-700 dark:text-red-400',
+}
+// Open: the green LED off, not started yet.
 const OPEN: StatusStyle = {
   tier: 'idle',
-  shape: <span className={cn(dot, 'border-[1.5px] border-sky-500/70')} />,
-  pill: 'border-sky-500/25 text-sky-800/80 dark:text-sky-300/70',
+  shape: <span className={cn(dot, GREEN_OFF)} />,
+  pill: 'border-emerald-500/25 text-emerald-800/70 dark:text-emerald-300/60',
 }
-// A word this panel does not know.
+// A word this panel does not know: the same dark LED, grey text.
 const IDLE: StatusStyle = {
   tier: 'idle',
-  shape: <span className={cn(dot, 'border-[1.5px] border-zinc-400 dark:border-zinc-500')} />,
+  shape: <span className={cn(dot, GREEN_OFF)} />,
   pill: 'border-zinc-400/40 text-zinc-600 dark:text-zinc-300',
 }
 
@@ -95,7 +96,7 @@ const STYLES: Record<string, StatusStyle> = {
   review: REVIEW,
   done: DONE,
   stopped: STOPPED,
-  crashed: FAILED,
+  crashed: CRASHED,
   error: FAILED,
   failed: FAILED,
   open: OPEN,
@@ -110,7 +111,7 @@ function styleOf(status: string, detail?: string) {
   if (style) {
     return style
   }
-  return detail ? FAILED : IDLE
+  return detail ? CRASHED : IDLE
 }
 
 // The tier a status shows in; lists sort by it (TIER_ORDER).
@@ -152,7 +153,7 @@ export function StatusPill({ status, detail, className }: StatusPillProps) {
 }
 
 const LEGEND: [StatusTier, StatusStyle][] = [
-  ['attention', FAILED],
+  ['attention', CRASHED],
   ['lit', RUNNING],
   ['idle', OPEN],
   ['off', DONE],
@@ -181,4 +182,12 @@ export function StatusLegend({ className }: { className?: string }) {
       ))}
     </span>
   )
+}
+
+// A steady LED in the status pill's look, for facts that are not a status:
+// green as done, yellow as review, red as failed, never blinking (a
+// blinking LED is a live status). The task rail's Review section uses it.
+export function Led({ color, className }: { color: 'green' | 'yellow' | 'red'; className?: string }) {
+  const on = color === 'green' ? GREEN_ON : color === 'yellow' ? YELLOW_ON : RED_ON
+  return <span data-led={color} className={cn(dot, on, className)} />
 }

@@ -354,12 +354,12 @@ test('a delivered report with two no answers counts both', async ({ page, reques
   await expect(review.getByRole('heading', { name: 'Needs you' })).toHaveCount(0)
 })
 
-test('the review status shows verbatim in its own amber pill', async ({ page }) => {
+test('the review status shows verbatim in its own yellow pill', async ({ page }) => {
   await page.goto('/panel/tasks')
   const pill = card(page, 'review-42').getByTestId('task-status').locator('[data-status]')
   await expect(pill).toHaveText('review')
   await expect(pill).toHaveAttribute('data-status', 'review')
-  await expect(pill).toHaveClass(/amber/)
+  await expect(pill).toHaveClass(/yellow/)
 })
 
 test('a done task shows who accepted it and its summary, read-only', async ({ page }) => {

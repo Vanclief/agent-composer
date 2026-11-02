@@ -7,14 +7,14 @@
 // summary. A rail on the right on wide screens, a card above the box on
 // narrow ones.
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { Check, ChevronDown, ChevronRight, CircleCheck, Copy, Triangle } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, CircleCheck, Copy } from 'lucide-react'
 
 import type { Met, Report, TaskView } from '@/api/tasks'
 import { Avatar } from '@/components/avatar'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
-import { StatusPill } from '@/components/status-pill'
+import { Led, StatusPill } from '@/components/status-pill'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -413,35 +413,17 @@ function compareURL(repo: string | undefined, ref: string | undefined, branch: s
   return `https://github.com/${path}/compare/${ref}...${branch}`
 }
 
-// The light of one answer (rtsdesign rule 6): yes the off green ring with a
-// check (finished), no the lit red triangle, partly a lit amber dot. No
-// answer: an empty dashed slot where the light goes (rule 4).
+// The light of one answer, the LEDs of the status pill held steady: yes
+// green as done, no red as failed, partly yellow as review. No answer: an
+// empty dashed slot where the light goes (rtsdesign rule 4).
 function Light({ met }: { met?: Met }) {
   const box = 'mt-1 grid size-3 shrink-0 place-items-center'
-  if (met === 'yes') {
+  if (met === 'yes' || met === 'no' || met === 'partly') {
+    const color = met === 'yes' ? 'green' : met === 'no' ? 'red' : 'yellow'
+    const title = met === 'yes' ? 'met' : met === 'no' ? 'not met' : 'partly met'
     return (
-      <span data-light="yes" title="met" className={box}>
-        <span className="grid size-2.5 place-items-center rounded-full border border-emerald-600/50 dark:border-emerald-400/40">
-          <Check
-            className="size-[7px] text-emerald-700/70 dark:text-emerald-400/70"
-            strokeWidth={1.5}
-            absoluteStrokeWidth
-          />
-        </span>
-      </span>
-    )
-  }
-  if (met === 'no') {
-    return (
-      <span data-light="no" title="not met" className={box}>
-        <Triangle className="size-2.5 fill-red-500 text-red-500" strokeWidth={2.5} />
-      </span>
-    )
-  }
-  if (met === 'partly') {
-    return (
-      <span data-light="partly" title="partly met" className={box}>
-        <span className="block size-2.5 rounded-full bg-amber-500 shadow-[0_0_6px_1px] shadow-amber-500/60" />
+      <span data-light={met} title={title} className={box}>
+        <Led color={color} />
       </span>
     )
   }
@@ -449,7 +431,7 @@ function Light({ met }: { met?: Met }) {
     <span data-light="none" title="not answered" className={box}>
       <span
         data-testid="empty-light"
-        className="block size-2.5 rounded-sm border border-dashed border-zinc-400 dark:border-zinc-600"
+        className="block size-2.5 rounded-full border border-dashed border-zinc-400 dark:border-zinc-600"
       />
     </span>
   )

@@ -93,20 +93,21 @@ its area.
 - **Statuses are verbatim:** render `<StatusPill status={task.status} />`
   or `<StatusPill status={sandbox.status} detail={sandbox.status_error} />`.
   Never derive, map or relabel a status in the UI. If a status is wrong, the
-  backend has to change. The pill's look follows the rtsdesign tiers
-  (`data-tier`): `lit` for alive (running: filled green; starting/stopping:
-  pulsing blue; review: filled amber), `off` for ended well (done, stopped:
-  the green shape turned off, a dim hollow ring), `attention` for died or
-  needs a hand (failed, crashed: lit red triangle, the only red on screen),
-  `idle` for not started (open: a hollow sky ring, `border-sky-500/70`, the
-  transition hue but empty and still, its pill a low-saturation sky so it
-  stays quieter than `starting`; open → starting → running reads hollow
-  blue → pulsing blue → lit green; Franco: open must not be grey). Done is
-  the off ring with a 7px check drawn at an absolute 1.5px stroke so it
-  stays crisp at 10px. A done thing never looks
-  as bright as a running one; a dead thing never looks like a done one. A
-  word the pill doesn't know is hollow grey, or `attention` when it has a
-  `detail`.
+  backend has to change. The pill's shape is an LED. Franco's spec,
+  2026-11-02, verbatim: "Running: green led blinking. Review: yellow led
+  blinking. Open: green led off. Done: green led on. Crashed: red dot
+  blinking. Canceled: red dot." (canceled is not a backend status yet;
+  failed is the steady red until it is). It overrides the older rtsdesign
+  tier text (open hollow blue, done green off). In the rtsdesign tiers
+  (`data-tier`): `lit` for alive (running: green blinking; review: yellow
+  blinking; starting/stopping: blue pulsing), `off` for ended well (done:
+  green on, steady; stopped: green off), `attention` for died or needs a
+  hand (crashed, or any word with a `detail`: red blinking; failed, error:
+  red on, steady; the only red on screen), `idle` for not started (open, and
+  any word the pill doesn't know: green off, grey text). Blinking means it
+  is doing something or waiting on someone; steady means it is settled:
+  running and done share the green, the blink tells them apart. A dead
+  thing never looks like a done one (red, never green).
   `statusTier`/`tierRank` from `@/components/status-pill` give a status's
   tier; the Tasks and Compute lists sort attention, lit, idle, off (rows
   carry `data-tier`; off ones are muted), and their top row has
@@ -201,7 +202,7 @@ its area.
   (`{ criteria: {met, note}[], changes?: {branch, sha, files?}, checks:
 {name, passed, note}[], left_out: {what, why}[], needs: string[] }` or
   `null`; `POST /deliver` takes it next to `summary`), the Summary once delivered, and
-  "Accepted by <name> <when>" once done. The rail shows the amber `review`
+  "Accepted by <name> <when>" once done. The rail shows the yellow `review`
   pill, a "Delivered <when>" line, and Accept (confirms "Accept and stop N
   running sandboxes", or "Accept" when none run) and Reject… (a required
   "Why") until done. `by` is the signed-in name (`humanName()` in
@@ -329,17 +330,17 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   criteria or a report): what the reviewer accepts, read from
   `task.report` (`Report` in `@/api/tasks`, typed ahead of the Go side's
   deliver-report). Criteria: a row per `task.accept` line in order
-  (`criterion`, `data-met` yes/no/partly), its light at the left (rule 6:
-  `yes` the off green ring with a check, `no` a lit red triangle, `partly`
-  a lit amber dot; `data-light`), the line in normal weight, the agent's
+  (`criterion`, `data-met` yes/no/partly), its light at the left, the
+  status pill's LEDs held steady (`Led` in `status-pill.tsx`: `yes` green
+  as done, `no` red as failed, `partly` yellow as review; `data-light`), the line in normal weight, the agent's
   note dim under it; with no report (or no answer for that line) an empty
   dashed slot where the light goes (`empty-light`). Then, from the report,
   each omitted when empty: Changes (`changes-branch` and `changes-sha`,
   mono chips, the sha cut to 7; the branch links in a new tab to
   `https://github.com/<repo>/compare/<ref>...<branch>` when the newest
   sandbox's spec has `repo` (a `github.com/` prefix stripped) and `ref`;
-  `changes-files` dim), Checks (`check`, `data-passed`: green ring or red
-  triangle, name mono, note dim), Left out (`left-out`: what, why dim),
+  `changes-files` dim), Checks (`check`, `data-passed`: a green or red
+  steady LED, name mono, note dim), Left out (`left-out`: what, why dim),
   Needs you (`need`, each with the lit amber `AttentionMark` from
   `attention.tsx` at its left edge: it waits on the reviewer).
 - Compute in the box: "Allocate compute" (outline, so Accept stays the one
