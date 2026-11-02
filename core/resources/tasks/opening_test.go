@@ -27,15 +27,15 @@ func TestOpeningMessage(t *testing.T) {
 			want: "@orchestrator (manager), @franco (owner): task `fix-login` is open: Fix login.\n" +
 				"Agent: claude_code (claude-opus-5-5) on sandbox `fix-login`, starting.\n" +
 				"The agent's instructions are the next message. Reply here to talk to it;\n" +
-				"it escalates to #franco when only the owner can decide. Post /done to\n" +
-				"close the task.",
+				"it escalates to #franco when only the owner can decide. Post /accept\n" +
+				"to accept the task, /reject <why> to send it back.",
 		},
 		{
 			name:   "person without a sandbox",
 			record: taskmodels.Task{Title: "Call the bank", Name: "call-the-bank", Assignee: "ana", Manager: "franco", Owner: "franco"},
 			want: "@franco (manager), @franco (owner): task `call-the-bank` is open: Call the bank.\n" +
 				"Assigned to ana, no sandbox.\n" +
-				"Post /done to close the task.",
+				"Post /accept to accept the task.",
 		},
 		{
 			name:      "no owner",
@@ -44,7 +44,7 @@ func TestOpeningMessage(t *testing.T) {
 			want: "@orchestrator (manager): task `fix-login` is open: Fix login.\n" +
 				"Agent: codex_cli (gpt-5.5) on sandbox `fix-login`, starting.\n" +
 				"The agent's instructions are the next message. Reply here to talk to it.\n" +
-				"Post /done to close the task.",
+				"Post /accept to accept the task, /reject <why> to send it back.",
 		},
 	}
 
@@ -86,8 +86,8 @@ func TestCreateAppliesDefaultsAndOpensTheChannel(t *testing.T) {
 	opening := "@orchestrator (manager), @franco (owner): task `fix-login` is open: Fix login.\n" +
 		"Agent: claude_code (claude-opus-5-5) on sandbox `fix-login`, starting.\n" +
 		"The agent's instructions are the next message. Reply here to talk to it;\n" +
-		"it escalates to #franco when only the owner can decide. Post /done to\n" +
-		"close the task."
+		"it escalates to #franco when only the owner can decide. Post /accept\n" +
+		"to accept the task, /reject <why> to send it back."
 	t.Logf("opening message:\n%s", messages[0].Body)
 	t.Logf("instructions:\n%s", messages[1].Body)
 
@@ -111,57 +111,7 @@ func TestCreateAppliesDefaultsAndOpensTheChannel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(messages) != 1 || messages[0].Body != "@orchestrator (manager), @ana (owner): task `call-the-bank` is open: Call the bank.\nAssigned to ana, no sandbox.\nPost /done to close the task." {
+	if len(messages) != 1 || messages[0].Body != "@orchestrator (manager), @ana (owner): task `call-the-bank` is open: Call the bank.\nAssigned to ana, no sandbox.\nPost /accept to accept the task." {
 		t.Fatalf("messages = %+v", messages)
-	}
-}
-
-func TestDoneFromManagerOrOwner(t *testing.T) {
-	env := newTestEnv(t)
-	ctx := context.Background()
-	human := messaging.Caller{Human: true}
-
-	for _, name := range []string{"by-manager", "by-owner", "by-other"} {
-		_, err := env.api.Create(ctx, nil, &CreateRequest{Name: name, Brief: "b", Assignee: "ana", Manager: "orchestrator", Owner: "franco"})
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	post := func(caller messaging.Caller, who string, channel string, body string) {
-		t.Helper()
-
-		p, err := env.msg.Join(ctx, caller, who)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, err = env.msg.Post(ctx, caller, p.ID, channel, body, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		err = env.msg.Leave(ctx, caller, p.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	post(human, "orchestrator", "#by-manager", " /done\n")
-	post(human, "franco", "#by-owner", "/done")
-	post(human, "someone", "#by-other", "/done")
-	post(human, "franco", "#by-other", "/done please")
-	// The task's own agent cannot close it, even under the manager's name.
-	post(messaging.Caller{Task: "by-other"}, "orchestrator", "#by-other", "/done")
-
-	for name, done := range map[string]bool{"by-manager": true, "by-owner": true, "by-other": false} {
-		view, err := env.api.Get(ctx, nil, &GetRequest{Name: name})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if (view.DoneAt != nil) != done || (view.Status == StatusDone) != done {
-			t.Fatalf("%s: done_at %v, status %s", name, view.DoneAt, view.Status)
-		}
 	}
 }

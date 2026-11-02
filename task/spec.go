@@ -76,9 +76,11 @@ func (s Sandbox) Validate() error {
 // File is a parsed task.yaml (ADR 0008 item 7). Sandbox is nil when the
 // file has no sandbox: block.
 type File struct {
-	Name     string   `yaml:"name"`
-	Title    string   `yaml:"title"`
-	Brief    string   `yaml:"brief"`
+	Name  string `yaml:"name"`
+	Title string `yaml:"title"`
+	Brief string `yaml:"brief"`
+	// Accept lists what accepted means, one criterion each (ADR 0010).
+	Accept   []string `yaml:"accept"`
 	Assignee string   `yaml:"assignee"`
 	Model    string   `yaml:"model"`
 	Manager  string   `yaml:"manager"`

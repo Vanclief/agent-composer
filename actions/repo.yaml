@@ -42,3 +42,10 @@ actions:
     because: [secrets-are-placeholders-bound-to-hosts]
     opened: { who: franco, when: 2026-11-01 }
     done: { who: franco, when: 2026-11-01 }
+
+  # ADR 0010 item 6: the Go side (criteria, deliver, accept, reject) is in;
+  # panel/src still posts /tasks/{id}/done, which is gone.
+  - id: panel-shows-acceptance
+    action: "Make the panel show criteria, review, accept and reject: the Brief tab's checklist, the review chip, Accept and Reject in a reviewed task's actions, and \"Accepted when\" in the New task dialog."
+    because: [tasks-are-done-when-accepted]
+    opened: { who: franco, when: 2026-11-02 }

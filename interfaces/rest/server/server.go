@@ -156,8 +156,16 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 	// runs in the background with its own context (ADR 0008).
 	case *tasks.CreateRequest:
 		return s.TasksAPI.Create(request.GetContext(), nil, body)
-	case *tasks.DoneRequest:
-		return s.TasksAPI.Done(request.GetContext(), nil, body)
+	case *tasks.DeliverRequest:
+		return s.TasksAPI.Deliver(request.GetContext(), nil, body)
+	// Accepting stops the task's sandboxes, which can outlive the default
+	// request timeout (ADR 0010 item 4).
+	case *tasks.AcceptRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 5*time.Minute)
+		defer cancel()
+		return s.TasksAPI.Accept(ctx, nil, body)
+	case *tasks.RejectRequest:
+		return s.TasksAPI.Reject(request.GetContext(), nil, body)
 	case *tasks.DeleteRequest:
 		// Every sandbox of the task is stopped and removed.
 		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 5*time.Minute)

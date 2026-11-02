@@ -99,6 +99,13 @@ beliefs:
     belief: A model's verdict or belief with no evidence under it is an opinion by construction, so one landing can ground nothing.
     because: [llms-are-parsers-not-sensors]
 
+  # ADR 0010: task acceptance. Opinions: Franco's framing in the ADR's
+  # rationale; nothing measured.
+  - id: done-needs-criteria-before-an-agent-says-it
+    belief: Done has to mean something written on the task before an agent can be trusted to say a task is done.
+  - id: delivery-and-acceptance-are-different-acts
+    belief: Delivering work and accepting it are different acts by different parties, and the gap between them should be visible.
+
   # Design language (AGENTS.md). Judgment: the panel follows the rtsdesign
   # skill on this premise from Franco's experience; nobody has measured
   # operator mistakes yet.

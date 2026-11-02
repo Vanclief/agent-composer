@@ -101,6 +101,17 @@ func (c *Client) Channels(ctx context.Context) (*httpapi.ChannelsResponse, error
 	return res, nil
 }
 
+// Deliver posts the task's delivery with summary on a sandbox's socket
+// (agc task deliver, ADR 0010 item 2) and decodes the task's view into out.
+func (c *Client) Deliver(ctx context.Context, summary string, out any) error {
+	err := c.do(ctx, http.MethodPost, httpapi.DeliverPath, nil, httpapi.DeliverRequest{Summary: summary}, out)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
 // do sends one request and decodes the JSON answer into out. Error
 // answers come back as ez errors with the code the status maps to.
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, in, out any) error {

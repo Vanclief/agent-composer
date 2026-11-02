@@ -20,12 +20,18 @@ func TestInstructions(t *testing.T) {
 			name: "harness with model and repo",
 			owner: taskmodels.Task{
 				Title: "Fix login", Name: "fix-login", Brief: "Make 2FA work.\n",
+				Accept:   []string{"2FA codes from the app log in", "`go test ./...` passes"},
 				Assignee: "claude_code", Model: "claude-opus-5-5", Manager: "orchestrator", Owner: "franco",
 			},
 			spec: task.Spec{Repo: "github.com/vanclief/agent-composer"},
 			want: "# Fix login\n" +
 				"\n" +
 				"Make 2FA work.\n" +
+				"\n" +
+				"## Accepted when\n" +
+				"\n" +
+				"- 2FA codes from the app log in\n" +
+				"- `go test ./...` passes\n" +
 				"\n" +
 				"## How this task works\n" +
 				"\n" +
@@ -41,7 +47,11 @@ func TestInstructions(t *testing.T) {
 				"  does not depend on the answer.\n" +
 				"- If something needs a decision only franco can make, post it in\n" +
 				"  `#franco` (their inbox) and say so in `#fix-login`; do not wait idle.\n" +
-				"- Do not modify files outside the repository, and never print secret values.\n",
+				"- Do not modify files outside the repository, and never print secret values.\n" +
+				"- When the work is finished, end by running `agc task deliver \"<summary>\"`\n" +
+				"  (or start your answer with `DONE:` followed by the summary). The task\n" +
+				"  is done only when your manager or franco accepts it; a rejection comes back in\n" +
+				"  `#fix-login` with the reason.\n",
 		},
 		{
 			name: "person without repo",
@@ -67,7 +77,11 @@ func TestInstructions(t *testing.T) {
 				"  does not depend on the answer.\n" +
 				"- If something needs a decision only franco can make, post it in\n" +
 				"  `#franco` (their inbox) and say so in `#call-the-bank`; do not wait idle.\n" +
-				"- Do not modify files outside the repository, and never print secret values.\n",
+				"- Do not modify files outside the repository, and never print secret values.\n" +
+				"- When the work is finished, end by running `agc task deliver \"<summary>\"`\n" +
+				"  (or start your answer with `DONE:` followed by the summary). The task\n" +
+				"  is done only when your manager accepts it; a rejection comes back in\n" +
+				"  `#call-the-bank` with the reason.\n",
 		},
 		{
 			name: "no owner",
@@ -92,7 +106,11 @@ func TestInstructions(t *testing.T) {
 				"  `agc msg post '#bump-deps' <text>`; your manager reads that channel and\n" +
 				"  answers there. Ask your manager there too, then keep working on what\n" +
 				"  does not depend on the answer.\n" +
-				"- Do not modify files outside the repository, and never print secret values.\n",
+				"- Do not modify files outside the repository, and never print secret values.\n" +
+				"- When the work is finished, end by running `agc task deliver \"<summary>\"`\n" +
+				"  (or start your answer with `DONE:` followed by the summary). The task\n" +
+				"  is done only when your manager accepts it; a rejection comes back in\n" +
+				"  `#bump-deps` with the reason.\n",
 		},
 	}
 

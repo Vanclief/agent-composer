@@ -53,6 +53,16 @@ type ParticipantsResponse struct {
 	Participants []msgmodels.Participant `json:"participants"`
 }
 
+// DeliverPath is where a sandbox's socket takes agc task deliver (ADR
+// 0010 item 2). Only sandbox sockets serve it, for their own task; the
+// handler here does not.
+const DeliverPath = "/task/deliver"
+
+// DeliverRequest is the body of a delivery: what the agent says it did.
+type DeliverRequest struct {
+	Summary string `json:"summary"`
+}
+
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
@@ -84,17 +94,17 @@ func (a *api) join(w http.ResponseWriter, r *http.Request) {
 
 	caller, err := a.decode(w, r, &req)
 	if err != nil {
-		writeError(w, err)
+		WriteError(w, err)
 		return
 	}
 
 	p, err := a.svc.Join(r.Context(), caller, req.Name)
 	if err != nil {
-		writeError(w, err)
+		WriteError(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, p)
+	WriteJSON(w, http.StatusOK, p)
 }
 
 func (a *api) leave(w http.ResponseWriter, r *http.Request) {
@@ -102,17 +112,17 @@ func (a *api) leave(w http.ResponseWriter, r *http.Request) {
 
 	caller, err := a.decode(w, r, &req)
 	if err != nil {
-		writeError(w, err)
+		WriteError(w, err)
 		return
 	}
 
 	err = a.svc.Leave(r.Context(), caller, req.ParticipantID)
 	if err != nil {
-		writeError(w, err)
+		WriteError(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, LeaveResponse{ParticipantID: req.ParticipantID, Left: true})
+	WriteJSON(w, http.StatusOK, LeaveResponse{ParticipantID: req.ParticipantID, Left: true})
 }
 
 func (a *api) post(w http.ResponseWriter, r *http.Request) {
@@ -120,23 +130,23 @@ func (a *api) post(w http.ResponseWriter, r *http.Request) {
 
 	caller, err := a.decode(w, r, &req)
 	if err != nil {
-		writeError(w, err)
+		WriteError(w, err)
 		return
 	}
 
 	m, err := a.svc.Post(r.Context(), caller, req.ParticipantID, req.Channel, req.Body, req.ReplyTo)
 	if err != nil {
-		writeError(w, err)
+		WriteError(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, m)
+	WriteJSON(w, http.StatusOK, m)
 }
 
 func (a *api) read(w http.ResponseWriter, r *http.Request) {
 	caller, err := a.caller(r)
 	if err != nil {
-		writeError(w, err)
+		WriteError(w, err)
 		return
 	}
 
@@ -144,29 +154,29 @@ func (a *api) read(w http.ResponseWriter, r *http.Request) {
 
 	after, err := parseInt(query.Get("after"), "after")
 	if err != nil {
-		writeError(w, err)
+		WriteError(w, err)
 		return
 	}
 
 	limit, err := parseInt(query.Get("limit"), "limit")
 	if err != nil {
-		writeError(w, err)
+		WriteError(w, err)
 		return
 	}
 
 	messages, err := a.svc.Read(r.Context(), caller, query.Get("channel"), after, int(limit))
 	if err != nil {
-		writeError(w, err)
+		WriteError(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, newMessagesResponse(messages, after))
+	WriteJSON(w, http.StatusOK, newMessagesResponse(messages, after))
 }
 
 func (a *api) wait(w http.ResponseWriter, r *http.Request) {
 	caller, err := a.caller(r)
 	if err != nil {
-		writeError(w, err)
+		WriteError(w, err)
 		return
 	}
 
@@ -174,7 +184,7 @@ func (a *api) wait(w http.ResponseWriter, r *http.Request) {
 
 	after, err := parseInt(query.Get("after"), "after")
 	if err != nil {
-		writeError(w, err)
+		WriteError(w, err)
 		return
 	}
 
@@ -182,50 +192,50 @@ func (a *api) wait(w http.ResponseWriter, r *http.Request) {
 	if query.Get("timeout") != "" {
 		timeout, err = time.ParseDuration(query.Get("timeout"))
 		if err != nil {
-			writeError(w, ez.New(ez.EINVALID, "timeout must be a duration such as 30s", err))
+			WriteError(w, ez.New(ez.EINVALID, "timeout must be a duration such as 30s", err))
 			return
 		}
 	}
 
 	messages, err := a.svc.Wait(r.Context(), caller, query.Get("channel"), after, timeout)
 	if err != nil {
-		writeError(w, err)
+		WriteError(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, newMessagesResponse(messages, after))
+	WriteJSON(w, http.StatusOK, newMessagesResponse(messages, after))
 }
 
 func (a *api) channels(w http.ResponseWriter, r *http.Request) {
 	caller, err := a.caller(r)
 	if err != nil {
-		writeError(w, err)
+		WriteError(w, err)
 		return
 	}
 
 	channels, err := a.svc.Channels(r.Context(), caller)
 	if err != nil {
-		writeError(w, err)
+		WriteError(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, ChannelsResponse{Channels: channels})
+	WriteJSON(w, http.StatusOK, ChannelsResponse{Channels: channels})
 }
 
 func (a *api) participants(w http.ResponseWriter, r *http.Request) {
 	caller, err := a.caller(r)
 	if err != nil {
-		writeError(w, err)
+		WriteError(w, err)
 		return
 	}
 
 	participants, err := a.svc.Participants(r.Context(), caller, r.URL.Query().Get("channel"))
 	if err != nil {
-		writeError(w, err)
+		WriteError(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, ParticipantsResponse{Participants: participants})
+	WriteJSON(w, http.StatusOK, ParticipantsResponse{Participants: participants})
 }
 
 // decode resolves the caller and reads a JSON body into dst.
@@ -235,12 +245,22 @@ func (a *api) decode(w http.ResponseWriter, r *http.Request, dst any) (messaging
 		return messaging.Caller{}, ez.Wrap(err)
 	}
 
-	err = json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBytes)).Decode(dst)
+	err = DecodeBody(w, r, dst)
 	if err != nil {
-		return messaging.Caller{}, ez.New(ez.EINVALID, "request body must be a JSON object", err)
+		return messaging.Caller{}, ez.Wrap(err)
 	}
 
 	return caller, nil
+}
+
+// DecodeBody reads a JSON body of at most a megabyte into dst.
+func DecodeBody(w http.ResponseWriter, r *http.Request, dst any) error {
+	err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBytes)).Decode(dst)
+	if err != nil {
+		return ez.New(ez.EINVALID, "request body must be a JSON object", err)
+	}
+
+	return nil
 }
 
 func parseInt(value, name string) (int64, error) {
@@ -265,11 +285,13 @@ func newMessagesResponse(messages []msgmodels.Message, after int64) MessagesResp
 	return MessagesResponse{Messages: messages, Cursor: cursor}
 }
 
-func writeError(w http.ResponseWriter, err error) {
-	writeJSON(w, ez.ErrorToHTTPStatus(err), ErrorResponse{Error: ez.ErrorMessage(err)})
+// WriteError answers err as an ErrorResponse with its HTTP status.
+func WriteError(w http.ResponseWriter, err error) {
+	WriteJSON(w, ez.ErrorToHTTPStatus(err), ErrorResponse{Error: ez.ErrorMessage(err)})
 }
 
-func writeJSON(w http.ResponseWriter, status int, value any) {
+// WriteJSON answers value as JSON with status.
+func WriteJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)

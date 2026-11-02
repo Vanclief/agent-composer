@@ -272,10 +272,11 @@ func workDir(spec task.Spec) string {
 }
 
 // Instructions is the TASK.md agc writes in every sandbox and keeps on the
-// sandbox row, byte for byte: the task's title and brief, then the
-// standing instructions of ADR 0009 item 3 filled in. Without an owner it
-// says "no owner is set" and drops the escalation line; without a repo it
-// says so.
+// sandbox row, byte for byte: the task's title and brief, "Accepted when"
+// with one bullet per criterion when it has any (ADR 0010 item 1), then
+// the standing instructions of ADR 0009 item 3 filled in, ending with how
+// to deliver. Without an owner it says "no owner is set" and drops the
+// escalation line; without a repo it says so.
 func Instructions(owner *taskmodels.Task, spec task.Spec) string {
 	var b strings.Builder
 
@@ -284,6 +285,14 @@ func Instructions(owner *taskmodels.Task, spec task.Spec) string {
 	brief := strings.TrimSpace(owner.Brief)
 	if brief != "" {
 		b.WriteString(brief + "\n\n")
+	}
+
+	if len(owner.Accept) > 0 {
+		b.WriteString("## Accepted when\n\n")
+		for _, criterion := range owner.Accept {
+			b.WriteString("- " + criterion + "\n")
+		}
+		b.WriteString("\n")
 	}
 
 	worker := owner.Assignee
@@ -323,6 +332,16 @@ func Instructions(owner *taskmodels.Task, spec task.Spec) string {
 
 	b.WriteString("- Do not modify files outside the repository, and never print secret values.\n")
 
+	acceptors := "your manager"
+	if owner.Owner != "" && owner.Owner != owner.Manager {
+		acceptors = "your manager or " + owner.Owner
+	}
+
+	b.WriteString("- When the work is finished, end by running `agc task deliver \"<summary>\"`\n")
+	b.WriteString("  (or start your answer with `DONE:` followed by the summary). The task\n")
+	b.WriteString("  is done only when " + acceptors + " accepts it; a rejection comes back in\n")
+	b.WriteString("  `#" + name + "` with the reason.\n")
+
 	return b.String()
 }
 
@@ -347,7 +366,7 @@ func AgentCommand(owner *taskmodels.Task) string {
 		fields = append(fields, "--model", owner.Model)
 	}
 	fields = append(fields, "--task", owner.Name)
-	// The loop closes on /done only from these two.
+	// The loop closes on /accept only from these two.
 	if owner.Manager != "" {
 		fields = append(fields, "--manager", owner.Manager)
 	}

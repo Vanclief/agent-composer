@@ -37,3 +37,8 @@ decisions:
     because: [authority-without-legibility-is-ritual, unread-digests-remove-the-human, llms-are-parsers-not-sensors, rules-beliefs-and-decisions-as-yaml]
     adr: docs/decisions/0007-proposals-and-gates.md
     decided: { who: franco, when: 2026-11-01 }
+  - id: tasks-are-done-when-accepted
+    decision: A task carries its acceptance criteria, its agent delivers, its manager or owner accepts or rejects, and accepting stops its sandboxes without deleting anything.
+    because: [done-needs-criteria-before-an-agent-says-it, delivery-and-acceptance-are-different-acts]
+    adr: docs/decisions/0010-task-acceptance.md
+    decided: { who: franco, when: 2026-11-02 }

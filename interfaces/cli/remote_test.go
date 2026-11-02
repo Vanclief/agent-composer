@@ -132,7 +132,7 @@ func TestServerErrorIsTheMessage(t *testing.T) {
 	defer server.Close()
 
 	errOut := &bytes.Buffer{}
-	_, err := runAgcErr(t, errOut, "task", "--server", server.URL, "done", "nope")
+	_, err := runAgcErr(t, errOut, "task", "--server", server.URL, "accept", "nope")
 	printed := &PrintedError{}
 	if !errors.As(err, &printed) || ez.ErrorMessage(printed.Err) != "task nope not found" {
 		t.Fatalf("err %v", err)
@@ -140,7 +140,7 @@ func TestServerErrorIsTheMessage(t *testing.T) {
 	if errOut.String() != "task nope not found\n" {
 		t.Fatalf("stderr %q", errOut.String())
 	}
-	if len(fake.requests) != 1 || fake.requests[0] != "POST /api/tasks/nope/done" {
+	if len(fake.requests) != 1 || fake.requests[0] != "POST /api/tasks/nope/accept" {
 		t.Fatalf("requests %v", fake.requests)
 	}
 }
