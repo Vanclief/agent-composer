@@ -804,6 +804,12 @@ export interface components {
             brief: string;
             /** @description A harness id (claude_code, codex_cli) or a person's name; empty is unassigned. */
             assignee: string;
+            /** @description The harness model when the assignee is a harness, empty for a person (ADR 0009). */
+            model: string;
+            /** @description Messaging name of whoever created the task and runs it day to day. */
+            manager: string;
+            /** @description The human the task answers to; empty when no owner is set. */
+            owner: string;
             /** @description Id of the knowledge action or decision the task serves; empty for none. */
             for: string;
             /**
@@ -820,20 +826,27 @@ export interface components {
             /** @description The task's sandboxes, newest first. */
             sandboxes: components["schemas"]["Sandbox"][];
         };
-        /** @description At least one of title or name is required. brief is required unless sandbox is set. */
+        /** @description At least one of title or name is required. brief is required unless sandbox is set. manager is required (400 "manager is required" without it). An empty assignee, model or owner gets the configured default (ADR 0009). On create agc posts the opening message in #<name> as agc, then the sandbox's instructions when a sandbox was requested. */
         CreateTaskRequest: {
             /** @description Up to 120 characters. Defaults to the name. */
             title?: string;
             /** @description 1-63 lowercase letters, digits or -, starting with a letter, and not a UUID. Defaults to the title's slug ("Review facebook ads" becomes review-facebook-ads). */
             name?: string;
             brief?: string;
+            /** @description A harness id or a person's name. Defaults to the configured harness (claude_code). */
             assignee?: string;
+            /** @description Defaults to the configured model (claude-opus-5-5) when the assignee is a harness; must be empty for a person. */
+            model?: string;
+            /** @description The creator's messaging name, who runs the task day to day and may post /done. */
+            manager: string;
+            /** @description The human the task answers to, a messaging name. Defaults to the configured owner; its sandboxes may post in #<owner>. */
+            owner?: string;
             for?: string;
             sandbox?: components["schemas"]["SandboxRequest"];
         };
         /** @description The environment fields inline, plus the command the sandbox runs for the task. */
         SandboxRequest: components["schemas"]["TaskSpec"] & {
-            /** @description Started as the first terminal once booted, split on whitespace, in the repo (or /home/agent without one). Empty starts nothing. */
+            /** @description Started as the first terminal once booted, split on whitespace, in the repo (or /home/agent without one). Empty runs the agent loop (agc agent run) when the task's assignee is a harness, and nothing for a person. */
             command?: string;
         };
         Sandbox: {
@@ -847,6 +860,8 @@ export interface components {
             name: string;
             spec: components["schemas"]["TaskSpec"];
             command: string;
+            /** @description The TASK.md written into the sandbox at /home/agent/TASK.md, byte for byte (ADR 0009). */
+            instructions: string;
             /** @description starting until booted, failed when the boot failed (status_error says why), otherwise the runtime's word verbatim (running, stopped), or unknown when the runtime cannot be asked (status_error says why). */
             status: string;
             /** @description Why the status is failed or unknown. */
