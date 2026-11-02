@@ -8,7 +8,6 @@ import { ComputePage } from '@/features/compute/ComputePage'
 import { SandboxPage } from '@/features/compute/SandboxPage'
 import { MessagesPage } from '@/features/messages/MessagesPage'
 import { MessagesTab } from '@/features/messages/MessagesTab'
-import { BriefTab } from '@/features/tasks/BriefTab'
 import { ComputeTab } from '@/features/tasks/ComputeTab'
 import { TaskPage } from '@/features/tasks/TaskPage'
 import { TasksPage } from '@/features/tasks/TasksPage'
@@ -23,8 +22,9 @@ export function App() {
         <Route index element={<HomeRedirect />} />
         <Route path="tasks" element={<TasksPage />} />
         <Route path="tasks/:name" element={<TaskPage />}>
-          <Route index element={<Navigate to="brief" replace />} />
-          <Route path="brief" element={<BriefTab />} />
+          {/* The center box shows Messages unless the URL says compute; brief is the old tab. */}
+          <Route index element={<MessagesTab />} />
+          <Route path="brief" element={<Navigate to=".." replace />} />
           <Route path="compute" element={<ComputeTab />} />
           <Route path="messages" element={<MessagesTab />} />
         </Route>

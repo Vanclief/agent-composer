@@ -164,9 +164,9 @@ test('Stop and Delete on review-42 say 2 commits and changes are lost', async ({
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   await expect(group(page, 'running').getByRole('article', { name: 'review-42', exact: true })).toBeVisible()
 
-  // The task's Compute tab asks the same.
-  await page.goto('/panel/tasks/review-42/compute')
-  await page.locator('[data-sandbox="review-42"]').getByRole('button', { name: 'Delete' }).click()
+  // The task page's compute view asks the same.
+  await page.goto('/panel/tasks/review-42/compute?sandbox=review-42')
+  await page.getByTestId('sandbox-parts').getByRole('button', { name: 'Delete' }).click()
   dialog = page.getByRole('alertdialog')
   await expect(dialog.getByTestId('lost-work')).toHaveText(lost)
   await expect(dialog).toContainText('The task review-42 stays.')

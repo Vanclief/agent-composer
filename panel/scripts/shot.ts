@@ -1,8 +1,10 @@
-// Screenshot one panel route against a fresh mock, at 1440x900.
+// Screenshot one panel route against a fresh mock, at 1440x900 unless
+// --width / --height say otherwise.
 //
 //   npm run shot -- /tasks
 //   npm run shot -- /tasks/review-42/messages --theme light
 //   npm run shot -- /messages --out /tmp/messages.png --wait 2000
+//   npm run shot -- /tasks/review-42 --width 1000
 //
 // Starts its own mock and Vite dev server on free ports (no build, nothing
 // shared with other checkouts), writes /tmp/agc-panel/<route>.png unless
@@ -24,13 +26,15 @@ function flag(name: string) {
   return process.argv[i + 1]
 }
 
-const flagsWithValues = new Set(['--out', '--theme', '--wait'])
+const flagsWithValues = new Set(['--out', '--theme', '--wait', '--width', '--height'])
 const positional = process.argv
   .slice(2)
   .filter((arg, i, all) => !arg.startsWith('--') && !flagsWithValues.has(all[i - 1]))
 const route = '/' + (positional[0] ?? '/tasks').replace(/^\/+/, '')
 const theme = flag('--theme') ?? 'dark'
 const settleMs = Number(flag('--wait') ?? 1000)
+const width = Number(flag('--width') ?? 1440)
+const height = Number(flag('--height') ?? 900)
 const slug = route.replace(/^\/+|\/+$/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-') || 'root'
 const out = flag('--out') ?? `/tmp/agc-panel/${slug}.png`
 
@@ -45,7 +49,7 @@ const port = (vite.httpServer?.address() as AddressInfo).port
 
 const browser = await chromium.launch()
 try {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+  const context = await browser.newContext({ viewport: { width, height } })
   await context.addInitScript((value) => localStorage.setItem('agc.panel.theme', value), theme)
   const page = await context.newPage()
   page.on('pageerror', (error) => console.error('page error:', error.message))

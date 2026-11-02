@@ -46,7 +46,7 @@ test('a task created through the API appears without a reload and toasts "Task s
   // Toasts from other tests' tasks stack above this one and shift it while
   // they animate in, so a pointer click misses; fire the click directly.
   await started.getByRole('button', { name: 'Open' }).dispatchEvent('click')
-  await expect(page).toHaveURL(new RegExp(`/panel/tasks/${task.name}/brief$`))
+  await expect(page).toHaveURL(new RegExp(`/panel/tasks/${task.name}$`))
   await expect(page.getByTestId('notify-chip')).toBeVisible()
 })
 

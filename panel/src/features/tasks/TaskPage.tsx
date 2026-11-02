@@ -1,26 +1,21 @@
-// /tasks/:name/*: the task header with its actions, then the brief, compute
-// and messages tabs rendered through <Outlet/>.
+// /tasks/:name/*: the task's facts in a rail (TaskRail) and, in the center,
+// one box with "Compute | Messages" at its top switching what <Outlet/>
+// renders. The URL holds the choice: /compute is the sandboxes, /messages
+// and the bare /tasks/:name are the channel. Wide screens (>= 1200px) put
+// the rail on the right, sticky; narrow ones stack it above the box.
 import { ArrowLeft } from 'lucide-react'
-import { Link, NavLink, Outlet, useNavigate, useParams } from 'react-router'
+import { Link, Outlet, useMatch, useNavigate, useParams } from 'react-router'
 
 import { useTask } from '@/api/hooks'
+import type { TaskView } from '@/api/tasks'
 import { conceptColors, conceptIcons, type Concept } from '@/components/concept-icons'
 import { ErrorText } from '@/components/error-text'
-import { IconChip } from '@/components/icon-chip'
-import { StatusPill } from '@/components/status-pill'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/shell/page-title'
 
-import { ago } from './format'
-import { TaskActions, useTaskActions } from './TaskActions'
-import { AssigneeChip, ForChip, ManagerChip, OwnerChip } from './TaskChips'
-
-const TABS: { to: string; label: string; concept: Concept }[] = [
-  { to: 'brief', label: 'Brief', concept: 'brief' },
-  { to: 'compute', label: 'Compute', concept: 'sandbox' },
-  { to: 'messages', label: 'Messages', concept: 'message' },
-]
+import { useTaskActions } from './TaskActions'
+import { TaskRail } from './TaskRail'
 
 export function TaskPage() {
   const { name = '' } = useParams()
@@ -28,7 +23,6 @@ export function TaskPage() {
   const actions = useTaskActions()
   const navigate = useNavigate()
   usePageTitle(task.data?.title ?? name)
-  const TaskIcon = conceptIcons.task
 
   if (!task.data) {
     if (task.error) {
@@ -52,86 +46,89 @@ export function TaskPage() {
     )
   }
 
-  const data = task.data
   return (
-    <div className="flex h-full flex-col">
-      <div data-testid="task-header" className="flex items-start gap-3 px-6 pt-6">
-        <span
+    <div className="h-full min-h-0 overflow-y-auto min-[1200px]:overflow-hidden">
+      <div className="flex flex-col gap-4 p-4 min-[1200px]:h-full min-[1200px]:flex-row min-[1200px]:gap-6 min-[1200px]:p-6">
+        <TaskRail
+          task={task.data}
+          actions={actions}
+          error={actions.error ?? task.error}
+          onDeleted={() => navigate('/tasks')}
           className={cn(
-            'grid size-12 shrink-0 place-items-center rounded-xl border',
-            conceptColors.task.bg,
-            conceptColors.task.border,
-            conceptColors.task.text,
+            // Narrow: a header card above the box.
+            'rounded-xl border border-border bg-white p-4 shadow-sm dark:bg-zinc-900/60',
+            // Wide: a flat rail on the right that scrolls on its own.
+            'min-[1200px]:order-2 min-[1200px]:w-[360px] min-[1200px]:shrink-0 min-[1200px]:overflow-y-auto',
+            'min-[1200px]:rounded-none min-[1200px]:border-0 min-[1200px]:bg-transparent min-[1200px]:p-0 min-[1200px]:shadow-none',
+            'min-[1200px]:dark:bg-transparent',
           )}
-        >
-          <TaskIcon className="size-6" />
-        </span>
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <div className="flex min-w-0 items-center gap-3">
-            <StatusPill status={data.status} />
-            <h2 className="truncate text-2xl font-semibold tracking-tight">{data.title}</h2>
-            <IconChip icon={conceptIcons.channel} concept="channel" title="Name and channel" className="shrink-0">
-              {data.name}
-            </IconChip>
-          </div>
-          <div data-testid="task-chips" className="flex flex-wrap items-center gap-1.5">
-            <AssigneeChip task={data} />
-            <ManagerChip task={data} />
-            <OwnerChip task={data} />
-            <ForChip task={data} />
-            {data.notify ? (
-              <span data-testid="notify-chip" className="inline-flex">
-                <IconChip icon={conceptIcons.notify} concept="notify" title="Notify: toast and sound on start and done">
-                  notify
-                </IconChip>
-              </span>
-            ) : null}
-            {data.delivered_at ? (
-              <span data-testid="delivered-chip" className="inline-flex">
-                <IconChip
-                  icon={conceptIcons.delivery}
-                  concept="delivery"
-                  title={`Delivered ${new Date(data.delivered_at).toLocaleString()}`}
-                >
-                  Delivered {ago(data.delivered_at)}
-                </IconChip>
-              </span>
-            ) : null}
-          </div>
-        </div>
-        <TaskActions task={data} actions={actions} onDeleted={() => navigate('/tasks')} className="ml-auto shrink-0" />
-      </div>
-      <ErrorText error={actions.error ?? task.error} className="mx-6 mt-4" />
-      <nav aria-label="Task" className="mt-4 flex gap-1 border-b border-border px-6 text-sm">
-        {TABS.map(({ to, label, concept }) => {
-          const Icon = conceptIcons[concept]
-          return (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                cn(
-                  '-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2',
-                  isActive
-                    ? 'border-zinc-900 font-medium dark:border-white'
-                    : 'border-transparent text-muted-foreground hover:text-foreground',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  {/* The open tab's icon takes its concept color; the rest stay dim. */}
-                  <Icon className={cn('size-4', isActive && conceptColors[concept].text)} />
-                  {label}
-                </>
-              )}
-            </NavLink>
-          )
-        })}
-      </nav>
-      <div className="min-h-0 flex-1">
-        <Outlet />
+        />
+        <TaskBox task={task.data} />
       </div>
     </div>
+  )
+}
+
+// The center box: the segmented control, then the chosen view.
+function TaskBox({ task }: { task: TaskView }) {
+  const compute = useMatch('/tasks/:name/compute') !== null
+  return (
+    <section
+      aria-label="Task work"
+      className="flex h-[80vh] min-h-[32rem] min-w-0 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-white shadow-sm min-[1200px]:order-1 min-[1200px]:h-auto min-[1200px]:min-h-0 min-[1200px]:flex-1 dark:bg-zinc-900/60"
+    >
+      <div className="flex shrink-0 items-center border-b border-border px-3 py-2">
+        <nav
+          aria-label="Task view"
+          className="inline-flex items-center gap-0.5 rounded-lg border border-border bg-zinc-100 p-0.5 text-sm dark:bg-zinc-950/60"
+        >
+          <Segment to="compute" label="Compute" concept="sandbox" active={compute} count={task.sandboxes.length} />
+          <Segment to="messages" label="Messages" concept="message" active={!compute} />
+        </nav>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <Outlet />
+      </div>
+    </section>
+  )
+}
+
+function Segment({
+  to,
+  label,
+  concept,
+  active,
+  count,
+}: {
+  to: string
+  label: string
+  concept: Concept
+  active: boolean
+  count?: number
+}) {
+  const Icon = conceptIcons[concept]
+  return (
+    <Link
+      to={to}
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 transition-colors',
+        active
+          ? 'bg-white font-medium text-foreground shadow-sm dark:bg-zinc-800'
+          : 'text-muted-foreground hover:text-foreground',
+      )}
+    >
+      {/* The chosen view's icon takes its concept color; the other stays dim. */}
+      <Icon aria-hidden className={cn('size-4', active && conceptColors[concept].text)} />
+      {label}
+      {count !== undefined && (
+        <span
+          title={`${count} ${count === 1 ? 'sandbox' : 'sandboxes'}`}
+          className="text-xs text-muted-foreground tabular-nums"
+        >
+          {count}
+        </span>
+      )}
+    </Link>
   )
 }
