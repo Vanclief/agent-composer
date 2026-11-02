@@ -527,6 +527,19 @@ Messages tab) provides the channel context (`context.ts`) every piece reads.
   `QuestionBadge.tsx`) beside the unread badge on the channel row and the
   Talk group header. Unread counting is unchanged. The questions query key
   includes the channels' last ids, so `message.posted` refreshes it.
+- **Question shape** (`questionShape.ts`, `QuestionParts.tsx`): the card is
+  at most 72ch wide, body `text-base leading-7`. The first line is the title
+  (bold, larger); `Changes:`, `Asks:`, `Diff:` lines are labelled rows
+  (`question-row`, `data-row`); a line that is only a URL, or the value of
+  `Diff:`, is a "View diff" button (`view-diff`, new tab), never the raw
+  URL; lines in a code fence and the rest render as markdown. A title
+  `Accept <task>?` on a task in `review` I own adds Accept (posts
+  `/accept <task>` as a reply in my inbox, else `/accept` in `#<task>`) and
+  Reject… (a reason, then `/reject <why>` in `#<task>`: the backend has no
+  inbox form of reject), errors verbatim under them (`accept-actions`);
+  otherwise, or once agc answered, the task's pill verbatim and "Accepted by
+  @name" (`accept-state`). The mock runs `/accept` and `/reject` posted in
+  channels like `core/resources/tasks/commands.go`.
 
 ## Commands (run in `panel/`)
 
