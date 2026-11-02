@@ -33,6 +33,7 @@
 - `core/resources/knowledge`: read-only REST over `knowledge/`, loading `evidence/ beliefs/ decisions/ rules/ actions/` under `<home>/knowledge` (or `AGC_KNOWLEDGE_DIR`) on every request; list (`?without=`), why, doubt and conflicts.
 - `interfaces/rest`: echo server; routes in `api_routes.go`, handlers in `handler/`, dispatch type switch in `server/server.go`.
 - `interfaces/cli`: the `agc` command-line interface.
+- `interfaces/cli/client`: HTTP client for the task, sandbox and spec routes; `agc task|sandbox` use it when `AGC_SERVER` or `--server` is set, else the in-process stack.
 - `models`: bun models; every table is registered in `ALL` in `models/db_registry.go`.
 - `models/migrations`: schema migrations as Go files named `YYYYMMDDHHMMSS_name.go`, run automatically at startup; see its README.
 - `executor`: host and sandbox executors.

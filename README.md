@@ -128,6 +128,33 @@ curl http://localhost:1202/api/workflow/executions/<execution_id>
 
 Creating an execution through REST returns an execution id immediately; poll the get endpoint for `running`, `succeeded`, or `failed`. CLI runs and server runs share the same database, so everything shows up in the UI either way.
 
+**Using the CLI against a server**
+
+`agc task …` and `agc sandbox …` normally open the local database and boot sandboxes in-process. Set `AGC_SERVER` (or pass `--server <url>`, before or after the subcommand) and they call that agc server's REST API instead, so a task can be created from any machine:
+
+```bash
+export AGC_SERVER=http://127.0.0.1:8788
+
+agc task create -f task.yaml          # returns at once: task open, sandbox starting
+agc task create -f task.yaml --wait   # polls until the sandbox is running or failed
+agc task list
+agc task get fix-login
+agc task done fix-login
+agc task delete fix-login --yes
+
+agc sandbox allocate fix-login -f sandbox.yaml [--wait]
+agc sandbox list
+agc sandbox get fix-login
+agc sandbox stop fix-login
+agc sandbox start fix-login
+agc sandbox delete fix-login --yes
+
+agc task spec ls                      # saved specs are the server's
+agc --server http://rig:8788 task ls  # one-off, without the env var
+```
+
+`task.yaml` is the ADR 0008 shape: `name`, `title`, `brief`, `assignee`, `for`, and `sandbox:` holding the environment block plus `command`. `agc task create` against a server prints the task and its page, `<server>/panel/tasks/<name>`. Every command prints the same lines in both modes; add `--json` for the raw view the API returns. A server error prints the server's message as is and exits 1. Without `AGC_SERVER` or `--server` everything runs locally as before, and local `create`/`allocate` always wait for the boot, since it runs in that process.
+
 **MCP server**
 
 ```bash
