@@ -81,17 +81,15 @@ Each page sets the top bar title with `usePageTitle('…')` from
 - **Statuses are verbatim:** render `<StatusPill status={task.status} />`
   or `<StatusPill status={sandbox.status} detail={sandbox.status_error} />`.
   Never derive, map or relabel a status in the UI. If a status is wrong, the
-  backend has to change. The pill's look follows the rtsdesign tiers
-  (`data-tier`): `lit` for alive (running: filled green; starting/stopping:
-  pulsing blue; review: filled amber), `off` for ended well (done, stopped:
-  the green shape turned off, a dim hollow ring), `attention` for died or
-  needs a hand (failed, crashed: lit red triangle, the only red on screen),
-  `idle` for not started (open: a hollow blue ring, the transition hue but
-  empty and still, so open → starting → running reads hollow blue → pulsing
-  blue → lit green; Franco: open must not be grey). A done thing never looks
-  as bright as a running one; a dead thing never looks like a done one. A
-  word the pill doesn't know is hollow grey, or `attention` when it has a
-  `detail`.
+  backend has to change. The pill's shape is an LED (Franco's spec,
+  2026-11-02, first tried on the Tasks page), in the rtsdesign tiers
+  (`data-tier`): `lit` for alive (running: green blinking; review: yellow
+  blinking; starting/stopping: blue pulsing), `off` for ended well (done:
+  green on, steady; stopped: green off), `attention` for died or needs a
+  hand (crashed, or any word with a `detail`: red blinking; failed, error:
+  red on, steady; the only red on screen), `idle` for not started (open, and
+  any word the pill doesn't know: green off). Blinking means it is doing
+  something or waiting on someone; steady means it is settled.
   `statusTier`/`tierRank` from `@/components/status-pill` give a status's
   tier; the Tasks and Compute lists sort attention, lit, idle, off (rows
   carry `data-tier`; off ones are muted), and their top row has

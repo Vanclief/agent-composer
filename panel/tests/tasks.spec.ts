@@ -257,12 +257,12 @@ test('the rail lists the criteria as unchecked boxes, and hides them when there 
   await expect(page.getByRole('region', { name: 'Delivery' })).toHaveCount(0)
 })
 
-test('the review status shows verbatim in its own amber pill', async ({ page }) => {
+test('the review status shows verbatim in its own yellow pill', async ({ page }) => {
   await page.goto('/panel/tasks')
   const pill = card(page, 'review-42').getByTestId('task-status').locator('[data-status]')
   await expect(pill).toHaveText('review')
   await expect(pill).toHaveAttribute('data-status', 'review')
-  await expect(pill).toHaveClass(/amber/)
+  await expect(pill).toHaveClass(/yellow/)
 })
 
 test('a done task shows who accepted it and its summary, read-only', async ({ page }) => {
