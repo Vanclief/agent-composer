@@ -274,6 +274,19 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.AccountsAPI.ClearDefault(request.GetContext(), nil, body)
 	case *accounts.DeleteRequest:
 		return s.AccountsAPI.Delete(request.GetContext(), nil, body)
+	case *accounts.SigninRequest:
+		return s.AccountsAPI.Signin(request.GetContext(), nil, body)
+	// Completing a sign-in exchanges the code and reads the account's
+	// usage, and signing out reads it again: each can outlast the default
+	// request timeout.
+	case *accounts.SigninCompleteRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
+		defer cancel()
+		return s.AccountsAPI.SigninComplete(ctx, nil, body)
+	case *accounts.SignoutRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
+		defer cancel()
+		return s.AccountsAPI.Signout(ctx, nil, body)
 
 	case *schedules.ListRequest:
 		return s.SchedulesAPI.List(request.GetContext(), nil, body)

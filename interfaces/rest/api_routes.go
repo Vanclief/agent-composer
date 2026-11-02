@@ -103,6 +103,9 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	accounts.DELETE("/:name", h.DeleteAccount)
 	accounts.POST("/:name/default", h.SetDefaultAccount)
 	accounts.DELETE("/:name/default", h.ClearDefaultAccount)
+	accounts.POST("/:name/signin", h.SigninAccount)
+	accounts.POST("/:name/signin/complete", h.CompleteSigninAccount)
+	accounts.DELETE("/:name/signin", h.SignoutAccount)
 
 	schedules := api.Group("/schedules")
 	schedules.GET("", h.ListSchedules)

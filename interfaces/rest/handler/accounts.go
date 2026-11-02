@@ -77,3 +77,40 @@ func (h *Handler) DeleteAccount(c echo.Context) error {
 
 	return c.NoContent(http.StatusNoContent)
 }
+
+// POST /accounts/:name/signin begins a sign-in and answers the page to
+// open (ADR 0018 "Sign-in").
+func (h *Handler) SigninAccount(c echo.Context) error {
+	const op = "Handler.SigninAccount"
+
+	request := requests.New(c.Request().Header, c.RealIP())
+
+	return h.JSONResponse(c, op, request, &accounts.SigninRequest{Name: c.Param("name")})
+}
+
+// POST /accounts/:name/signin/complete finishes it with the pasted code,
+// which is never echoed or logged (accounts.SigninCompleteRequest
+// marshals without it).
+func (h *Handler) CompleteSigninAccount(c echo.Context) error {
+	const op = "Handler.CompleteSigninAccount"
+
+	request := requests.New(c.Request().Header, c.RealIP())
+
+	body := &accounts.SigninCompleteRequest{}
+	err := c.Bind(body)
+	if err != nil {
+		return h.ManageError(c, op, request, err)
+	}
+	body.Name = c.Param("name")
+
+	return h.JSONResponse(c, op, request, body)
+}
+
+// DELETE /accounts/:name/signin signs the account out.
+func (h *Handler) SignoutAccount(c echo.Context) error {
+	const op = "Handler.SignoutAccount"
+
+	request := requests.New(c.Request().Header, c.RealIP())
+
+	return h.JSONResponse(c, op, request, &accounts.SignoutRequest{Name: c.Param("name")})
+}
