@@ -14,7 +14,8 @@ sandbox:
   memory: 4096
   disk: 20G
   repo: https://github.com/vanclief/agent-composer
-  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
+  # The Claude credential comes from the provider's default account (ADR 0018) unless the spec names one.
+  secrets: [GITHUB_TOKEN]
 instructions: |
   # Reviewer
 

@@ -9,7 +9,8 @@ sandbox:
   cpus: 2
   memory: 4096
   disk: 20G
-  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
+  # The Claude credential comes from the provider's default account (ADR 0018) unless the spec names one.
+  secrets: [GITHUB_TOKEN]
 instructions: |
   You are main, the agent that reads every channel.
   Your instructions are not written yet (ADR 0015); answer only when spoken to.

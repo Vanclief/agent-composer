@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	agentmodels "github.com/vanclief/agent-composer/models/agent"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/task"
+	"gopkg.in/yaml.v3"
 )
 
 // Made-up values: no test holds a real credential.
@@ -189,6 +191,47 @@ func TestAllocateHomeBindsTheProviderDefault(t *testing.T) {
 	got := storedSecrets(t, env, "reviewer-1")
 	if !reflect.DeepEqual(got, []string{"ACCOUNT_CODEX as CODEX_API_KEY"}) {
 		t.Fatalf("stored secrets = %q", got)
+	}
+}
+
+// The shipped templates (agents/*.yaml) name no credential, so a home
+// allocated from one gets the anthropic oauth default next to GITHUB_TOKEN.
+func TestAllocateHomeFromShippedTemplateBindsTheDefault(t *testing.T) {
+	for _, role := range []string{"reviewer", "main", "developer"} {
+		t.Run(role, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join("..", "..", "..", "agents", role+".yaml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var tmpl struct {
+				Harness agentmodels.Harness `yaml:"harness"`
+				Sandbox task.Sandbox        `yaml:"sandbox"`
+			}
+			err = yaml.Unmarshal(data, &tmpl)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tmpl.Harness != agentmodels.HarnessClaudeCode {
+				t.Fatalf("harness = %q", tmpl.Harness)
+			}
+			if !reflect.DeepEqual(tmpl.Sandbox.Secrets, []string{"GITHUB_TOKEN"}) {
+				t.Fatalf("template secrets = %q", tmpl.Sandbox.Secrets)
+			}
+
+			env := newAccountsEnv(t)
+			name := role + "-1"
+			_, err = env.api.AllocateHome(context.Background(), HomeRequest{Agent: name, Harness: tmpl.Harness, Sandbox: tmpl.Sandbox, Command: "agc agent run --agent " + name})
+			if err != nil {
+				t.Fatal(err)
+			}
+			env.api.Wait()
+
+			got := storedSecrets(t, env, name)
+			if !reflect.DeepEqual(got, []string{"GITHUB_TOKEN", "ACCOUNT_WORK as CLAUDE_CODE_OAUTH_TOKEN"}) {
+				t.Fatalf("stored secrets = %q", got)
+			}
+		})
 	}
 }
 
