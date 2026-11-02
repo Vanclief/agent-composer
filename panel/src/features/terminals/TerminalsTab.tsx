@@ -1,13 +1,15 @@
-// A task's terminals: a rail of job tiles with quick-start buttons, and the
-// selected job's xterm. Panes the user has viewed stay mounted (hidden when
-// not selected) so switching is instant and keeps scrollback; jobs never
-// viewed are not attached.
+// A sandbox's terminals: a rail of job tiles with quick-start buttons, and
+// the selected job's xterm. Panes the user has viewed stay mounted (hidden
+// when not selected) so switching is instant and keeps scrollback; jobs
+// never viewed are not attached.
+// TODO(ADR 0008): not routed; :name is a sandbox. The compute feature mounts
+// this on SandboxPage (/compute/:name) and renames it as it sees fit.
 import { useCallback, useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { useParams } from 'react-router'
 
-import { queryKeys, useStartTerminal, useTask, useTerminals } from '@/api/hooks'
+import { queryKeys, useSandbox, useStartTerminal, useTerminals } from '@/api/hooks'
 import type { TaskSpec } from '@/api/client'
 import type { Terminal } from '@/api/terminals'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
@@ -28,14 +30,14 @@ const color = conceptColors.terminal
 
 export function TerminalsTab() {
   const { name = '' } = useParams()
-  // A fresh view per task, so panes never outlive their task's route.
+  // A fresh view per sandbox, so panes never outlive their sandbox's route.
   return <TerminalsView key={name} name={name} />
 }
 
 function TerminalsView({ name }: { name: string }) {
   const queryClient = useQueryClient()
-  const task = useTask(name)
-  const status = task.data?.status
+  const sandbox = useSandbox(name)
+  const status = sandbox.data?.status
   const running = status === 'running'
   const terminals = useTerminals(name, running)
   const start = useStartTerminal(name)
@@ -49,7 +51,7 @@ function TerminalsView({ name }: { name: string }) {
   const selected = picked ?? jobs.find((job) => job.running)?.id ?? null
   const panes = jobs.filter((job) => job.id === selected || viewed.includes(job.id))
   const selectedJob = jobs.find((job) => job.id === selected)
-  const dir = repoDir(task.data?.spec)
+  const dir = repoDir(sandbox.data?.spec)
 
   const select = (id: string) => {
     setPicked(id)
@@ -103,7 +105,7 @@ function TerminalsView({ name }: { name: string }) {
             ))}
           </ul>
         )}
-        {task.data && !running && <EmptySlot reason={`Task ${status}`} />}
+        {sandbox.data && !running && <EmptySlot reason={`Sandbox ${status}`} />}
         {running && (
           <div aria-label="Start terminal" role="group" className="flex flex-col gap-2 pt-2">
             <div className="grid grid-cols-3 gap-1.5">
@@ -152,7 +154,7 @@ function TerminalsView({ name }: { name: string }) {
         className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-white shadow-sm dark:bg-zinc-900/60"
       >
         {panes.map((job) => (
-          <TerminalPane key={job.id} task={name} job={job} visible={job.id === selected} onExited={onExited} />
+          <TerminalPane key={job.id} sandbox={name} job={job} visible={job.id === selected} onExited={onExited} />
         ))}
         {!selectedJob && (
           <div className="grid flex-1 place-items-center bg-zinc-50 dark:bg-zinc-950">
@@ -197,7 +199,7 @@ function JobTile({ job, selected, exited, onSelect }: JobTileProps) {
   )
 }
 
-// Where the task's repo is cloned: "github.com/o/n" lives in /home/agent/n.
+// Where the sandbox's repo is cloned: "github.com/o/n" lives in /home/agent/n.
 function repoDir(spec: TaskSpec | undefined) {
   const repo = spec?.repo?.trim() ?? ''
   const last =

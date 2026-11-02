@@ -35,14 +35,15 @@ type Connection =
   | { state: 'closed'; reason: string }
 
 type TerminalPaneProps = {
-  task: string
+  // Sandbox name or id.
+  sandbox: string
   job: Terminal
   visible: boolean
   // Called once the server closes with "job completed".
   onExited: (job: string) => void
 }
 
-export function TerminalPane({ task, job, visible, onExited }: TerminalPaneProps) {
+export function TerminalPane({ sandbox, job, visible, onExited }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
@@ -110,7 +111,7 @@ export function TerminalPane({ task, job, visible, onExited }: TerminalPaneProps
       return
     }
     term.reset()
-    const socket = new WebSocket(terminalSocketURL(task, job.id))
+    const socket = new WebSocket(terminalSocketURL(sandbox, job.id))
     socket.binaryType = 'arraybuffer'
     socketRef.current = socket
 
@@ -140,7 +141,7 @@ export function TerminalPane({ task, job, visible, onExited }: TerminalPaneProps
       }
       socket.close(1000, 'detached')
     }
-  }, [task, job.id, attached, attempt, onExited])
+  }, [sandbox, job.id, attached, attempt, onExited])
 
   useEffect(() => {
     if (visible) {

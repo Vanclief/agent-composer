@@ -3,8 +3,8 @@ import { useState } from 'react'
 import { Clock, Plus } from 'lucide-react'
 import { Link } from 'react-router'
 
-import type { Task } from '@/api/client'
 import { useTasks } from '@/api/hooks'
+import type { TaskView } from '@/api/tasks'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
@@ -16,7 +16,7 @@ import { CreateTaskDialog } from '@/features/create-task/CreateTaskDialog'
 import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/shell/page-title'
 
-import { formatMemory, shortAge } from './format'
+import { shortAge } from './format'
 import { TaskActions, useTaskActions } from './TaskActions'
 
 export function TasksPage() {
@@ -62,10 +62,10 @@ export function TasksPage() {
 
 // The whole row opens the task; status, age, actions and errors sit above
 // the link so their tooltips and buttons work.
-function TaskRow({ task }: { task: Task }) {
+// TODO(ADR 0008): the tasks feature adds the assignee, brief and sandboxes.
+function TaskRow({ task }: { task: TaskView }) {
   const actions = useTaskActions()
   const TaskIcon = conceptIcons.task
-  const { cpus, memory } = task.spec
 
   return (
     <li className="relative flex flex-col gap-2 px-4 py-2.5 text-sm transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
@@ -80,21 +80,9 @@ function TaskRow({ task }: { task: Task }) {
         <IconChip icon={conceptIcons.channel} concept="channel" title="Name and channel" className="shrink-0">
           {task.name}
         </IconChip>
-        <div className="ml-auto hidden shrink-0 items-center gap-1.5 lg:flex">
-          {cpus ? (
-            <IconChip icon={conceptIcons.cpu} concept="cpu" title="CPUs">
-              {cpus} CPU
-            </IconChip>
-          ) : null}
-          {memory ? (
-            <IconChip icon={conceptIcons.memory} concept="memory" title="Memory">
-              {formatMemory(memory)}
-            </IconChip>
-          ) : null}
-        </div>
-        <div className="relative z-10 ml-auto flex shrink-0 items-center gap-3 lg:ml-3">
+        <div className="relative z-10 ml-auto flex shrink-0 items-center gap-3">
           <div className="flex w-24 justify-start">
-            <StatusPill status={task.status} detail={task.status_error} />
+            <StatusPill status={task.status} />
           </div>
           <IconChip
             icon={Clock}

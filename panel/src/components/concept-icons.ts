@@ -60,6 +60,10 @@ export const conceptIcons = {
   subject: Library,
   // Something to do because of a decision (ADR 0006).
   action: ListTodo,
+  // ADR 0008: the compute a task is allocated, one microsandbox VM.
+  sandbox: Box,
+  // A task's brief: what to do and what done looks like.
+  brief: ScrollText,
 } satisfies Record<string, LucideIcon>
 
 export type Concept = keyof typeof conceptIcons
@@ -67,7 +71,7 @@ export type Concept = keyof typeof conceptIcons
 // One hue per concept, used with its icon in every list, card, detail and
 // form (rtsdesign rule 3: color codes concepts, saturation codes attention).
 // Families, one hue each:
-//   violet  machine: task, image, cpu, memory
+//   violet  machine: task, sandbox, image, cpu, memory
 //   blue    code: repo, ref, setup
 //   yellow  secret (warm, a warning)
 //   lime    env
@@ -75,7 +79,7 @@ export type Concept = keyof typeof conceptIcons
 //   cyan    terminal
 //   pink    messaging: channel, message, human
 //   orange  savedSpec
-//   zinc    raw (a view, not a resource: neutral)
+//   zinc    raw (a view, not a resource: neutral), brief (words)
 // Statuses own emerald (running), zinc (stopped), sky (transitions) and red
 // (failed); no concept uses those, so a status always stands out.
 // Saturation is attention: a selected chip is a strong tint, and only the
@@ -244,4 +248,6 @@ export const conceptColors = {
   subject: zinc,
   // lime is env's in Work; the two never meet on one screen.
   action: lime,
+  sandbox: violet,
+  brief: zinc,
 } satisfies Record<Concept, ConceptColor>

@@ -1,8 +1,9 @@
-// Terminals in a Task's VM. Not in docs/openapi.yaml, so typed by hand from
-// interfaces/rest/handler/terminals.go and core/resources/tasks/terminals.go.
+// Terminals in a sandbox (ADR 0008). Not in docs/openapi.yaml, so typed by
+// hand from interfaces/rest/handler/terminals.go. sandbox is an id or name.
 import { apiFetch } from './client'
 
-// A TTY job in the VM, as the runtime reports it.
+// A TTY job in the sandbox, as the runtime reports it. The command a
+// sandbox is allocated with runs as the job "agent".
 export type Terminal = {
   id: string
   command: string[]
@@ -19,11 +20,11 @@ export type StartTerminalRequest = {
 const enc = encodeURIComponent
 
 export const terminals = {
-  list(task: string) {
-    return apiFetch<{ terminals: Terminal[] }>('GET', `/tasks/${enc(task)}/terminals`)
+  list(sandbox: string, signal?: AbortSignal) {
+    return apiFetch<{ terminals: Terminal[] }>('GET', `/sandboxes/${enc(sandbox)}/terminals`, undefined, signal)
   },
-  start(task: string, request: StartTerminalRequest) {
-    return apiFetch<{ id: string }>('POST', `/tasks/${enc(task)}/terminals`, request)
+  start(sandbox: string, request: StartTerminalRequest) {
+    return apiFetch<{ id: string }>('POST', `/sandboxes/${enc(sandbox)}/terminals`, request)
   },
 }
 
@@ -32,7 +33,7 @@ export const terminals = {
 // {"type":"resize","rows":N,"cols":N} to resize. The server closes with
 // reason "job completed" when the program exits; closing the socket only
 // detaches and the job keeps running.
-export function terminalSocketURL(task: string, job: string) {
+export function terminalSocketURL(sandbox: string, job: string) {
   const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${scheme}://${window.location.host}/api/tasks/${enc(task)}/terminals/${enc(job)}/ws`
+  return `${scheme}://${window.location.host}/api/sandboxes/${enc(sandbox)}/terminals/${enc(job)}/ws`
 }

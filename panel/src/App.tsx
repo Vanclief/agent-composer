@@ -2,12 +2,14 @@
 // under src/features/<feature>/ (see CLAUDE.md); this file only wires them.
 import { Navigate, Route, Routes } from 'react-router'
 
+import { ComputePage } from '@/features/compute/ComputePage'
+import { SandboxPage } from '@/features/compute/SandboxPage'
 import { MessagesPage } from '@/features/messages/MessagesPage'
 import { MessagesTab } from '@/features/messages/MessagesTab'
-import { SpecTab } from '@/features/tasks/SpecTab'
+import { BriefTab } from '@/features/tasks/BriefTab'
+import { ComputeTab } from '@/features/tasks/ComputeTab'
 import { TaskPage } from '@/features/tasks/TaskPage'
 import { TasksPage } from '@/features/tasks/TasksPage'
-import { TerminalsTab } from '@/features/terminals/TerminalsTab'
 import { ActionsPage, BeliefsPage, DecisionsPage, EvidencePage, RulesPage } from '@/features/think/ThinkPages'
 import { Layout } from '@/shell/layout'
 import { HomeRedirect } from '@/shell/mode'
@@ -19,11 +21,14 @@ export function App() {
         <Route index element={<HomeRedirect />} />
         <Route path="tasks" element={<TasksPage />} />
         <Route path="tasks/:name" element={<TaskPage />}>
-          <Route index element={<Navigate to="terminals" replace />} />
-          <Route path="terminals" element={<TerminalsTab />} />
+          <Route index element={<Navigate to="brief" replace />} />
+          <Route path="brief" element={<BriefTab />} />
+          <Route path="compute" element={<ComputeTab />} />
           <Route path="messages" element={<MessagesTab />} />
-          <Route path="spec" element={<SpecTab />} />
         </Route>
+        {/* Compute (ADR 0008): every sandbox; :name is a sandbox with its terminals. */}
+        <Route path="compute" element={<ComputePage />} />
+        <Route path="compute/:name" element={<SandboxPage />} />
         {/* :channel is the channel name without its #: /messages/review-42 is #review-42. */}
         <Route path="messages" element={<MessagesPage />} />
         <Route path="messages/:channel" element={<MessagesPage />} />

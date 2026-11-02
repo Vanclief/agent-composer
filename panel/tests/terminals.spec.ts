@@ -1,68 +1,28 @@
-// Owned by the terminals feature (TerminalsTab).
-import { expect, test, type Page } from '@playwright/test'
+// Owned by the terminals feature (TerminalsTab, TerminalPane), mounted on
+// the compute feature's SandboxPage.
+// TODO(ADR 0008): smoke tests left by the foundation pass; rewrite them once
+// SandboxPage renders the terminals at /compute/:name.
+import { expect, test } from '@playwright/test'
 
-const rail = (page: Page) => page.getByRole('list', { name: 'Terminals' })
-const tile = (page: Page, command: string) =>
-  rail(page)
-    .getByRole('button')
-    .filter({ has: page.getByText(command, { exact: true }) })
-const visibleScreen = (page: Page) => page.locator('.xterm-rows:visible')
-
-test('the rail shows each job with its state shape', async ({ page }) => {
-  await page.goto('/panel/tasks/review-42/terminals')
-  await expect(tile(page, 'claude').locator('[data-state="running"]')).toBeVisible()
-  await expect(tile(page, 'bash').locator('[data-state="exited"]').first()).toBeVisible()
-  await expect(page.getByRole('group', { name: 'Start terminal' })).toBeVisible()
+test('a sandbox page opens under Compute', async ({ page }) => {
+  await page.goto('/panel/compute/review-42')
+  await expect(page.getByRole('heading', { name: 'SandboxPage' })).toBeVisible()
 })
 
-test('selecting a job attaches and echoes typed input', async ({ page }) => {
-  await page.goto('/panel/tasks/review-42/terminals')
-  await tile(page, 'claude').click()
-  await expect(tile(page, 'claude')).toHaveAttribute('aria-current', 'true')
-  await expect(visibleScreen(page)).toContainText('mock terminal')
-  await expect(page.getByRole('button', { name: 'Detach' })).toBeVisible()
+test('terminals live under sandboxes', async ({ request }) => {
+  const running = await request.get('/api/sandboxes/review-42/terminals')
+  expect(running.ok()).toBe(true)
+  const { terminals } = (await running.json()) as { terminals: { id: string; command: string[]; running: boolean }[] }
+  expect(terminals.map((t) => [t.command.join(' '), t.running])).toEqual([
+    ['claude', true],
+    ['bash', false],
+  ])
+  expect(terminals[0].id).toBe('agent')
 
-  await page.locator('.xterm:visible').click()
-  await page.keyboard.type('echo hi')
-  await expect(visibleScreen(page)).toContainText('echo hi')
+  const stopped = await request.get('/api/sandboxes/review-42-2/terminals')
+  expect(stopped.status()).toBe(409)
+  expect((await stopped.json()).error.message).toBe('sandbox review-42-2 is stopped; start it to use terminals')
 
-  await page.getByRole('button', { name: 'Detach' }).click()
-  await expect(page.getByRole('button', { name: 'Reconnect' })).toBeVisible()
-  await expect(tile(page, 'claude')).toBeVisible()
-})
-
-test('an exited job keeps its output and says exited', async ({ page }) => {
-  await page.goto('/panel/tasks/review-42/terminals')
-  const exited = tile(page, 'bash')
-    .filter({ has: page.locator('[data-state="exited"]') })
-    .first()
-  await exited.click()
-  await expect(visibleScreen(page)).toContainText('[process exited]')
-  await expect(exited.getByText('exited', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Reconnect' })).toHaveCount(0)
-})
-
-test('quick-start bash starts a job and selects it', async ({ page }) => {
-  await page.goto('/panel/tasks/review-42/terminals')
-  await expect(tile(page, 'claude')).toBeVisible()
-  await page.getByRole('group', { name: 'Start terminal' }).getByRole('button', { name: 'bash' }).click()
-  const selected = rail(page).locator('[aria-current="true"]')
-  await expect(selected).toContainText('bash')
-  await expect(selected.locator('[data-state="running"]')).toBeVisible()
-  await expect(visibleScreen(page)).toContainText('mock terminal · review-42 · bash')
-})
-
-test('a custom command starts on Enter', async ({ page }) => {
-  await page.goto('/panel/tasks/review-42/terminals')
-  const command = `vim notes-${Date.now()}`
-  await page.getByRole('textbox', { name: 'Command' }).fill(command)
-  await page.getByRole('textbox', { name: 'Command' }).press('Enter')
-  await expect(rail(page).locator('[aria-current="true"]')).toContainText(command)
-})
-
-test('a stopped task says why and offers no start buttons', async ({ page }) => {
-  await page.goto('/panel/tasks/flaky-ci/terminals')
-  await expect(page.getByText('Task stopped', { exact: true })).toBeVisible()
-  await expect(page.getByRole('group', { name: 'Start terminal' })).toHaveCount(0)
-  await expect(rail(page)).toHaveCount(0)
+  const failed = await request.get('/api/sandboxes/boot-fail')
+  expect(await failed.json()).toMatchObject({ status: 'failed', status_error: 'clone failed: repository not found' })
 })

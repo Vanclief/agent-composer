@@ -1,6 +1,7 @@
 // The three top-level modes: Think (evidence, beliefs, decisions, rules),
-// Work (tasks) and Talk (channels). The active mode comes from the route;
-// the last one used is kept in localStorage so / opens it again.
+// Work (tasks and their compute) and Talk (channels). The active mode comes
+// from the route; the last one used is kept in localStorage so / opens it
+// again.
 import { useEffect } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { Link, Navigate, useLocation } from 'react-router'
@@ -36,15 +37,14 @@ export const MODES: Record<Mode, { label: string; icon: LucideIcon; concept: Con
     concept: 'task',
     nav: [
       { to: '/tasks', label: 'Tasks', concept: 'task' },
+      { to: '/compute', label: 'Compute', concept: 'sandbox' },
     ],
   },
   talk: {
     label: 'Talk',
     icon: conceptIcons.message,
     concept: 'message',
-    nav: [
-      { to: '/messages', label: 'Channels', concept: 'message' },
-    ],
+    nav: [{ to: '/messages', label: 'Channels', concept: 'message' }],
   },
 }
 

@@ -178,13 +178,15 @@ test('Create sends the spec and opens the new task', async ({ page }) => {
     volumes: ['data:/home/agent/data:rw'],
     channels: ['#releases', '#alerts:read'],
   }
-  expect((await posted).postData()).toBe(JSON.stringify({ title, spec }))
+  // TODO(ADR 0008): the create-task feature sends a real brief, assignee and
+  // command; the foundation pass only moved the spec under sandbox.
+  expect((await posted).postData()).toBe(JSON.stringify({ title, brief: '', assignee: '', for: '', sandbox: spec }))
 
-  await expect(page).toHaveURL(new RegExp(`/panel/tasks/${name}/terminals$`))
+  await expect(page).toHaveURL(new RegExp(`/panel/tasks/${name}/brief$`))
   await expect(page.getByRole('dialog')).toHaveCount(0)
   const task = await (await page.request.get(`/api/tasks/${name}`)).json()
   expect(task.title).toBe(title)
-  expect(task.spec).toEqual(spec)
+  expect(task.sandboxes[0].spec).toEqual(spec)
 })
 
 test('a backend error shows verbatim and keeps the dialog open', async ({ page }) => {
