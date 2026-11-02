@@ -24,4 +24,6 @@ type Config struct {
 	SQLite   sqlite.ConnectionConfig   `mapstructure:"sqlite"`
 	// Defaults fill in a task's assignee, model and owner (ADR 0009).
 	Defaults DefaultsSettings `mapstructure:"defaults"`
+	// Triggers are outside events posted as messages (ADR 0014).
+	Triggers TriggersSettings `mapstructure:"triggers"`
 }

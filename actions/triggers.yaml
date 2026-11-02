@@ -1,0 +1,10 @@
+# What is left open after outside events became messages (ADR 0014).
+actions:
+  - id: add-more-trigger-sources
+    action: Add trigger sources beyond GitHub Actions and the GitHub REST lists, such as check runs from other apps, other forges, mail and chat, each with its own cursors in the same file.
+    because: [outside-events-become-messages]
+    opened: { who: franco, when: 2026-11-02 }
+  - id: give-webhooks-a-public-entrance
+    action: Decide on a public entrance to agc (a relay or a tunnel that keeps the rig's services on 127.0.0.1) before accepting inbound webhooks, so events arrive without a poll.
+    because: [outside-events-become-messages, rig-is-on-home-lan-without-firewall]
+    opened: { who: franco, when: 2026-11-02 }

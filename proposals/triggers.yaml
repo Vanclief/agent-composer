@@ -1,0 +1,9 @@
+# The code behind ADR 0014.
+proposals:
+  - id: github-triggers-code
+    proposes: code
+    proposal: Poll the configured GitHub repos for issues, pull requests, comments, reviews and finished workflow runs, and post each new one as agc in #<task> or #main, with cursors in <agc home>/triggers/cursors.json and agc triggers show to list them.
+    because: [outside-events-become-messages]
+    by: claude_code
+    when: 2026-11-02
+    change: agc/triggers

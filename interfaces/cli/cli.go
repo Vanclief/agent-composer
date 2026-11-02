@@ -97,6 +97,7 @@ func newApp() *cli.App {
 			taskCommand(),
 			sandboxCommand(),
 			scheduleCommand(),
+			triggersCommand(),
 			rulesCommand(),
 			beliefsCommand(),
 			evidenceCommand(),

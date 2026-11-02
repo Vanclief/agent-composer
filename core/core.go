@@ -17,6 +17,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/schedules"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
+	"github.com/vanclief/agent-composer/core/resources/triggers"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
 	"github.com/vanclief/agent-composer/messaging"
 	"github.com/vanclief/agent-composer/runtime"
@@ -46,6 +47,8 @@ type Stack struct {
 	AgentsAPI *agents.API
 	// Events is the live feed behind GET /api/events.
 	Events *events.Bus
+	// TriggersAPI posts outside events as messages (ADR 0014).
+	TriggersAPI *triggers.API
 }
 
 type StackOptions struct {
@@ -148,10 +151,13 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		KnowledgeAPI: knowledgeAPI,
 		AgentsAPI:    agentsAPI,
 		Events:       bus,
+		TriggersAPI:  triggers.NewAPI(ctrl, msg, secretsPath, home),
 	}, nil
 }
 
 // StartScheduler blocks while the scheduler runs until the context is canceled.
+// Only agc rest calls it, so it also starts the trigger polling (ADR 0014).
 func (s *Stack) StartScheduler(ctx context.Context) {
+	go s.TriggersAPI.Start(ctx)
 	s.Scheduler.Start(ctx)
 }
