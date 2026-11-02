@@ -27,6 +27,7 @@ func (api *API) ListAccounts(ctx context.Context) ([]usage.Account, error) {
 			Provider: string(record.Provider),
 			Kind:     string(record.Kind),
 			Secret:   record.Secret,
+			Login:    record.SignedInAt != nil,
 		})
 	}
 
@@ -53,6 +54,13 @@ func (p PollerUsage) Usage(ctx context.Context, name string) (*UsageView, error)
 	}
 
 	return view, nil
+}
+
+var _ AccountPoller = PollerUsage{}
+
+// PollAccount reads account name's usage now and returns its email.
+func (p PollerUsage) PollAccount(ctx context.Context, name string) string {
+	return p.Poller.PollAccount(ctx, name)
 }
 
 // resetsAt is the poller's RFC 3339 reset time, nil when it gave none or

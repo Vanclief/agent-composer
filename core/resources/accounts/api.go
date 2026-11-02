@@ -7,6 +7,7 @@ package accounts
 
 import (
 	"context"
+	"net/http"
 	"sync"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/vanclief/ez"
 
 	"github.com/vanclief/agent-composer/core/controller"
+	"github.com/vanclief/agent-composer/core/resources/accounts/oauth"
 	"github.com/vanclief/agent-composer/models/account"
 	"github.com/vanclief/agent-composer/models/agent"
 )
@@ -44,6 +46,22 @@ type API struct {
 	// held.
 	usageMu sync.Mutex
 	usage   UsageSource
+	poller  AccountPoller
+
+	// loginMu guards the sign-ins: the pending ones and the access
+	// tokens, both in memory only (ADR 0018 "Sign-in"). It is taken
+	// before mu, never while mu is held.
+	loginMu sync.Mutex
+	oauth   oauth.Config
+	client  *http.Client
+	pending map[string]oauth.Pending
+	access  map[string]oauth.Token
+}
+
+// AccountPoller reads one account's usage now and returns the email its
+// profile gave; PollerUsage is one.
+type AccountPoller interface {
+	PollAccount(ctx context.Context, name string) string
 }
 
 // NewAPI returns the accounts API over the secrets file at secretsPath.
@@ -57,7 +75,31 @@ func NewAPI(ctrl *controller.Controller, secretsPath string, users SecretUsers) 
 
 // New is NewAPI over a bare database, for tests.
 func New(db bun.IDB, secretsPath string, users SecretUsers) *API {
-	return &API{db: db, secretsPath: secretsPath, users: users}
+	return &API{
+		db:          db,
+		secretsPath: secretsPath,
+		users:       users,
+		oauth:       oauth.Default(),
+		client:      &http.Client{Timeout: 30 * time.Second},
+		pending:     map[string]oauth.Pending{},
+		access:      map[string]oauth.Token{},
+	}
+}
+
+// SetOAuth replaces where accounts sign in and the HTTP client, for tests.
+func (api *API) SetOAuth(cfg oauth.Config, client *http.Client) {
+	api.loginMu.Lock()
+	api.oauth = cfg
+	api.client = client
+	api.loginMu.Unlock()
+}
+
+// SetPoller makes a sign-in and a sign-out read the account's usage at
+// once through poller.
+func (api *API) SetPoller(poller AccountPoller) {
+	api.usageMu.Lock()
+	api.poller = poller
+	api.usageMu.Unlock()
 }
 
 // SetUsage fills anthropic oauth accounts' usage from source from now on.
@@ -76,6 +118,9 @@ type AccountView struct {
 	Email     string           `json:"email"`
 	Default   bool             `json:"default"`
 	CreatedAt time.Time        `json:"created_at"`
+	// SignedInAt is when the account last signed in through agc, null
+	// when it has no login (ADR 0018 "Sign-in").
+	SignedInAt *time.Time `json:"signed_in_at"`
 	// Usage is filled for anthropic oauth accounts once a UsageSource is
 	// set, else null.
 	Usage *UsageView `json:"usage"`
@@ -132,13 +177,14 @@ func providerViews() []ProviderView {
 // view, not returned.
 func (api *API) view(ctx context.Context, record *account.Account) *AccountView {
 	view := &AccountView{
-		Name:      record.Name,
-		Provider:  record.Provider,
-		Kind:      record.Kind,
-		Secret:    record.Secret,
-		Email:     record.Email,
-		Default:   record.Default,
-		CreatedAt: record.CreatedAt,
+		Name:       record.Name,
+		Provider:   record.Provider,
+		Kind:       record.Kind,
+		Secret:     record.Secret,
+		Email:      record.Email,
+		Default:    record.Default,
+		CreatedAt:  record.CreatedAt,
+		SignedInAt: record.SignedInAt,
 	}
 
 	api.usageMu.Lock()

@@ -168,11 +168,16 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	}, nil
 }
 
-// connectAccountsUsage makes poller list the accounts through api and api
-// show poller's readings as each account's usage (ADR 0018 "Usage").
+// connectAccountsUsage makes poller list the accounts through api and read
+// signed-in ones with their login, and api show poller's readings as each
+// account's usage and poll an account at once on sign-in and sign-out
+// (ADR 0018 "Usage", "Sign-in").
 func connectAccountsUsage(api *accounts.API, poller *usage.Poller) {
 	poller.SetLister(api)
-	api.SetUsage(accounts.PollerUsage{Poller: poller})
+	poller.SetLogins(api)
+	source := accounts.PollerUsage{Poller: poller}
+	api.SetUsage(source)
+	api.SetPoller(source)
 }
 
 // StartScheduler blocks while the scheduler runs until the context is canceled.
