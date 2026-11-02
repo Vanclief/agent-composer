@@ -1,0 +1,61 @@
+# agc task create -f tasks/panel-dark-only.task.yaml
+# Action remove-the-light-theme (actions/panel.yaml), opened by Franco on
+# 2026-11-02 with the design system: the panel is dark only. Launched once
+# the six panel-eva-* roll-out branches were merged (85d6189).
+name: panel-dark-only
+title: The panel is dark only, the light theme and its toggle are gone
+assignee: claude_code
+manager: franco
+owner: franco
+for: panel-reads-like-an-instrument
+accept:
+  - The html element always carries class dark (set in panel/index.html, no script reading agc.panel.theme), next-themes is no longer imported anywhere, the sidebar has no theme toggle, and the light token block in panel/src/index.css is gone so the design-system tokens are the only ones
+  - npm run shot has no --theme flag and panel/CLAUDE.md says the panel is dark only; tests/shell.spec.ts no longer tests the toggle and make panel-check passes
+  - actions/panel.yaml marks remove-the-light-theme done with { who: claude_code, when: 2026-11-02 } and go run . rules check rules/ passes
+  - Branch agc/panel-dark-only pushed and not merged; the delivery lists the screenshot path of /tasks
+brief: |
+  Franco decided the panel is dark only (docs/design/panel.md, action
+  remove-the-light-theme in actions/panel.yaml). Read panel/CLAUDE.md,
+  docs/design/panel.md, panel/src/index.css, panel/src/main.tsx,
+  panel/src/shell/layout.tsx, panel/src/shell/theme-toggle.tsx,
+  panel/index.html, panel/scripts (the shot script) and
+  tests/shell.spec.ts. Then make the smallest change that removes the
+  light theme for good:
+  - panel/index.html: <html class="dark"> and no inline script that
+    reads agc.panel.theme.
+  - panel/src/main.tsx: no ThemeProvider; delete
+    panel/src/shell/theme-toggle.tsx and its use in layout.tsx; remove
+    the next-themes import everywhere. Leave the dependency in
+    package.json alone unless nothing else uses it, in which case drop it
+    from package.json and package-lock.json with npm uninstall.
+  - panel/src/index.css: delete the light :root token block; the .dark
+    token block stays as is (do not rename the .dark prefix anywhere, the
+    html carries the class for good). The @custom-variant dark line
+    stays.
+  - The shot script: drop the --theme flag.
+  - tests/shell.spec.ts: delete the toggle test; keep the others.
+  - panel/CLAUDE.md: say dark only where it says dark by default with a
+    light toggle.
+  - actions/panel.yaml: mark remove-the-light-theme done.
+  Nothing else changes: no restyling, no new look, no new dependency.
+
+  Never print, echo, grep or read environment variables or secret values
+  (no env, printenv, gh auth status, cat of credential files): the
+  secrets in your environment are placeholders bound to hosts, and once
+  one appears in your context the secret policy blocks your own model
+  calls and your session is dead. Never spell a placeholder (the MSB
+  prefix plus a secret name) in any file or message either.
+
+  Verify: make panel-check; go run . rules check rules/; npm run shot --
+  /tasks and look at the PNG. Commit on branch agc/panel-dark-only, push
+  it, never merge. Post progress in #panel-dark-only; ask with QUESTION:
+  when blocked. Deliver with agc task deliver, the summary naming the
+  screenshot path.
+sandbox:
+  image: agc-agent
+  cpus: 2
+  memory: 4096
+  repo: https://github.com/vanclief/agent-composer
+  ref: feat/tasks-microsandbox
+  setup: cd panel && npm ci
+  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
