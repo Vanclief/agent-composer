@@ -1,6 +1,7 @@
 // /tasks: every task as one card: status, title and name, then who works on
-// it, who manages it, what it is for and its compute. Tasks in review
-// first, then open, running and done, newest first inside each.
+// it, who manages it, what it is for and its compute. Sorted by status
+// light: attention, lit (review, then running), idle (open), off (done),
+// newest first inside each; a done card recedes.
 import { useMemo, useState } from 'react'
 import { Clock, Plus } from 'lucide-react'
 import { Link } from 'react-router'
@@ -11,7 +12,7 @@ import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
 import { IconChip } from '@/components/icon-chip'
-import { StatusPill } from '@/components/status-pill'
+import { StatusLegend, StatusPill, statusTier } from '@/components/status-pill'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CreateTaskDialog } from '@/features/create-task/CreateTaskDialog'
@@ -38,6 +39,7 @@ export function TasksPage() {
           <TaskIcon className={cn('size-4', conceptColors.task.text)} />
           {tasks.data?.length ?? '–'}
         </span>
+        <StatusLegend className="mr-auto ml-4" />
         <Button onClick={() => setCreating(true)} className={conceptColors.task.solid}>
           <Plus /> New task
         </Button>
@@ -67,14 +69,17 @@ export function TasksPage() {
 // the card's link so they work on their own.
 function TaskCard({ task }: { task: TaskView }) {
   const TaskIcon = conceptIcons.task
+  const tier = statusTier(task.status)
 
   return (
     <li
       data-task={task.name}
+      data-tier={tier}
       className={cn(
         'relative flex flex-col gap-2 rounded-xl border bg-white px-4 py-2.5 text-sm shadow-sm transition-colors hover:bg-violet-500/5 dark:bg-zinc-900/60 dark:hover:bg-violet-500/10',
         conceptColors.task.border,
         conceptColors.task.edge,
+        tier === 'off' && 'text-muted-foreground shadow-none',
       )}
     >
       <div className="flex items-center gap-3">
@@ -97,7 +102,12 @@ function TaskCard({ task }: { task: TaskView }) {
           </IconChip>
         </span>
       </div>
-      <div className="relative z-10 flex w-fit flex-wrap items-center gap-1.5 pl-[5.75rem]">
+      <div
+        className={cn(
+          'relative z-10 flex w-fit flex-wrap items-center gap-1.5 pl-[5.75rem]',
+          tier === 'off' && 'opacity-60',
+        )}
+      >
         <AssigneeChip task={task} />
         <ManagerChip task={task} />
         <OwnerChip task={task} />

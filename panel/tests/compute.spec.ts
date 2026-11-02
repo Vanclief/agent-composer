@@ -36,12 +36,12 @@ test('sandboxes are grouped by status in order, with counts', async ({ page, req
   // A failed sandbox can only be deleted.
   await expect(failed.getByRole('button')).toHaveText(['Delete'])
 
-  // Groups come in the fixed order.
-  const order = ['starting', 'running', 'failed', 'stopped', 'unknown']
+  // Groups come in the fixed order: by status light, attention first.
+  const order = ['failed', 'starting', 'running', 'unknown', 'stopped']
   const labels = await page.getByRole('region').evaluateAll((sections) => sections.map((s) => s.ariaLabel ?? ''))
   const shown = labels.filter((label) => order.includes(label))
   expect(shown).toEqual(order.filter((status) => shown.includes(status)))
-  expect(shown.slice(0, 4)).toEqual(['starting', 'running', 'failed', 'stopped'])
+  expect(shown.filter((s) => s !== 'unknown').slice(0, 4)).toEqual(['failed', 'starting', 'running', 'stopped'])
 
   // Each count matches its cards and the API.
   for (const status of ['running', 'failed', 'stopped']) {
