@@ -106,7 +106,7 @@ function PresetChips({
 
 export function MachineCard({ form, update }: CardProps) {
   return (
-    <Card name="machine" concept="task" label="Machine" tip="The VM the task runs in">
+    <Card name="machine" concept="sandbox" label="Size" tip="Image, vCPUs and memory of the sandbox">
       <IconInput
         data-image
         icon={conceptIcons.image}
@@ -148,7 +148,7 @@ export function CodeCard({ form, update }: CardProps) {
   const SetupIcon = conceptIcons.setup
 
   return (
-    <Card name="code" concept="repo" label="Code" tip="Repository cloned into the VM">
+    <Card name="code" concept="repo" label="Code" tip="Repository cloned into the sandbox">
       <IconInput
         data-repo
         icon={conceptIcons.repo}
@@ -171,7 +171,7 @@ export function CodeCard({ form, update }: CardProps) {
         />
         {dir ? (
           <span data-repo-dir className="min-w-0">
-            <IconChip icon={conceptIcons.repo} concept="repo" title="Where the repo is cloned in the VM">
+            <IconChip icon={conceptIcons.repo} concept="repo" title="Where the repo is cloned in the sandbox">
               {dir}
             </IconChip>
           </span>
@@ -327,7 +327,7 @@ export function EnvCard({ form, update }: CardProps) {
   }
 
   return (
-    <Card name="env" concept="env" label="Env" tip="Environment variables set in the VM" count={form.env.length}>
+    <Card name="env" concept="env" label="Env" tip="Environment variables set in the sandbox" count={form.env.length}>
       <div className="flex flex-col gap-1.5">
         {form.env.map((row) => (
           <div key={row.id} data-env className="flex items-center gap-1.5">
@@ -378,7 +378,7 @@ export function VolumesCard({ form, update }: CardProps) {
       name="volumes"
       concept="volume"
       label="Volumes"
-      tip="Mounted into the VM. Named volumes are kept by agc across tasks; host paths come from this machine."
+      tip="Mounted into the sandbox. Named volumes are kept by agc across tasks; host paths come from this machine."
       count={form.volumes.length}
     >
       <div className="flex flex-col gap-1.5">

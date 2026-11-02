@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { Brain, Eye, FileText, Hammer, Library, Lightbulb, Scale, Signpost } from 'lucide-react'
 import { ListTodo } from 'lucide-react'
+import { Bot } from 'lucide-react'
 
 export const conceptIcons = {
   // A Task: a VM agents work in.
@@ -64,6 +65,8 @@ export const conceptIcons = {
   sandbox: Box,
   // A task's brief: what to do and what done looks like.
   brief: ScrollText,
+  // ADR 0009: a harness that works a task (claude_code, codex_cli, pi).
+  agent: Bot,
 } satisfies Record<string, LucideIcon>
 
 export type Concept = keyof typeof conceptIcons
@@ -250,4 +253,6 @@ export const conceptColors = {
   action: lime,
   sandbox: violet,
   brief: zinc,
+  // Workers, people and agents alike, share the messaging pink.
+  agent: pink,
 } satisfies Record<Concept, ConceptColor>

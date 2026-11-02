@@ -36,6 +36,8 @@ export function Card({
   label,
   tip,
   count,
+  aside,
+  className,
   children,
 }: {
   name: string
@@ -44,7 +46,10 @@ export function Card({
   tip: string
   // Badge after the label; hidden when 0.
   count?: number
-  children: ReactNode
+  // Controls at the right end of the header row.
+  aside?: ReactNode
+  className?: string
+  children?: ReactNode
 }) {
   const Icon = conceptIcons[concept]
   const color = conceptColors[concept]
@@ -54,6 +59,7 @@ export function Card({
       className={cn(
         'flex flex-col gap-3 rounded-xl border border-border bg-white p-4 shadow-sm dark:bg-zinc-900/60',
         color.edge,
+        className,
       )}
     >
       <div className={cn('flex items-center gap-1.5 text-xs font-medium tracking-wide uppercase', color.text)}>
@@ -62,6 +68,11 @@ export function Card({
         </Tip>
         {label}
         {count ? <CountBadge count={count} className={cn(color.bg, color.text)} /> : null}
+        {aside ? (
+          <div className="ml-auto flex items-center gap-2 font-normal tracking-normal text-foreground normal-case">
+            {aside}
+          </div>
+        ) : null}
       </div>
       {children}
     </section>
