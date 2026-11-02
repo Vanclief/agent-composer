@@ -2403,8 +2403,8 @@ const DM_RE = /^@[a-z0-9][a-z0-9_-]{0,63}\/[a-z0-9][a-z0-9_-]{0,63}$/
 // and who the server's owner and reserved system participant are.
 const DEFAULTS = { harness: 'claude_code', model: 'claude-opus-5-5', owner: 'franco', system: 'agc' }
 
-// GET /api/msg/participants?all=1 (ahead of the Go side): everyone who ever
-// joined, in any channel or none, active first, then departed, by name.
+// GET /api/msg/participants?all=1, as Service.AllParticipants: everyone who
+// ever joined, in any channel or none, active first, then departed, by name.
 function allParticipants(state: State) {
   return [...state.participants.values()]
     .sort((a, b) => Number(Boolean(a.left_at)) - Number(Boolean(b.left_at)) || a.name.localeCompare(b.name))

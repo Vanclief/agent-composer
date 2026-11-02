@@ -1033,8 +1033,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List the participants of a channel, with presence
-         * @description Everyone who has posted in the channel: active ones first, then those who left, each by name. Poll it with the channel to keep presence current; nothing is published.
+         * List the participants of a channel, or everyone, with presence
+         * @description Everyone who has posted in the channel: active ones first, then those who left, each by name. Poll it with the channel to keep presence current; nothing is published. With all=1 (humans only, 403 for a task) it lists everyone who ever joined, in any channel or none, in the same order, and ignores channel.
          */
         get: operations["listMsgParticipants"];
         put?: never;
@@ -4087,9 +4087,11 @@ export interface operations {
     };
     listMsgParticipants: {
         parameters: {
-            query: {
-                /** @description The channel, such as '#review-42'. */
-                channel: string;
+            query?: {
+                /** @description The channel, such as '#review-42'. Required unless all=1. */
+                channel?: string;
+                /** @description 1 lists every participant ever joined instead of one channel's. */
+                all?: "1";
             };
             header?: never;
             path?: never;

@@ -1892,17 +1892,26 @@ paths:
     get:
       tags: [Messaging]
       operationId: listMsgParticipants
-      summary: List the participants of a channel, with presence
+      summary: List the participants of a channel, or everyone, with presence
       description: >
         Everyone who has posted in the channel: active ones first, then those who left, each by
-        name. Poll it with the channel to keep presence current; nothing is published.
+        name. Poll it with the channel to keep presence current; nothing is published. With
+        all=1 (humans only, 403 for a task) it lists everyone who ever joined, in any channel or
+        none, in the same order, and ignores channel.
       parameters:
         - name: channel
           in: query
-          required: true
-          description: The channel, such as '#review-42'.
+          required: false
+          description: The channel, such as '#review-42'. Required unless all=1.
           schema:
             type: string
+        - name: all
+          in: query
+          required: false
+          description: 1 lists every participant ever joined instead of one channel's.
+          schema:
+            type: string
+            enum: ['1']
       responses:
         '200':
           description: The channel's participants.

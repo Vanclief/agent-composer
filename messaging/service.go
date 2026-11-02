@@ -672,3 +672,32 @@ func (s *Service) Participants(ctx context.Context, caller Caller, channel strin
 
 	return s.views(ctx, participants)
 }
+
+// AllParticipants lists everyone who ever joined, in any channel or none:
+// active ones first, then those who left, each by name, with their
+// presence. Only humans may list them; an agent sees the participants of
+// the channels it may read.
+func (s *Service) AllParticipants(ctx context.Context, caller Caller) ([]ParticipantView, error) {
+	err := checkCaller(caller)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	if !caller.Human {
+		msg := fmt.Sprintf("listing every participant is for humans, not task %s", caller.Task)
+		return nil, ez.New(ez.ENOTAUTHORIZED, msg, nil)
+	}
+
+	participants := []msgmodels.Participant{}
+
+	err = s.db.NewSelect().
+		Model(&participants).
+		OrderExpr("left_at IS NOT NULL").
+		Order("name ASC", "joined_at ASC").
+		Scan(ctx)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return s.views(ctx, participants)
+}

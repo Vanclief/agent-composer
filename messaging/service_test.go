@@ -483,3 +483,37 @@ func TestWaitChannelsReturnsAnyChannelInIDOrder(t *testing.T) {
 		t.Fatalf("no channel: want EINVALID, got %v", err)
 	}
 }
+
+func TestAllParticipantsListsEveryoneForHumansOnly(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+
+	zed := join(t, svc, review, "zed")
+	join(t, svc, human, "franco")
+	quiet := join(t, svc, review, "quiet")
+	post(t, svc, review, zed, "#review-42", "on it")
+
+	err := svc.Leave(ctx, review, quiet.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := svc.AllParticipants(ctx, human)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// franco never posted and quiet left: both are still listed.
+	want := []string{"franco", "zed", "quiet"}
+	if len(got) != len(want) {
+		t.Fatalf("want %v, got %+v", want, got)
+	}
+	for i, name := range want {
+		if got[i].Name != name {
+			t.Fatalf("participant %d: want %s, got %+v", i, name, got)
+		}
+	}
+
+	_, err = svc.AllParticipants(ctx, review)
+	wantCode(t, err, ez.ENOTAUTHORIZED)
+}

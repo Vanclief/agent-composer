@@ -115,8 +115,8 @@ its area.
   its manager first (ADR 0010: the manager or the owner accepts); it waits on
   the owner when the owner is the manager or the manager never joined
   messaging (no participant of that name in `GET /api/msg/participants?all=1`;
-  the signed-in person counts as joined; until that list loads, or on a
-  server without `all=1`, the manager is taken as joined). An open question
+  the signed-in person counts as joined; until that list loads, or when it
+  fails, the manager is taken as joined). An open question
   (`kind: question`) in `#<task>` waits on whom it is `for` (the questions
   query with `for=<me>`). A `crashed`/`failed` sandbox of a task not `done`
   waits on the owner. All in `src/features/tasks/attention.tsx`
@@ -223,8 +223,8 @@ its area.
   `{questions}`, each a message with `answered_by` (empty while open) and
   `answered_at` (`null` while open); typed ahead of the Go side.
   `msg.allParticipants()` is `GET /api/msg/participants?all=1`: everyone who
-  ever joined, any channel; typed ahead of the Go side (which still requires
-  `channel`), hook `useAllParticipants()`.
+  ever joined, any channel, humans only (403 for a task; `AllParticipants`
+  in `messaging/service.go`), hook `useAllParticipants()`.
 - `@/api/defaults`: `GET /api/defaults` → `{ harness, model, owner, system }`
   (ADR 0009 defaults, the server's owner and reserved participant), typed
   ahead of the Go side (another task builds it on the same path); hook
