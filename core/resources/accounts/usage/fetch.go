@@ -85,6 +85,13 @@ const (
 	DefaultUserAgent = "agc"
 	// ErrTokenRejected is UsageView.Error when the API answers 401.
 	ErrTokenRejected = "token rejected: sign in again"
+	// ErrInferenceOnly is UsageView.Error for an account with no login
+	// whose token the API refuses for usage or profile: a token from
+	// `claude setup-token` is inference-only (ADR 0018 "Sign-in").
+	ErrInferenceOnly = "inference-only token: sign in for usage"
+	// ErrSignInExpired is UsageView.Error when the login's refresh token
+	// is refused or gone.
+	ErrSignInExpired = "sign-in expired: sign in again"
 
 	maxBody        = 1 << 20
 	requestTimeout = 10 * time.Second
@@ -113,6 +120,12 @@ type UsageView struct {
 type Result struct {
 	Email string
 	Usage UsageView
+
+	// usageStatus and profileStatus are each endpoint's HTTP status, 0
+	// when it was not reached; the poller maps them for an account with
+	// no login.
+	usageStatus   int
+	profileStatus int
 }
 
 // Fetcher reads the usage and profile endpoints. The zero value uses
@@ -144,14 +157,16 @@ func (f Fetcher) Fetch(ctx context.Context, client *http.Client, token string) (
 	result := Result{}
 
 	var body usageBody
-	why := f.get(ctx, client, token, UsagePath, &body)
+	why, status := f.get(ctx, client, token, UsagePath, &body)
+	result.usageStatus = status
 	if why != "" {
 		whys = append(whys, why)
 	}
 	result.Usage.Windows = body.windows()
 
 	var profile profileBody
-	why = f.get(ctx, client, token, ProfilePath, &profile)
+	why, status = f.get(ctx, client, token, ProfilePath, &profile)
+	result.profileStatus = status
 	if why != "" {
 		whys = append(whys, why)
 	}
@@ -170,9 +185,10 @@ func (f Fetcher) Fetch(ctx context.Context, client *http.Client, token string) (
 	return result, nil
 }
 
-// get GETs path into out and returns "" or a short why. The why never
-// carries the token or the transport's error text.
-func (f Fetcher) get(ctx context.Context, client *http.Client, token, path string, out interface{}) string {
+// get GETs path into out and returns "" or a short why, and the HTTP
+// status (0 when there was no answer). The why never carries the token or
+// the transport's error text.
+func (f Fetcher) get(ctx context.Context, client *http.Client, token, path string, out interface{}) (string, int) {
 	name := strings.TrimPrefix(path, "/api/oauth/")
 
 	base := f.BaseURL
@@ -190,7 +206,7 @@ func (f Fetcher) get(ctx context.Context, client *http.Client, token, path strin
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, strings.TrimSuffix(base, "/")+path, nil)
 	if err != nil {
-		return name + ": bad base URL"
+		return name + ": bad base URL", 0
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -202,31 +218,31 @@ func (f Fetcher) get(ctx context.Context, client *http.Client, token, path strin
 	resp, err := client.Do(req)
 	if err != nil {
 		if reqCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
-			return name + ": timed out"
+			return name + ": timed out", 0
 		}
-		return name + ": unreachable"
+		return name + ": unreachable", 0
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return ErrTokenRejected
+		return ErrTokenRejected, resp.StatusCode
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Sprintf("%s: HTTP %d", name, resp.StatusCode)
+		return fmt.Sprintf("%s: HTTP %d", name, resp.StatusCode), resp.StatusCode
 	}
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
 	if err != nil {
-		return name + ": reading the response failed"
+		return name + ": reading the response failed", resp.StatusCode
 	}
 
 	err = json.Unmarshal(data, out)
 	if err != nil {
-		return name + ": unexpected response"
+		return name + ": unexpected response", resp.StatusCode
 	}
 
-	return ""
+	return "", resp.StatusCode
 }
 
 // joinWhys joins distinct whys, so a 401 on both endpoints reads once.
