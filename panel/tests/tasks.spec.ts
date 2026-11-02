@@ -287,7 +287,7 @@ test('the messages tab opens with agc addressing the manager and owner, then the
     '@agent-composer-da (manager), @franco (owner): task `review-42` is open: Review 42.\n' +
       'Agent: claude_code (claude-opus-5-5) on sandbox `review-42`, starting.\n' +
       "The agent's instructions are the next message. Reply here to talk to it; " +
-      'it escalates to #franco when only the owner can decide. Post /done to close the task.',
+      'it escalates to #franco when only the owner can decide. Post /accept to accept the task, /reject <why> to send it back.',
   )
   await expect(messages.nth(1)).toContainText(task.sandboxes[0].instructions)
   await expect(page.getByTestId('message-list').getByTestId('author').first()).toHaveText('@agc')

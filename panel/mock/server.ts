@@ -587,7 +587,7 @@ function createState() {
       '@agent-composer-da (manager), @franco (owner): task `review-42` is open: Review 42.\n' +
         'Agent: claude_code (claude-opus-5-5) on sandbox `review-42`, starting.\n' +
         "The agent's instructions are the next message. Reply here to talk to it; " +
-        'it escalates to #franco when only the owner can decide. Post /done to close the task.',
+        'it escalates to #franco when only the owner can decide. Post /accept to accept the task, /reject <why> to send it back.',
     ).created_at = opened
     post('#review-42', agc, sandboxes.get('review-42')?.instructions ?? '').created_at = opened
     const first = post('#review-42', reviewer, 'Cloned the repo and ran the tests. 3 failures in workflow/.')
