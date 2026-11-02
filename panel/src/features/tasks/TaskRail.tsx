@@ -1,21 +1,24 @@
 // The task page's facts, top to bottom: the actions, status and title, the
-// name and channel, who works on it, delivered and accepted lines, the
-// criteria it is accepted on (ADR 0010), the brief, what the agent received
-// (ADR 0009 item 6) and the delivery summary. A rail on the right on wide
-// screens, a card above the box on narrow ones.
+// name and channel, delivered and accepted lines, then in review or done
+// the Review section (each criterion against the agent's report, changes,
+// checks, left out, needs you) and the delivery summary; who works on it,
+// the criteria it is accepted on while not delivered (ADR 0010), the brief,
+// what the agent received (ADR 0009 item 6) and, before delivery, the
+// summary. A rail on the right on wide screens, a card above the box on
+// narrow ones.
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronDown, ChevronRight, CircleCheck, Copy } from 'lucide-react'
 
-import type { TaskView } from '@/api/tasks'
+import type { Met, Report, TaskView } from '@/api/tasks'
 import { Avatar } from '@/components/avatar'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
-import { StatusPill } from '@/components/status-pill'
+import { Led, StatusPill } from '@/components/status-pill'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-import { ActChip, useAttention } from './attention'
+import { ActChip, AttentionMark, useAttention } from './attention'
 import { ago, assignedToHarness } from './format'
 import { TaskActions, type useTaskActions } from './TaskActions'
 import { ForChip } from './TaskChips'
@@ -33,6 +36,9 @@ export function TaskRail({ task, actions, error, onDeleted, className }: TaskRai
   // the top. Wide screens always show them.
   const [details, setDetails] = useState(false)
   const Chevron = details ? ChevronDown : ChevronRight
+  // In review or done the Review section takes the criteria, and the
+  // summary sits under it, out of the narrow fold.
+  const reviewing = task.status === 'review' || task.status === 'done'
   return (
     <aside data-testid="task-header" aria-label="Task facts" className={cn('flex flex-col gap-4 text-sm', className)}>
       <TaskActions task={task} actions={actions} onDeleted={onDeleted} className="justify-end" />
@@ -46,8 +52,10 @@ export function TaskRail({ task, actions, error, onDeleted, className }: TaskRai
         </p>
         <Waiting task={task} />
       </div>
-      <Who task={task} />
       <Moments task={task} />
+      <Review task={task} />
+      {reviewing && <Delivery task={task} />}
+      <Who task={task} />
       <ErrorText error={error} />
       <Button
         variant="ghost"
@@ -56,13 +64,13 @@ export function TaskRail({ task, actions, error, onDeleted, className }: TaskRai
         onClick={() => setDetails(!details)}
         className="self-start px-1 text-muted-foreground min-[1200px]:hidden"
       >
-        <Chevron /> {details ? 'Hide details' : 'Details: criteria, brief, summary'}
+        <Chevron /> {details ? 'Hide details' : reviewing ? 'Details: brief' : 'Details: criteria, brief, summary'}
       </Button>
       <div className={cn('flex-col gap-4 min-[1200px]:flex', details ? 'flex' : 'hidden')}>
-        <Criteria task={task} />
+        {!reviewing && <Criteria task={task} />}
         <Brief task={task} />
         <Received task={task} />
-        <Delivery task={task} />
+        {!reviewing && <Delivery task={task} />}
       </div>
     </aside>
   )
@@ -254,6 +262,178 @@ function Criteria({ task }: { task: TaskView }) {
       </ul>
       <p className="text-xs text-muted-foreground">agc does not check these; the manager or owner does</p>
     </Section>
+  )
+}
+
+// What the reviewer accepts (review or done): each criterion with the
+// agent's answer as a light, then what changed, the checks it ran, what it
+// left out and what waits on the reviewer. With no report every criterion
+// keeps an empty slot where the light goes: the agent did not answer it.
+function Review({ task }: { task: TaskView }) {
+  if (task.status !== 'review' && task.status !== 'done') {
+    return null
+  }
+  const report = task.report
+  if (task.accept.length === 0 && !report) {
+    return null
+  }
+  return (
+    <Section label="Review" icon={conceptIcons.criteria} color={conceptColors.criteria.text}>
+      {task.accept.length > 0 && (
+        <ul data-testid="criteria" aria-label="Criteria" className="flex flex-col gap-2">
+          {task.accept.map((criterion, i) => {
+            const answer = report?.criteria[i]
+            return (
+              <li key={i} data-testid="criterion" data-met={answer?.met} className="flex items-start gap-2">
+                <Light met={answer?.met} />
+                <div className="min-w-0">
+                  <p className="break-words">{criterion}</p>
+                  {answer?.note && <p className="text-xs text-muted-foreground">{answer.note}</p>}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      {report && <ReportParts task={task} report={report} />}
+    </Section>
+  )
+}
+
+function ReportParts({ task, report }: { task: TaskView; report: Report }) {
+  return (
+    <>
+      {report.changes && <Changes task={task} changes={report.changes} />}
+      {report.checks.length > 0 && (
+        <Part label="Checks">
+          {report.checks.map((check, i) => (
+            <li key={i} data-testid="check" data-passed={check.passed} className="flex items-start gap-2">
+              <Light met={check.passed ? 'yes' : 'no'} />
+              <div className="min-w-0">
+                <p className="font-mono text-xs leading-5 break-words">{check.name}</p>
+                {check.note && <p className="text-xs text-muted-foreground">{check.note}</p>}
+              </div>
+            </li>
+          ))}
+        </Part>
+      )}
+      {report.left_out.length > 0 && (
+        <Part label="Left out">
+          {report.left_out.map((item, i) => (
+            <li key={i} data-testid="left-out" className="min-w-0 pl-5">
+              <p className="break-words">{item.what}</p>
+              {item.why && <p className="text-xs text-muted-foreground">{item.why}</p>}
+            </li>
+          ))}
+        </Part>
+      )}
+      {report.needs.length > 0 && (
+        <Part label="Needs you">
+          {report.needs.map((need, i) => (
+            <li key={i} data-testid="need" className="relative pl-5 break-words">
+              <AttentionMark />
+              {need}
+            </li>
+          ))}
+        </Part>
+      )}
+    </>
+  )
+}
+
+// A labelled list inside the Review section.
+function Part({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5 pt-1">
+      <h4 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{label}</h4>
+      <ul aria-label={label} className="flex flex-col gap-1.5">
+        {children}
+      </ul>
+    </div>
+  )
+}
+
+// The branch and short sha as mono chips; the branch opens the GitHub
+// compare against the sandbox's ref when the repo is known.
+function Changes({ task, changes }: { task: TaskView; changes: NonNullable<Report['changes']> }) {
+  const spec = task.sandboxes[0]?.spec
+  const href = compareURL(spec?.repo, spec?.ref, changes.branch)
+  const chip =
+    'inline-flex max-w-full items-center truncate rounded-md border border-border px-1.5 font-mono text-xs leading-5'
+  return (
+    <Part label="Changes">
+      <li data-testid="changes" className="flex flex-wrap items-center gap-1.5">
+        {href ? (
+          <a
+            data-testid="changes-branch"
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            title={`Compare ${spec?.ref}...${changes.branch} on GitHub`}
+            className={cn(chip, 'text-sky-700 hover:bg-sky-500/10 dark:text-sky-400')}
+          >
+            {changes.branch}
+          </a>
+        ) : (
+          <span data-testid="changes-branch" title="Branch" className={chip}>
+            {changes.branch}
+          </span>
+        )}
+        <span data-testid="changes-sha" title={changes.sha} className={cn(chip, 'text-muted-foreground')}>
+          {changes.sha.slice(0, 7)}
+        </span>
+        {changes.files !== undefined && (
+          <span data-testid="changes-files" className="text-xs text-muted-foreground">
+            {changes.files} {changes.files === 1 ? 'file' : 'files'}
+          </span>
+        )}
+      </li>
+    </Part>
+  )
+}
+
+// https://github.com/<owner>/<repo>/compare/<ref>...<branch>, or undefined
+// when the repo is not an owner/repo path on GitHub or there is no ref.
+function compareURL(repo: string | undefined, ref: string | undefined, branch: string) {
+  if (!repo || !ref || !branch) {
+    return undefined
+  }
+  let path = repo
+    .trim()
+    .replace(/^https?:\/\//, '')
+    .replace(/^git@github\.com:/, 'github.com/')
+  path = path
+    .replace(/^github\.com\//, '')
+    .replace(/\.git$/, '')
+    .replace(/\/+$/, '')
+  const parts = path.split('/')
+  if (parts.length !== 2 || parts[0].includes('.')) {
+    return undefined
+  }
+  return `https://github.com/${path}/compare/${ref}...${branch}`
+}
+
+// The light of one answer, the LEDs of the status pill held steady: yes
+// green as done, no red as failed, partly yellow as review. No answer: an
+// empty dashed slot where the light goes (rtsdesign rule 4).
+function Light({ met }: { met?: Met }) {
+  const box = 'mt-1 grid size-3 shrink-0 place-items-center'
+  if (met === 'yes' || met === 'no' || met === 'partly') {
+    const color = met === 'yes' ? 'green' : met === 'no' ? 'red' : 'yellow'
+    const title = met === 'yes' ? 'met' : met === 'no' ? 'not met' : 'partly met'
+    return (
+      <span data-light={met} title={title} className={box}>
+        <Led color={color} />
+      </span>
+    )
+  }
+  return (
+    <span data-light="none" title="not answered" className={box}>
+      <span
+        data-testid="empty-light"
+        className="block size-2.5 rounded-full border border-dashed border-zinc-400 dark:border-zinc-600"
+      />
+    </span>
   )
 }
 

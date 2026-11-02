@@ -183,3 +183,11 @@ export function StatusLegend({ className }: { className?: string }) {
     </span>
   )
 }
+
+// A steady LED in the status pill's look, for facts that are not a status:
+// green as done, yellow as review, red as failed, never blinking (a
+// blinking LED is a live status). The task rail's Review section uses it.
+export function Led({ color, className }: { color: 'green' | 'yellow' | 'red'; className?: string }) {
+  const on = color === 'green' ? GREEN_ON : color === 'yellow' ? YELLOW_ON : RED_ON
+  return <span data-led={color} className={cn(dot, on, className)} />
+}
