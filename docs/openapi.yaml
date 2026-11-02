@@ -664,7 +664,9 @@ paths:
         review. A task can be delivered more than once; the last summary and report win, and a
         delivery without a report stores null. Inside a sandbox `agc task deliver` reaches the
         same call over the sandbox's messaging socket, which passes `report` through unchanged.
-        400 when the report breaks a rule, including a `criteria` count that does not match the
+        `files` carries the PNG of each of the report's `shots` under its label; agc keeps them
+        under its home, served by GET /tasks/{id}/shots/{label}.png, and a delivery without
+        shots removes the earlier ones. 400 when the report breaks a rule, including a `criteria` count that does not match the
         task's `accept`; 409 when the task is done.
       parameters:
         - $ref: '#/components/parameters/TaskIdParam'
@@ -686,6 +688,37 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
         '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /tasks/{id}/shots/{label}.png:
+    get:
+      tags: [Tasks]
+      operationId: getTaskShot
+      summary: Get a delivered screenshot
+      description: >
+        The PNG a delivery sent for the report's shot `label`, kept on the agc host under
+        `<agc home>/shots/<task>/<label>.png` (ADR 0010, "Delivery report"). Each delivery
+        replaces the task's shots; a reject or an accept keeps them. 404 when the task or the
+        shot is absent.
+      parameters:
+        - $ref: '#/components/parameters/TaskIdParam'
+        - name: label
+          in: path
+          required: true
+          description: The shot's label, a slug such as `before` or `after`.
+          schema:
+            type: string
+            pattern: '^[a-z][a-z0-9-]{0,62}$'
+      responses:
+        '200':
+          description: The screenshot.
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '404':
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
@@ -2995,6 +3028,15 @@ components:
           description: >
             Optional. In a request any list and `changes` may be left out; they read as empty
             and absent. 400 when it breaks a rule of ADR 0010 "Delivery report".
+        files:
+          type: object
+          maxProperties: 8
+          description: >
+            The PNG of each of the report's `shots`, base64, under the shot's label: one per
+            shot and no other, each a PNG of at most 2 MB (2097152 bytes); 400 otherwise.
+          additionalProperties:
+            type: string
+            format: byte
       required:
         - summary
     DeliveryReport:
@@ -3034,12 +3076,40 @@ components:
           items:
             type: string
             minLength: 1
+        shots:
+          type: array
+          maxItems: 8
+          description: >
+            Screenshots of what the change looks like, `before` and `after` for a change a person
+            sees; absent when the delivery has none. Labels are unique.
+          items:
+            $ref: '#/components/schemas/DeliveryShot'
       required:
         - criteria
         - changes
         - checks
         - left_out
         - needs
+    DeliveryShot:
+      type: object
+      properties:
+        label:
+          type: string
+          pattern: '^[a-z][a-z0-9-]{0,62}$'
+          description: A slug, `before` or `after` for a UI change.
+        file:
+          type: string
+          description: >
+            In a request, the PNG's path where the agent took it (ends in .png); on a task,
+            `<label>.png`, the name agc keeps it under.
+        url:
+          type: string
+          description: >
+            Set by agc on a task, never sent: where the shot is served, under `AGC_PUBLIC_URL`
+            when agc has one, else the root-relative path /api/tasks/<task>/shots/<label>.png.
+      required:
+        - label
+        - file
     DeliveryCriterion:
       type: object
       properties:

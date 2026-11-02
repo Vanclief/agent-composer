@@ -283,9 +283,29 @@ export interface paths {
         put?: never;
         /**
          * Deliver a task for review
-         * @description Sets `delivered_at`, `summary` and `report` and posts "Delivered: <summary>" in #<task> as agc, followed by the report rendered as markdown when there is one (ADR 0010 item 2, "Delivery report"). The sandboxes are left as they are; the agent keeps waiting for review. A task can be delivered more than once; the last summary and report win, and a delivery without a report stores null. Inside a sandbox `agc task deliver` reaches the same call over the sandbox's messaging socket, which passes `report` through unchanged. 400 when the report breaks a rule, including a `criteria` count that does not match the task's `accept`; 409 when the task is done.
+         * @description Sets `delivered_at`, `summary` and `report` and posts "Delivered: <summary>" in #<task> as agc, followed by the report rendered as markdown when there is one (ADR 0010 item 2, "Delivery report"). The sandboxes are left as they are; the agent keeps waiting for review. A task can be delivered more than once; the last summary and report win, and a delivery without a report stores null. Inside a sandbox `agc task deliver` reaches the same call over the sandbox's messaging socket, which passes `report` through unchanged. `files` carries the PNG of each of the report's `shots` under its label; agc keeps them under its home, served by GET /tasks/{id}/shots/{label}.png, and a delivery without shots removes the earlier ones. 400 when the report breaks a rule, including a `criteria` count that does not match the task's `accept`; 409 when the task is done.
          */
         post: operations["deliverTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/shots/{label}.png": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a delivered screenshot
+         * @description The PNG a delivery sent for the report's shot `label`, kept on the agc host under `<agc home>/shots/<task>/<label>.png` (ADR 0010, "Delivery report"). Each delivery replaces the task's shots; a reject or an accept keeps them. 404 when the task or the shot is absent.
+         */
+        get: operations["getTaskShot"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1533,6 +1553,10 @@ export interface components {
             summary: string;
             /** @description Optional. In a request any list and `changes` may be left out; they read as empty and absent. 400 when it breaks a rule of ADR 0010 "Delivery report". */
             report?: components["schemas"]["DeliveryReport"];
+            /** @description The PNG of each of the report's `shots`, base64, under the shot's label: one per shot and no other, each a PNG of at most 2 MB (2097152 bytes); 400 otherwise. */
+            files?: {
+                [key: string]: string;
+            };
         };
         /** @description What a delivery says against the task's criteria, what the reviewer judges (ADR 0010, "Delivery report"). Strings are trimmed; every list holds at most 50 entries. On a task the lists are always arrays. */
         DeliveryReport: {
@@ -1544,6 +1568,16 @@ export interface components {
             left_out: components["schemas"]["DeliveryLeftOut"][];
             /** @description What the agent needs the reviewer to decide; non-empty strings. */
             needs: string[];
+            /** @description Screenshots of what the change looks like, `before` and `after` for a change a person sees; absent when the delivery has none. Labels are unique. */
+            shots?: components["schemas"]["DeliveryShot"][];
+        };
+        DeliveryShot: {
+            /** @description A slug, `before` or `after` for a UI change. */
+            label: string;
+            /** @description In a request, the PNG's path where the agent took it (ends in .png); on a task, `<label>.png`, the name agc keeps it under. */
+            file: string;
+            /** @description Set by agc on a task, never sent: where the shot is served, under `AGC_PUBLIC_URL` when agc has one, else the root-relative path /api/tasks/<task>/shots/<label>.png. */
+            url?: string;
         };
         DeliveryCriterion: {
             /** @enum {string} */
@@ -3194,6 +3228,33 @@ export interface operations {
             400: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    getTaskShot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Task UUID or task name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["TaskIdParam"];
+                /** @description The shot's label, a slug such as `before` or `after`. */
+                label: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The screenshot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                };
+            };
+            404: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };
     };
