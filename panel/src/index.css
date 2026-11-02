@@ -237,7 +237,7 @@
   border-left-color: var(--eva-red);
 }
 /* A dead row wears hazard stripes along the top. */
-.dark ul[aria-label='Tasks'] > li[data-tier='attention']:not([data-attention])::before {
+.dark ul[aria-label='Tasks'] > li[data-tier='attention']:not([data-attention])::after {
   content: '';
   position: absolute;
   inset: 0 0 auto 0;
@@ -327,4 +327,150 @@
   background: var(--eva);
   box-shadow: 0 0 6px 1px var(--eva-dim);
   border-radius: 0;
+}
+
+/* Instrument layer: the display behind, the frame tabs, indexes and corner
+   marks that make a list read as a panel. */
+.dark body {
+  background-color: var(--background);
+  background-image:
+    linear-gradient(oklch(0.74 0.19 48 / 6%) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.74 0.19 48 / 6%) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.dark aside,
+.dark main > header {
+  background-color: var(--sidebar);
+}
+/* The top bar ends in a ruler: a line with a tick every 24px. */
+.dark main > header {
+  position: relative;
+  border-bottom: 1px solid var(--eva-dim);
+}
+.dark main > header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 5px;
+  background: repeating-linear-gradient(90deg, var(--eva-dim) 0 1px, transparent 1px 24px);
+}
+/* The page title is a filled tab in the frame. */
+.dark h1[data-testid='page-title'] {
+  background: var(--eva);
+  color: oklch(0.1 0 0);
+  padding: 2px 12px 1px;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+.dark h1[data-testid='page-title'] > * {
+  color: oklch(0.1 0 0 / 65%);
+}
+/* The task list is one framed panel; rows are its lines, indexed. */
+.dark ul[aria-label='Tasks'] {
+  counter-reset: row;
+  gap: 4px;
+}
+.dark ul[aria-label='Tasks'] > li {
+  padding-left: 48px;
+  counter-increment: row;
+}
+.dark ul[aria-label='Tasks'] > li::before {
+  content: counter(row, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 32px;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  color: var(--eva);
+  border-right: 1px solid var(--eva-dim);
+  background: oklch(0.74 0.19 48 / 8%);
+}
+.dark ul[aria-label='Tasks'] > li[data-tier='off']::before {
+  color: var(--muted-foreground);
+  background: transparent;
+}
+/* A corner mark on every row's top right. */
+.dark ul[aria-label='Tasks'] > li > div:first-of-type::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 10px;
+  height: 10px;
+  border-top: 2px solid var(--eva);
+  border-right: 2px solid var(--eva);
+}
+.dark ul[aria-label='Tasks'] > li[data-tier='off'] > div:first-of-type::after {
+  border-color: var(--eva-dim);
+}
+/* Alive statuses read as filled tabs; the rest stay outlined. */
+.dark span[data-status][data-tier='lit'] {
+  background: oklch(0.74 0.19 48 / 12%);
+}
+/* Counts beside the legend: telemetry. */
+.dark [data-testid='status-counts'] {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  color: var(--muted-foreground);
+}
+.dark [data-testid='status-counts'] b {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+/* The sidebar as an index: areas numbered, pages hanging off a rail. */
+.dark nav[aria-label='Main'] {
+  counter-reset: area;
+  gap: 10px;
+}
+.dark nav[aria-label='Main'] button[data-testid^='area-header-'] {
+  counter-increment: area;
+}
+.dark nav[aria-label='Main'] button[data-testid^='area-header-']::before {
+  content: counter(area, decimal-leading-zero);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
+  margin-right: 2px;
+}
+.dark nav[aria-label='Main'] button[data-testid^='area-header-'] > svg:first-of-type {
+  display: none;
+}
+.dark nav[aria-label='Main'] button[data-testid^='area-header-'] + ul {
+  margin-left: 10px;
+  padding-left: 8px;
+  border-left: 1px solid var(--eva-dim);
+}
+.dark nav[aria-label='Main'] button[data-testid^='area-header-'] + ul a[aria-current='page'] {
+  background: oklch(0.74 0.19 48 / 12%);
+}
+/* The list's header is a strip with its own ruler. */
+.dark div:has(> ul[aria-label='Tasks']) > div:first-child {
+  position: relative;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--eva-dim);
+}
+.dark div:has(> ul[aria-label='Tasks']) > div:first-child::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, var(--eva-dim) 0 1px, transparent 1px 12px);
+}
+/* The logo block: a filled tab like the title. */
+.dark aside > div:first-child {
+  border-bottom: 1px solid var(--eva-dim);
+  letter-spacing: 0.2em;
 }

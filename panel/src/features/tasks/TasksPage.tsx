@@ -7,10 +7,11 @@ import { useMemo, useState } from 'react'
 import { Plus } from 'lucide-react'
 
 import { useTasks } from '@/api/hooks'
+import type { TaskView } from '@/api/tasks'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
-import { StatusLegend } from '@/components/status-pill'
+import { StatusLegend, StatusPill } from '@/components/status-pill'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CreateTaskDialog } from '@/features/create-task/CreateTaskDialog'
@@ -20,6 +21,28 @@ import { usePageTitle } from '@/shell/page-title'
 import { useAttention } from './attention'
 import { sortTasks } from './format'
 import { TaskRow } from './TaskRow'
+
+// How many tasks carry each status word, in the order the words first
+// appear in the sorted list; the words are the backend's, verbatim.
+function StatusCounts({ tasks }: { tasks: TaskView[] }) {
+  const counts = new Map<string, number>()
+  for (const task of tasks) {
+    counts.set(task.status, (counts.get(task.status) ?? 0) + 1)
+  }
+  if (counts.size === 0) {
+    return null
+  }
+  return (
+    <span data-testid="status-counts" className="mr-auto ml-6 inline-flex items-center gap-4 text-xs text-muted-foreground">
+      {[...counts].map(([status, n]) => (
+        <span key={status} data-status-count={status} className="inline-flex items-center gap-1.5">
+          <StatusPill status={status} className="border-0 px-0" />
+          <b className="font-mono tabular-nums">{String(n).padStart(2, '0')}</b>
+        </span>
+      ))}
+    </span>
+  )
+}
 
 export function TasksPage() {
   usePageTitle('Tasks')
@@ -42,7 +65,8 @@ export function TasksPage() {
           <TaskIcon className={cn('size-4', conceptColors.task.text)} />
           {tasks.data?.length ?? '–'}
         </span>
-        <StatusLegend className="mr-auto ml-4" />
+        <StatusLegend className="ml-4" />
+        <StatusCounts tasks={tasks.data ?? []} />
         <Button onClick={() => setCreating(true)} className={conceptColors.task.solid}>
           <Plus /> New task
         </Button>
