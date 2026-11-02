@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils'
 import { MODES, ModeSwitch, useMode } from './mode'
 import { PageTitleContext } from './page-title'
 import { ThemeToggle } from './theme-toggle'
-import { LiveDot, SoundToggle } from './top-bar'
+import { LiveDot, MeChip, SoundToggle } from './top-bar'
 import { useTaskNotifications } from './notifications'
 
 export function Layout() {
@@ -84,6 +84,7 @@ export function Layout() {
           <div className="ml-auto flex shrink-0 items-center gap-1 pl-4">
             <LiveDot />
             <SoundToggle />
+            <MeChip />
           </div>
         </header>
         <div className="min-h-0 flex-1 overflow-auto">

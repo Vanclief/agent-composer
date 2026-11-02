@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 
 import { useKnowledge } from '@/api/hooks'
 import type { TaskView } from '@/api/tasks'
+import { Avatar } from '@/components/avatar'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { IconChip } from '@/components/icon-chip'
 import { StatusPill } from '@/components/status-pill'
@@ -48,17 +49,43 @@ export function AssigneeChip({ task }: { task: TaskView }) {
 // ADR 0009: the manager created the task and runs it day to day (an agent
 // or a person); the owner is the human it answers to. agc addresses both
 // when the task opens.
-export function ManagerChip({ task }: { task: TaskView }) {
-  return <PersonChip role="manager" name={task.manager} />
+export function ManagerChip({ task, avatar }: { task: TaskView; avatar?: boolean }) {
+  // The manager may be an agent; it is shown as human only when it is the
+  // owner, who always is one.
+  return <PersonChip role="manager" name={task.manager} avatar={avatar} human={task.manager === task.owner} />
 }
 
-export function OwnerChip({ task }: { task: TaskView }) {
-  return <PersonChip role="owner" name={task.owner} />
+export function OwnerChip({ task, avatar }: { task: TaskView; avatar?: boolean }) {
+  return <PersonChip role="owner" name={task.owner} avatar={avatar} human />
 }
 
-function PersonChip({ role, name }: { role: 'manager' | 'owner'; name: string }) {
+// avatar: the task header's look, an xs identicon before the name; the
+// list keeps the plain chip.
+function PersonChip({
+  role,
+  name,
+  avatar,
+  human,
+}: {
+  role: 'manager' | 'owner'
+  name: string
+  avatar?: boolean
+  human: boolean
+}) {
   if (!name) {
     return null
+  }
+  if (avatar) {
+    return (
+      <span
+        data-testid={role}
+        title={`${role} ${name}`}
+        className="inline-flex items-center gap-1 rounded-md border border-zinc-200 py-0.5 pr-1.5 pl-0.5 font-mono text-xs text-zinc-700 dark:border-zinc-800 dark:text-zinc-300"
+      >
+        <Avatar name={name} size="xs" human={human} />
+        <span className="truncate">@{name}</span>
+      </span>
+    )
   }
   return (
     <span data-testid={role} className="inline-flex">

@@ -95,6 +95,9 @@ type Participant = {
   human: boolean
   joined_at: string
   left_at?: string
+  // Presence, computed when listed (presenceOf); not stored.
+  online?: boolean
+  last_seen_at?: string | null
 }
 
 type Message = {
@@ -985,6 +988,25 @@ function checkChannel(channel: string) {
   }
 }
 
+// Presence as the backend will send it: agc is always online; an agent is
+// online while its task has a running sandbox; a human while someone holds
+// the name, and franco always (seeded as online). last_seen_at is the
+// participant's last message, else when it left, else when it joined.
+function presenceOf(state: State, p: Participant) {
+  let online: boolean
+  if (p.name === 'agc') {
+    online = true
+  } else if (p.human) {
+    online = p.name === 'franco' || [...state.participants.values()].some((q) => q.name === p.name && !q.left_at)
+  } else {
+    const task = state.findTask(p.task)
+    online = task !== undefined && state.sandboxesOf(task).some((b) => b.status === 'running')
+  }
+  const last = state.messages.filter((m) => m.participant_id === p.id).at(-1)
+  const last_seen_at: string | null = last?.created_at ?? p.left_at ?? p.joined_at ?? null
+  return { online, last_seen_at }
+}
+
 async function msgAPI(state: State, method: string, verb: string, url: URL, req: IncomingMessage) {
   if (method === 'GET' && verb === 'channels') {
     const names = new Set<string>()
@@ -1044,6 +1066,7 @@ async function msgAPI(state: State, method: string, verb: string, url: URL, req:
       .map((id) => state.participants.get(id))
       .filter((p): p is Participant => p !== undefined)
       .sort((a, b) => Number(Boolean(a.left_at)) - Number(Boolean(b.left_at)) || a.name.localeCompare(b.name))
+      .map((p) => ({ ...p, ...presenceOf(state, p) }))
     return { participants }
   }
 

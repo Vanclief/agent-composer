@@ -9,15 +9,15 @@ the panel stays conflict-free.
 
 ## Who owns what
 
-| Path                                                                                                                                                             | Owner               |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| `src/features/tasks/` (`TasksPage`, `TaskPage`, `BriefTab`, `ComputeTab`) + `tests/tasks.spec.ts`                                                                | tasks feature       |
-| `src/features/create-task/` (`CreateTaskDialog`) + `tests/create-task.spec.ts`                                                                                   | create-task feature |
-| `src/features/compute/` (`ComputePage`, `SandboxPage`)                                                                                                           | compute feature     |
-| `src/features/terminals/` (`TerminalsTab`, `TerminalPane`, mounted by `SandboxPage`) + `tests/terminals.spec.ts`                                                 | terminals feature   |
-| `src/features/messages/` (`MessagesTab`, `MessagesPage`, `ChannelRows`, unread, message toasts) + `tests/messages.spec.ts`, `tests/talk.spec.ts`                 | messages feature    |
-| `src/features/agents/` (`AgentsPage`, `AgentPage`, the New agent and Keep… dialogs) + `tests/agents.spec.ts`                                                     | agents feature      |
-| everything else: `src/api/`, `src/components/`, `src/shell/`, `src/App.tsx`, `src/main.tsx`, `mock/`, `scripts/`, `tests/shell.spec.ts`, configs, `package.json` | foundation (shared) |
+| Path                                                                                                                                                                                       | Owner               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
+| `src/features/tasks/` (`TasksPage`, `TaskPage`, `BriefTab`, `ComputeTab`) + `tests/tasks.spec.ts`                                                                                          | tasks feature       |
+| `src/features/create-task/` (`CreateTaskDialog`) + `tests/create-task.spec.ts`                                                                                                             | create-task feature |
+| `src/features/compute/` (`ComputePage`, `SandboxPage`)                                                                                                                                     | compute feature     |
+| `src/features/terminals/` (`TerminalsTab`, `TerminalPane`, mounted by `SandboxPage`) + `tests/terminals.spec.ts`                                                                           | terminals feature   |
+| `src/features/messages/` (`MessagesTab`, `MessagesPage`, `ChannelRows`, unread, message toasts) + `tests/messages.spec.ts`, `tests/talk.spec.ts`                                           | messages feature    |
+| `src/features/agents/` (`AgentsPage`, `AgentPage`, the New agent and Keep… dialogs) + `tests/agents.spec.ts`                                                                               | agents feature      |
+| everything else: `src/api/`, `src/components/`, `src/shell/`, `src/App.tsx`, `src/main.tsx`, `mock/`, `scripts/`, `tests/shell.spec.ts`, `tests/presence.spec.ts`, configs, `package.json` | foundation (shared) |
 
 - The files in `src/features/` are placeholders. Replace them freely, but keep
   the exported component names and props: `App.tsx` and `TasksPage` import
@@ -96,6 +96,18 @@ Each page sets the top bar title with `usePageTitle('…')` from
   never rephrased, and never only as a toast.
 - `<IconChip icon={conceptIcons.memory}>4 GB</IconChip>` for icon + mono
   values, paths and ids.
+- **Avatars:** `<Avatar name size human? presence? />` (`@/components/avatar`,
+  sizes `xs` 16, `sm` 20, `md` 28, `lg` 40) is a deterministic identicon
+  hashed from the name (FNV-1a → seeded shapes in the concept hues, never
+  the status hues; `data-seed`, `data-shapes`), so a name looks the same
+  everywhere. A thin ring says who: human pink, agent or task violet; `agc`
+  gets a neutral grey mark (`data-kind` `human`/`agent`/`agc`). With
+  `presence` set, a `<PresenceDot online />` (`data-testid="presence"`,
+  `data-online`, `data-tier`) sits at its bottom-right: a filled emerald
+  dot (tier `lit`) or a hollow grey ring (tier `off`). Used in the channel
+  header, the Agents list and page (dot lit only when `awake`; the word
+  stays in its pill), the task header's manager and owner (xs) and the top
+  bar's `@me` (`data-testid="me"`).
 - Compact zinc look, dark by default (light via the sidebar toggle). Use the
   shadcn components in `@/components/ui` (button, card, badge, dialog,
   alert-dialog, input, textarea, label, tabs, tooltip, toggle, toggle-group,
@@ -242,6 +254,15 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   `/messages/<channel>`, and the chime (speaker toggle applies). Only for
   messages in `#<me>` or mentioning `@<me>`; never for my own messages or
   for the channel I am looking at. Everything else only bumps badges.
+- **Presence** (`src/features/messages/presence.ts`): participants carry
+  `online` and `last_seen_at` (hand-typed in `@/api/msg`; the backend is
+  adding them). `usePresence(channel)` reads `GET /api/msg/participants`
+  every 15s (and on `message.posted`, which invalidates the same query) and
+  returns name → `{online, last_seen_at}` (a name held twice is online if
+  either is). The channel header (`ChannelView`'s members strip) shows each
+  member as an avatar with its dot and the tooltip `@name · online` or
+  `@name · last seen 3 min ago`. Not yet in the message headers
+  (`MessageList`) or the sidebar rows (`ChannelRows`).
 - **Inbox page:** `/messages/<me>` is the ordinary channel view titled
   "Inbox #<me>", with the line "Your inbox: agents and tasks escalate here"
   (`data-testid="inbox-header"`) and, when empty, an empty slot saying so.
@@ -322,7 +343,11 @@ otherwise). Agent homes are not mock sandboxes, so `/compute/<home>` 404s.
 
 `GET /api/events` streams the live events from the mock's own
 operations (create, boot, stop/start/delete, accept, post, wake, sleep) with the 20s
-heartbeat. `notify` is true on every seeded task except `docs-pass`. Mock
+heartbeat. `notify` is true on every seeded task except `docs-pass`. Participants are listed with presence, computed per request: `agc`
+always online, an agent while its task has a running sandbox (so
+`review-42`'s are online, `flaky-ci`'s offline), a human while someone
+holds the name and `franco` always; `last_seen_at` is the participant's
+last message, else when it left, else when it joined. Mock
 only: `POST /api/msg/join` with a `task` joins as that task's agent (not
 human), so a test can post the closing message `task.done` summarizes.
 
