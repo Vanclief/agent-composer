@@ -12,7 +12,7 @@ Task must be handed the credentials its agents need, and an agent that can
 run arbitrary code must not be able to read or exfiltrate them.
 
 microsandbox offers placeholder secrets: the guest environment variable holds
-a dummy value such as `$MSB_GITHUB_TOKEN`, and the runtime's TLS-intercepting
+a dummy value (the variable name with a fixed prefix; never spelled out here, see rule `no-literal-secret-placeholders`), and the runtime's TLS-intercepting
 proxy swaps in the real value only in requests to an allow-listed host. Any
 other destination is blocked and logged. The 2026-11-01 spike confirmed this
 works for Claude Code on a subscription OAuth token (`api.anthropic.com`), for

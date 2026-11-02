@@ -101,6 +101,10 @@ rules:
       trusted: [claude_code, codex_cli]
       ask: Does the subject put a secret value (a token, password, private key or API key, not a secret's name or a placeholder) into a task spec, a fixture, or a field a REST response returns? Name the file and line if so.
     because: [secrets-are-placeholders-bound-to-hosts]
+  - id: no-literal-secret-placeholders
+    rule: Never spell a microsandbox secret placeholder (`$MSB_` followed by a secret's name) in docs, code, tests or messages; write "the placeholder". The placeholders are deterministic, so a file that spells one kills the session of every sandbox agent that reads it.
+    check: scripts/check-placeholders.sh
+    because: [secrets-are-placeholders-bound-to-hosts, agents-can-exfiltrate-what-they-read]
 
   # Knowledge (ADR 0006). agc rejects evidence whose who names a model.
   - id: evidence-who-is-never-a-model
