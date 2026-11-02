@@ -1098,7 +1098,7 @@ export interface paths {
         };
         /**
          * Stream live events
-         * @description Server-sent events (`text/event-stream`, `Cache-Control: no-cache`) until the client goes away. Each event is `id: <n>` (the event number), `event: <type>` and `data: <json>`; the server sends the comment `: ping` every 20 seconds as a heartbeat. Missed events are never replayed: after a reconnect, refetch. A client that falls too far behind is disconnected. Types and their data: `task.created` (TaskCreatedEvent) when a task is created, after its sandbox, if any, is allocated; `task.done` (TaskDoneEvent) when a task is accepted, the first time only; `sandbox.status` (SandboxStatusEvent) on every status change: allocated (starting), booted, failed, stopped (by POST /sandboxes/{id}/stop or by the task's accept, also right after a boot that finished once the task was accepted), started, and deleted (status `deleted`); `message.posted` (MessagePostedEvent) for every message stored in any channel, agc's included; `schedule.ran` (ScheduleRanEvent) after every tick of a schedule, by the scheduler or POST /schedules/{id}/run, failed ones included (see the schedule's last_error); `agent.state` (AgentStateEvent) on every status change of a persistent agent's home (as its sandbox.status), and when the agent is created, kept, woken for the first time and deleted (state `deleted`).
+         * @description Server-sent events (`text/event-stream`, `Cache-Control: no-cache`) until the client goes away. Each event is `id: <n>` (the event number), `event: <type>` and `data: <json>`; the server sends the comment `: ping` every 20 seconds as a heartbeat. Missed events are never replayed: after a reconnect, refetch. A client that falls too far behind is disconnected. Types and their data: `task.created` (TaskCreatedEvent) when a task is created, after its sandbox, if any, is allocated; `task.done` (TaskDoneEvent) when a task is accepted, the first time only; `sandbox.status` (SandboxStatusEvent) on every status change: allocated (starting), booted, failed, stopped (by POST /sandboxes/{id}/stop or by the task's accept, also right after a boot that finished once the task was accepted), started, and deleted (status `deleted`); `message.posted` (MessagePostedEvent) for every message stored in any channel, agc's included; `schedule.ran` (ScheduleRanEvent) after every tick of a schedule, by the scheduler or POST /schedules/{id}/run, failed ones included (see the schedule's last_error); `agent.state` (AgentStateEvent) on every status change of a persistent agent's home (as its sandbox.status), and when the agent is created, kept, woken for the first time and deleted (state `deleted`); `channel.archived` (ChannelArchivedEvent) when agc rest archives the channel of a task done longer than archive_done ago (ADR 0005 "Archived channels").
          */
         get: operations["streamEvents"];
         put?: never;
@@ -1649,6 +1649,13 @@ export interface components {
         /** @description Data of `agent.state`. */
         AgentStateEvent: {
             agent: components["schemas"]["Agent"];
+        };
+        /** @description Data of `channel.archived`. */
+        ChannelArchivedEvent: {
+            /** @example #fix-login */
+            channel: string;
+            /** Format: date-time */
+            archived_at: string;
         };
         /** @description Data of `schedule.ran`. */
         ScheduleRanEvent: {

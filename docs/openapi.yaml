@@ -1980,7 +1980,9 @@ paths:
         POST /schedules/{id}/run, failed ones included (see the schedule's last_error);
         `agent.state` (AgentStateEvent) on every status change of a persistent agent's home
         (as its sandbox.status), and when the agent is created, kept, woken for the first time
-        and deleted (state `deleted`).
+        and deleted (state `deleted`);
+        `channel.archived` (ChannelArchivedEvent) when agc rest archives the channel of a task
+        done longer than archive_done ago (ADR 0005 "Archived channels").
       responses:
         '200':
           description: The stream.
@@ -1991,7 +1993,7 @@ paths:
                 description: >
                   Frames as described above; each data is one of the event schemas
                   (TaskCreatedEvent, TaskDoneEvent, SandboxStatusEvent, MessagePostedEvent, ScheduleRanEvent,
-                  AgentStateEvent).
+                  AgentStateEvent, ChannelArchivedEvent).
         '500':
           $ref: '#/components/responses/Error'
   /msg/post:
@@ -3278,6 +3280,19 @@ components:
           $ref: '#/components/schemas/Agent'
       required:
         - agent
+    ChannelArchivedEvent:
+      type: object
+      description: Data of `channel.archived`.
+      properties:
+        channel:
+          type: string
+          example: '#fix-login'
+        archived_at:
+          type: string
+          format: date-time
+      required:
+        - channel
+        - archived_at
     ScheduleRanEvent:
       type: object
       description: Data of `schedule.ran`.
