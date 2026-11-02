@@ -1,12 +1,13 @@
 // A question's body in the reviewer's shape (questionShape.ts): the title,
-// then "Changes", "Asks" and "Diff" as labelled rows, a diff link as a
-// "View diff" button, the rest as markdown. Then, for "Accept <task>?" on
-// a task in review that I own, Accept and Reject… posting the channel
-// commands of ADR 0010 (core/resources/tasks/commands.go); once agc has
-// answered, the task's status from the tasks query, verbatim.
-import { useEffect, useState, type KeyboardEvent } from 'react'
+// then "Changes" and "Asks" as labelled rows, "Before" and "After" images
+// side by side, the diff as a small muted "Diff" link after the rows (the
+// owner does not read code, Franco 2026-11-02), the rest as markdown.
+// Then, for "Accept <task>?" on a task in review that I own, Accept and
+// Send back… posting the channel commands of ADR 0010
+// (core/resources/tasks/commands.go); once agc has answered, the task's
+// status from the tasks query, verbatim.
+import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { ExternalLink } from 'lucide-react'
 
 import { queryKeys, useTasks } from '@/api/hooks'
 import type { Message } from '@/api/msg'
@@ -19,48 +20,97 @@ import { cn } from '@/lib/utils'
 
 import { useChannel } from './context'
 import { MarkdownText, MessageBody } from './MessageBody'
-import type { QuestionShape } from './questionShape'
+import type { QuestionPart, QuestionShape } from './questionShape'
 import { useSend } from './send'
 
 // One step larger than a message (text-sm), with room between lines.
 const BODY = 'text-base leading-7'
 
-function ViewDiff({ url }: { url: string }) {
+const LABEL = 'w-16 shrink-0 text-[11px] font-medium tracking-wide text-muted-foreground uppercase'
+
+function DiffLink({ url }: { url: string }) {
   return (
-    <Button asChild size="sm" variant="outline" className="w-fit">
-      <a href={url} target="_blank" rel="noreferrer" data-testid="view-diff" title={url}>
-        <ExternalLink aria-hidden /> View diff
-      </a>
-    </Button>
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      data-testid="diff-link"
+      title={url}
+      className="w-fit text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+    >
+      Diff
+    </a>
+  )
+}
+
+type ImageRow = Extract<QuestionPart, { type: 'row' }>
+
+// Before and After side by side, each at most half the card; a click opens
+// the image full size in a new tab.
+function Images({ rows }: { rows: ImageRow[] }) {
+  return (
+    <div data-testid="question-images" className="grid grid-cols-2 gap-3">
+      {rows.map((row) => (
+        <figure key={row.label} data-image={row.label} className="flex min-w-0 flex-col gap-1">
+          <figcaption className={LABEL}>{row.label}</figcaption>
+          <a href={row.url} target="_blank" rel="noreferrer" title={`Open ${row.label} full size`}>
+            <img
+              src={row.url}
+              alt={row.label}
+              loading="lazy"
+              className="max-h-72 w-full rounded-md border border-border bg-zinc-900 object-contain"
+            />
+          </a>
+        </figure>
+      ))}
+    </div>
   )
 }
 
 export function QuestionBody({ shape }: { shape: QuestionShape }) {
+  const images = shape.parts.filter((p): p is ImageRow => p.type === 'row' && Boolean(p.image))
+  let diff = ''
+  let lastRow = -1
+  const items: ReactNode[] = []
+  shape.parts.forEach((part, i) => {
+    if (part.type === 'text') {
+      items.push(<MessageBody key={i} body={part.text} className={BODY} />)
+      return
+    }
+    if (part.type === 'link' || (part.label === 'Diff' && part.url)) {
+      if (!diff) {
+        diff = part.url ?? ''
+        return
+      }
+    }
+    if (part.type === 'link') {
+      items.push(<MessageBody key={i} body={part.url} className={BODY} />)
+      return
+    }
+    if (part.image) {
+      if (part === images[0]) {
+        items.push(<Images key={i} rows={images} />)
+        lastRow = items.length - 1
+      }
+      return
+    }
+    items.push(
+      <div key={i} data-testid="question-row" data-row={part.label} className="flex items-baseline gap-3">
+        <span className={LABEL}>{part.label}</span>
+        <MarkdownText body={part.value} className={cn(BODY, 'flex-1 [&_p]:my-0')} />
+      </div>,
+    )
+    lastRow = items.length - 1
+  })
+  if (diff) {
+    items.splice(lastRow + 1, 0, <DiffLink key="diff" url={diff} />)
+  }
   return (
     <div data-testid="question-body" className="flex min-w-0 flex-col gap-1.5">
       {shape.title && (
         <MarkdownText body={shape.title} className="text-lg leading-7 font-semibold text-foreground [&_p]:my-0" />
       )}
-      {shape.parts.map((part, i) => {
-        if (part.type === 'text') {
-          return <MessageBody key={i} body={part.text} className={BODY} />
-        }
-        if (part.type === 'link') {
-          return <ViewDiff key={i} url={part.url} />
-        }
-        return (
-          <div key={i} data-testid="question-row" data-row={part.label} className="flex items-baseline gap-3">
-            <span className="w-16 shrink-0 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-              {part.label}
-            </span>
-            {part.url ? (
-              <ViewDiff url={part.url} />
-            ) : (
-              <MarkdownText body={part.value} className={cn(BODY, 'flex-1 [&_p]:my-0')} />
-            )}
-          </div>
-        )
-      })}
+      {items}
     </div>
   )
 }
@@ -74,8 +124,8 @@ export function AcceptActions({ question, task: name }: { question: Message; tas
   const tasks = useTasks()
   const queryClient = useQueryClient()
   const post = useSend(identity)
-  const [rejecting, setRejecting] = useState(false)
-  const [why, setWhy] = useState('')
+  const [sendingBack, setSendingBack] = useState(false)
+  const [feedback, setFeedback] = useState('')
   const [sent, setSent] = useState<'accept' | 'reject' | ''>('')
   const task = tasks.data?.find((t) => t.name === name)
 
@@ -119,7 +169,8 @@ export function AcceptActions({ question, task: name }: { question: Message; tas
 
   // ADR 0010: "/accept <task>" counts only in the owner's inbox; elsewhere
   // "/accept" goes in #<task>. There is no "/reject <task> <why>" in the
-  // inbox, so a reject always goes in #<task>.
+  // inbox, so a send back is "/reject <feedback>" in #<task>, and the same
+  // feedback answers the question where it was asked.
   async function accept() {
     const ok = await post.send(
       inbox
@@ -131,46 +182,50 @@ export function AcceptActions({ question, task: name }: { question: Message; tas
     }
   }
 
-  async function reject() {
-    const reason = why.trim()
-    if (!reason) {
+  async function sendBack() {
+    const text = feedback.trim()
+    if (!text || busy) {
       return
     }
     const ok = await post.send({
       channel: `#${name}`,
-      body: `/reject ${reason}`,
+      body: `/reject ${text}`,
       reply_to: inTask ? question.id : undefined,
     })
-    if (ok) {
-      setSent('reject')
-      setWhy('')
+    if (!ok) {
+      return
     }
+    setSent('reject')
+    if (!inTask) {
+      await post.send({ channel, body: text, reply_to: question.id })
+    }
+    setFeedback('')
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
       e.preventDefault()
-      reject()
+      sendBack()
     }
   }
 
   let acceptLabel = 'Accept'
   if (!joined) {
     acceptLabel = identity.joining ? 'Accept: joining' : 'Accept: join first'
-  } else if (post.isPending && !rejecting) {
+  } else if (post.isPending && !sendingBack) {
     acceptLabel = 'Accepting'
   } else if (sent === 'accept') {
     acceptLabel = 'Accept: sent, waiting for agc'
   }
-  let sendLabel = 'Send'
+  let sendLabel = 'Send back'
   if (!joined) {
-    sendLabel = identity.joining ? 'Send: joining' : 'Send: join first'
-  } else if (why.trim() === '') {
-    sendLabel = 'Send: needs a reason'
+    sendLabel = identity.joining ? 'Send back: joining' : 'Send back: join first'
   } else if (post.isPending) {
-    sendLabel = 'Rejecting'
+    sendLabel = 'Sending back'
   } else if (sent === 'reject') {
-    sendLabel = 'Send: sent, waiting for agc'
+    sendLabel = 'Send back: sent, waiting for agc'
+  } else if (feedback.trim() === '') {
+    sendLabel = 'Send back: write feedback'
   }
 
   return (
@@ -183,21 +238,21 @@ export function AcceptActions({ question, task: name }: { question: Message; tas
           size="sm"
           variant="outline"
           disabled={busy}
-          aria-expanded={rejecting}
-          onClick={() => setRejecting(!rejecting)}
-          data-act="reject"
+          aria-expanded={sendingBack}
+          onClick={() => setSendingBack(!sendingBack)}
+          data-act="send-back"
         >
-          Reject…
+          Send back…
         </Button>
         <StatusPill status={task.status} className="ml-auto" />
       </div>
-      {rejecting && (
+      {sendingBack && (
         <div className="flex items-center gap-2">
           <Input
-            aria-label={`Why reject ${name}`}
-            placeholder="Why"
-            value={why}
-            onChange={(e) => setWhy(e.target.value)}
+            aria-label={`Feedback for ${name}`}
+            placeholder="Feedback"
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
             onKeyDown={onKeyDown}
             autoFocus
             className="h-8 flex-1"
@@ -205,9 +260,9 @@ export function AcceptActions({ question, task: name }: { question: Message; tas
           <Button
             size="sm"
             variant="outline"
-            disabled={!joined || why.trim() === '' || busy}
-            onClick={reject}
-            data-act="reject-send"
+            disabled={!joined || feedback.trim() === '' || busy}
+            onClick={sendBack}
+            data-act="send-back-send"
           >
             {sendLabel}
           </Button>
