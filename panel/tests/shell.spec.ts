@@ -1,14 +1,16 @@
 // Owned by the foundation (layout, routing, theme).
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
-test('/ redirects to tasks and the Talk mode opens messages', async ({ page }) => {
+test('/ redirects to tasks on a first visit', async ({ page }) => {
   await page.goto('/panel/')
   await expect(page).toHaveURL(/\/panel\/tasks$/)
   await expect(page.getByTestId('page-title')).toHaveText('Tasks')
+  await expect(page.getByTestId('page-area')).toHaveText('Work /')
 
-  await page.getByRole('navigation', { name: 'Mode' }).getByRole('link', { name: 'Talk' }).click()
+  await page.getByRole('link', { name: 'Channels', exact: true }).click()
   await expect(page).toHaveURL(/\/panel\/messages$/)
   await expect(page.getByTestId('page-title')).toHaveText('Messages')
+  await expect(page.getByTestId('page-area')).toHaveText('Talk /')
 })
 
 test('unknown paths go to tasks', async ({ page }) => {
@@ -28,110 +30,121 @@ test('theme defaults to dark and the toggle persists', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Dark theme' })).toBeVisible()
 })
 
-test('the mode switch swaps the nav between Work and Think', async ({ page }) => {
-  await page.goto('/panel/tasks')
-  const mode = page.getByRole('navigation', { name: 'Mode' })
-  const nav = page.getByRole('navigation', { name: 'Main' })
-  await expect(mode.getByRole('link', { name: 'Work' })).toHaveAttribute('aria-current', 'page')
-  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute', 'Agents'])
+function header(page: Page, area: string) {
+  return page.getByTestId(`area-header-${area}`)
+}
 
-  await mode.getByRole('link', { name: 'Think' }).click()
-  await expect(page).toHaveURL(/\/panel\/think\/beliefs$/)
-  await expect(mode.getByRole('link', { name: 'Think' })).toHaveAttribute('aria-current', 'page')
-  await expect(nav.getByRole('link')).toHaveText(['Beliefs', 'Decisions', 'Rules', 'Actions', 'Evidence'])
-  await nav.getByRole('link', { name: 'Rules' }).click()
-  await expect(page).toHaveURL(/\/panel\/think\/rules$/)
+function group(page: Page, label: string) {
+  return page.getByRole('group', { name: label, exact: true })
+}
 
-  await mode.getByRole('link', { name: 'Work' }).click()
-  await expect(page).toHaveURL(/\/panel\/tasks$/)
-  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute', 'Agents'])
-})
+for (const path of ['/panel/tasks', '/panel/think/beliefs', '/panel/messages']) {
+  test(`the three group headers are always shown on ${path}`, async ({ page }) => {
+    await page.goto(path)
+    const nav = page.getByRole('navigation', { name: 'Main' })
+    await expect(nav.locator('[data-testid^="area-header-"]')).toHaveText(['Think', 'Work', /^Talk/])
+    const think = await header(page, 'think').boundingBox()
+    const work = await header(page, 'work').boundingBox()
+    const talk = await header(page, 'talk').boundingBox()
+    expect(work!.y).toBeGreaterThan(think!.y + think!.height - 1)
+    expect(talk!.y).toBeGreaterThan(work!.y + work!.height - 1)
+    expect(talk!.x).toBe(work!.x)
+    // Every group open by default, pages of all three listed.
+    await expect(group(page, 'Think').getByRole('link')).toHaveText([
+      'Beliefs',
+      'Decisions',
+      'Rules',
+      'Actions',
+      'Evidence',
+    ])
+    await expect(group(page, 'Work').getByRole('link')).toHaveText(['Tasks', 'Compute', 'Agents'])
+    await expect(group(page, 'Talk').getByRole('link', { name: 'Channels', exact: true })).toBeVisible()
+  })
+}
 
-test('Work nav opens Compute, which stays in Work mode', async ({ page }) => {
-  await page.goto('/panel/tasks')
-  const mode = page.getByRole('navigation', { name: 'Mode' })
-  const nav = page.getByRole('navigation', { name: 'Main' })
-  await nav.getByRole('link', { name: 'Compute' }).click()
-  await expect(page).toHaveURL(/\/panel\/compute$/)
-  await expect(page.getByTestId('page-title')).toHaveText('Compute')
-  await expect(mode.getByRole('link', { name: 'Work' })).toHaveAttribute('aria-current', 'page')
-  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute', 'Agents'])
-
+test('the route highlights its page without hiding the other groups', async ({ page }) => {
   await page.goto('/panel/compute/review-42')
   await expect(page.getByTestId('page-title')).toHaveText('review-42')
-  await expect(mode.getByRole('link', { name: 'Work' })).toHaveAttribute('aria-current', 'page')
+  await expect(group(page, 'Work').getByRole('link', { name: 'Compute' })).toHaveAttribute('aria-current', 'page')
+  await expect(header(page, 'work')).toHaveAttribute('data-current', 'true')
+  await expect(header(page, 'think')).toHaveAttribute('data-current', 'false')
+  await group(page, 'Think').getByRole('link', { name: 'Rules' }).click()
+  await expect(page).toHaveURL(/\/panel\/think\/rules$/)
+  await expect(page.getByTestId('page-area')).toHaveText('Think /')
+  await expect(group(page, 'Work').getByRole('link')).toHaveText(['Tasks', 'Compute', 'Agents'])
 })
 
-test('the three modes are a vertical list', async ({ page }) => {
-  await page.goto('/panel/tasks')
-  const mode = page.getByRole('navigation', { name: 'Mode' })
-  // Talk carries its unread count.
-  await expect(mode.getByRole('link')).toHaveText(['Think', 'Work', /^Talk(\d+\+?)?$/])
-  const think = await mode.getByRole('link', { name: 'Think' }).boundingBox()
-  const work = await mode.getByRole('link', { name: 'Work' }).boundingBox()
-  const talk = await mode.getByRole('link', { name: 'Talk' }).boundingBox()
-  expect(work!.y).toBeGreaterThan(think!.y + think!.height - 1)
-  expect(talk!.y).toBeGreaterThan(work!.y + work!.height - 1)
-  expect(talk!.x).toBe(work!.x)
-})
-
-test('/messages is Talk mode with the Channels nav', async ({ page }) => {
-  await page.goto('/panel/messages')
-  const mode = page.getByRole('navigation', { name: 'Mode' })
-  const nav = page.getByRole('navigation', { name: 'Main' })
-  await expect(mode.getByRole('link', { name: 'Talk' })).toHaveAttribute('aria-current', 'page')
-  await expect(mode.getByRole('link', { name: 'Work' })).not.toHaveAttribute('aria-current', 'page')
-  await expect(nav.getByRole('link', { name: 'Channels', exact: true })).toBeVisible()
-  await expect(nav.getByRole('link', { name: 'Tasks' })).toHaveCount(0)
-})
-
-test('/ opens Talk when it was the last mode', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('agc.panel.mode', 'talk'))
-  await page.goto('/panel/')
-  await expect(page).toHaveURL(/\/panel\/messages$/)
-})
-
-test('the Talk sidebar lists channels with their unread counts', async ({ page }) => {
-  // Only followed channels are in the sidebar (follow.ts).
-  await page.addInitScript(() =>
-    localStorage.setItem(
-      'agc.panel.follow',
-      JSON.stringify({ '#releases': { on: true, at: 0 }, '#review-42': { on: true, at: 0 } }),
-    ),
-  )
-  await page.goto('/panel/messages')
-  const nav = page.getByRole('navigation', { name: 'Main' })
-  for (const name of ['#review-42', '#releases']) {
-    const row = nav.getByRole('link', { name: new RegExp(`^${name}\\b`) })
-    await expect(row).toBeVisible()
-    // Never opened in this browser: every message is unread.
-    await expect(row.getByTestId('unread-badge')).toHaveText(/^\d+$/)
+test('collapsing Work hides its pages, keeps the header, and survives a reload', async ({ page }) => {
+  await page.goto('/panel/think/beliefs')
+  const work = header(page, 'work')
+  await expect(work).toHaveAttribute('aria-expanded', 'true')
+  await work.click()
+  await expect(work).toHaveAttribute('aria-expanded', 'false')
+  await expect(work).toBeVisible()
+  for (const name of ['Tasks', 'Compute', 'Agents']) {
+    await expect(group(page, 'Work').getByRole('link', { name })).toHaveCount(0)
   }
+  await expect(group(page, 'Think').getByRole('link', { name: 'Beliefs' })).toBeVisible()
+
+  await page.reload()
+  await expect(header(page, 'work')).toHaveAttribute('aria-expanded', 'false')
+  await expect(group(page, 'Work').getByRole('link')).toHaveCount(0)
+
+  await header(page, 'work').click()
+  await expect(group(page, 'Work').getByRole('link')).toHaveText(['Tasks', 'Compute', 'Agents'])
 })
 
-test('clicking a channel in the sidebar opens and highlights it', async ({ page }) => {
-  // Only followed channels are in the sidebar (follow.ts).
-  await page.addInitScript(() =>
-    localStorage.setItem(
-      'agc.panel.follow',
-      JSON.stringify({ '#releases': { on: true, at: 0 }, '#review-42': { on: true, at: 0 } }),
-    ),
-  )
-  await page.goto('/panel/messages/review-42')
-  const nav = page.getByRole('navigation', { name: 'Main' })
-  const releases = nav.getByRole('link', { name: /^#releases\b/ })
-  const review = nav.getByRole('link', { name: /^#review-42\b/ })
-  await expect(review).toHaveAttribute('aria-current', 'page')
-  await releases.click()
-  await expect(page).toHaveURL(/\/panel\/messages\/releases$/)
-  await expect(releases).toHaveAttribute('aria-current', 'page')
-  await expect(releases).toHaveClass(/bg-pink-500\/20/)
-  await expect(review).not.toHaveAttribute('aria-current', 'page')
-})
-
-test('Work mode shows no channel rows', async ({ page }) => {
+test('navigating to a channel opens Talk when it was collapsed, and leaves the others', async ({ page }) => {
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('seeded')) {
+      sessionStorage.setItem('seeded', '1')
+      localStorage.setItem('agc.panel.group.talk', 'closed')
+      localStorage.setItem('agc.panel.group.think', 'closed')
+    }
+  })
   await page.goto('/panel/tasks')
+  await expect(header(page, 'talk')).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByTestId('channel-rows')).toHaveCount(0)
+
+  await page.goto('/panel/messages/review-42')
+  await expect(header(page, 'talk')).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.getByTestId('channel-rows')).toBeVisible()
+  await expect(header(page, 'think')).toHaveAttribute('aria-expanded', 'false')
+  await expect(header(page, 'work')).toHaveAttribute('aria-expanded', 'true')
+})
+
+test('the Talk badge stays visible with Talk collapsed', async ({ page }) => {
+  await page.goto('/panel/tasks')
+  const badge = page.getByTestId('area-badge-talk').getByTestId('unread-badge')
+  // Never opened in this browser: the inbox alone is unread.
+  await expect(badge).toHaveText(/^\d+\+?$/)
+  await header(page, 'talk').click()
+  await expect(page.getByTestId('channel-rows')).toHaveCount(0)
+  await expect(badge).toBeVisible()
+  await expect(badge).toHaveText(/^\d+\+?$/)
+})
+
+test('/ opens the last page visited', async ({ page }) => {
+  await page.goto('/panel/think/rules')
+  await expect(page.getByTestId('page-title')).toHaveText('Rules')
+  await page.goto('/panel/')
+  await expect(page).toHaveURL(/\/panel\/think\/rules$/)
+
+  await page.goto('/panel/messages/review-42')
+  await expect(page.getByTestId('page-title')).toHaveText(/review-42/)
+  await page.goto('/panel/')
+  await expect(page).toHaveURL(/\/panel\/messages\/review-42$/)
+})
+
+test('the sidebar scrolls as one column with every group open', async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 420 })
+  await page.goto('/panel/messages')
   const nav = page.getByRole('navigation', { name: 'Main' })
-  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute', 'Agents'])
-  await expect(nav.getByTestId('channel-rows')).toHaveCount(0)
+  await expect(page.getByTestId('channel-rows')).toBeVisible()
+  const overflow = await nav.evaluate((el) => el.scrollHeight > el.clientHeight)
+  expect(overflow).toBe(true)
+  await nav.evaluate((el) => el.scrollTo(0, el.scrollHeight))
+  // The headers scroll away with the rest: none sticks.
+  await expect(header(page, 'think')).not.toBeInViewport()
+  await expect(page.getByTestId('browse-link')).toBeInViewport()
 })
