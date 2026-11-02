@@ -1,0 +1,12 @@
+# What an agent may put in a person's inbox (ADR 0005 "Inbox"). messaging
+# refuses an agent's plain post in #<person>; this rule covers what the
+# server cannot see: whether a question is really one, and whether a
+# template or brief tells an agent to post notes there.
+subject: a person's inbox, #<person>
+rules:
+  - id: inbox-holds-only-questions
+    rule: An agent posts in a person's inbox (#<person>) only a question that needs that person, or an answer in a thread there; notes, status and merges go in #<task>.
+    judge:
+      trusted: [franco]
+      ask: Does anything in the change make an agent post in a person's inbox something that is not a question needing that person, or a reply in a thread there (a note, a status line, a "merged", a "never mind")?
+    because: [an-inbox-full-of-notes-hides-the-questions]

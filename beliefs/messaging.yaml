@@ -1,0 +1,4 @@
+# What we hold true about messaging between people and agents (ADR 0005).
+beliefs:
+  - id: an-inbox-full-of-notes-hides-the-questions
+    belief: A person's inbox read among notes they need not act on hides the questions that wait on them, so they answer late or not at all.

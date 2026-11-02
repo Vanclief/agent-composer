@@ -140,3 +140,14 @@ able to read or disrupt everything.
 Messages carry a `kind`, `message` or `question`; a reply from anyone other than the asker answers a question.
 This is the one typed message we take on, because an agent that needs an answer must be able to say so,
 and the owner or manager must see what is waiting on them (`GET /api/msg/questions`) instead of rereading channels.
+
+## Amendment (2026-11-02): Inbox
+
+A person's inbox is `#<name>`, the channel named after a human participant (`#franco`).
+It takes from the person anything, and from agc its own posts; from an agent or a Task only a question (`kind: question`, `agc msg ask`)
+or a reply in a thread there, such as the answer to that person's question or a follow-up in it.
+Any other post by an agent is refused with "only questions and answers go in a person's inbox; post notes in #<task>"
+(`messaging.Service.Post`, next to `authorize`). DMs and every other channel are unchanged.
+Why: the inbox is what the person reads to find what waits on them, and notes ("merged", "never mind", "conflicts")
+drowned the questions there (22 unread, 12 of them notes). Notes go in `#<task>`, which the manager and the owner read anyway.
+The rule `inbox-holds-only-questions` covers what the server cannot see: whether a question really needs that person.
