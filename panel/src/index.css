@@ -38,33 +38,34 @@
 }
 
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.92 0.004 286.32);
-  --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  /* A step dimmer than zinc-400 so colored concepts pop; still AA on the page and cards. */
-  --muted-foreground: oklch(0.64 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.552 0.016 285.938);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.552 0.016 285.938);
+  /* Eva look (Franco, 2026-11-02): warm black ground, orange type and frames. */
+  --radius: 0;
+  --background: oklch(0.13 0.008 60);
+  --foreground: oklch(0.8 0.17 55);
+  --card: oklch(0.16 0.01 60);
+  --card-foreground: oklch(0.8 0.17 55);
+  --popover: oklch(0.16 0.01 60);
+  --popover-foreground: oklch(0.8 0.17 55);
+  --primary: oklch(0.74 0.19 48);
+  --primary-foreground: oklch(0.1 0 0);
+  --secondary: oklch(0.22 0.03 55);
+  --secondary-foreground: oklch(0.8 0.17 55);
+  --muted: oklch(0.2 0.02 55);
+  --muted-foreground: oklch(0.62 0.1 55);
+  --accent: oklch(0.24 0.04 55);
+  --accent-foreground: oklch(0.85 0.17 55);
+  --destructive: oklch(0.62 0.25 27);
+  --border: oklch(0.74 0.19 48 / 35%);
+  --input: oklch(0.74 0.19 48 / 25%);
+  --ring: oklch(0.8 0.14 200);
+  --sidebar: oklch(0.11 0.006 60);
+  --sidebar-foreground: oklch(0.8 0.17 55);
+  --sidebar-primary: oklch(0.74 0.19 48);
+  --sidebar-primary-foreground: oklch(0.1 0 0);
+  --sidebar-accent: oklch(0.22 0.03 55);
+  --sidebar-accent-foreground: oklch(0.85 0.17 55);
+  --sidebar-border: oklch(0.74 0.19 48 / 35%);
+  --sidebar-ring: oklch(0.8 0.14 200);
 }
 
 @theme inline {
@@ -74,7 +75,7 @@
     0%, 49% { opacity: 1; }
     50%, 100% { opacity: 0.2; }
   }
-  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Avenir Next Condensed', 'Helvetica Neue', 'Arial Narrow', 'Roboto Condensed', ui-sans-serif, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -120,4 +121,184 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+}
+
+/* Eva look, the Tasks page test (Franco, 2026-11-02). Unlayered on purpose:
+   these rules override Tailwind utilities on the shell and the Tasks list. */
+.dark {
+  --eva: oklch(0.74 0.19 48);
+  --eva-dim: oklch(0.74 0.19 48 / 40%);
+  --eva-red: oklch(0.62 0.25 27);
+  --eva-green: oklch(0.8 0.2 150);
+  --eva-cyan: oklch(0.8 0.14 200);
+  color-scheme: dark;
+}
+.dark body {
+  font-weight: 500;
+}
+/* Labels: condensed, uppercase, spaced. */
+.dark h1[data-testid='page-title'],
+.dark nav[aria-label='Mode'] a,
+.dark nav[aria-label='Main'] a,
+.dark aside > div:first-child,
+.dark ul[aria-label='Tasks'] > li > div:first-child > a,
+.dark button:has(> svg.lucide-plus) {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+.dark h1[data-testid='page-title'] {
+  font-size: 1.25rem;
+  letter-spacing: 0.18em;
+}
+/* Frames: one-pixel orange lines, square. */
+.dark aside,
+.dark aside > div,
+.dark main > header {
+  border-color: var(--eva-dim);
+}
+.dark aside {
+  background: var(--sidebar);
+}
+.dark aside > div:first-child > span {
+  background: var(--eva);
+  color: oklch(0.1 0 0);
+  border-radius: 0;
+}
+/* Mode rows: the active one is an inverted block, the others outlined. */
+.dark nav[aria-label='Mode'] a {
+  border: 1px solid var(--eva-dim);
+  border-radius: 0;
+  color: var(--foreground);
+  background: transparent;
+}
+.dark nav[aria-label='Mode'] a:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+.dark nav[aria-label='Mode'] a[data-active='true'] {
+  background: var(--eva);
+  color: oklch(0.1 0 0);
+  border-color: var(--eva);
+}
+.dark nav[aria-label='Mode'] a[data-active='true'] svg {
+  color: oklch(0.1 0 0);
+}
+/* Pages: a left bar marks the active one. */
+.dark nav[aria-label='Main'] a {
+  border-radius: 0;
+  border-left: 3px solid transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+.dark nav[aria-label='Main'] a:hover {
+  color: var(--foreground);
+  background: var(--accent);
+}
+.dark nav[aria-label='Main'] a[aria-current='page'] {
+  border-left-color: var(--eva);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+/* The task list: every row a framed block; the tier shows on its left edge. */
+.dark ul[aria-label='Tasks'] {
+  border: 0;
+  gap: 6px;
+}
+.dark ul[aria-label='Tasks'] > li {
+  position: relative;
+  border: 1px solid var(--eva-dim);
+  border-left-width: 4px;
+  background: var(--card);
+  padding: 10px 14px 10px 16px;
+}
+.dark ul[aria-label='Tasks'] > li + li {
+  border-top-width: 1px;
+}
+.dark ul[aria-label='Tasks'] > li:hover {
+  background: var(--secondary);
+}
+.dark ul[aria-label='Tasks'] > li[data-tier='lit'] {
+  border-left-color: var(--eva);
+}
+.dark ul[aria-label='Tasks'] > li[data-tier='idle'] {
+  border-left-color: var(--eva-dim);
+}
+.dark ul[aria-label='Tasks'] > li[data-tier='off'] {
+  border-color: oklch(0.74 0.19 48 / 20%);
+  border-left-color: oklch(0.74 0.19 48 / 25%);
+}
+.dark ul[aria-label='Tasks'] > li[data-tier='attention'] {
+  border-color: var(--eva-red);
+  border-left-color: var(--eva-red);
+}
+/* Attention rows wear hazard stripes along the top. */
+.dark ul[aria-label='Tasks'] > li[data-tier='attention']::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 5px;
+  background: repeating-linear-gradient(-45deg, var(--eva-red) 0 8px, transparent 8px 16px);
+}
+.dark ul[aria-label='Tasks'] > li > div:first-child > a {
+  color: var(--foreground);
+  font-size: 1rem;
+}
+.dark ul[aria-label='Tasks'] > li[data-tier='off'] > div:first-child > a {
+  color: var(--muted-foreground);
+}
+.dark ul[aria-label='Tasks'] > li > div:first-child > span {
+  color: var(--muted-foreground);
+}
+/* Status words: a bracketed, square readout. */
+.dark span[data-status][data-tier] {
+  border-radius: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+.dark span[data-status][data-tier='lit'][data-status='running'] {
+  border-color: var(--eva-green);
+  color: var(--eva-green);
+}
+.dark span[data-status][data-tier='off'] {
+  border-color: var(--eva-dim);
+  color: var(--muted-foreground);
+}
+.dark span[data-status][data-tier='idle'] {
+  border-color: var(--eva-dim);
+  color: var(--muted-foreground);
+}
+.dark span[data-status][data-tier='attention'] {
+  border-color: var(--eva-red);
+  color: var(--eva-red);
+}
+/* The compute chip and the new-task button, squared and in the frame color. */
+.dark a[data-testid='sandbox-summary'] {
+  border-radius: 0;
+  background: transparent;
+  border-color: var(--eva-dim);
+  color: var(--foreground);
+}
+.dark a[data-testid='sandbox-summary'] [data-status] {
+  background: transparent;
+}
+.dark button:has(> svg.lucide-plus) {
+  border-radius: 0;
+  background: transparent;
+  border: 1px solid var(--eva);
+  color: var(--eva);
+}
+.dark button:has(> svg.lucide-plus):hover {
+  background: var(--eva);
+  color: oklch(0.1 0 0);
+}
+/* Top bar readouts in the frame color. */
+.dark [data-testid='live-status'],
+.dark [data-testid='me'] {
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border-radius: 0;
 }
