@@ -8,6 +8,7 @@ import { Link } from 'react-router'
 
 import type { AgentView } from '@/api/agents'
 import { useAgents } from '@/api/hooks'
+import { Avatar } from '@/components/avatar'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
@@ -85,7 +86,7 @@ function AgentRow({ agent }: { agent: AgentView }) {
       <div data-testid="agent-state" className="flex w-20 shrink-0">
         <StatusPill status={agent.state} />
       </div>
-      <conceptIcons.agent aria-hidden className={cn('size-4 shrink-0', color.text)} />
+      <Avatar name={agent.name} size="sm" presence={agent.state === 'awake'} />
       <Link
         to={`/agents/${encodeURIComponent(agent.name)}`}
         className={cn(

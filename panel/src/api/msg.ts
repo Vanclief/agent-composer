@@ -15,6 +15,10 @@ export type Participant = {
   human: boolean
   joined_at: string
   left_at?: string
+  // Presence, being added by the backend; optional until every server
+  // sends it. last_seen_at is null when the participant was never seen.
+  online?: boolean
+  last_seen_at?: string | null
 }
 
 export type Message = {

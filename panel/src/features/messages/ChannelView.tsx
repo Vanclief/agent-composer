@@ -10,7 +10,7 @@ import { useChannelMessages } from '@/api/hooks'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
-import { IconChip } from '@/components/icon-chip'
+import { Avatar } from '@/components/avatar'
 import { cn } from '@/lib/utils'
 
 import { Composer } from './Composer'
@@ -21,6 +21,7 @@ import { MessageList } from './MessageList'
 import { answerOf, useOpenQuestions, useQuestions } from './questions'
 import { ThreadPane } from './ThreadPane'
 import { buildThreads } from './threads'
+import { presenceLabel, usePresence, type Presence } from './presence'
 import { useNow } from './time'
 import { markRead, useReadMap } from './unread'
 
@@ -28,32 +29,35 @@ function plural(n: number, word: string) {
   return `${n} ${word}${n === 1 ? '' : 's'}`
 }
 
-// Who is in the channel, humans first, then a count of each kind.
-function MembersStrip({ members }: { members: Member[] }) {
+// Who is in the channel, humans first, then a count of each kind. Each
+// member is its avatar with a presence dot (presence.ts) and its name; the
+// tooltip says "@name · online" or "@name · last seen 3 min ago".
+function MembersStrip({ members, presence }: { members: Member[]; presence: Map<string, Presence> }) {
   const humans = members.filter((m) => m.human).length
   return (
     <div
       role="group"
       aria-label="Members"
       data-testid="members"
-      className="flex flex-wrap items-center gap-1.5 border-b border-border px-4 py-2"
+      className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border px-4 py-2"
     >
-      {members.map((m) =>
-        m.human ? (
-          <IconChip key={`/${m.name}`} icon={conceptIcons.human} concept="human" title="Human">
-            @{m.name}
-          </IconChip>
-        ) : (
-          <IconChip
+      {members.map((m) => {
+        const p = presence.get(m.name)
+        const kind = m.human ? 'Human' : `Agent in task ${m.task}`
+        return (
+          <span
             key={`${m.task}/${m.name}`}
-            icon={conceptIcons.task}
-            concept="task"
-            title={`Agent in task ${m.task}`}
+            data-member={m.name}
+            title={`@${m.name} · ${presenceLabel(p)} (${kind})`}
+            className={cn(
+              'inline-flex items-center gap-1.5 font-mono text-xs',
+              p?.online ? '' : 'text-muted-foreground',
+            )}
           >
-            @{m.name}
-          </IconChip>
-        ),
-      )}
+            <Avatar name={m.name} size="sm" human={m.human} presence={p?.online ?? false} />@{m.name}
+          </span>
+        )
+      })}
       <span data-testid="members-count" className="ml-auto font-mono text-xs text-muted-foreground">
         {plural(members.length - humans, 'agent')} · {plural(humans, 'human')}
       </span>
@@ -118,6 +122,7 @@ export function ChannelView({
   const root = useRef<HTMLDivElement>(null)
   const empty = !feed.isPending && !feed.error && feed.messages.length === 0
   const members = membersOf(feed.messages)
+  const presence = usePresence(channel)
   const lastID = feed.messages.at(-1)?.id
   const threads = useMemo(() => buildThreads(feed.messages), [feed.messages])
   const channelQuestions = useQuestions({ channel })
@@ -192,7 +197,7 @@ export function ChannelView({
       <div ref={root} className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           {header}
-          {members.length > 0 && <MembersStrip members={members} />}
+          {members.length > 0 && <MembersStrip members={members} presence={presence} />}
           <WaitingStrip ids={waiting} onJump={jumpTo} />
           <ErrorText error={feed.error} className="m-3 mb-0" />
           {empty ? (
