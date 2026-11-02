@@ -33,6 +33,19 @@ export type SandboxView = {
   booted_at: string | null
   stopped_at: string | null
   created_at: string
+  // What stopping or deleting would lose, read live from the clone (ADR
+  // 0008 item 6). GET /sandboxes/{id} sets it, and the list with ?work=1,
+  // when the sandbox is running and has a repo; null otherwise or when the
+  // check failed.
+  work: SandboxWork | null
+}
+
+export type SandboxWork = {
+  // The clone has uncommitted changes.
+  dirty: boolean
+  // Commits on no remote branch, with or without an upstream.
+  unpushed: number
+  checked_at: string
 }
 
 export type TaskView = {

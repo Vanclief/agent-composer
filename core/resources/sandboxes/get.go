@@ -16,6 +16,8 @@ func (r GetRequest) Validate() error {
 	return validateRef(r.ID, r.Name)
 }
 
+// Get returns the sandbox with its status and, when it is running and has
+// a repo, the work in its clone.
 func (api *API) Get(ctx context.Context, requester interface{}, request *GetRequest) (*SandboxView, error) {
 	err := request.Validate()
 	if err != nil {
@@ -27,5 +29,12 @@ func (api *API) Get(ctx context.Context, requester interface{}, request *GetRequ
 		return nil, ez.Wrap(err)
 	}
 
-	return api.view(ctx, record, owner.Name)
+	view, err := api.view(ctx, record, owner.Name)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	api.addWork(ctx, view)
+
+	return view, nil
 }

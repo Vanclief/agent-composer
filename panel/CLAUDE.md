@@ -154,7 +154,10 @@ Tasks (each with a brief and assignee):
 - `review-42` "Review 42": running, assignee `claude_code`,
   `for: attach-rulesets-to-task-specs`; sandbox `review-42` running
   (terminals `agent` running `claude`, and `bash` exited) and an older
-  sandbox `review-42-2` stopped.
+  sandbox `review-42-2` stopped. `review-42`'s clone has uncommitted
+  changes and 2 unpushed commits; every other clone is clean. A sandbox's
+  `work` is set only on `GET /api/sandboxes/:id` (and the list with
+  `?work=1`) while it is running with a repo, as on the real server.
 - `flaky-ci` "Flaky CI": open, assignee `franco`, no sandbox.
 - `docs-pass` "Docs pass": done; sandbox `docs-pass` stopped.
 - `boot-fail` "Boot fail": open; sandbox `boot-fail` failed with

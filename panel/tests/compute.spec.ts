@@ -74,11 +74,14 @@ test('a card shows its task chip linking to the task, and opens its sandbox', as
   await expect(page).toHaveURL(/\/panel\/tasks\/review-42/)
 
   await page.goto('/panel/compute')
+  // Until the task titles load, the task chip reads docs-pass too.
+  await expect(card(page, 'docs-pass').getByRole('link', { name: 'Docs pass' })).toBeVisible()
   await card(page, 'docs-pass').getByRole('link', { name: 'docs-pass' }).click()
   await expect(page).toHaveURL(/\/panel\/compute\/docs-pass$/)
   await expect(page.getByTestId('page-title')).toHaveText('docs-pass')
 })
 
+// review-42-2's clone is clean, so Stop says nothing is lost.
 test('Start then Stop on review-42-2', async ({ page }) => {
   await page.goto('/panel/compute')
   const older = card(page, 'review-42-2')
@@ -86,6 +89,9 @@ test('Start then Stop on review-42-2', async ({ page }) => {
   await older.getByRole('button', { name: 'Start' }).click()
   await expect(group(page, 'running').getByRole('article', { name: 'review-42-2' })).toBeVisible()
   await card(page, 'review-42-2').getByRole('button', { name: 'Stop' }).click()
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog.getByTestId('lost-work')).toHaveText('Nothing unpushed')
+  await dialog.getByRole('button', { name: 'Stop', exact: true }).click()
   await expect(group(page, 'stopped').getByRole('article', { name: 'review-42-2' })).toBeVisible()
   await expect(card(page, 'review-42-2').getByRole('button', { name: 'Start' })).toBeVisible()
 })
@@ -95,12 +101,16 @@ test('Delete asks first, then removes the card', async ({ page, request }) => {
   await page.goto('/panel/compute')
   await card(page, name).getByRole('button', { name: 'Delete' }).click()
   const dialog = page.getByRole('alertdialog')
-  await expect(dialog).toContainText('Uncommitted work in the sandbox is lost.')
+  // Still starting, so the clone cannot be checked.
+  await expect(dialog.getByTestId('lost-work')).toHaveText('Could not check the clone')
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   await expect(card(page, name)).toBeVisible()
 
   await card(page, name).getByRole('button', { name: 'Delete' }).click()
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click()
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: /^Delete/ })
+    .click()
   await expect(card(page, name)).toHaveCount(0)
   expect((await request.get(`/api/sandboxes/${name}`)).status()).toBe(404)
 })
@@ -126,7 +136,59 @@ test('deleting from the sandbox page goes back to Compute', async ({ page, reque
   const name = await allocate(request)
   await page.goto(`/panel/compute/${name}`)
   await page.getByRole('button', { name: 'Delete' }).click()
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click()
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: /^Delete/ })
+    .click()
   await expect(page).toHaveURL(/\/panel\/compute$/)
   await expect(card(page, name)).toHaveCount(0)
+})
+
+// review-42's clone has uncommitted changes and 2 unpushed commits. Every
+// dialog is cancelled, so the sandbox stays running for other tests.
+test('Stop and Delete on review-42 say 2 commits and changes are lost', async ({ page }) => {
+  const lost = '2 unpushed commits and uncommitted changes will be lost'
+  await page.goto('/panel/compute')
+  const review = card(page, 'review-42')
+
+  await review.getByRole('button', { name: 'Delete' }).click()
+  let dialog = page.getByRole('alertdialog')
+  await expect(dialog.getByTestId('lost-work')).toHaveText(lost)
+  await expect(dialog.getByRole('button', { name: 'Delete and lose 2 commits and changes' })).toBeEnabled()
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+
+  await review.getByRole('button', { name: 'Stop' }).click()
+  dialog = page.getByRole('alertdialog')
+  await expect(dialog.getByTestId('lost-work')).toHaveText(lost)
+  await expect(dialog.getByRole('button', { name: 'Stop and lose 2 commits and changes' })).toBeEnabled()
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(group(page, 'running').getByRole('article', { name: 'review-42', exact: true })).toBeVisible()
+
+  // The task's Compute tab asks the same.
+  await page.goto('/panel/tasks/review-42/compute')
+  await page.locator('[data-sandbox="review-42"]').getByRole('button', { name: 'Delete' }).click()
+  dialog = page.getByRole('alertdialog')
+  await expect(dialog.getByTestId('lost-work')).toHaveText(lost)
+  await expect(dialog).toContainText('The task review-42 stays.')
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+})
+
+test('a stopped sandbox says the clone could not be checked', async ({ page }) => {
+  await page.goto('/panel/compute')
+  await card(page, 'docs-pass').getByRole('button', { name: 'Delete' }).click()
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog.getByTestId('lost-work')).toHaveText('Could not check the clone')
+  await expect(dialog.getByRole('button', { name: 'Delete anyway' })).toBeEnabled()
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+})
+
+test('the sandbox API reads the work only when asked', async ({ request }) => {
+  const one = await (await request.get('/api/sandboxes/review-42')).json()
+  expect(one.work).toMatchObject({ dirty: true, unpushed: 2 })
+  const plain = (await (await request.get('/api/sandboxes')).json()) as { sandboxes: { work: unknown }[] }
+  expect(plain.sandboxes.every((s) => s.work === null)).toBe(true)
+  const withWork = (await (await request.get('/api/sandboxes?work=1')).json()) as {
+    sandboxes: { name: string; work: unknown }[]
+  }
+  expect(withWork.sandboxes.find((s) => s.name === 'review-42')?.work).toMatchObject({ dirty: true, unpushed: 2 })
 })

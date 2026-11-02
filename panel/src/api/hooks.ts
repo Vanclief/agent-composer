@@ -38,6 +38,7 @@ export const queryKeys = {
   knowledgeWithout: (without: string) => ['knowledge', 'without', without] as const,
   conflicts: ['knowledge', 'conflicts'] as const,
   participants: (channel: string) => ['msg', 'participants', channel] as const,
+  sandboxWork: (ref: string) => ['sandboxes', ref, 'work'] as const,
 }
 
 // ---------- tasks and sandboxes (ADR 0008) ----------
@@ -343,5 +344,18 @@ export function useParticipants(channel: string | undefined) {
     queryFn: async ({ signal }) => (await msg.participants(channel ?? '', signal)).participants,
     enabled: Boolean(channel),
     refetchInterval: TASKS_POLL_MS,
+  })
+}
+
+// The sandbox read fresh, with the work in its clone, for a Stop or Delete
+// dialog: fetched each time enabled turns on, never served from cache.
+export function useSandboxWork(ref: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.sandboxWork(ref),
+    queryFn: ({ signal }) => sandboxes.get(ref, signal),
+    enabled: Boolean(ref) && enabled,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
   })
 }

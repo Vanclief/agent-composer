@@ -1,8 +1,9 @@
 // /tasks/:name/compute: "Allocate compute" on top, then the task's
 // sandboxes, newest first (ADR 0008). Each row carries its own Stop or
-// Start, Delete and a link to the sandbox's page with its terminals.
+// Start, Delete (both say what the clone would lose) and a link to the
+// sandbox's page with its terminals.
 import { useState } from 'react'
-import { ExternalLink, Loader2, Play, Plus, Power, PowerOff, Square } from 'lucide-react'
+import { ExternalLink, Loader2, Play, Plus, Power, PowerOff, Square, Trash2 } from 'lucide-react'
 import { Link, useParams } from 'react-router'
 
 import { useDeleteSandbox, useStartSandbox, useStopSandbox, useTask } from '@/api/hooks'
@@ -13,10 +14,10 @@ import { ErrorText } from '@/components/error-text'
 import { IconChip } from '@/components/icon-chip'
 import { StatusPill } from '@/components/status-pill'
 import { Button } from '@/components/ui/button'
+import { ConfirmSandbox } from '@/features/compute/LostWork'
 import { cn } from '@/lib/utils'
 
 import { AllocateForm } from './AllocateForm'
-import { ConfirmDelete } from './ConfirmDelete'
 import { formatMemory, shortAge } from './format'
 
 export function ComputeTab() {
@@ -107,10 +108,18 @@ function SandboxRow({ task, sandbox }: { task: TaskView; sandbox: SandboxView })
         )}
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {canStop && (
-            <Button variant="outline" size="sm" disabled={stop.isPending} onClick={() => stop.mutate(sandbox.name)}>
-              {stop.isPending ? <Loader2 className="animate-spin" /> : <Square />}
-              Stop
-            </Button>
+            <ConfirmSandbox
+              sandbox={sandbox.name}
+              verb="Stop"
+              icon={Square}
+              onConfirm={() => stop.mutate(sandbox.name)}
+              trigger={
+                <Button variant="outline" size="sm" disabled={stop.isPending}>
+                  {stop.isPending ? <Loader2 className="animate-spin" /> : <Square />}
+                  Stop
+                </Button>
+              }
+            />
           )}
           {canStart && (
             <Button variant="outline" size="sm" disabled={start.isPending} onClick={() => start.mutate(sandbox.name)}>
@@ -123,14 +132,26 @@ function SandboxRow({ task, sandbox }: { task: TaskView; sandbox: SandboxView })
               <ExternalLink /> Open
             </Link>
           </Button>
-          <ConfirmDelete
-            title={`Delete sandbox ${sandbox.name}?`}
-            pending={remove.isPending}
+          <ConfirmSandbox
+            sandbox={sandbox.name}
+            verb="Delete"
+            icon={Trash2}
+            destructive
             onConfirm={() => remove.mutate(sandbox.name)}
-            className="ml-2"
+            trigger={
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={remove.isPending}
+                className="ml-2 border-red-500/40 text-red-600 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400"
+              >
+                {remove.isPending ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                Delete
+              </Button>
+            }
           >
-            {`The sandbox and its uncommitted work are deleted. The task ${task.name} stays.`}
-          </ConfirmDelete>
+            {`The task ${task.name} stays.`}
+          </ConfirmSandbox>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2 pl-[5.5rem]">

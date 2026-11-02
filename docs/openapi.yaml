@@ -664,7 +664,17 @@ paths:
       tags: [Sandboxes]
       operationId: listSandboxes
       summary: List sandboxes
-      description: Returns every sandbox, newest first, each with its task and status.
+      description: >
+        Returns every sandbox, newest first, each with its task and status. `work` is null
+        unless `work=1` asks for it, since checking runs git in every running sandbox.
+      parameters:
+        - name: work
+          in: query
+          required: false
+          description: 1 to check each running clone for unpushed work.
+          schema:
+            type: string
+            enum: ['1', 'true']
       responses:
         '200':
           description: Sandboxes.
@@ -686,6 +696,7 @@ paths:
       tags: [Sandboxes]
       operationId: getSandbox
       summary: Retrieve a sandbox
+      description: The sandbox with its status and, when it is running and has a repo, the work in its clone.
       parameters:
         - $ref: '#/components/parameters/SandboxIdParam'
       responses:
@@ -1790,6 +1801,14 @@ components:
         created_at:
           type: string
           format: date-time
+        work:
+          description: >
+            What stopping or deleting the sandbox would lose (ADR 0008 item 6), read live from its
+            clone. Set by GET /sandboxes/{id} and by the list with work=1 when the sandbox is
+            running and has a repo; null otherwise, and null when the check failed.
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/SandboxWork'
       required:
         - id
         - task_id
@@ -1801,6 +1820,25 @@ components:
         - booted_at
         - stopped_at
         - created_at
+        - work
+    SandboxWork:
+      type: object
+      properties:
+        dirty:
+          type: boolean
+          description: The clone has uncommitted changes (git status --porcelain printed a line).
+        unpushed:
+          type: integer
+          description: >
+            Commits reachable from HEAD that are on no remote branch (git rev-list --count HEAD
+            --not --remotes), with or without an upstream.
+        checked_at:
+          type: string
+          format: date-time
+      required:
+        - dirty
+        - unpushed
+        - checked_at
     DeleteSandboxResponse:
       type: object
       properties:

@@ -294,6 +294,8 @@ func TestAllocate(t *testing.T) {
 	}
 
 	env.api.Wait()
+	// Get then checks the clone for work, which is TestGetWork's concern.
+	bootCalls := env.rt.Calls()
 
 	got, err := env.api.Get(ctx, nil, &GetRequest{Name: "review-42"})
 	if err != nil {
@@ -322,8 +324,8 @@ func TestAllocate(t *testing.T) {
 		"terminal claude --dangerously-skip-permissions in /home/agent/agent-composer",
 		"detach",
 	}
-	if !reflect.DeepEqual(env.rt.Calls(), wantCalls) {
-		t.Fatalf("calls = %q", env.rt.Calls())
+	if !reflect.DeepEqual(bootCalls, wantCalls) {
+		t.Fatalf("calls = %q", bootCalls)
 	}
 
 	brief := env.rt.files["/home/agent/TASK.md"]
@@ -369,7 +371,13 @@ func TestAllocateNamesLaterSandboxesAfterTheTask(t *testing.T) {
 
 	env.api.Wait()
 
-	created := env.rt.created[2]
+	// Boots run concurrently, so created is in no particular order.
+	var created sandbox.Spec
+	for _, spec := range env.rt.created {
+		if spec.Name == "fix-3" {
+			created = spec
+		}
+	}
 	if created.Labels["agc.task"] != "fix" || created.Labels["agc.sandbox"] != "fix-3" || created.Env["AGC_TASK"] != "fix" {
 		t.Fatalf("third sandbox = %+v", created)
 	}

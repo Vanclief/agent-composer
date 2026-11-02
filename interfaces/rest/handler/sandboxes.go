@@ -7,13 +7,14 @@ import (
 	"github.com/vanclief/compose/components/rest/requests"
 )
 
-// GET /sandboxes
+// GET /sandboxes?work=1
 func (h *Handler) ListSandboxes(c echo.Context) error {
 	const op = "Handler.ListSandboxes"
 
 	request := requests.New(c.Request().Header, c.RealIP())
+	work := c.QueryParam("work")
 
-	return h.JSONResponse(c, op, request, &sandboxes.ListRequest{})
+	return h.JSONResponse(c, op, request, &sandboxes.ListRequest{Work: work == "1" || work == "true"})
 }
 
 // GET /sandboxes/:id

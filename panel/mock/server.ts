@@ -69,7 +69,12 @@ type SandboxView = Omit<Sandbox, 'boot_error' | 'runtime'> & {
   task: string
   status: string
   status_error?: string
+  work: SandboxWork | null
 }
+
+// What stopping or deleting would lose, read from the clone (ADR 0008
+// item 6). Only GET /api/sandboxes/:id and the list with ?work=1 set it.
+type SandboxWork = { dirty: boolean; unpushed: number; checked_at: string }
 
 type TaskView = Task & { status: string; sandboxes: SandboxView[] }
 
@@ -193,6 +198,8 @@ function createState() {
   const sandboxes = new Map<string, Sandbox>()
   // When a starting sandbox finishes booting.
   const readyAt = new Map<string, number>()
+  // Uncommitted changes and unpushed commits by sandbox name.
+  const clones = new Map<string, { dirty: boolean; unpushed: number }>()
   // Terminal jobs by sandbox name.
   const terminals = new Map<string, Terminal[]>()
   const specs = new Map<string, string>()
@@ -313,7 +320,7 @@ function createState() {
   function sandboxView(sandbox: Sandbox): SandboxView {
     boot(sandbox)
     const { boot_error, runtime, ...row } = sandbox
-    const view: SandboxView = { ...row, task: taskName(sandbox), status: runtime }
+    const view: SandboxView = { ...row, task: taskName(sandbox), status: runtime, work: null }
     if (boot_error !== null) {
       view.status = 'failed'
       view.status_error = boot_error
@@ -321,6 +328,15 @@ function createState() {
       view.status = 'starting'
     }
     return view
+  }
+
+  // The clone's work, as the server reads it: only when running with a repo.
+  function withWork(view: SandboxView): SandboxView {
+    if (view.status !== 'running' || !view.spec.repo) {
+      return view
+    }
+    const clone = clones.get(view.name) ?? { dirty: false, unpushed: 0 }
+    return { ...view, work: { ...clone, checked_at: iso() } }
   }
 
   function sandboxesOf(task: Task) {
@@ -533,6 +549,10 @@ function createState() {
 
   seed()
 
+  // The work in each clone: review-42 has uncommitted changes and 2
+  // unpushed commits, every other clone is clean.
+  clones.set('review-42', { dirty: true, unpushed: 2 })
+
   return {
     tasks,
     sandboxes,
@@ -542,6 +562,8 @@ function createState() {
     messages,
     taskView,
     sandboxView,
+    withWork,
+    clones,
     findTask,
     findSandbox,
     addTask,
@@ -701,9 +723,9 @@ function createTask(state: State, body: Record<string, unknown>) {
   return state.taskView(task)
 }
 
-async function sandboxesAPI(state: State, method: string, rest: string[], req: IncomingMessage) {
+async function sandboxesAPI(state: State, method: string, rest: string[], req: IncomingMessage, work = false) {
   if (rest.length === 0 && method === 'GET') {
-    const list = [...state.sandboxes.values()].map(state.sandboxView)
+    const list = [...state.sandboxes.values()].map(state.sandboxView).map((v) => (work ? state.withWork(v) : v))
     list.sort((a, b) => b.created_at.localeCompare(a.created_at))
     return { sandboxes: list }
   }
@@ -711,7 +733,7 @@ async function sandboxesAPI(state: State, method: string, rest: string[], req: I
   const sandbox = state.findSandbox(rest[0])
   const view = state.sandboxView(sandbox)
   if (rest.length === 1 && method === 'GET') {
-    return view
+    return state.withWork(view)
   }
   if (rest.length === 1 && method === 'DELETE') {
     state.deleteSandbox(sandbox)
@@ -940,7 +962,8 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
     if (parts[1] === 'tasks') {
       body = await tasksAPI(state, method, parts.slice(2), req)
     } else if (parts[1] === 'sandboxes') {
-      body = await sandboxesAPI(state, method, parts.slice(2), req)
+      const work = url.searchParams.get('work')
+      body = await sandboxesAPI(state, method, parts.slice(2), req, work === '1' || work === 'true')
     } else if (parts[1] === 'specs') {
       body = await specsAPI(state, method, parts.slice(2), req)
     } else if (parts[1] === 'secrets' && parts.length === 2 && method === 'GET') {
