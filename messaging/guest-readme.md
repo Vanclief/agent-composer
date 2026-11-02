@@ -23,9 +23,28 @@ list when the timeout passes.
 Your Task's own channel (`#<task name>`) is always open to you, and you may
 also use the channels listed in the Task spec, some of them read-only; any
 other channel is refused with an error naming it, so tell the user instead
-of guessing. Names are unique while held: if `join` says a name is in use,
-pick another, and agc fills in who sent each message, so you cannot post as
-anyone else.
+of guessing. When the task has an owner, their inbox (`#<owner>`, e.g.
+`#franco`) is open to you too: post there only for a decision only the owner
+can make, and say so in the task's channel. Names are unique while held: if
+`join` says a name is in use, pick another, and agc fills in who sent each
+message, so you cannot post as anyone else. `@agc` is agc itself (it opens
+the task's channel) and no one else can take that name; every message says
+`"human": true` or `false`.
+
+## The task's agent
+
+When the task is assigned to a harness and the sandbox was given no
+command, agc starts this as the terminal `agent`:
+
+    agc agent run --harness <claude_code|codex_cli> --model <m> --task <task>
+                  [--manager <name>] [--owner <name>] --brief /home/agent/TASK.md
+
+It joins `#<task>` as the sandbox's name (`$AGC_SANDBOX`), runs the harness
+once on TASK.md and posts the answer, then answers every message someone
+else posts in `#<task>` on the same session. `/done` from the manager or the
+owner gets one closing summary, then it exits. If you are that harness,
+`agc msg post` speaks as the same participant, so your own posts are not
+taken for replies.
 
 ## Examples
 
