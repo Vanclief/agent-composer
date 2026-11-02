@@ -145,3 +145,40 @@ sections omitted. TASK.md's "Delivering" section tells the agent to write
 `report.json` and run `agc task deliver "<summary>" --report report.json`;
 an answer starting `DONE:` still delivers the summary alone, the fallback
 when no report can be written.
+
+## Who merges
+
+Added 2026-11-02. A delivery that carries a branch (`changes.branch` and
+`changes.sha` in the report) is merged by the task's manager, not by the
+owner, unless the rule `merge-needs-franco-for-ui-or-breaking`
+(`rules/repo.yaml`) fails:
+
+1. **The manager judges and checks.** On delivery the manager judges the
+   rules on the diff from the task's base to the delivered sha,
+   `git diff <base>...<sha> | agc rules judge --as claude_code --on -`, and
+   runs the repository checks (`go build ./... && go vet ./... &&
+   go test ./...`, `gofmt -l .`, `go run . rules check rules/`, and
+   `make panel-check` when `panel/` changed).
+2. **Nothing to show, nothing broken: the manager merges.** When every
+   check passes, no judged rule fails and
+   `merge-needs-franco-for-ui-or-breaking` holds, the manager merges the
+   branch into the base, pushes the base and accepts the task. A failing
+   check or another failing rule is a rejection with the reason, as in
+   item 5.
+3. **A UI or breaking change: the owner is asked.** When that rule fails
+   or its verdict is unclear (unclear counts as "needs Franco", never as a
+   pass), the manager posts one question in `#<owner>` with the judge's
+   reason and the compare link for `<base>...<sha>`, and the task waits on
+   the owner in `review`.
+4. **The owner's verdict.** There, the owner's accept (any of item 4's
+   doors) means approved: the manager merges the branch and pushes after
+   it. The owner's reject sends the task back to the agent with the reason,
+   as in item 5, and nothing is merged.
+
+`accept` itself is unchanged: it still only sets `done_at` and
+`accepted_by` and stops the task's sandboxes; merging is the manager's act
+around it, and deploying to the rig stays a hand step (`make rig-deploy`).
+The owner is asked only for UI and breaking changes because his review time
+goes to what he can see and to what can break others, while style and
+correctness are covered by the mechanical rules and the tests (belief
+`franco-reviews-what-he-sees-and-what-breaks`).
