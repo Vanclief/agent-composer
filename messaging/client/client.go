@@ -156,13 +156,6 @@ func (c *Client) Deliver(ctx context.Context, summary string, out any) error {
 	return nil
 }
 
-// AgentPath and AgentSleepPath are served on a persistent agent's home
-// sandbox socket (ADR 0016), by core/resources/agents, not by httpapi.
-const (
-	AgentPath      = "/agent"
-	AgentSleepPath = "/agent/sleep"
-)
-
 // AgentView is the agent row as GET /agent returns it; only the fields
 // the loop reads.
 type AgentView struct {
@@ -183,7 +176,7 @@ type AgentResponse struct {
 func (c *Client) Agent(ctx context.Context) (*AgentResponse, error) {
 	res := &AgentResponse{}
 
-	err := c.do(ctx, http.MethodGet, AgentPath, nil, nil, res)
+	err := c.do(ctx, http.MethodGet, httpapi.AgentPath, nil, nil, res)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -193,12 +186,58 @@ func (c *Client) Agent(ctx context.Context) (*AgentResponse, error) {
 
 // Sleep asks agc to stop the home sandbox this runs in.
 func (c *Client) Sleep(ctx context.Context) error {
-	err := c.do(ctx, http.MethodPost, AgentSleepPath, nil, nil, nil)
+	err := c.do(ctx, http.MethodPost, httpapi.AgentSleepPath, nil, nil, nil)
 	if err != nil {
 		return ez.Wrap(err)
 	}
 
 	return nil
+}
+
+// CreateTask creates a task from an agent's home, with the agent as its
+// manager; request is a task create request and out gets the task.
+func (c *Client) CreateTask(ctx context.Context, request any, out any) error {
+	err := c.do(ctx, http.MethodPost, httpapi.TasksPath, nil, request, out)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// AcceptTask accepts, from an agent's home, a task the agent manages.
+func (c *Client) AcceptTask(ctx context.Context, name string, out any) error {
+	err := c.do(ctx, http.MethodPost, taskPath(httpapi.TaskAcceptPath, name), nil, struct{}{}, out)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// GetTask reads, from an agent's home, a task the agent manages.
+func (c *Client) GetTask(ctx context.Context, name string, out any) error {
+	err := c.do(ctx, http.MethodGet, taskPath(httpapi.TaskPath, name), nil, nil, out)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// RejectTask sends back, from an agent's home, a task the agent manages.
+func (c *Client) RejectTask(ctx context.Context, name string, why string, out any) error {
+	err := c.do(ctx, http.MethodPost, taskPath(httpapi.TaskRejectPath, name), nil, httpapi.RejectBody{Why: why}, out)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// taskPath fills {name} in a task route pattern.
+func taskPath(pattern string, name string) string {
+	return strings.Replace(pattern, "{name}", url.PathEscape(name), 1)
 }
 
 // do sends one request and decodes the JSON answer into out. Error
@@ -249,6 +288,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		return ez.New(ez.HTTPStatusToError(res.StatusCode), failure.Error, nil)
 	}
 
+	// A home's sleep answers 204 with no body.
 	if out == nil || res.StatusCode == http.StatusNoContent {
 		return nil
 	}

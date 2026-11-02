@@ -29,6 +29,12 @@ tags:
     description: >
       A schedule creates a task from a template every interval, or one task per new item its poll
       command lists (ADR 0012). agc rest runs the scheduler; next_run_at is computed, never stored.
+  - name: Agents
+    description: >
+      A persistent agent (ADR 0016) is a row, not a process: born numbered from a role template
+      (agents/<role>.yaml under the agc home, AGC_AGENTS_DIR overrides), kept under a name, asleep
+      by default and woken in its home sandbox when someone talks to it. Its state is computed
+      from the home sandbox, never stored.
   - name: Sandboxes
     description: >
       A sandbox is the compute a task is allocated: one microsandbox VM (ADR 0003, ADR 0008).
@@ -983,6 +989,170 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
+  /agents:
+    get:
+      tags: [Agents]
+      operationId: listAgents
+      summary: List persistent agents
+      description: Every agent, oldest first, with its state read from its home now.
+      responses:
+        '200':
+          description: Agents.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentList'
+        '500':
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [Agents]
+      operationId: createAgent
+      summary: Make a numbered agent from a role
+      description: >
+        Reads the template agents/<role>.yaml (the role lowercased; 400 when there is none) and
+        inserts `<role lowercased>-<n>`, n one more than the highest number ever drawn for that
+        role, so a kept agent's number is never handed out again, even after a rename or a role
+        change. An empty harness or model takes the template's, then the configured defaults;
+        the owner is the default owner (ADR 0009). The agent is asleep with no home.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAgentRequest'
+      responses:
+        '201':
+          description: The numbered agent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '400':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /agents/{name}:
+    parameters:
+      - $ref: '#/components/parameters/AgentNameParam'
+    get:
+      tags: [Agents]
+      operationId: getAgent
+      summary: Get a persistent agent
+      responses:
+        '200':
+          description: The agent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Agents]
+      operationId: deleteAgent
+      summary: Delete a persistent agent
+      description: >
+        Deletes the home sandbox (its VM and disk), then the row. The home's volume agc-<home>,
+        the agent's memory and harness transcripts, is kept, as for every sandbox (ADR 0008), and
+        so are its messages and the tasks it managed.
+      responses:
+        '200':
+          description: The deleted agent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteAgentResponse'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /agents/{name}/keep:
+    parameters:
+      - $ref: '#/components/parameters/AgentNameParam'
+    post:
+      tags: [Agents]
+      operationId: keepAgent
+      summary: Keep (name or rename) an agent
+      description: >
+        Sets kept, renames the agent and, with role, changes the template it runs (400 when the
+        role has no template). The home sandbox and its volume keep their names: a rename is a
+        label, not a move. The tasks it manages follow it to the new name. 409 when another
+        agent has the name.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeepAgentRequest'
+      responses:
+        '200':
+          description: The kept agent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /agents/{name}/wake:
+    parameters:
+      - $ref: '#/components/parameters/AgentNameParam'
+    post:
+      tags: [Agents]
+      operationId: wakeAgent
+      summary: Wake an agent
+      description: >
+        With no home, allocates one from the template's sandbox, named after the agent, with the
+        template's instructions as /home/agent/AGENT.md and the job `agent` running
+        `agc agent run --agent <name> --harness <h> [--model <m>] --brief /home/agent/AGENT.md`,
+        and answers waking while it boots. With a stopped home, starts it. With a home running or
+        starting, does nothing. A home that failed to boot is deleted and allocated again; any
+        other home status answers 409. A message in a channel the agent reads also wakes it.
+      responses:
+        '200':
+          description: The agent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /agents/{name}/sleep:
+    parameters:
+      - $ref: '#/components/parameters/AgentNameParam'
+    post:
+      tags: [Agents]
+      operationId: sleepAgent
+      summary: Put an agent to sleep
+      description: >
+        Stops the awake agent's home and posts "Asleep." as agc in its DM channel
+        @<owner>/<name>. 409 when the agent is not awake.
+      responses:
+        '200':
+          description: The agent, asleep.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
   /schedules:
     get:
       tags: [Schedules]
@@ -1574,7 +1744,10 @@ paths:
         `message.posted` (MessagePostedEvent) for every message stored in any channel, agc's
         included;
         `schedule.ran` (ScheduleRanEvent) after every tick of a schedule, by the scheduler or
-        POST /schedules/{id}/run, failed ones included (see the schedule's last_error).
+        POST /schedules/{id}/run, failed ones included (see the schedule's last_error);
+        `agent.state` (AgentStateEvent) on every status change of a persistent agent's home
+        (as its sandbox.status), and when the agent is created, kept, woken for the first time
+        and deleted (state `deleted`).
       responses:
         '200':
           description: The stream.
@@ -1584,7 +1757,8 @@ paths:
                 type: string
                 description: >
                   Frames as described above; each data is one of the event schemas
-                  (TaskCreatedEvent, TaskDoneEvent, SandboxStatusEvent, MessagePostedEvent, ScheduleRanEvent).
+                  (TaskCreatedEvent, TaskDoneEvent, SandboxStatusEvent, MessagePostedEvent, ScheduleRanEvent,
+                  AgentStateEvent).
         '500':
           $ref: '#/components/responses/Error'
   /msg/post:
@@ -2591,19 +2765,30 @@ components:
         task_id:
           type: string
           format: uuid
+          description: The zero uuid for an agent's home.
         task:
           type: string
-          description: The task's name.
+          description: The task's name; empty for an agent's home (ADR 0016).
+        agent:
+          type: string
+          description: >
+            The name of the persistent agent whose home this is (ADR 0016), kept in step when the
+            agent is renamed; empty for a task's sandbox.
         name:
           type: string
-          description: The runtime's sandbox name, also its socket file. <task>, then <task>-2, <task>-3.
+          description: >
+            The runtime's sandbox name, also its socket file. <task>, then <task>-2, <task>-3; an
+            agent's home is named after the agent the same way and keeps its name when the agent
+            is renamed.
         spec:
           $ref: '#/components/schemas/TaskSpec'
         command:
           type: string
         instructions:
           type: string
-          description: The TASK.md written into the sandbox at /home/agent/TASK.md, byte for byte (ADR 0009).
+          description: >
+            The TASK.md written into the sandbox at /home/agent/TASK.md, byte for byte (ADR 0009);
+            for an agent's home, its template's instructions, written as /home/agent/AGENT.md.
         volume:
           type: string
           description: >
@@ -2642,6 +2827,7 @@ components:
         - id
         - task_id
         - task
+        - agent
         - name
         - spec
         - command
@@ -2669,6 +2855,11 @@ components:
         task:
           type: string
           description: The poster's task; empty for a human and for agc.
+        agent:
+          type: string
+          description: >
+            The home sandbox of the persistent agent that posted (ADR 0016), its first name;
+            empty for everyone else.
         human:
           type: boolean
         reply_to:
@@ -2685,6 +2876,7 @@ components:
         - from
         - participant_id
         - task
+        - agent
         - human
         - body
         - created_at
@@ -2696,6 +2888,14 @@ components:
           $ref: '#/components/schemas/Task'
       required:
         - task
+    AgentStateEvent:
+      type: object
+      description: Data of `agent.state`.
+      properties:
+        agent:
+          $ref: '#/components/schemas/Agent'
+      required:
+        - agent
     ScheduleRanEvent:
       type: object
       description: Data of `schedule.ran`.
@@ -3731,6 +3931,134 @@ components:
         - id
         - kind
         - text
+    CreateAgentRequest:
+      type: object
+      properties:
+        role:
+          type: string
+          description: The template's name, agents/<role>.yaml, in any case.
+        harness:
+          type: string
+          description: claude_code, codex_cli or pi; empty takes the template's, then the default.
+        model:
+          type: string
+          description: Empty takes the template's (for its harness), then the default.
+      required:
+        - role
+    KeepAgentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Up to 32 lowercase letters, digits and dashes.
+        role:
+          type: string
+          description: Omitted keeps the role.
+      required:
+        - name
+    AgentTask:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The task's name, also its channel.
+        status:
+          type: string
+          description: The task's status, verbatim.
+      required:
+        - name
+        - status
+    AgentConversation:
+      type: object
+      properties:
+        channel:
+          type: string
+        last_at:
+          type: string
+          format: date-time
+          description: The last message's time; the agent's or the task's creation when none.
+      required:
+        - channel
+        - last_at
+    Agent:
+      type: object
+      description: A persistent agent (ADR 0016).
+      properties:
+        name:
+          type: string
+          description: Unique; <role>-<n> until kept, then its name.
+        role:
+          type: string
+        kept:
+          type: boolean
+        harness:
+          type: string
+        model:
+          type: string
+        owner:
+          type: string
+        state:
+          type: string
+          description: >
+            Computed from the home sandbox, never stored: asleep (no home, or stopped), waking
+            (starting), awake (running), otherwise the sandbox's own status verbatim (failed,
+            stopping, unknown). In an agent.state event, deleted once it is gone.
+        home:
+          type: string
+          nullable: true
+          description: The home sandbox's name; null before the first wake.
+        tasks:
+          type: array
+          description: The tasks whose manager is the agent.
+          items:
+            $ref: '#/components/schemas/AgentTask'
+        conversations:
+          type: array
+          description: >
+            The DM channel @<owner>/<name> first, then #<task> for each of its tasks, then any
+            other channel the agent has posted in, newest first.
+          items:
+            $ref: '#/components/schemas/AgentConversation'
+        last_active_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: The newest message among its conversations, or its last wake.
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - name
+        - role
+        - kept
+        - harness
+        - model
+        - owner
+        - state
+        - home
+        - tasks
+        - conversations
+        - last_active_at
+        - created_at
+    AgentList:
+      type: object
+      properties:
+        agents:
+          type: array
+          items:
+            $ref: '#/components/schemas/Agent'
+      required:
+        - agents
+    DeleteAgentResponse:
+      type: object
+      properties:
+        deleted:
+          type: boolean
+        name:
+          type: string
+      required:
+        - deleted
+        - name
     ScheduleTemplate:
       type: object
       description: >
@@ -4080,6 +4408,11 @@ components:
         task:
           type: string
           description: The sender's task, empty for humans and for agc.
+        agent:
+          type: string
+          description: >
+            The home sandbox of the persistent agent that posted (ADR 0016), its first name;
+            empty for everyone else.
         human:
           type: boolean
         reply_to:
@@ -4098,6 +4431,7 @@ components:
         - from
         - participant_id
         - task
+        - agent
         - human
         - body
         - kind
@@ -4168,6 +4502,11 @@ components:
         task:
           type: string
           description: The task that joined it; empty for humans and agc.
+        agent:
+          type: string
+          description: >
+            The home sandbox of the persistent agent that joined it (ADR 0016); empty for everyone
+            else. Such a participant is online while that home runs.
         human:
           type: boolean
         joined_at:
@@ -4196,6 +4535,7 @@ components:
         - id
         - name
         - task
+        - agent
         - human
         - joined_at
         - online

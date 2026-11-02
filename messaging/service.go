@@ -31,12 +31,21 @@ type Grant struct {
 }
 
 // Caller is who is asking, resolved by the transport, never by the
-// request body.
+// request body. Agent is set instead of Task for a persistent agent's home
+// sandbox (ADR 0016): the home sandbox's name, which is the agent's first
+// name and never changes.
 type Caller struct {
 	Task   string
+	Agent  string
 	Grants []Grant
 	Human  bool
 }
+
+// MainAgent reports whether the persistent agent whose home sandbox is
+// called home has the role main, which may read, wait on and post in
+// every channel (ADR 0016 item 9). Core wires it with SetMainAgent so
+// messaging does not import the agents API.
+type MainAgent func(home string) bool
 
 // ChannelInfo is a channel the caller may read.
 type ChannelInfo struct {
@@ -62,6 +71,9 @@ type Service struct {
 
 	// channelsFor names the channels a person reads besides their inbox.
 	channelsFor ChannelsFor
+
+	// mainAgent says which agent callers read everything, nil for none.
+	mainAgent MainAgent
 
 	// system serializes taking the reserved name agc.
 	system sync.Mutex
@@ -95,16 +107,44 @@ func NewService(db bun.IDB) *Service {
 	return &Service{db: db, posted: make(chan struct{}), seen: map[string]time.Time{}, now: time.Now}
 }
 
+// SetMainAgent wires the check for the main role (ADR 0016 item 9).
+// Without it no agent caller is main.
+func (s *Service) SetMainAgent(fn MainAgent) {
+	s.mu.Lock()
+	s.mainAgent = fn
+	s.mu.Unlock()
+}
+
+// everywhere reports whether the caller may use every channel: a human, or
+// the persistent agent with the role main.
+func (s *Service) everywhere(caller Caller) bool {
+	if caller.Human {
+		return true
+	}
+
+	if caller.Agent == "" {
+		return false
+	}
+
+	s.mu.Lock()
+	fn := s.mainAgent
+	s.mu.Unlock()
+
+	return fn != nil && fn(caller.Agent)
+}
+
 // TaskChannel is the channel every Task gets without declaring it.
 func TaskChannel(task string) string {
 	return "#" + task
 }
 
-// authorize is the single access rule. Humans may do anything. A Task
-// may read and post in its own channel, read any granted channel, and
-// post in a granted channel unless it is read-only.
-func authorize(caller Caller, channel string, post bool) error {
-	if caller.Human {
+// authorize is the single access rule. Humans, and the agent with the
+// role main (ADR 0016 item 9), may do anything. A Task may read and post
+// in its own channel, read any granted channel, and post in a granted
+// channel unless it is read-only. Any other persistent agent has only its
+// grants, which its home's transport computes per request.
+func (s *Service) authorize(caller Caller, channel string, post bool) error {
+	if s.everywhere(caller) {
 		return nil
 	}
 
@@ -118,28 +158,51 @@ func authorize(caller Caller, channel string, post bool) error {
 		}
 
 		if post && grant.ReadOnly {
-			msg := fmt.Sprintf("channel %s is read-only for task %s", channel, caller.Task)
+			msg := fmt.Sprintf("channel %s is read-only for %s", channel, callerName(caller))
 			return ez.New(ez.ENOTAUTHORIZED, msg, nil)
 		}
 
 		return nil
 	}
 
-	msg := fmt.Sprintf("channel %s is not available to task %s", channel, caller.Task)
+	msg := fmt.Sprintf("channel %s is not available to %s", channel, callerName(caller))
 	return ez.New(ez.ENOTAUTHORIZED, msg, nil)
 }
 
+// callerName names a non-human caller in errors.
+func callerName(caller Caller) string {
+	if caller.Agent != "" {
+		return "agent " + caller.Agent
+	}
+
+	return "task " + caller.Task
+}
+
 func checkCaller(caller Caller) error {
-	if !caller.Human && caller.Task == "" {
-		return ez.New(ez.ENOTAUTHORIZED, "caller is neither a task nor a human", nil)
+	if !caller.Human && caller.Task == "" && caller.Agent == "" {
+		return ez.New(ez.ENOTAUTHORIZED, "caller is neither a task, an agent nor a human", nil)
+	}
+
+	if !caller.Human && caller.Task != "" && caller.Agent != "" {
+		return ez.New(ez.ENOTAUTHORIZED, "caller is both a task and an agent", nil)
 	}
 
 	return nil
 }
 
+// ownChannels is the caller's own channel, #<task>, for a task; none for
+// a human or an agent.
+func ownChannels(caller Caller) []string {
+	if caller.Task == "" {
+		return []string{}
+	}
+
+	return []string{TaskChannel(caller.Task)}
+}
+
 // owns reports whether the participant was joined by this caller.
 func owns(caller Caller, p *msgmodels.Participant) bool {
-	return p.Human == caller.Human && p.Task == caller.Task
+	return p.Human == caller.Human && p.Task == caller.Task && p.Agent == caller.Agent
 }
 
 func (s *Service) Join(ctx context.Context, caller Caller, name string) (*msgmodels.Participant, error) {
@@ -160,6 +223,7 @@ func (s *Service) Join(ctx context.Context, caller Caller, name string) (*msgmod
 	p := &msgmodels.Participant{Name: name, Human: caller.Human}
 	if !caller.Human {
 		p.Task = caller.Task
+		p.Agent = caller.Agent
 	}
 
 	err = p.Insert(ctx, s.db)
@@ -211,7 +275,7 @@ func (s *Service) Leave(ctx context.Context, caller Caller, participantID string
 	}
 
 	if !caller.Human && !owns(caller, p) {
-		return ez.New(ez.ENOTAUTHORIZED, fmt.Sprintf("participant %s does not belong to task %s", participantID, caller.Task), nil)
+		return ez.New(ez.ENOTAUTHORIZED, fmt.Sprintf("participant %s does not belong to %s", participantID, callerName(caller)), nil)
 	}
 
 	if isSystem(p) {
@@ -252,7 +316,7 @@ func (s *Service) Post(ctx context.Context, caller Caller, participantID, channe
 		return nil, ez.Wrap(err)
 	}
 
-	err = authorize(caller, channel, true)
+	err = s.authorize(caller, channel, true)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -291,6 +355,7 @@ func (s *Service) insert(ctx context.Context, p *msgmodels.Participant, channel,
 		From:          p.Name,
 		ParticipantID: p.ID,
 		Task:          p.Task,
+		Agent:         p.Agent,
 		Human:         p.Human,
 		ReplyTo:       replyTo,
 		Body:          body,
@@ -328,7 +393,7 @@ func (s *Service) OnPost(hook PostHook) {
 
 // isSystem reports whether p is agc's own participant.
 func isSystem(p *msgmodels.Participant) bool {
-	return p.Name == msgmodels.SystemName && !p.Human && p.Task == ""
+	return p.Name == msgmodels.SystemName && !p.Human && p.Task == "" && p.Agent == ""
 }
 
 // PostAsSystem posts body in channel as the reserved participant agc
@@ -414,7 +479,7 @@ func (s *Service) checkRead(caller Caller, channels []string) ([]string, error) 
 			return nil, ez.Wrap(err)
 		}
 
-		err = authorize(caller, channel, false)
+		err = s.authorize(caller, channel, false)
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}
@@ -525,7 +590,7 @@ func (s *Service) Channels(ctx context.Context, caller Caller) ([]ChannelInfo, e
 		Group("channel").
 		Order("channel ASC")
 
-	if caller.Human {
+	if s.everywhere(caller) {
 		err = query.Scan(ctx, &stats)
 		if err != nil {
 			return nil, ez.Wrap(err)
@@ -538,10 +603,13 @@ func (s *Service) Channels(ctx context.Context, caller Caller) ([]ChannelInfo, e
 		return stats, nil
 	}
 
-	channels := []ChannelInfo{{Channel: TaskChannel(caller.Task)}}
-	names := []string{TaskChannel(caller.Task)}
+	channels := []ChannelInfo{}
+	names := ownChannels(caller)
+	for _, name := range names {
+		channels = append(channels, ChannelInfo{Channel: name})
+	}
 	for _, grant := range caller.Grants {
-		if grant.Channel == TaskChannel(caller.Task) {
+		if caller.Task != "" && grant.Channel == TaskChannel(caller.Task) {
 			continue
 		}
 
@@ -580,7 +648,7 @@ func (s *Service) Participants(ctx context.Context, caller Caller, channel strin
 		return nil, ez.Wrap(err)
 	}
 
-	err = authorize(caller, channel, false)
+	err = s.authorize(caller, channel, false)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}

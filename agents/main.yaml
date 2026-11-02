@@ -1,0 +1,15 @@
+# The main role (ADR 0016 item 9, ADR 0015): the agent that reads every
+# channel. Its instructions are a placeholder until ADR 0015 fills them in.
+harness: claude_code
+model: ""
+idle: 15m
+reads: ["*"]
+sandbox:
+  image: agc-agent
+  cpus: 2
+  memory: 4096
+  disk: 20G
+  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
+instructions: |
+  You are main, the agent that reads every channel.
+  Your instructions are not written yet (ADR 0015); answer only when spoken to.

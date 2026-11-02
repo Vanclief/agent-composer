@@ -98,12 +98,24 @@ func jsonOutput(c *cli.Context) bool {
 	return false
 }
 
-// withService runs fn against the server when one is set, else against an
+// withService runs fn against the server when one is set, else inside an
+// agent's home against its socket (homeService), else against an
 // in-process stack like workflow run.
 func withService(c *cli.Context, fn func(ctx context.Context, svc taskService) error) error {
 	server := serverURL(c)
 	if server != "" {
 		err := fn(c.Context, client.New(server))
+		if err != nil {
+			fmt.Fprintln(c.App.ErrWriter, ez.ErrorMessage(err))
+			return &PrintedError{Err: err}
+		}
+
+		return nil
+	}
+
+	// An agent's home reaches agc only over its socket (ADR 0016).
+	if insideHome() {
+		err := fn(c.Context, homeService{})
 		if err != nil {
 			fmt.Fprintln(c.App.ErrWriter, ez.ErrorMessage(err))
 			return &PrintedError{Err: err}

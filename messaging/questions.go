@@ -76,7 +76,7 @@ func (s *Service) Questions(ctx context.Context, caller Caller, filter Questions
 			return nil, ez.Wrap(err)
 		}
 
-		err = authorize(caller, filter.Channel, false)
+		err = s.authorize(caller, filter.Channel, false)
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}
@@ -84,7 +84,7 @@ func (s *Service) Questions(ctx context.Context, caller Caller, filter Questions
 		query = query.Where("message.channel = ?", filter.Channel)
 	}
 
-	if !caller.Human {
+	if !s.everywhere(caller) {
 		query = query.Where("message.channel IN (?)", bun.In(readable(caller)))
 	}
 
@@ -111,9 +111,9 @@ func (s *Service) Questions(ctx context.Context, caller Caller, filter Questions
 	return questions, nil
 }
 
-// readable is every channel a Task caller may read.
+// readable is every channel a Task or agent caller may read.
 func readable(caller Caller) []string {
-	channels := []string{TaskChannel(caller.Task)}
+	channels := ownChannels(caller)
 	for _, grant := range caller.Grants {
 		channels = append(channels, grant.Channel)
 	}

@@ -98,11 +98,19 @@ func (api *API) AllocateFor(ctx context.Context, owner *taskmodels.Task, request
 		command = AgentCommand(owner)
 	}
 
-	record, err := api.insert(ctx, owner, encodedSpec, command, Instructions(owner, spec))
+	record := &taskmodels.Sandbox{TaskID: owner.ID, Spec: encodedSpec, Command: command, Instructions: Instructions(owner, spec)}
+
+	err = api.insert(ctx, owner.Name, record)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
+	return api.startBoot(ctx, record, owner, spec, bindings)
+}
+
+// startBoot publishes the new sandbox as starting and boots it in the
+// background.
+func (api *API) startBoot(ctx context.Context, record *taskmodels.Sandbox, owner *taskmodels.Task, spec task.Spec, bindings []secrets.Binding) (*SandboxView, error) {
 	// The view is read before the boot starts, so it always says starting.
 	view, err := api.view(ctx, record, owner)
 	if err != nil {
@@ -131,7 +139,7 @@ func (api *API) AllocateFor(ctx context.Context, owner *taskmodels.Task, request
 		// booted and stops it itself.
 		api.endBoot(record.Name)
 
-		if booted {
+		if booted && record.Agent == "" {
 			api.stopIfTaskDone(context.WithoutCancel(bootCtx), record, owner)
 		}
 	}()
@@ -139,31 +147,31 @@ func (api *API) AllocateFor(ctx context.Context, owner *taskmodels.Task, request
 	return view, nil
 }
 
-// insert names the sandbox and inserts it. The first sandbox of a task is
-// named after it, later ones <task>-2, <task>-3: the first free name. A
-// name is taken while a sandbox has it or while a deleted sandbox's volume
-// (task.VolumeName) is still on the host, so a new sandbox never inherits
-// another's transcripts.
-func (api *API) insert(ctx context.Context, owner *taskmodels.Task, encodedSpec []byte, command string, instructions string) (*taskmodels.Sandbox, error) {
+// insert names the sandbox and inserts record. The first sandbox of a task
+// (or the home of an agent) is named after base, later ones <base>-2,
+// <base>-3: the first free name. A name is taken while a sandbox has it or
+// while a deleted sandbox's volume (task.VolumeName) is still on the host,
+// so a new sandbox never inherits another's transcripts.
+func (api *API) insert(ctx context.Context, base string, record *taskmodels.Sandbox) error {
 	api.naming.Lock()
 	defer api.naming.Unlock()
 
 	name := ""
 	for n := 1; name == ""; n++ {
-		candidate := owner.Name
+		candidate := base
 		if n > 1 {
-			candidate = fmt.Sprintf("%s-%d", owner.Name, n)
+			candidate = fmt.Sprintf("%s-%d", base, n)
 		}
 
 		taken, err := taskmodels.SandboxNameTaken(ctx, api.db, candidate)
 		if err != nil {
-			return nil, ez.Wrap(err)
+			return ez.Wrap(err)
 		}
 
 		if !taken {
 			taken, err = api.volumeExists(task.VolumeName(candidate))
 			if err != nil {
-				return nil, ez.Wrap(err)
+				return ez.Wrap(err)
 			}
 		}
 
@@ -172,14 +180,15 @@ func (api *API) insert(ctx context.Context, owner *taskmodels.Task, encodedSpec 
 		}
 	}
 
-	record := &taskmodels.Sandbox{TaskID: owner.ID, Name: name, Spec: encodedSpec, Command: command, Instructions: instructions, Volume: task.VolumeName(name)}
+	record.Name = name
+	record.Volume = task.VolumeName(name)
 
 	err := record.Insert(ctx, api.db)
 	if err != nil {
-		return nil, ez.Wrap(err)
+		return ez.Wrap(err)
 	}
 
-	return record, nil
+	return nil
 }
 
 // boot is one sandbox's boot in progress, cancelled by Delete.
@@ -249,7 +258,7 @@ func (api *API) bootSandbox(ctx context.Context, record *taskmodels.Sandbox, own
 	}
 
 	// The listener starts first so the guest can use it at once.
-	err = api.startSandboxListener(name, owner, spec)
+	err = api.startSandboxListener(record, owner, spec)
 	if err != nil {
 		return ez.Wrap(err)
 	}
@@ -260,7 +269,7 @@ func (api *API) bootSandbox(ctx context.Context, record *taskmodels.Sandbox, own
 		return ez.Wrap(err)
 	}
 
-	err = prepare(ctx, sb, spec, record.Instructions)
+	err = prepare(ctx, sb, spec, briefPath(record), record.Instructions)
 	if err != nil {
 		return api.discard(ctx, name, sb, err)
 	}
@@ -418,10 +427,11 @@ func AgentCommand(owner *taskmodels.Task) string {
 
 // prepare gives the sandbox user the home disk (a fresh ext4 disk belongs
 // to root), lays out the home (homeScript), clones the repo, writes the
-// agent config and TASK.md (the instructions), and runs the setup script,
+// agent config and the instructions at brief (TASK.md, or AGENT.md in an
+// agent's home), and runs the setup script,
 // as the sandbox user. Setup runs in the repo, or in the home directory
 // when there is no repo, and can still change the agent config.
-func prepare(ctx context.Context, sb Sandbox, spec task.Spec, instructions string) error {
+func prepare(ctx context.Context, sb Sandbox, spec task.Spec, brief string, instructions string) error {
 	err := run(ctx, sb, executor.Command{Name: "chown", Args: []string{guestUser + ":" + guestUser, task.HomeDir}, User: "root"}, "chown "+task.HomeDir)
 	if err != nil {
 		return ez.Wrap(err)
@@ -471,7 +481,7 @@ func prepare(ctx context.Context, sb Sandbox, spec task.Spec, instructions strin
 		return ez.Wrap(err)
 	}
 
-	err = sb.WriteFile(ctx, BriefPath, []byte(instructions))
+	err = sb.WriteFile(ctx, brief, []byte(instructions))
 	if err != nil {
 		return ez.Wrap(err)
 	}

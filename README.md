@@ -199,6 +199,13 @@ agc needs no configuration. To opt into PostgreSQL instead of SQLite, create `~/
 
 A `postgres` section with a host or database set selects PostgreSQL; without one (or without a config file) agc uses `~/.agent_composer/agc.db`. `agc config` always tells you which is active and why. `POSTGRES_PASSWORD` can be passed as an environment variable.
 
+**Knowledge and agents directories**
+
+agc reads two directories under its home, `~/.agent_composer`, on every request, so edits show at once:
+
+- `knowledge/` holds the evidence, beliefs, decisions, rules and actions of ADR 0006 (`AGC_KNOWLEDGE_DIR` overrides it).
+- `agents/` holds the persistent agents' role templates, `<role>.yaml` (`AGC_AGENTS_DIR` overrides it; ADR 0016). A template sets `harness`, `model`, `sandbox` (a task sandbox spec, `disk` included), `idle` (default `15m`), `reads` (channel patterns the agent watches besides its DM and its tasks' channels; `*` is every channel) and `instructions` (the agent's AGENT.md). The role is the file name, case-insensitive: `agc agent create Reviewer` reads `reviewer.yaml`. The repo ships `agents/reviewer.yaml` and `agents/main.yaml`; copy them into `~/.agent_composer/agents/`.
+
 ## Updating
 
 Re-run the install command from Installation — it always fetches the latest release. Check what you have with `agc --version`.

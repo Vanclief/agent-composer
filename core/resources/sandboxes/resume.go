@@ -48,7 +48,7 @@ func (api *API) Resume(ctx context.Context) error {
 			continue
 		}
 
-		err = api.startSandboxListener(name, owners.of(record), spec)
+		err = api.startSandboxListener(record, owners.of(record), spec)
 		if err != nil {
 			log.Warn().Err(err).Str("sandbox", name).Msg("cannot resume sandbox messaging")
 		}

@@ -105,14 +105,14 @@ func TestClientAgentAndSleep(t *testing.T) {
 	slept := false
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET "+AgentPath, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET "+httpapi.AgentPath, func(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"agent":    map[string]any{"name": "reviewer-1", "role": "reviewer", "owner": "franco", "kept": false},
 			"channels": []string{"@franco/reviewer-1", "#fix-login"},
 			"idle":     "15m",
 		})
 	})
-	mux.HandleFunc("POST "+AgentSleepPath, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST "+httpapi.AgentSleepPath, func(w http.ResponseWriter, r *http.Request) {
 		slept = true
 		w.WriteHeader(http.StatusNoContent)
 	})

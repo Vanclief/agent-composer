@@ -33,6 +33,9 @@ type Message struct {
 	From          string `bun:"from,notnull" json:"from"`
 	ParticipantID string `bun:"participant_id,notnull" json:"participant_id"`
 	Task          string `bun:"task,notnull" json:"task"`
+	// Agent is copied from the participant: the home sandbox of the
+	// persistent agent that posted (ADR 0016), else empty.
+	Agent string `bun:"agent,notnull,default:''" json:"agent"`
 	// Human is copied from the participant: false for agc and agents.
 	Human   bool   `bun:"human,notnull,default:false" json:"human"`
 	ReplyTo *int64 `bun:"reply_to,nullzero" json:"reply_to,omitempty"`

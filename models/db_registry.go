@@ -18,6 +18,7 @@ var ALL = []interface{}{
 	(*messaging.Participant)(nil), (*messaging.Message)(nil),
 	(*agent.Conversation)(nil),
 	(*agent.Spec)(nil),
+	(*agent.Agent)(nil),
 	(*execution.WorkflowExecution)(nil),
 	(*execution.NodeExecution)(nil),
 	(*task.Task)(nil),

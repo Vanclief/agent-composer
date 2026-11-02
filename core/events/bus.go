@@ -20,6 +20,9 @@ const (
 	MessagePosted = "message.posted"
 	// ScheduleRan is published after every tick of a schedule (ADR 0012).
 	ScheduleRan = "schedule.ran"
+	// AgentState is published on every state change of a persistent
+	// agent's home, and on create, keep and delete (ADR 0016).
+	AgentState = "agent.state"
 )
 
 // Buffer is how many events a subscriber may fall behind before it is

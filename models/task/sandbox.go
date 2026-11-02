@@ -19,8 +19,13 @@ import (
 type Sandbox struct {
 	bun.BaseModel `bun:"table:sandboxes"`
 
-	ID     uuid.UUID `bun:",pk,type:uuid" json:"id"`
+	ID uuid.UUID `bun:",pk,type:uuid" json:"id"`
+	// TaskID is the task the sandbox is allocated to, the zero uuid for a
+	// persistent agent's home (ADR 0016), which has Agent set instead.
 	TaskID uuid.UUID `bun:"task_id,type:uuid,notnull" json:"task_id"`
+	// Agent is the name of the persistent agent whose home this sandbox
+	// is, kept in step when the agent is renamed; empty for a task's.
+	Agent string `bun:"agent,notnull,default:''" json:"agent"`
 	// Name is the runtime's sandbox name and the socket file.
 	Name string `bun:"name,notnull,unique" json:"name"`
 	// Spec is the environment block the sandbox booted from.
@@ -45,8 +50,12 @@ func (s *Sandbox) Validate() error {
 		return ez.New(ez.EINVALID, "sandbox is nil", nil)
 	}
 
-	if s.TaskID == uuid.Nil {
-		return ez.New(ez.EINVALID, "sandbox task id is required", nil)
+	if s.TaskID == uuid.Nil && s.Agent == "" {
+		return ez.New(ez.EINVALID, "sandbox task id or agent is required", nil)
+	}
+
+	if s.TaskID != uuid.Nil && s.Agent != "" {
+		return ez.New(ez.EINVALID, "sandbox belongs to a task or to an agent, not both", nil)
 	}
 
 	err := ValidateName(s.Name)
@@ -168,6 +177,11 @@ func ListSandboxes(ctx context.Context, db bun.IDB) ([]Sandbox, error) {
 // ListTaskSandboxes returns the sandboxes of a task, newest first.
 func ListTaskSandboxes(ctx context.Context, db bun.IDB, taskID uuid.UUID) ([]Sandbox, error) {
 	sandboxes := []Sandbox{}
+
+	// The zero id is every agent home's, never a task's.
+	if taskID == uuid.Nil {
+		return sandboxes, nil
+	}
 
 	err := db.NewSelect().Model(&sandboxes).Where("task_id = ?", taskID).Order("created_at DESC", "id DESC").Scan(ctx)
 	if err != nil {

@@ -98,7 +98,7 @@ func (api *API) publishDeleted(ctx context.Context, record *taskmodels.Sandbox) 
 		return
 	}
 
-	owner, err := taskmodels.GetTaskByID(ctx, api.db, record.TaskID)
+	owner, err := api.ownerOf(ctx, record)
 	if err != nil {
 		log.Warn().Err(err).Str("sandbox", record.Name).Msg("cannot read the task for sandbox.status deleted")
 		return

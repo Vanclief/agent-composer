@@ -46,7 +46,7 @@ func (api *API) Start(ctx context.Context, requester interface{}, request *Start
 		return nil, ez.Wrap(err)
 	}
 
-	err = api.startSandboxListener(record.Name, owner, spec)
+	err = api.startSandboxListener(record, owner, spec)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}

@@ -480,6 +480,123 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List persistent agents
+         * @description Every agent, oldest first, with its state read from its home now.
+         */
+        get: operations["listAgents"];
+        put?: never;
+        /**
+         * Make a numbered agent from a role
+         * @description Reads the template agents/<role>.yaml (the role lowercased; 400 when there is none) and inserts `<role lowercased>-<n>`, n one more than the highest number ever drawn for that role, so a kept agent's number is never handed out again, even after a rename or a role change. An empty harness or model takes the template's, then the configured defaults; the owner is the default owner (ADR 0009). The agent is asleep with no home.
+         */
+        post: operations["createAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Agent name, e.g. reviewer-1. */
+                name: components["parameters"]["AgentNameParam"];
+            };
+            cookie?: never;
+        };
+        /** Get a persistent agent */
+        get: operations["getAgent"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a persistent agent
+         * @description Deletes the home sandbox (its VM and disk), then the row. The home's volume agc-<home>, the agent's memory and harness transcripts, is kept, as for every sandbox (ADR 0008), and so are its messages and the tasks it managed.
+         */
+        delete: operations["deleteAgent"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{name}/keep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Agent name, e.g. reviewer-1. */
+                name: components["parameters"]["AgentNameParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Keep (name or rename) an agent
+         * @description Sets kept, renames the agent and, with role, changes the template it runs (400 when the role has no template). The home sandbox and its volume keep their names: a rename is a label, not a move. The tasks it manages follow it to the new name. 409 when another agent has the name.
+         */
+        post: operations["keepAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{name}/wake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Agent name, e.g. reviewer-1. */
+                name: components["parameters"]["AgentNameParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Wake an agent
+         * @description With no home, allocates one from the template's sandbox, named after the agent, with the template's instructions as /home/agent/AGENT.md and the job `agent` running `agc agent run --agent <name> --harness <h> [--model <m>] --brief /home/agent/AGENT.md`, and answers waking while it boots. With a stopped home, starts it. With a home running or starting, does nothing. A home that failed to boot is deleted and allocated again; any other home status answers 409. A message in a channel the agent reads also wakes it.
+         */
+        post: operations["wakeAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{name}/sleep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Agent name, e.g. reviewer-1. */
+                name: components["parameters"]["AgentNameParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Put an agent to sleep
+         * @description Stops the awake agent's home and posts "Asleep." as agc in its DM channel @<owner>/<name>. 409 when the agent is not awake.
+         */
+        post: operations["sleepAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/schedules": {
         parameters: {
             query?: never;
@@ -837,7 +954,7 @@ export interface paths {
         };
         /**
          * Stream live events
-         * @description Server-sent events (`text/event-stream`, `Cache-Control: no-cache`) until the client goes away. Each event is `id: <n>` (the event number), `event: <type>` and `data: <json>`; the server sends the comment `: ping` every 20 seconds as a heartbeat. Missed events are never replayed: after a reconnect, refetch. A client that falls too far behind is disconnected. Types and their data: `task.created` (TaskCreatedEvent) when a task is created, after its sandbox, if any, is allocated; `task.done` (TaskDoneEvent) when a task is accepted, the first time only; `sandbox.status` (SandboxStatusEvent) on every status change: allocated (starting), booted, failed, stopped (by POST /sandboxes/{id}/stop or by the task's accept, also right after a boot that finished once the task was accepted), started, and deleted (status `deleted`); `message.posted` (MessagePostedEvent) for every message stored in any channel, agc's included; `schedule.ran` (ScheduleRanEvent) after every tick of a schedule, by the scheduler or POST /schedules/{id}/run, failed ones included (see the schedule's last_error).
+         * @description Server-sent events (`text/event-stream`, `Cache-Control: no-cache`) until the client goes away. Each event is `id: <n>` (the event number), `event: <type>` and `data: <json>`; the server sends the comment `: ping` every 20 seconds as a heartbeat. Missed events are never replayed: after a reconnect, refetch. A client that falls too far behind is disconnected. Types and their data: `task.created` (TaskCreatedEvent) when a task is created, after its sandbox, if any, is allocated; `task.done` (TaskDoneEvent) when a task is accepted, the first time only; `sandbox.status` (SandboxStatusEvent) on every status change: allocated (starting), booted, failed, stopped (by POST /sandboxes/{id}/stop or by the task's accept, also right after a boot that finished once the task was accepted), started, and deleted (status `deleted`); `message.posted` (MessagePostedEvent) for every message stored in any channel, agc's included; `schedule.ran` (ScheduleRanEvent) after every tick of a schedule, by the scheduler or POST /schedules/{id}/run, failed ones included (see the schedule's last_error); `agent.state` (AgentStateEvent) on every status change of a persistent agent's home (as its sandbox.status), and when the agent is created, kept, woken for the first time and deleted (state `deleted`).
          */
         get: operations["streamEvents"];
         put?: never;
@@ -1287,15 +1404,20 @@ export interface components {
         Sandbox: {
             /** Format: uuid */
             id: string;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The zero uuid for an agent's home.
+             */
             task_id: string;
-            /** @description The task's name. */
+            /** @description The task's name; empty for an agent's home (ADR 0016). */
             task: string;
-            /** @description The runtime's sandbox name, also its socket file. <task>, then <task>-2, <task>-3. */
+            /** @description The name of the persistent agent whose home this is (ADR 0016), kept in step when the agent is renamed; empty for a task's sandbox. */
+            agent: string;
+            /** @description The runtime's sandbox name, also its socket file. <task>, then <task>-2, <task>-3; an agent's home is named after the agent the same way and keeps its name when the agent is renamed. */
             name: string;
             spec: components["schemas"]["TaskSpec"];
             command: string;
-            /** @description The TASK.md written into the sandbox at /home/agent/TASK.md, byte for byte (ADR 0009). */
+            /** @description The TASK.md written into the sandbox at /home/agent/TASK.md, byte for byte (ADR 0009); for an agent's home, its template's instructions, written as /home/agent/AGENT.md. */
             instructions: string;
             /** @description The named volume agc-<name> holding the harness homes (~/.claude, ~/.codex) and their transcripts, mounted at /home/agent/.harness and kept after the sandbox is deleted. Empty for sandboxes booted before volumes. */
             volume: string;
@@ -1324,6 +1446,8 @@ export interface components {
             participant_id: string;
             /** @description The poster's task; empty for a human and for agc. */
             task: string;
+            /** @description The home sandbox of the persistent agent that posted (ADR 0016), its first name; empty for everyone else. */
+            agent: string;
             human: boolean;
             /** Format: int64 */
             reply_to?: number;
@@ -1334,6 +1458,10 @@ export interface components {
         /** @description Data of `task.created`. */
         TaskCreatedEvent: {
             task: components["schemas"]["Task"];
+        };
+        /** @description Data of `agent.state`. */
+        AgentStateEvent: {
+            agent: components["schemas"]["Agent"];
         };
         /** @description Data of `schedule.ran`. */
         ScheduleRanEvent: {
@@ -1748,6 +1876,66 @@ export interface components {
             kind: "belief" | "evidence";
             text: string;
         };
+        CreateAgentRequest: {
+            /** @description The template's name, agents/<role>.yaml, in any case. */
+            role: string;
+            /** @description claude_code, codex_cli or pi; empty takes the template's, then the default. */
+            harness?: string;
+            /** @description Empty takes the template's (for its harness), then the default. */
+            model?: string;
+        };
+        KeepAgentRequest: {
+            /** @description Up to 32 lowercase letters, digits and dashes. */
+            name: string;
+            /** @description Omitted keeps the role. */
+            role?: string;
+        };
+        AgentTask: {
+            /** @description The task's name, also its channel. */
+            name: string;
+            /** @description The task's status, verbatim. */
+            status: string;
+        };
+        AgentConversation: {
+            channel: string;
+            /**
+             * Format: date-time
+             * @description The last message's time; the agent's or the task's creation when none.
+             */
+            last_at: string;
+        };
+        /** @description A persistent agent (ADR 0016). */
+        Agent: {
+            /** @description Unique; <role>-<n> until kept, then its name. */
+            name: string;
+            role: string;
+            kept: boolean;
+            harness: string;
+            model: string;
+            owner: string;
+            /** @description Computed from the home sandbox, never stored: asleep (no home, or stopped), waking (starting), awake (running), otherwise the sandbox's own status verbatim (failed, stopping, unknown). In an agent.state event, deleted once it is gone. */
+            state: string;
+            /** @description The home sandbox's name; null before the first wake. */
+            home: string | null;
+            /** @description The tasks whose manager is the agent. */
+            tasks: components["schemas"]["AgentTask"][];
+            /** @description The DM channel @<owner>/<name> first, then #<task> for each of its tasks, then any other channel the agent has posted in, newest first. */
+            conversations: components["schemas"]["AgentConversation"][];
+            /**
+             * Format: date-time
+             * @description The newest message among its conversations, or its last wake.
+             */
+            last_active_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        AgentList: {
+            agents: components["schemas"]["Agent"][];
+        };
+        DeleteAgentResponse: {
+            deleted: boolean;
+            name: string;
+        };
         /** @description The task a schedule creates: the fields of CreateTaskRequest. title, name, brief and each accept entry are Go text/templates over the item's fields (.key, .url, ...) and .Now, the tick's time; a field the item lacks is an error. Without name the task is <schedule>-<yyyymmdd-hhmm> (UTC) without a poll, <schedule>-<first 8 hex of the key's SHA-256> with one. Without title, a poll item's `title` field is the task title. manager is required. */
         ScheduleTemplate: {
             title?: string;
@@ -1909,6 +2097,8 @@ export interface components {
             participant_id: string;
             /** @description The sender's task, empty for humans and for agc. */
             task: string;
+            /** @description The home sandbox of the persistent agent that posted (ADR 0016), its first name; empty for everyone else. */
+            agent: string;
             human: boolean;
             /** Format: int64 */
             reply_to?: number;
@@ -1947,6 +2137,8 @@ export interface components {
             name: string;
             /** @description The task that joined it; empty for humans and agc. */
             task: string;
+            /** @description The home sandbox of the persistent agent that joined it (ADR 0016); empty for everyone else. Such a participant is online while that home runs. */
+            agent: string;
             human: boolean;
             /** Format: date-time */
             joined_at: string;
@@ -3009,6 +3201,187 @@ export interface operations {
                 content?: never;
             };
             404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    listAgents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agents. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentList"];
+                };
+            };
+            500: components["responses"]["Error"];
+        };
+    };
+    createAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAgentRequest"];
+            };
+        };
+        responses: {
+            /** @description The numbered agent. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            400: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    getAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Agent name, e.g. reviewer-1. */
+                name: components["parameters"]["AgentNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The agent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    deleteAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Agent name, e.g. reviewer-1. */
+                name: components["parameters"]["AgentNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The deleted agent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteAgentResponse"];
+                };
+            };
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    keepAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Agent name, e.g. reviewer-1. */
+                name: components["parameters"]["AgentNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KeepAgentRequest"];
+            };
+        };
+        responses: {
+            /** @description The kept agent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    wakeAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Agent name, e.g. reviewer-1. */
+                name: components["parameters"]["AgentNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The agent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    sleepAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Agent name, e.g. reviewer-1. */
+                name: components["parameters"]["AgentNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The agent, asleep. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };
     };
