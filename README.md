@@ -157,6 +157,20 @@ agc --server http://rig:8788 task ls  # one-off, without the env var
 
 `task.yaml` is the ADR 0008 shape: `name`, `title`, `brief`, `assignee`, `for`, and `sandbox:` holding the environment block plus `command`. `agc task create` against a server prints the task and its page, `<server>/panel/tasks/<name>`. Every command prints the same lines in both modes; add `--json` for the raw view the API returns. A server error prints the server's message as is and exits 1. Without `AGC_SERVER` or `--server` everything runs locally as before, and local `create`/`allocate` always wait for the boot, since it runs in that process.
 
+**Scheduled tasks**
+
+A schedule creates a task from a template every interval, or, with a `poll:` command, one task per new item the command lists as JSON lines (ADR 0012). `agc rest` runs the scheduler; `agc schedule` works locally or against `AGC_SERVER` like `agc task`, and locally a schedule runs only with `agc schedule run`. See [docs/schedules/pr-reviews.yaml](docs/schedules/pr-reviews.yaml):
+
+```bash
+agc schedule create -f docs/schedules/pr-reviews.yaml
+agc schedule list
+agc schedule show pr-reviews          # template, last error and the items seen
+agc schedule run pr-reviews           # tick now; prints the tasks it created
+agc schedule disable pr-reviews
+agc schedule enable pr-reviews
+agc schedule delete pr-reviews        # its tasks are kept
+```
+
 **MCP server**
 
 ```bash

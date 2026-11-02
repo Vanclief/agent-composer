@@ -356,18 +356,12 @@ func printCreatedTask(c *cli.Context, view *tasks.TaskView, pageURL string, show
 func fillTaskDefaults(request *tasks.CreateRequest, defaults controller.DefaultsSettings, local bool) ([]string, error) {
 	applied := []string{}
 
-	if strings.TrimSpace(request.Manager) == "" {
-		state, err := loadMsgState()
-		if err == nil && state.Name != "" {
-			request.Manager = state.Name
-			applied = append(applied, "manager "+state.Name+" (your messaging name)")
-		} else if defaults.Owner != "" {
-			request.Manager = defaults.Owner
-			applied = append(applied, "manager "+defaults.Owner+" (the configured owner)")
-		} else {
-			msg := "the task needs a manager: set manager: in the file, run agc msg join <name>, or configure defaults.owner"
-			return nil, ez.New(ez.EINVALID, msg, nil)
-		}
+	filledManager, err := fillManager(&request.Manager, defaults, "manager:")
+	if err != nil {
+		return nil, err
+	}
+	if filledManager != "" {
+		applied = append(applied, filledManager)
 	}
 
 	if !local {
@@ -398,6 +392,29 @@ func fillTaskDefaults(request *tasks.CreateRequest, defaults controller.Defaults
 	request.Owner = filled.Owner
 
 	return applied, nil
+}
+
+// fillManager sets an empty manager to the caller's messaging name (agc
+// msg join), else the configured owner, and says what it set; field is
+// how the file spells the key, for the error.
+func fillManager(manager *string, defaults controller.DefaultsSettings, field string) (string, error) {
+	if strings.TrimSpace(*manager) != "" {
+		return "", nil
+	}
+
+	state, err := loadMsgState()
+	if err == nil && state.Name != "" {
+		*manager = state.Name
+		return "manager " + state.Name + " (your messaging name)", nil
+	}
+
+	if defaults.Owner != "" {
+		*manager = defaults.Owner
+		return "manager " + defaults.Owner + " (the configured owner)", nil
+	}
+
+	msg := "the task needs a manager: set " + field + " in the file, run agc msg join <name>, or configure defaults.owner"
+	return "", ez.New(ez.EINVALID, msg, nil)
 }
 
 func firstNonEmpty(values ...string) string {

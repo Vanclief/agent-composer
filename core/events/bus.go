@@ -18,6 +18,8 @@ const (
 	TaskDone      = "task.done"
 	SandboxStatus = "sandbox.status"
 	MessagePosted = "message.posted"
+	// ScheduleRan is published after every tick of a schedule (ADR 0012).
+	ScheduleRan = "schedule.ran"
 )
 
 // Buffer is how many events a subscriber may fall behind before it is

@@ -13,6 +13,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/hooks"
 	knowledgeapi "github.com/vanclief/agent-composer/core/resources/knowledge"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
+	"github.com/vanclief/agent-composer/core/resources/schedules"
 	settingsapi "github.com/vanclief/agent-composer/core/resources/settings"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
@@ -38,13 +39,14 @@ type Server struct {
 	SettingsAPI   *settingsapi.API
 	TasksAPI      *tasks.API
 	SandboxesAPI  *sandboxes.API
+	SchedulesAPI  *schedules.API
 	KnowledgeAPI  *knowledgeapi.API
 	Messaging     *messaging.Service
 	// Events feeds GET /api/events.
 	Events *events.Bus
 }
 
-func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API, tasksAPI *tasks.API, knowledgeAPI *knowledgeapi.API, msg *messaging.Service, bus *events.Bus) *Server {
+func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API, tasksAPI *tasks.API, schedulesAPI *schedules.API, knowledgeAPI *knowledgeapi.API, msg *messaging.Service, bus *events.Bus) *Server {
 	if rootCtx == nil {
 		rootCtx = context.Background()
 	}
@@ -62,6 +64,7 @@ func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.A
 		SettingsAPI:   settingsapi.NewAPI(),
 		TasksAPI:      tasksAPI,
 		SandboxesAPI:  tasksAPI.Sandboxes,
+		SchedulesAPI:  schedulesAPI,
 		KnowledgeAPI:  knowledgeAPI,
 		Messaging:     msg,
 		Events:        bus,
@@ -212,6 +215,24 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.TasksAPI.DeleteSpec(request.GetContext(), nil, body)
 	case *tasks.ListSecretsRequest:
 		return s.TasksAPI.ListSecrets(request.GetContext(), nil, body)
+
+	case *schedules.ListRequest:
+		return s.SchedulesAPI.List(request.GetContext(), nil, body)
+	case *schedules.GetRequest:
+		return s.SchedulesAPI.Get(request.GetContext(), nil, body)
+	case *schedules.CreateRequest:
+		return s.SchedulesAPI.Create(request.GetContext(), nil, body)
+	case *schedules.UpdateRequest:
+		return s.SchedulesAPI.Update(request.GetContext(), nil, body)
+	case *schedules.DeleteRequest:
+		return s.SchedulesAPI.Delete(request.GetContext(), nil, body)
+	case *schedules.ListItemsRequest:
+		return s.SchedulesAPI.ListItems(request.GetContext(), nil, body)
+	// A tick runs the poll command (up to 60s) and creates its tasks.
+	case *schedules.RunRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 5*time.Minute)
+		defer cancel()
+		return s.SchedulesAPI.Run(ctx, nil, body)
 
 	// The live stream lasts as long as the client stays: no timeout, the
 	// handler passes the connection's own context.

@@ -460,6 +460,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List schedules
+         * @description Every schedule, by name.
+         */
+        get: operations["listSchedules"];
+        put?: never;
+        /**
+         * Create a schedule
+         * @description Stores the schedule without running it; the scheduler runs it on its next check (every 30s), as a schedule that never ran is due at once. The template is rendered with every item field it reads set to "sample" (with a poll) and must pass the same defaults and validation as POST /tasks, else 400. 409 when the name is taken.
+         */
+        post: operations["createSchedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/schedules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Retrieve a schedule */
+        get: operations["getSchedule"];
+        /**
+         * Replace a schedule
+         * @description Replaces every, enabled, task and poll; the name stays, and so do last_run_at and the items, so keys already seen still create nothing. Omitted enabled is true, omitted poll removes the poll. Validated as on create.
+         */
+        put: operations["updateSchedule"];
+        post?: never;
+        /**
+         * Delete a schedule
+         * @description Deletes the schedule and its items. The tasks it created are kept.
+         */
+        delete: operations["deleteSchedule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/schedules/{id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run a schedule now
+         * @description Ticks the schedule now, enabled or not and due or not, and answers once the tick ends. Without a poll it creates one task; with one it runs the command on the host (sh -c, 60s timeout, only PATH, HOME and the named secrets in its environment), reads its stdout as JSON lines, and creates a task for each key not seen before, exactly as POST /tasks does. A failed tick answers 200 with error set (also the schedule's last_error); a failing command or bad output creates nothing. 409 while another tick of the schedule runs.
+         */
+        post: operations["runSchedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/schedules/{id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the items a schedule has seen
+         * @description One item per key, newest first, with the task created for it. Without a poll the key is the created task's name.
+         */
+        get: operations["listScheduleItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sandboxes/{id}/transcripts": {
         parameters: {
             query?: never;
@@ -651,7 +740,7 @@ export interface paths {
         };
         /**
          * Stream live events
-         * @description Server-sent events (`text/event-stream`, `Cache-Control: no-cache`) until the client goes away. Each event is `id: <n>` (the event number), `event: <type>` and `data: <json>`; the server sends the comment `: ping` every 20 seconds as a heartbeat. Missed events are never replayed: after a reconnect, refetch. A client that falls too far behind is disconnected. Types and their data: `task.created` (TaskCreatedEvent) when a task is created, after its sandbox, if any, is allocated; `task.done` (TaskDoneEvent) when a task is accepted, the first time only; `sandbox.status` (SandboxStatusEvent) on every status change: allocated (starting), booted, failed, stopped (by POST /sandboxes/{id}/stop or by the task's accept, also right after a boot that finished once the task was accepted), started, and deleted (status `deleted`); `message.posted` (MessagePostedEvent) for every message stored in any channel, agc's included.
+         * @description Server-sent events (`text/event-stream`, `Cache-Control: no-cache`) until the client goes away. Each event is `id: <n>` (the event number), `event: <type>` and `data: <json>`; the server sends the comment `: ping` every 20 seconds as a heartbeat. Missed events are never replayed: after a reconnect, refetch. A client that falls too far behind is disconnected. Types and their data: `task.created` (TaskCreatedEvent) when a task is created, after its sandbox, if any, is allocated; `task.done` (TaskDoneEvent) when a task is accepted, the first time only; `sandbox.status` (SandboxStatusEvent) on every status change: allocated (starting), booted, failed, stopped (by POST /sandboxes/{id}/stop or by the task's accept, also right after a boot that finished once the task was accepted), started, and deleted (status `deleted`); `message.posted` (MessagePostedEvent) for every message stored in any channel, agc's included; `schedule.ran` (ScheduleRanEvent) after every tick of a schedule, by the scheduler or POST /schedules/{id}/run, failed ones included (see the schedule's last_error).
          */
         get: operations["streamEvents"];
         put?: never;
@@ -1119,6 +1208,11 @@ export interface components {
         TaskCreatedEvent: {
             task: components["schemas"]["Task"];
         };
+        /** @description Data of `schedule.ran`. */
+        ScheduleRanEvent: {
+            schedule: components["schemas"]["Schedule"];
+            created: components["schemas"]["Task"][];
+        };
         /** @description Data of `task.done`. */
         TaskDoneEvent: {
             task: components["schemas"]["Task"];
@@ -1460,6 +1554,94 @@ export interface components {
             kind: "belief" | "evidence";
             text: string;
         };
+        /** @description The task a schedule creates: the fields of CreateTaskRequest. title, name, brief and each accept entry are Go text/templates over the item's fields (.key, .url, ...) and .Now, the tick's time; a field the item lacks is an error. Without name the task is <schedule>-<yyyymmdd-hhmm> (UTC) without a poll, <schedule>-<first 8 hex of the key's SHA-256> with one. Without title, a poll item's `title` field is the task title. manager is required. */
+        ScheduleTemplate: {
+            title?: string;
+            name?: string;
+            brief?: string;
+            accept?: string[];
+            assignee?: string;
+            model?: string;
+            manager?: string;
+            owner?: string;
+            for?: string;
+            sandbox?: components["schemas"]["SandboxRequest"];
+        };
+        /** @description A command run on the agc host with sh -c. Each non-empty stdout line is a JSON object of string fields with a non-empty key. secrets are names in the secrets file, set in the command's environment; their values are redacted from last_error. */
+        SchedulePoll: {
+            command: string;
+            secrets?: string[];
+        };
+        CreateScheduleRequest: {
+            /** @description 1-63 lowercase letters, digits or -, starting with a letter, and not a UUID. */
+            name: string;
+            /** @description A Go duration such as 2m or 1h, at least 1m. */
+            every: string;
+            /** @description Defaults to true. */
+            enabled?: boolean;
+            task: components["schemas"]["ScheduleTemplate"];
+            poll?: components["schemas"]["SchedulePoll"];
+        };
+        UpdateScheduleRequest: {
+            every: string;
+            /** @description Defaults to true. */
+            enabled?: boolean;
+            task: components["schemas"]["ScheduleTemplate"];
+            poll?: components["schemas"]["SchedulePoll"];
+        };
+        Schedule: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            every: string;
+            enabled: boolean;
+            task: components["schemas"]["ScheduleTemplate"];
+            poll: components["schemas"]["SchedulePoll"] | null;
+            /**
+             * Format: date-time
+             * @description When the last tick started, failed ones included.
+             */
+            last_run_at: string | null;
+            /** @description The last tick's error, empty when it succeeded. */
+            last_error: string;
+            /**
+             * Format: date-time
+             * @description last_run_at plus every (created_at before the first run); null while disabled.
+             */
+            next_run_at: string | null;
+            /** @description True while a tick of this schedule runs. */
+            running: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ScheduleList: {
+            schedules: components["schemas"]["Schedule"][];
+        };
+        ScheduleRunResponse: {
+            schedule: components["schemas"]["Schedule"];
+            created: components["schemas"]["Task"][];
+            /** @description The tick's error, empty when it succeeded. */
+            error: string;
+        };
+        ScheduleItem: {
+            key: string;
+            /** @description The created task's name, kept after the task is deleted. */
+            task: string;
+            /** Format: uuid */
+            task_id: string;
+            /** Format: date-time */
+            seen_at: string;
+        };
+        ScheduleItemList: {
+            items: components["schemas"]["ScheduleItem"][];
+        };
+        DeleteScheduleResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
         DeleteTaskResponse: {
             deleted: boolean;
             name: string;
@@ -1617,6 +1799,8 @@ export interface components {
         WorkflowSlugParam: string;
         /** @description Task UUID or task name. A value that parses as a UUID is looked up by id. */
         TaskIdParam: string;
+        /** @description Schedule UUID or schedule name. A value that parses as a UUID is looked up by id. */
+        ScheduleIdParam: string;
         /** @description Sandbox UUID or sandbox name. A value that parses as a UUID is looked up by id. */
         SandboxIdParam: string;
         /** @description A belief, decision, rule or action id for why; a belief, decision, rule or evidence id for doubt. */
@@ -2597,6 +2781,189 @@ export interface operations {
                 };
                 content?: never;
             };
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    listSchedules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Schedules. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleList"];
+                };
+            };
+            500: components["responses"]["Error"];
+        };
+    };
+    createSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateScheduleRequest"];
+            };
+        };
+        responses: {
+            /** @description The created schedule. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Schedule"];
+                };
+            };
+            400: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    getSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Schedule UUID or schedule name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["ScheduleIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The schedule. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Schedule"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    updateSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Schedule UUID or schedule name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["ScheduleIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateScheduleRequest"];
+            };
+        };
+        responses: {
+            /** @description The schedule. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Schedule"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    deleteSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Schedule UUID or schedule name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["ScheduleIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The deleted schedule. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteScheduleResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    runSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Schedule UUID or schedule name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["ScheduleIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The tick. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleRunResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    listScheduleItems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Schedule UUID or schedule name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["ScheduleIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Items. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleItemList"];
+                };
+            };
+            400: components["responses"]["Error"];
             404: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };

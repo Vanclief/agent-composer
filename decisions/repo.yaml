@@ -42,3 +42,8 @@ decisions:
     because: [done-needs-criteria-before-an-agent-says-it, delivery-and-acceptance-are-different-acts]
     adr: docs/decisions/0010-task-acceptance.md
     decided: { who: franco, when: 2026-11-02 }
+  - id: schedules-create-tasks-per-polled-item
+    decision: A schedule creates a task from its template every interval, or once per new key its poll command lists, only under agc rest, and never twice for one key.
+    because: [recurring-work-arrives-as-items, a-poll-command-beats-an-integration]
+    adr: docs/decisions/0012-scheduled-tasks.md
+    decided: { who: franco, when: 2026-11-02 }

@@ -14,6 +14,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/hooks"
 	"github.com/vanclief/agent-composer/core/resources/knowledge"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
+	"github.com/vanclief/agent-composer/core/resources/schedules"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
 	"github.com/vanclief/agent-composer/messaging"
@@ -29,13 +30,16 @@ const tickTime = 1 * time.Minute
 
 // Stack represents the core services required by any interface.
 type Stack struct {
-	Controller   *controller.Controller
-	Scheduler    *scheduler.Scheduler
-	Runtime      *runtime.Runtime
-	HooksAPI     *hooks.API
-	WorkflowAPI  *workflowapi.API
-	Messaging    *messaging.Service
-	TasksAPI     *tasks.API
+	Controller  *controller.Controller
+	Scheduler   *scheduler.Scheduler
+	Runtime     *runtime.Runtime
+	HooksAPI    *hooks.API
+	WorkflowAPI *workflowapi.API
+	Messaging   *messaging.Service
+	TasksAPI    *tasks.API
+	// SchedulesAPI creates tasks on a schedule; only agc rest starts its
+	// scheduler (ADR 0012).
+	SchedulesAPI *schedules.API
 	KnowledgeAPI *knowledge.API
 	// Events is the live feed behind GET /api/events.
 	Events *events.Bus
@@ -97,6 +101,8 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	sandboxesAPI := sandboxes.NewAPI(rootCtx, ctrl, msg, sandboxes.SandboxRuntime{}, secretsPath, filepath.Join(home, "tasks"))
 	tasksAPI := tasks.NewAPI(ctrl, sandboxesAPI, msg, secretsPath, specs)
 	tasksAPI.SetEvents(bus)
+	schedulesAPI := schedules.NewAPI(ctrl, tasksAPI, secretsPath)
+	schedulesAPI.SetEvents(bus)
 
 	// Participant presence reads sandbox status through this seam, so
 	// messaging does not import the sandboxes API.
@@ -125,6 +131,7 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		WorkflowAPI:  workflowAPI,
 		Messaging:    msg,
 		TasksAPI:     tasksAPI,
+		SchedulesAPI: schedulesAPI,
 		KnowledgeAPI: knowledgeAPI,
 		Events:       bus,
 	}, nil
