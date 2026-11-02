@@ -13,7 +13,6 @@ import { TasksBadge, useMyTaskCount } from '@/features/tasks/attention'
 import { AREAS, areaOf } from './areas'
 import { PageTitleContext } from './page-title'
 import { Sidebar } from './sidebar'
-import { ThemeToggle } from './theme-toggle'
 import { LiveDot, MeChip, SoundToggle } from './top-bar'
 import { useTaskNotifications } from './notifications'
 
@@ -54,9 +53,6 @@ export function Layout() {
           }}
           pageBadges={{ '/tasks': <TasksBadge count={mine} /> }}
         />
-        <div className="flex justify-end p-2">
-          <ThemeToggle />
-        </div>
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">

@@ -171,7 +171,7 @@ its area.
   header, the Agents list and page (dot lit only when `awake`; the word
   stays in its pill), the task rail's manager and owner (xs) and the top
   bar's `@me` (`data-testid="me"`).
-- Compact zinc look, dark by default (light via the sidebar toggle). Use the
+- Compact zinc look, dark only (no light theme, no toggle). Use the
   shadcn components in `@/components/ui` (button, card, badge, dialog,
   alert-dialog, input, textarea, label, tabs, tooltip, toggle, toggle-group,
   switch, select, separator, scroll-area, dropdown-menu, sonner, skeleton,
@@ -492,7 +492,7 @@ First time: `npm ci && npx playwright install chromium`.
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `npm run mock`           | Mock API on http://127.0.0.1:8790 (`-- --port N`)                                                                                                                                                                                                                          |
 | `npm run dev`            | Vite dev server at http://localhost:5173/panel/, `/api` proxied to `VITE_API_TARGET` (default the mock on 8790; a real agc is `http://127.0.0.1:1202`)                                                                                                                     |
-| `npm run shot -- /tasks` | Screenshot a route at 1440x900 against its own fresh mock and dev server, writes and prints `/tmp/agc-panel/<route>.png`. Flags: `--theme light`, `--out <path>`, `--wait <ms>`, `--width <px>`, `--height <px>`, `--storage key=value` (repeatable), `--click <selector>` |
+| `npm run shot -- /tasks` | Screenshot a route at 1440x900 against its own fresh mock and dev server, writes and prints `/tmp/agc-panel/<route>.png`. Flags: `--out <path>`, `--wait <ms>`, `--width <px>`, `--height <px>`, `--storage key=value` (repeatable), `--click <selector>` |
 | `npm run check`          | Types drift, `tsc -b`, eslint, Playwright. Must be green before you finish                                                                                                                                                                                                 |
 | `npm run test`           | Playwright only                                                                                                                                                                                                                                                            |
 | `npm run types`          | Regenerate `src/api/schema.d.ts` from `../docs/openapi.yaml`                                                                                                                                                                                                               |
