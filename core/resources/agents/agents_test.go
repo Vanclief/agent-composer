@@ -673,7 +673,8 @@ func TestChannelsOfAnAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantReads := []string{"@franco/watcher-1", "#fix-ci", "#bump-deps", "#ci-*"}
+	// No @franco/watcher-1: messaging rejects @ names until ADR 0011.
+	wantReads := []string{"#fix-ci", "#bump-deps", "#ci-*"}
 	if !reflect.DeepEqual(reads, wantReads) {
 		t.Fatalf("reads = %q, want %q", reads, wantReads)
 	}
@@ -682,7 +683,7 @@ func TestChannelsOfAnAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantChannels := []string{"@franco/watcher-1", "#fix-ci", "#bump-deps", "#ci-main", "#ci-nightly"}
+	wantChannels := []string{"#fix-ci", "#bump-deps", "#ci-main", "#ci-nightly"}
 	if !reflect.DeepEqual(channels, wantChannels) {
 		t.Fatalf("channels = %q, want %q", channels, wantChannels)
 	}
@@ -916,7 +917,7 @@ func TestHomeSocketServesTheAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Agent.Name != "reviewer-1" || got.Idle != "20m" || !reflect.DeepEqual(got.Channels, []string{"@franco/reviewer-1", "#review-42"}) {
+	if got.Agent.Name != "reviewer-1" || got.Idle != "20m" || !reflect.DeepEqual(got.Channels, []string{"#review-42"}) {
 		t.Fatalf("GET /agent = %+v", got)
 	}
 
@@ -1008,7 +1009,7 @@ func TestHomeSocketServesTheAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(got.Channels, []string{"@franco/reviewer-1", "#review-42"}) {
+	if !reflect.DeepEqual(got.Channels, []string{"#review-42"}) {
 		t.Fatalf("channels after accept = %q, want #review-42 kept", got.Channels)
 	}
 

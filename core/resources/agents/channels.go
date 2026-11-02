@@ -56,10 +56,18 @@ func MatchChannel(pattern string, channel string) bool {
 	return err == nil && matched
 }
 
+// validChannel is messaging's channel name check, swapped in tests.
+var validChannel = msgmodels.ValidateChannel
+
 // Reads is every channel pattern the agent reads (ADR 0016 item 6): its
 // DM channel, #<task> for each task it manages, then the template's
 // reads. It is the one list behind GET /agent, the wake hook and the
 // home's messaging access.
+//
+// A channel messaging rejects is left out: messaging only knows # names
+// until direct-message channels land (ADR 0011), and one name it rejects
+// fails the home loop's whole wait on every channel. The DM channel
+// @<owner>/<name> joins the list once messaging accepts it.
 func (api *API) Reads(ctx context.Context, record *agent.Agent, tmpl *Template) ([]string, error) {
 	patterns := []string{}
 
@@ -81,7 +89,22 @@ func (api *API) Reads(ctx context.Context, record *agent.Agent, tmpl *Template) 
 		patterns = append(patterns, tmpl.Reads...)
 	}
 
-	return dedupe(patterns), nil
+	return dedupe(knownChannels(patterns)), nil
+}
+
+// knownChannels drops every pattern that names one channel messaging
+// rejects; globs and * stay, they only ever match channels that exist.
+func knownChannels(patterns []string) []string {
+	out := []string{}
+	for _, pattern := range patterns {
+		if pattern != Every && !isGlob(pattern) && validChannel(pattern) != nil {
+			continue
+		}
+
+		out = append(out, pattern)
+	}
+
+	return out
 }
 
 // matchesAny reports whether channel matches one of patterns.
