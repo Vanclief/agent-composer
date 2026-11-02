@@ -2,12 +2,11 @@ package tasks
 
 import (
 	"context"
-	"errors"
-	"io/fs"
-	"os"
 
 	"github.com/google/uuid"
 	"github.com/vanclief/ez"
+
+	taskmodels "github.com/vanclief/agent-composer/models/task"
 )
 
 type DeleteRequest struct {
@@ -24,9 +23,8 @@ type DeleteResponse struct {
 	Name    string `json:"name"`
 }
 
-// Delete removes the sandbox and its disk, the listener and the row.
-// Volumes and the Task's channel history are kept (ADR 0003, 0005). A
-// sandbox the runtime no longer knows is treated as already removed.
+// Delete removes the task's sandboxes, VMs and rows, then the task.
+// Volumes and the task's channel history are kept (ADR 0003, 0005).
 func (api *API) Delete(ctx context.Context, requester interface{}, request *DeleteRequest) (*DeleteResponse, error) {
 	err := request.Validate()
 	if err != nil {
@@ -38,32 +36,16 @@ func (api *API) Delete(ctx context.Context, requester interface{}, request *Dele
 		return nil, ez.Wrap(err)
 	}
 
-	name := record.Name
-
-	status, err := api.rt.Status(ctx, name)
-	if err != nil && ez.ErrorCode(err) != ez.ENOTFOUND {
+	sandboxRecords, err := taskmodels.ListTaskSandboxes(ctx, api.db, record.ID)
+	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	if err == nil {
-		if status != statusStopped {
-			err = api.rt.Stop(ctx, name)
-			if err != nil {
-				return nil, ez.Wrap(err)
-			}
-		}
-
-		err = api.rt.Remove(ctx, name)
+	for i := range sandboxRecords {
+		err = api.Sandboxes.Remove(ctx, &sandboxRecords[i])
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}
-	}
-
-	api.stopListener(name)
-
-	err = os.Remove(api.socketPath(name))
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return nil, ez.New(ez.EINTERNAL, "cannot remove socket "+api.socketPath(name), err)
 	}
 
 	err = record.Delete(ctx, api.db)
@@ -71,5 +53,5 @@ func (api *API) Delete(ctx context.Context, requester interface{}, request *Dele
 		return nil, ez.Wrap(err)
 	}
 
-	return &DeleteResponse{Deleted: true, Name: name}, nil
+	return &DeleteResponse{Deleted: true, Name: record.Name}, nil
 }

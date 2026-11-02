@@ -3,7 +3,6 @@ package task
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -22,19 +21,25 @@ var (
 	nonSlugRegex = regexp.MustCompile(`[^a-z0-9]+`)
 )
 
-// Task is what agc keeps about a Task. Its status lives in the runtime and
-// is read live, never stored (ADR 0003).
+// Task is an order: work to be done, in words. It is allocated compute as
+// Sandboxes. Its status is computed, never stored (ADR 0008).
 type Task struct {
 	bun.BaseModel `bun:"table:tasks"`
 
 	ID uuid.UUID `bun:",pk,type:uuid" json:"id"`
 	// Title is what a human calls the Task.
 	Title string `bun:"title,notnull,default:''" json:"title"`
-	// Name is a slug, also the sandbox name, the channel and the socket file.
-	Name      string          `bun:"name,notnull,unique" json:"name"`
-	Spec      json.RawMessage `bun:"type:jsonb" json:"spec"`
-	CreatedAt time.Time       `json:"created_at"`
-	UpdatedAt time.Time       `json:"updated_at"`
+	// Name is a slug, also the channel and the first sandbox's name.
+	Name string `bun:"name,notnull,unique" json:"name"`
+	// Brief says what to do and what done looks like, in markdown.
+	Brief string `bun:"brief,notnull,default:''" json:"brief"`
+	// Assignee is a harness id or a person's name. Empty is unassigned.
+	Assignee string `bun:"assignee,notnull,default:''" json:"assignee"`
+	// For is the id of the knowledge action or decision the Task serves.
+	For       string     `bun:"for_id,notnull,default:''" json:"for"`
+	DoneAt    *time.Time `bun:"done_at" json:"done_at"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
 }
 
 func ValidateName(name string) error {
@@ -101,10 +106,6 @@ func (t *Task) Validate() error {
 		return ez.Wrap(err)
 	}
 
-	if len(t.Spec) == 0 {
-		return ez.New(ez.EINVALID, "task spec is required", nil)
-	}
-
 	return nil
 }
 
@@ -130,6 +131,24 @@ func (t *Task) Insert(ctx context.Context, db bun.IDB) error {
 	}
 
 	_, err = db.NewInsert().Model(t).Exec(ctx)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// MarkDone sets DoneAt to now. A Task already done keeps its first DoneAt.
+func (t *Task) MarkDone(ctx context.Context, db bun.IDB) error {
+	if t.DoneAt != nil {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	t.DoneAt = &now
+	t.UpdatedAt = now
+
+	_, err := db.NewUpdate().Model(t).Column("done_at", "updated_at").WherePK().Exec(ctx)
 	if err != nil {
 		return ez.Wrap(err)
 	}
@@ -182,7 +201,7 @@ func GetTaskByName(ctx context.Context, db bun.IDB, name string) (*Task, error) 
 func ListTasks(ctx context.Context, db bun.IDB) ([]Task, error) {
 	tasks := []Task{}
 
-	err := db.NewSelect().Model(&tasks).Order("created_at DESC").Scan(ctx)
+	err := db.NewSelect().Model(&tasks).Order("created_at DESC", "id DESC").Scan(ctx)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}

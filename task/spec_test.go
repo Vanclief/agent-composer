@@ -30,78 +30,95 @@ func TestLoadFileWithName(t *testing.T) {
 	filePath := writeFile(t, `
 name: review-42
 title: Review PR 42
-image: agc-agent
-cpus: 2
-memory: 4096
-repo: github.com/vanclief/agent-composer
-ref: master
-setup: |
-  go mod download
-secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
-env:
-  GOFLAGS: -mod=mod
-volumes:
-  - go-mod-cache:/home/agent/go/pkg/mod:rw
-channels: ["#releases", "#alerts:read"]
+brief: |
+  Review PR 42 and post findings.
+assignee: claude_code
+for: review-prs
+sandbox:
+  image: agc-agent
+  cpus: 2
+  memory: 4096
+  repo: github.com/vanclief/agent-composer
+  ref: master
+  setup: |
+    go mod download
+  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
+  env:
+    GOFLAGS: -mod=mod
+  volumes:
+    - go-mod-cache:/home/agent/go/pkg/mod:rw
+  channels: ["#releases", "#alerts:read"]
+  command: claude --dangerously-skip-permissions
 `)
 
 	loaded, err := LoadFile(filePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec := loaded.Spec
 
-	if loaded.Name != "review-42" || loaded.Title != "Review PR 42" {
-		t.Fatalf("name = %q, title = %q", loaded.Name, loaded.Title)
+	if loaded.Name != "review-42" || loaded.Title != "Review PR 42" || loaded.Assignee != "claude_code" || loaded.For != "review-prs" {
+		t.Fatalf("got %+v", loaded)
+	}
+	if loaded.Brief != "Review PR 42 and post findings.\n" {
+		t.Fatalf("brief = %q", loaded.Brief)
 	}
 
-	want := Spec{
-		Image:    "agc-agent",
-		CPUs:     2,
-		Memory:   4096,
-		Repo:     "github.com/vanclief/agent-composer",
-		Ref:      "master",
-		Setup:    "go mod download\n",
-		Secrets:  []string{"CLAUDE_CODE_OAUTH_TOKEN", "GITHUB_TOKEN"},
-		Env:      map[string]string{"GOFLAGS": "-mod=mod"},
-		Volumes:  []string{"go-mod-cache:/home/agent/go/pkg/mod:rw"},
-		Channels: []string{"#releases", "#alerts:read"},
+	want := Sandbox{
+		Spec: Spec{
+			Image:    "agc-agent",
+			CPUs:     2,
+			Memory:   4096,
+			Repo:     "github.com/vanclief/agent-composer",
+			Ref:      "master",
+			Setup:    "go mod download\n",
+			Secrets:  []string{"CLAUDE_CODE_OAUTH_TOKEN", "GITHUB_TOKEN"},
+			Env:      map[string]string{"GOFLAGS": "-mod=mod"},
+			Volumes:  []string{"go-mod-cache:/home/agent/go/pkg/mod:rw"},
+			Channels: []string{"#releases", "#alerts:read"},
+		},
+		Command: "claude --dangerously-skip-permissions",
 	}
-	if !reflect.DeepEqual(spec, want) {
-		t.Fatalf("spec = %+v, want %+v", spec, want)
+	if loaded.Sandbox == nil || !reflect.DeepEqual(*loaded.Sandbox, want) {
+		t.Fatalf("sandbox = %+v, want %+v", loaded.Sandbox, want)
 	}
 
-	err = spec.Validate()
+	err = loaded.Sandbox.Validate()
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestLoadFileBareSpec(t *testing.T) {
-	loaded, err := LoadFile(writeFile(t, "image: debian\nmemory: 512\n"))
+func TestLoadFileWithoutSandbox(t *testing.T) {
+	loaded, err := LoadFile(writeFile(t, "title: Call the bank\nbrief: Ask about the fee.\nassignee: Franco\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if loaded.Name != "" || loaded.Title != "" || loaded.Spec.Image != "debian" || loaded.Spec.Memory != 512 {
+	if loaded.Title != "Call the bank" || loaded.Assignee != "Franco" || loaded.Sandbox != nil {
 		t.Fatalf("got %+v", loaded)
 	}
 }
 
 func TestLoadFileRejectsUnknownKey(t *testing.T) {
-	_, err := LoadFile(writeFile(t, "image: debian\ncpu: 2\n"))
+	_, err := LoadFile(writeFile(t, "sandbox:\n  image: debian\n  cpu: 2\n"))
 	if err == nil || ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), "cpu") {
 		t.Fatalf("expected EINVALID naming cpu, got %v", err)
+	}
+
+	// The environment lives under sandbox:, not at top level.
+	_, err = LoadFile(writeFile(t, "title: x\nrepo: github.com/o/n\n"))
+	if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), "repo") {
+		t.Fatalf("expected EINVALID naming repo, got %v", err)
 	}
 }
 
 func TestParseFile(t *testing.T) {
-	parsed, err := ParseFile([]byte("title: '  Review ads  '\nrepo: github.com/o/n\n"))
+	parsed, err := ParseFile([]byte("title: '  Review ads  '\nsandbox:\n  repo: github.com/o/n\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if parsed.Title != "Review ads" || parsed.Name != "" || parsed.Spec.Repo != "github.com/o/n" {
+	if parsed.Title != "Review ads" || parsed.Name != "" || parsed.Sandbox.Repo != "github.com/o/n" {
 		t.Fatalf("got %+v", parsed)
 	}
 
@@ -110,9 +127,20 @@ func TestParseFile(t *testing.T) {
 		t.Fatalf("empty file: got %+v, err %v", parsed, err)
 	}
 
-	_, err = ParseFile([]byte("repo: [unclosed\n"))
+	_, err = ParseFile([]byte("sandbox: [unclosed\n"))
 	if ez.ErrorCode(err) != ez.EINVALID {
 		t.Fatalf("expected EINVALID for bad YAML, got %v", err)
+	}
+}
+
+func TestParseSandbox(t *testing.T) {
+	parsed, err := ParseSandbox([]byte("image: debian\nmemory: 512\ncommand: bash\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if parsed.Image != "debian" || parsed.Memory != 512 || parsed.Command != "bash" {
+		t.Fatalf("got %+v", parsed)
 	}
 }
 
@@ -247,22 +275,22 @@ func TestSandboxSpec(t *testing.T) {
 	}
 	bindings := []secrets.Binding{{Name: "GITHUB_TOKEN", Value: "v", Hosts: []string{"github.com"}}}
 
-	got, err := spec.SandboxSpec("review-42", bindings, "/tmp/review-42.sock", 5100)
+	got, err := spec.SandboxSpec("review-42", "review-42-2", bindings, "/tmp/review-42-2.sock", 5100)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	want := sandbox.Spec{
-		Name:      "review-42",
+		Name:      "review-42-2",
 		Image:     "agc-agent",
 		CPUs:      2,
 		MemoryMiB: 1024,
 		Env:       map[string]string{"GOFLAGS": "-mod=mod", "AGC_TASK": "review-42", "AGC_MSG_VSOCK_PORT": "5100"},
 		Secrets:   []sandbox.Secret{{Name: "GITHUB_TOKEN", Value: "v", Hosts: []string{"github.com"}}},
 		Volumes:   []sandbox.Volume{{Source: "cache", Dest: "/cache", ReadWrite: true}},
-		VsockPath: "/tmp/review-42.sock",
+		VsockPath: "/tmp/review-42-2.sock",
 		VsockPort: 5100,
-		Labels:    map[string]string{"agc.task": "review-42"},
+		Labels:    map[string]string{"agc.task": "review-42", "agc.sandbox": "review-42-2"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v\nwant %+v", got, want)

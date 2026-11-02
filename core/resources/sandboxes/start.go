@@ -1,4 +1,4 @@
-package tasks
+package sandboxes
 
 import (
 	"context"
@@ -18,15 +18,20 @@ func (r StartRequest) Validate() error {
 	return validateRef(r.ID, r.Name)
 }
 
-// Start boots a stopped Task from its disk. Secrets are read again from
+// Start boots a stopped sandbox from its disk. Secrets are read again from
 // the store, since their values may have changed.
-func (api *API) Start(ctx context.Context, requester interface{}, request *StartRequest) (*TaskView, error) {
+func (api *API) Start(ctx context.Context, requester interface{}, request *StartRequest) (*SandboxView, error) {
 	err := request.Validate()
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	record, err := api.find(ctx, request.ID, request.Name)
+	record, owner, err := api.findWithTask(ctx, request.ID, request.Name)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	err = requireBooted(record)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -41,7 +46,7 @@ func (api *API) Start(ctx context.Context, requester interface{}, request *Start
 		return nil, ez.Wrap(err)
 	}
 
-	err = api.startTaskListener(record.Name, spec)
+	err = api.startSandboxListener(record.Name, owner.Name, spec)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -51,5 +56,12 @@ func (api *API) Start(ctx context.Context, requester interface{}, request *Start
 		return nil, ez.Wrap(err)
 	}
 
-	return api.view(ctx, record)
+	record.StoppedAt = nil
+
+	err = record.Update(ctx, api.db, "stopped_at")
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return api.view(ctx, record, owner.Name)
 }

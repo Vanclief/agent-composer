@@ -20,6 +20,7 @@ var ALL = []interface{}{
 	(*execution.WorkflowExecution)(nil),
 	(*execution.NodeExecution)(nil),
 	(*task.Task)(nil),
+	(*task.Sandbox)(nil),
 	(*user.User)(nil),
 	(*workflow.Workflow)(nil),
 	(*workflow.WorkflowVersion)(nil),

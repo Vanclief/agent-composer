@@ -12,6 +12,7 @@ import (
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
 	"github.com/vanclief/agent-composer/core/resources/knowledge"
+	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
 	"github.com/vanclief/agent-composer/messaging"
@@ -88,13 +89,14 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	}
 
 	specs := task.Store{Dir: filepath.Join(home, "config", "specs")}
-	tasksAPI := tasks.NewAPI(ctrl, msg, tasks.SandboxRuntime{}, secretsPath, filepath.Join(home, "tasks"), specs)
+	sandboxesAPI := sandboxes.NewAPI(rootCtx, ctrl, msg, sandboxes.SandboxRuntime{}, secretsPath, filepath.Join(home, "tasks"))
+	tasksAPI := tasks.NewAPI(ctrl, sandboxesAPI, secretsPath, specs)
 
-	// Tasks keep running while agc is down. Their messaging listeners
+	// Sandboxes keep running while agc is down. Their messaging listeners
 	// come back here.
-	err = tasksAPI.Resume(rootCtx)
+	err = sandboxesAPI.Resume(rootCtx)
 	if err != nil {
-		log.Warn().Err(err).Msg("task messaging resume failed")
+		log.Warn().Err(err).Msg("sandbox messaging resume failed")
 	}
 
 	// The knowledge directory holds evidence/, beliefs/, decisions/ and

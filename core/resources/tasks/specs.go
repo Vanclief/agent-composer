@@ -10,7 +10,8 @@ import (
 	"github.com/vanclief/agent-composer/task"
 )
 
-// Saved specs are reusable task.yaml files (task.Store).
+// Saved specs are reusable sandbox specs: the sandbox block of a task.yaml
+// at top level (task.Store).
 
 type ListSpecsRequest struct{}
 

@@ -13,8 +13,9 @@ import (
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 )
 
-// Store keeps saved specs: reusable task.yaml files, one per spec, in Dir
-// as <name>.yaml. The YAML is kept verbatim so comments survive.
+// Store keeps saved specs: reusable sandbox specs (the sandbox: block of a
+// task.yaml, at top level), one per spec, in Dir as <name>.yaml. The YAML is
+// kept verbatim so comments survive.
 type Store struct {
 	Dir string
 }
@@ -74,20 +75,20 @@ func (s Store) Get(name string) (Saved, error) {
 	return Saved{Name: name, YAML: string(data)}, nil
 }
 
-// Save validates yamlText as a task.yaml and writes it as name, replacing
-// any saved spec of that name.
+// Save validates yamlText as a sandbox spec and writes it as name,
+// replacing any saved spec of that name.
 func (s Store) Save(name string, yamlText string) (Saved, error) {
 	err := taskmodels.ValidateName(name)
 	if err != nil {
 		return Saved{}, ez.Wrap(err)
 	}
 
-	parsed, err := ParseFile([]byte(yamlText))
+	parsed, err := ParseSandbox([]byte(yamlText))
 	if err != nil {
 		return Saved{}, ez.Wrap(err)
 	}
 
-	err = parsed.Spec.Validate()
+	err = parsed.Validate()
 	if err != nil {
 		return Saved{}, ez.Wrap(err)
 	}

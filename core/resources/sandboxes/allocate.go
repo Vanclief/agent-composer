@@ -1,0 +1,450 @@
+package sandboxes
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"path"
+	"strings"
+	"time"
+	"unicode"
+
+	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+	"github.com/vanclief/ez"
+
+	"github.com/vanclief/agent-composer/executor"
+	taskmodels "github.com/vanclief/agent-composer/models/task"
+	"github.com/vanclief/agent-composer/secrets"
+	"github.com/vanclief/agent-composer/task"
+)
+
+// maxStderrBytes keeps the tail of a failed clone or setup in the error.
+const maxStderrBytes = 2000
+
+// BriefPath is where agc writes the task's title and brief in a sandbox.
+const BriefPath = task.HomeDir + "/TASK.md"
+
+// AllocateRequest allocates a sandbox to the task named by TaskID or
+// TaskName, which come from the path. The body is the sandbox: the
+// environment fields inline plus command.
+type AllocateRequest struct {
+	TaskID   uuid.UUID `json:"-"`
+	TaskName string    `json:"-"`
+	task.Sandbox
+}
+
+func (r AllocateRequest) Validate() error {
+	err := validateRef(r.TaskID, r.TaskName)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	err = r.Sandbox.Validate()
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// Allocate inserts a sandbox for the task and returns it as starting. The
+// boot runs in the background (see AllocateFor).
+func (api *API) Allocate(ctx context.Context, requester interface{}, request *AllocateRequest) (*SandboxView, error) {
+	err := request.Validate()
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	var owner *taskmodels.Task
+	if request.TaskID != uuid.Nil {
+		owner, err = taskmodels.GetTaskByID(ctx, api.db, request.TaskID)
+	} else {
+		owner, err = taskmodels.GetTaskByName(ctx, api.db, request.TaskName)
+	}
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return api.AllocateFor(ctx, owner, request.Sandbox)
+}
+
+// AllocateFor inserts a sandbox for owner and returns it as starting.
+// Missing secrets fail here, before anything is inserted. A goroutine with
+// its own context then creates the VM, clones the repo, writes the agent
+// config and TASK.md, runs setup, sets booted_at and starts the command as
+// a terminal. A failure sets boot_error and discards the VM.
+func (api *API) AllocateFor(ctx context.Context, owner *taskmodels.Task, request task.Sandbox) (*SandboxView, error) {
+	err := request.Validate()
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	spec := request.Spec
+
+	bindings, err := api.resolveSecrets(spec)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	encodedSpec, err := json.Marshal(spec)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	record, err := api.insert(ctx, owner, encodedSpec, strings.TrimSpace(request.Command))
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	// The view is read before the boot starts, so it always says starting.
+	view, err := api.view(ctx, record, owner.Name)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	bootCtx, cancel := context.WithTimeout(api.rootCtx, bootTimeout)
+	done := make(chan struct{})
+
+	api.mu.Lock()
+	api.booting[record.Name] = &boot{cancel: cancel, done: done}
+	api.mu.Unlock()
+
+	api.boots.Add(1)
+	go func() {
+		defer api.boots.Done()
+		defer close(done)
+		defer cancel()
+		defer api.endBoot(record.Name)
+
+		api.boot(bootCtx, record, owner, spec, bindings)
+	}()
+
+	return view, nil
+}
+
+// insert names the sandbox and inserts it. The first sandbox of a task is
+// named after it, later ones <task>-2, <task>-3: the first free name.
+func (api *API) insert(ctx context.Context, owner *taskmodels.Task, encodedSpec []byte, command string) (*taskmodels.Sandbox, error) {
+	api.naming.Lock()
+	defer api.naming.Unlock()
+
+	name := ""
+	for n := 1; name == ""; n++ {
+		candidate := owner.Name
+		if n > 1 {
+			candidate = fmt.Sprintf("%s-%d", owner.Name, n)
+		}
+
+		taken, err := taskmodels.SandboxNameTaken(ctx, api.db, candidate)
+		if err != nil {
+			return nil, ez.Wrap(err)
+		}
+
+		if !taken {
+			name = candidate
+		}
+	}
+
+	record := &taskmodels.Sandbox{TaskID: owner.ID, Name: name, Spec: encodedSpec, Command: command}
+
+	err := record.Insert(ctx, api.db)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return record, nil
+}
+
+// boot is one sandbox's boot in progress, cancelled by Delete.
+type boot struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
+func (api *API) endBoot(name string) {
+	api.mu.Lock()
+	delete(api.booting, name)
+	api.mu.Unlock()
+}
+
+// cancelBoot cancels the sandbox's boot, if one is in progress, and waits
+// for it to discard what it made.
+func (api *API) cancelBoot(name string) {
+	api.mu.Lock()
+	b := api.booting[name]
+	api.mu.Unlock()
+
+	if b == nil {
+		return
+	}
+
+	b.cancel()
+	<-b.done
+}
+
+// boot runs the allocation and records a failure as boot_error.
+func (api *API) boot(ctx context.Context, record *taskmodels.Sandbox, owner *taskmodels.Task, spec task.Spec, bindings []secrets.Binding) {
+	err := api.bootSandbox(ctx, record, owner, spec, bindings)
+	if err == nil {
+		return
+	}
+
+	msg := ez.ErrorMessage(err)
+	record.BootError = &msg
+
+	err = record.Update(context.WithoutCancel(ctx), api.db, "boot_error")
+	if err != nil {
+		log.Error().Err(err).Str("sandbox", record.Name).Str("boot_error", msg).Msg("cannot record sandbox boot error")
+	}
+}
+
+func (api *API) bootSandbox(ctx context.Context, record *taskmodels.Sandbox, owner *taskmodels.Task, spec task.Spec, bindings []secrets.Binding) error {
+	name := record.Name
+
+	sandboxSpec, err := spec.SandboxSpec(owner.Name, name, bindings, api.socketPath(name), msgVsockPort)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	// The listener starts first so the guest can use it at once.
+	err = api.startSandboxListener(name, owner.Name, spec)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	sb, err := api.rt.Create(ctx, sandboxSpec)
+	if err != nil {
+		api.stopListener(name)
+		return ez.Wrap(err)
+	}
+
+	err = prepare(ctx, sb, spec, owner)
+	if err != nil {
+		return api.discard(ctx, name, sb, err)
+	}
+
+	now := time.Now().UTC()
+	record.BootedAt = &now
+
+	err = record.Update(ctx, api.db, "booted_at")
+	if err != nil {
+		return api.discard(ctx, name, sb, err)
+	}
+
+	if record.Command != "" {
+		fields := strings.Fields(record.Command)
+
+		_, err = sb.StartTerminal(ctx, executor.Command{Name: fields[0], Args: fields[1:], Dir: workDir(spec)})
+		if err != nil {
+			cause := ez.New(ez.ErrorCode(err), "cannot start "+record.Command+": "+ez.ErrorMessage(err), err)
+			return api.discard(ctx, name, sb, cause)
+		}
+	}
+
+	err = sb.Detach(ctx)
+	if err != nil {
+		log.Warn().Err(err).Str("sandbox", name).Msg("cannot release sandbox handle")
+	}
+
+	return nil
+}
+
+// workDir is where setup and the command run: the repo, or the home
+// directory when there is no repo.
+func workDir(spec task.Spec) string {
+	if spec.Repo == "" {
+		return task.HomeDir
+	}
+
+	_, repoDir, err := spec.RepoURL()
+	if err != nil {
+		return task.HomeDir
+	}
+
+	return repoDir
+}
+
+// Brief is the TASK.md agc writes in every sandbox: the task's title and
+// brief, then the standing instruction that work must leave the sandbox
+// (ADR 0008 item 6).
+func Brief(owner *taskmodels.Task) string {
+	var b strings.Builder
+
+	b.WriteString("# " + owner.Title + "\n\n")
+
+	brief := strings.TrimSpace(owner.Brief)
+	if brief != "" {
+		b.WriteString(brief + "\n\n")
+	}
+
+	b.WriteString("---\n\n")
+	b.WriteString("Work left only in this sandbox does not count. When you are done, commit on a branch named `agc/" + owner.Name + "`, ")
+	b.WriteString("push it, and post what changed in `#" + owner.Name + "`.\n")
+
+	return b.String()
+}
+
+// prepare clones the repo, writes the agent config and TASK.md, and runs
+// the setup script, as the sandbox user. Setup runs in the repo, or in the
+// home directory when there is no repo, and can still change the agent
+// config.
+func prepare(ctx context.Context, sb Sandbox, spec task.Spec, owner *taskmodels.Task) error {
+	dir := ""
+
+	if spec.Repo != "" {
+		cloneURL, repoDir, err := spec.RepoURL()
+		if err != nil {
+			return ez.Wrap(err)
+		}
+
+		err = run(ctx, sb, executor.Command{Name: "git", Args: []string{"clone", cloneURL, repoDir}}, "git clone "+cloneURL)
+		if err != nil {
+			return ez.Wrap(err)
+		}
+
+		// checkout, not clone --branch, so ref may also be a commit sha.
+		if spec.Ref != "" {
+			err = run(ctx, sb, executor.Command{Name: "git", Args: []string{"-C", repoDir, "checkout", spec.Ref}}, "git checkout "+spec.Ref)
+			if err != nil {
+				return ez.Wrap(err)
+			}
+		}
+
+		dir = repoDir
+	}
+
+	trusted := dir
+	if trusted == "" {
+		trusted = task.HomeDir
+	}
+
+	script, err := agentConfigScript(trusted)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	err = run(ctx, sb, executor.Command{Name: "bash", Args: []string{"-c", script}}, "agent config")
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	err = sb.WriteFile(ctx, BriefPath, []byte(Brief(owner)))
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	if spec.Setup != "" {
+		err = run(ctx, sb, executor.Command{Name: "bash", Args: []string{"-lc", spec.Setup}, Dir: dir}, "setup")
+		if err != nil {
+			return ez.Wrap(err)
+		}
+	}
+
+	return nil
+}
+
+// agentConfigTemplate merges first-run answers into the sandbox user's
+// Claude Code and Codex config, keeping whatever is already there (a
+// mounted volume may hold a harness home). Keys, from the shipped CLIs:
+// Claude Code's global config (~/.claude.json, or $CLAUDE_CONFIG_DIR/
+// .claude.json) holds hasCompletedOnboarding, theme,
+// bypassPermissionsModeAccepted (read by older releases, moved to settings
+// by newer ones) and projects[dir].hasTrustDialogAccepted; its user
+// settings (~/.claude/settings.json) hold skipDangerousModePermissionPrompt,
+// which current releases check before the bypass-permissions dialog.
+// Codex reads projects."<dir>".trust_level from $CODEX_HOME/config.toml.
+// {{dir}} is replaced by the trusted directory.
+const agentConfigTemplate = `set -eu
+dir='{{dir}}'
+claude_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+claude_json="${CLAUDE_CONFIG_DIR:-$HOME}/.claude.json"
+codex_dir="${CODEX_HOME:-$HOME/.codex}"
+mkdir -p "$claude_dir" "$codex_dir"
+
+merge() {
+  file="$1"
+  filter="$2"
+  if [ ! -s "$file" ]
+  then
+    echo '{}' > "$file"
+  fi
+  jq --arg dir "$dir" "$filter" "$file" > "$file.agc"
+  mv "$file.agc" "$file"
+}
+
+merge "$claude_json" '.hasCompletedOnboarding = true | .theme = "dark" | .bypassPermissionsModeAccepted = true | .projects[$dir].hasTrustDialogAccepted = true'
+merge "$claude_dir/settings.json" '.skipDangerousModePermissionPrompt = true'
+
+codex_config="$codex_dir/config.toml"
+touch "$codex_config"
+if ! grep -qxF "[projects.\"$dir\"]" "$codex_config"
+then
+  {
+    echo
+    echo "[projects.\"$dir\"]"
+    echo 'trust_level = "trusted"'
+  } >> "$codex_config"
+fi
+`
+
+// agentConfigScript renders the bash script that marks Claude Code's
+// onboarding done with the dark theme, accepts its bypass-permissions
+// dialog and trusts dir in Claude Code and Codex, so an agent started in
+// the sandbox begins working without a human answering first-run prompts.
+// dir is written inside shell, JSON and TOML quotes, so a path with a
+// quote, a backslash or a control character is rejected.
+func agentConfigScript(dir string) (string, error) {
+	if !path.IsAbs(dir) || strings.ContainsAny(dir, `"'\`) || strings.IndexFunc(dir, unicode.IsControl) >= 0 {
+		msg := fmt.Sprintf("directory %q cannot be marked trusted: it must be absolute, without quotes, backslashes or control characters", dir)
+		return "", ez.New(ez.EINVALID, msg, nil)
+	}
+
+	return strings.Replace(agentConfigTemplate, "{{dir}}", dir, 1), nil
+}
+
+// run runs cmd and turns a non-zero exit into an error carrying the tail
+// of its stderr.
+func run(ctx context.Context, sb Sandbox, cmd executor.Command, what string) error {
+	result, err := sb.Run(ctx, cmd)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	if result.ExitCode == 0 {
+		return nil
+	}
+
+	msg := fmt.Sprintf("%s failed with exit code %d", what, result.ExitCode)
+	stderr := strings.TrimSpace(string(result.Stderr))
+	if len(stderr) > maxStderrBytes {
+		stderr = "..." + stderr[len(stderr)-maxStderrBytes:]
+	}
+	if stderr != "" {
+		msg += ": " + stderr
+	}
+
+	return ez.New(ez.EINTERNAL, msg, nil)
+}
+
+// discard undoes a half-booted sandbox: stops and removes the VM and its
+// listener. The returned error is cause, extended to say what happened to
+// the VM.
+func (api *API) discard(ctx context.Context, name string, sb Sandbox, cause error) error {
+	cleanupCtx := context.WithoutCancel(ctx)
+
+	_ = sb.Detach(cleanupCtx)
+	api.stopListener(name)
+
+	err := api.rt.Stop(cleanupCtx, name)
+	if err == nil {
+		err = api.rt.Remove(cleanupCtx, name)
+	}
+
+	msg := ez.ErrorMessage(cause) + " (sandbox " + name + " was removed)"
+	if err != nil {
+		msg = ez.ErrorMessage(cause) + " (sandbox " + name + " could not be removed: " + ez.ErrorMessage(err) + ")"
+	}
+
+	return ez.New(ez.ErrorCode(cause), msg, cause)
+}
