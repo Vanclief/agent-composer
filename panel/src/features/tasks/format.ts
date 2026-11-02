@@ -79,3 +79,27 @@ export function parseChannel(entry: string) {
   }
   return { name: name.replace(/^#/, ''), readOnly }
 }
+
+// Harness ids in runtime/harnesses/catalog.go; any other assignee is a
+// person. A task with a model is a harness's too (ADR 0009: a person's task
+// has no model).
+const HARNESSES = ['claude_code', 'codex_cli', 'pi']
+
+export function assignedToHarness(task: { assignee: string; model: string }) {
+  return task.model !== '' || HARNESSES.includes(task.assignee)
+}
+
+// The list order: open, then running, then done (any other word last),
+// newest first inside each. The words are the server's, never relabeled.
+const STATUS_ORDER = ['open', 'running', 'done']
+
+function statusRank(status: string) {
+  const i = STATUS_ORDER.indexOf(status)
+  return i < 0 ? STATUS_ORDER.length : i
+}
+
+export function sortTasks<T extends { status: string; created_at: string }>(list: T[]) {
+  return [...list].sort(
+    (a, b) => statusRank(a.status) - statusRank(b.status) || b.created_at.localeCompare(a.created_at),
+  )
+}

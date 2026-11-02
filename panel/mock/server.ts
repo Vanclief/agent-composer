@@ -491,6 +491,19 @@ function createState() {
     const reviewer = join('reviewer', 'review-42', false)
     const tester = join('tester', 'review-42', false)
     const franco = join('franco', '', true)
+    // ADR 0009 item 4: agc opens the channel with the manager's message,
+    // then the instructions of sandbox review-42 verbatim, 40 minutes ago.
+    const agc = join('agc', '', false)
+    const opened = iso(Date.now() - 40 * 60_000)
+    post(
+      '#review-42',
+      agc,
+      '@franco, task `review-42` is open: Review 42.\n' +
+        'Agent: claude_code (claude-opus-5-5) on sandbox `review-42`, starting.\n' +
+        "The agent's instructions are the next message. Reply here to talk to it;\n" +
+        'post /done to close the task.',
+    ).created_at = opened
+    post('#review-42', agc, sandboxes.get('review-42')?.instructions ?? '').created_at = opened
     const first = post('#review-42', reviewer, 'Cloned the repo and ran the tests. 3 failures in workflow/.')
     post('#review-42', franco, 'Look at the loop node first.', first.id)
     post('#review-42', tester, 'Reproduced 2 of 3 locally. The third looks flaky.')
