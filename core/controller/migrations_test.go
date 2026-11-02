@@ -148,8 +148,8 @@ func TestSetupOnFreshDatabaseKeepsSingleTitleColumn(t *testing.T) {
 		t.Fatal("fresh tasks table should have exactly one title column")
 	}
 
-	if countAppliedMigrations(t, controller) != 10 {
-		t.Fatal("the title, sandboxes, task agents, task notify, task acceptance, message kind, sandbox volume, schedules, agents and task report migrations should be recorded as applied")
+	if countAppliedMigrations(t, controller) != 11 {
+		t.Fatal("the title, sandboxes, task agents, task notify, task acceptance, message kind, sandbox volume, schedules, agents, task report and accounts migrations should be recorded as applied")
 	}
 }
 
