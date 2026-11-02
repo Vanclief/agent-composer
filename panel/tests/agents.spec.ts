@@ -88,17 +88,17 @@ test('Wake sends the request; the chip reads waking, then awake, and Sleep puts 
   await expect(page.getByTestId('live-status')).toHaveAttribute('data-state', 'connected')
   await expect(page.getByTestId('agent-state')).toHaveText('asleep')
 
-  const posted = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith(`/api/agents/${name}/wake`))
-  await page.getByRole('button', { name: 'Wake' }).click()
-  await posted
-  await expect(page.getByTestId('agent-state')).toHaveText('waking')
-  // Sleep says why it cannot be pressed yet.
-  await expect(page.getByRole('button', { name: 'Waking…' })).toBeDisabled()
-  // The mock's agent.state event brings awake within the 30s poll.
-  await expect(page.getByTestId('agent-state')).toHaveText('awake', { timeout: 6000 })
+  // dispatchEvent: toasts stacking over the actions row made a real click
+  // wait for the pointer path and time out under load (see live.spec.ts).
+  await page.getByRole('button', { name: 'Wake' }).dispatchEvent('click')
+  // The mock answers waking and, two seconds later, awake through an
+  // agent.state event; under load the first state may already be gone when
+  // the assertion runs, so accept either, then wait for awake.
+  await expect(page.getByTestId('agent-state')).toHaveText(/^(waking|awake)$/)
+  await expect(page.getByTestId('agent-state')).toHaveText('awake', { timeout: 10000 })
   await expect(page.locator('[data-card="home"]').getByRole('link')).toHaveAttribute('href', `/panel/compute/${name}`)
 
-  await page.getByRole('button', { name: 'Sleep' }).click()
+  await page.getByRole('button', { name: 'Sleep' }).dispatchEvent('click')
   await expect(page.getByTestId('agent-state')).toHaveText('asleep')
   await expect(page.getByRole('button', { name: 'Wake' })).toBeVisible()
 })

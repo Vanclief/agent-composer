@@ -36,6 +36,8 @@ type PostRequest struct {
 	Channel       string `json:"channel"`
 	Body          string `json:"body"`
 	ReplyTo       *int64 `json:"reply_to,omitempty"`
+	// Kind is message (the default when empty) or question.
+	Kind string `json:"kind,omitempty"`
 }
 
 // MessagesResponse answers read and wait. Cursor is the id to pass as
@@ -47,6 +49,12 @@ type MessagesResponse struct {
 
 type ChannelsResponse struct {
 	Channels []messaging.ChannelInfo `json:"channels"`
+}
+
+// QuestionsResponse answers questions: newest first, each with its
+// answer when it has one.
+type QuestionsResponse struct {
+	Questions []messaging.Question `json:"questions"`
 }
 
 type ParticipantsResponse struct {
@@ -85,6 +93,7 @@ func New(svc *messaging.Service, caller func(*http.Request) (messaging.Caller, e
 	mux.HandleFunc("GET /wait", a.wait)
 	mux.HandleFunc("GET /channels", a.channels)
 	mux.HandleFunc("GET /participants", a.participants)
+	mux.HandleFunc("GET /questions", a.questions)
 
 	return mux
 }
@@ -134,7 +143,7 @@ func (a *api) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m, err := a.svc.Post(r.Context(), caller, req.ParticipantID, req.Channel, req.Body, req.ReplyTo)
+	m, err := a.svc.Post(r.Context(), caller, req.ParticipantID, req.Channel, req.Body, req.ReplyTo, req.Kind)
 	if err != nil {
 		WriteError(w, err)
 		return
@@ -238,6 +247,32 @@ func (a *api) participants(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, ParticipantsResponse{Participants: participants})
 }
 
+func (a *api) questions(w http.ResponseWriter, r *http.Request) {
+	caller, err := a.caller(r)
+	if err != nil {
+		WriteError(w, err)
+		return
+	}
+
+	query := r.URL.Query()
+
+	open, err := parseFlag(query.Get("open"), "open")
+	if err != nil {
+		WriteError(w, err)
+		return
+	}
+
+	filter := messaging.QuestionsFilter{Channel: query.Get("channel"), Open: open, For: query.Get("for")}
+
+	questions, err := a.svc.Questions(r.Context(), caller, filter)
+	if err != nil {
+		WriteError(w, err)
+		return
+	}
+
+	WriteJSON(w, http.StatusOK, QuestionsResponse{Questions: questions})
+}
+
 // decode resolves the caller and reads a JSON body into dst.
 func (a *api) decode(w http.ResponseWriter, r *http.Request, dst any) (messaging.Caller, error) {
 	caller, err := a.caller(r)
@@ -274,6 +309,18 @@ func parseInt(value, name string) (int64, error) {
 	}
 
 	return n, nil
+}
+
+// parseFlag reads a boolean query parameter: 1 or true, 0, false or empty.
+func parseFlag(value, name string) (bool, error) {
+	switch value {
+	case "", "0", "false":
+		return false, nil
+	case "1", "true":
+		return true, nil
+	}
+
+	return false, ez.New(ez.EINVALID, name+" must be 1 or 0", nil)
 }
 
 func newMessagesResponse(messages []msgmodels.Message, after int64) MessagesResponse {

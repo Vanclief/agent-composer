@@ -2,8 +2,8 @@
 // (src/shell/layout.tsx). Only followed channels (follow.ts): Inbox (#<me>)
 // pinned first, even before it has a message; then Direct (my DMs,
 // @<me>/<task>), then Tasks (channels named after a task), then Other; last
-// "Browse channels…" to every channel. Each row has its unread badge and is
-// bold while unread.
+// "Browse channels…" to every channel. Each row has its unread badge, the
+// questions waiting for me (QuestionBadge), and is bold while unread.
 import { Compass, Lock } from 'lucide-react'
 import { NavLink } from 'react-router'
 
@@ -14,7 +14,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
 import { channelPath, dmTask, useFollow } from './follow'
-import { UnreadBadge } from './UnreadBadge'
+import { RowBadges } from './QuestionBadge'
+import { useOpenQuestions } from './questions'
 import { type ChannelUnread } from './unread'
 
 function rowClass(isActive: boolean, unread: boolean) {
@@ -27,7 +28,17 @@ function rowClass(isActive: boolean, unread: boolean) {
   )
 }
 
-function ChannelRow({ channel, readOnly, unread }: { channel: string; readOnly: boolean; unread: ChannelUnread }) {
+function ChannelRow({
+  channel,
+  readOnly,
+  unread,
+  questions,
+}: {
+  channel: string
+  readOnly: boolean
+  unread: ChannelUnread
+  questions: number
+}) {
   const name = channel.replace(/^#/, '')
   return (
     <li>
@@ -40,7 +51,7 @@ function ChannelRow({ channel, readOnly, unread }: { channel: string; readOnly: 
       >
         {readOnly && <Lock aria-label="Read only" className="size-3.5 shrink-0" />}
         <span className="truncate font-mono">#{name}</span>
-        <UnreadBadge count={unread.count} mention={unread.mention} />
+        <RowBadges count={unread.count} mention={unread.mention} questions={questions} />
       </NavLink>
     </li>
   )
@@ -48,7 +59,17 @@ function ChannelRow({ channel, readOnly, unread }: { channel: string; readOnly: 
 
 // The other side of a DM: the newest participant who is not me, else the
 // task's name.
-function DMRow({ channel, me, unread }: { channel: string; me: string; unread: ChannelUnread }) {
+function DMRow({
+  channel,
+  me,
+  unread,
+  questions,
+}: {
+  channel: string
+  me: string
+  unread: ChannelUnread
+  questions: number
+}) {
   const participants = useParticipants(channel)
   const task = dmTask(channel)
   const other = (participants.data ?? []).filter((p) => p.name !== me && p.name !== 'agc').at(-1)?.name
@@ -66,7 +87,7 @@ function DMRow({ channel, me, unread }: { channel: string; me: string; unread: C
         <Icon aria-hidden className={cn('size-3.5 shrink-0', conceptColors.human.text)} />
         <span className="shrink-0 font-mono">@{other ?? task}</span>
         {other && <span className="min-w-0 truncate text-xs font-normal text-muted-foreground">{task}</span>}
-        <UnreadBadge count={unread.count} mention={unread.mention} />
+        <RowBadges count={unread.count} mention={unread.mention} questions={questions} />
       </NavLink>
     </li>
   )
@@ -83,6 +104,7 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
 
 export function ChannelRows() {
   const { unread, following } = useFollow()
+  const questions = useOpenQuestions()
   const tasks = useTasks()
   const { channelsQuery, inbox, me } = unread
   const InboxIcon = conceptIcons.inbox
@@ -107,7 +129,7 @@ export function ChannelRows() {
         >
           <InboxIcon aria-hidden className={cn('size-3.5 shrink-0', conceptColors.inbox.text)} />
           <span className="truncate">Inbox</span>
-          <UnreadBadge count={inboxUnread.count} mention={inboxUnread.mention} />
+          <RowBadges count={inboxUnread.count} mention={inboxUnread.mention} questions={questions.of(inbox).length} />
         </NavLink>
       </li>
       {channelsQuery.isPending ? (
@@ -124,21 +146,39 @@ export function ChannelRows() {
           {direct.length > 0 && (
             <Group label="Direct">
               {direct.map((c) => (
-                <DMRow key={c.channel} channel={c.channel} me={me} unread={unread.of(c.channel)} />
+                <DMRow
+                  key={c.channel}
+                  channel={c.channel}
+                  me={me}
+                  unread={unread.of(c.channel)}
+                  questions={questions.of(c.channel).length}
+                />
               ))}
             </Group>
           )}
           {taskChannels.length > 0 && (
             <Group label="Tasks">
               {taskChannels.map((c) => (
-                <ChannelRow key={c.channel} channel={c.channel} readOnly={c.read_only} unread={unread.of(c.channel)} />
+                <ChannelRow
+                  key={c.channel}
+                  channel={c.channel}
+                  readOnly={c.read_only}
+                  unread={unread.of(c.channel)}
+                  questions={questions.of(c.channel).length}
+                />
               ))}
             </Group>
           )}
           {other.length > 0 && (
             <Group label="Other">
               {other.map((c) => (
-                <ChannelRow key={c.channel} channel={c.channel} readOnly={c.read_only} unread={unread.of(c.channel)} />
+                <ChannelRow
+                  key={c.channel}
+                  channel={c.channel}
+                  readOnly={c.read_only}
+                  unread={unread.of(c.channel)}
+                  questions={questions.of(c.channel).length}
+                />
               ))}
             </Group>
           )}

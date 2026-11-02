@@ -137,6 +137,9 @@ func (e *Executor) Run(ctx context.Context, cmd executor.Command) (*executor.Res
 	if cmd.Stdin != nil {
 		opts = append(opts, m.WithExecStdinPipe())
 	}
+	if cmd.User != "" {
+		opts = append(opts, m.WithExecUser(cmd.User))
+	}
 
 	h, err := e.sb.ExecStream(ctx, cmd.Name, cmd.Args, opts...)
 	if err != nil {

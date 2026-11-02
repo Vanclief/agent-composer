@@ -54,7 +54,9 @@ sandbox:
   ref: feat/tasks-microsandbox
   setup: |
     npx playwright install chromium
+    printf '%s\n' '#!/bin/sh' 'exec claude "$(cat /home/agent/TASK.md)"' > /home/agent/run.sh
   secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
-  # A bare `claude` waits at its prompt for someone to type; hand it the
-  # brief so the task starts on its own.
-  command: claude Read /home/agent/TASK.md and do everything it says, start to finish, without waiting for me.
+  # A bare `claude` waits at its prompt for someone to type, and agc splits
+  # command on whitespace, so setup writes a one-line script that hands
+  # claude the whole brief.
+  command: bash /home/agent/run.sh

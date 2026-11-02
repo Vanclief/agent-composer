@@ -1,5 +1,5 @@
 // Owned by the messages feature (MessagesTab, MessagesPage).
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 
 // Every test shares one mock, and a joined name stays held, so each test
 // posts under its own name unless it means to collide.
@@ -17,16 +17,19 @@ test('a task messages tab shows its channel with human and agent authors', async
   const list = page.getByTestId('message-list')
   for (const body of [
     'Cloned the repo and ran the tests. 3 failures in workflow/.',
-    'Look at the loop node first.',
     'Reproduced 2 of 3 locally. The third looks flaky.',
     'Fixed the loop node. Pushing to review-42.',
   ]) {
-    // exact: the reply stub quotes the first one too.
     await expect(list.getByText(body, { exact: true })).toBeVisible()
   }
-  await expect(list.locator('[data-kind="human"]', { hasText: '@franco' })).toBeVisible()
+  // franco's reply lives in the first message's thread.
+  await expect(list.getByText('Look at the loop node first.')).toHaveCount(0)
   await expect(list.locator('[data-kind="agent"]', { hasText: '@reviewer' }).first()).toBeVisible()
-  await expect(list.locator('[data-kind="agent"]', { hasText: '@tester' })).toBeVisible()
+  await expect(list.locator('[data-kind="agent"]', { hasText: '@tester' }).first()).toBeVisible()
+  await list.getByTestId('thread-footer').first().click()
+  const thread = page.getByTestId('thread-pane')
+  await expect(thread.getByText('Look at the loop node first.')).toBeVisible()
+  await expect(thread.locator('[data-kind="human"]', { hasText: '@franco' })).toBeVisible()
 })
 
 test('joining and posting shows the message in the list', async ({ page }) => {
@@ -182,37 +185,20 @@ test('senders show a human or a task icon, and agents link to their task', async
   const groupOf = (name: string) =>
     list.getByTestId('message-group').filter({ has: page.getByTestId('author').filter({ hasText: name }) })
 
-  await expect(groupOf('@franco').locator('svg[data-concept="human"]')).toHaveCount(1)
-  await expect(groupOf('@franco').getByRole('link')).toHaveCount(0)
+  // franco only answers in threads.
+  await list.getByTestId('thread-footer').first().click()
+  const franco = page
+    .getByTestId('thread-pane')
+    .getByTestId('message-group')
+    .filter({ has: page.getByTestId('author').filter({ hasText: '@franco' }) })
+  await expect(franco.locator('svg[data-concept="human"]')).toHaveCount(1)
+  await expect(franco.getByRole('link')).toHaveCount(0)
   const tester = groupOf('@tester')
   await expect(tester.locator('svg[data-concept="task"]')).toHaveCount(1)
   const link = tester.getByRole('link', { name: 'review-42' })
   await expect(link).toHaveAttribute('href', '/panel/tasks/review-42')
   await link.click()
   await expect(page).toHaveURL(/\/panel\/tasks\/review-42/)
-})
-
-test('a reply shows a one-line stub quoting the message it answers', async ({ page, request }) => {
-  await actAs(page, uniqueName())
-  await page.goto('/panel/messages/review-42')
-  await expect(page.getByTestId('message-list').getByTestId('reply-stub')).toHaveText(
-    'replying to @reviewer: Cloned the repo and ran the tests. 3 failures in workflow/.',
-  )
-
-  // A long body is cut to its first 60 characters.
-  const slug = uniqueName('c')
-  const joined = await request.post('/api/msg/join', { data: { name: uniqueName('o') } })
-  const { id: participant } = await joined.json()
-  const long = 'x'.repeat(50) + 'abcdefghij' + 'TAIL'
-  const posted = await request.post('/api/msg/post', {
-    data: { participant_id: participant, channel: `#${slug}`, body: long },
-  })
-  const target = await posted.json()
-  await request.post('/api/msg/post', {
-    data: { participant_id: participant, channel: `#${slug}`, body: 'answer', reply_to: target.id },
-  })
-  await page.goto(`/panel/messages/${slug}`)
-  await expect(page.getByTestId('reply-stub')).toHaveText(`replying to @${target.from}: ${'x'.repeat(50)}abcdefghij…`)
 })
 
 test('the members strip lists distinct senders, humans first, with a count', async ({ page }) => {
@@ -223,4 +209,247 @@ test('the members strip lists distinct senders, humans first, with a count', asy
   // strip counts it with the humans until messages carry a human flag.
   await expect(strip.getByTestId('members-count')).toHaveText('2 agents · 2 humans')
   await expect(strip.locator('[title]')).toHaveText(['@agc', '@franco', '@reviewer', '@tester'])
+})
+
+// ---------- markdown, system lines, threads, questions ----------
+
+async function joinAs(request: APIRequestContext, name = uniqueName('o'), task = '') {
+  const joined = await request.post('/api/msg/join', { data: { name, task } })
+  expect(joined.ok()).toBeTruthy()
+  return (await joined.json()) as { id: string; name: string }
+}
+
+async function postAs(
+  request: APIRequestContext,
+  participant: string,
+  channel: string,
+  body: string,
+  extra: { reply_to?: number; kind?: 'message' | 'question' } = {},
+) {
+  const posted = await request.post('/api/msg/post', {
+    data: { participant_id: participant, channel, body, ...extra },
+  })
+  expect(posted.ok()).toBeTruthy()
+  return (await posted.json()) as { id: number; from: string }
+}
+
+// The JSON body of the next POST /api/msg/post the page sends.
+function nextPost(page: Page) {
+  return page
+    .waitForRequest((r) => r.url().endsWith('/api/msg/post') && r.method() === 'POST')
+    .then((r) => r.postDataJSON() as { reply_to?: number; body: string })
+}
+
+test('a body renders as markdown: a code block with copy, a channel chip link, a mention', async ({
+  page,
+  request,
+}) => {
+  const slug = uniqueName('c')
+  const agent = await joinAs(request)
+  await postAs(
+    request,
+    agent.id,
+    `#${slug}`,
+    'Run this, then tell #releases and @someone:\n\n```sh\ngo test ./...\n```\n\nSee [the docs](https://example.com/docs).',
+  )
+  await actAs(page, uniqueName())
+  await page.goto(`/panel/messages/${slug}`)
+  const list = page.getByTestId('message-list')
+  const code = list.getByTestId('code-block')
+  await expect(code.locator('pre')).toHaveText('go test ./...')
+  await expect(code.getByRole('button', { name: 'Copy code' })).toBeAttached()
+  await expect(code.locator('pre')).toHaveCSS('font-family', /mono/i)
+  const chip = list.getByTestId('channel-chip')
+  await expect(chip).toHaveText('releases')
+  await expect(chip).toHaveAttribute('href', '/panel/messages/releases')
+  await expect(list.getByTestId('mention-chip')).toHaveText('@someone')
+  await expect(list.getByRole('link', { name: 'the docs' })).toHaveAttribute('target', '_blank')
+  await chip.click()
+  await expect(page).toHaveURL(/\/panel\/messages\/releases$/)
+})
+
+test('a long body clamps with Show more', async ({ page, request }) => {
+  const slug = uniqueName('c')
+  const agent = await joinAs(request)
+  const lines = Array.from({ length: 30 }, (_, i) => `row ${i + 1}`).join('\n')
+  await postAs(request, agent.id, `#${slug}`, lines)
+  await actAs(page, uniqueName())
+  await page.goto(`/panel/messages/${slug}`)
+  const body = page.getByTestId('message-body')
+  await expect(body).toHaveAttribute('data-clamped', 'true')
+  expect((await body.boundingBox())!.height).toBeLessThanOrEqual(240)
+  await page.getByRole('button', { name: 'Show more' }).click()
+  await expect(body).toHaveAttribute('data-clamped', 'false')
+  await expect(page.getByRole('button', { name: 'Show less' })).toBeVisible()
+})
+
+test('agc posts are compact system lines; the instructions collapse and expand', async ({ page }) => {
+  await actAs(page, uniqueName())
+  await page.goto('/panel/messages/review-42')
+  const list = page.getByTestId('message-list')
+  const lines = list.getByTestId('system-line')
+  await expect(lines).toHaveCount(2)
+  // Not chat bubbles: no group, no visible author header.
+  await expect(list.getByTestId('message-group').getByTestId('system-line')).toHaveCount(0)
+  await expect(lines.first().getByTestId('author')).toHaveClass(/sr-only/)
+
+  const instructions = list.locator('[data-testid="system-line"][data-system="instructions"]')
+  const toggle = instructions.getByRole('button', { name: 'Instructions' })
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await expect(instructions).not.toContainText('How this task works')
+  expect((await instructions.boundingBox())!.height).toBeLessThan(30)
+  await toggle.click()
+  await expect(instructions.getByText('How this task works')).toBeVisible()
+  await toggle.click()
+  await expect(instructions).not.toContainText('How this task works')
+})
+
+test('status lines from agc carry the delivery and criteria icons', async ({ page, request }) => {
+  const created = await request.post('/api/tasks', {
+    data: { title: `Status ${uniqueName()}`, brief: 'b', assignee: 'claude_code', for: '' },
+  })
+  expect(created.ok()).toBeTruthy()
+  const task = (await created.json()) as { name: string }
+  expect((await request.post(`/api/tasks/${task.name}/deliver`, { data: { summary: 'all done' } })).ok()).toBeTruthy()
+  expect(
+    (await request.post(`/api/tasks/${task.name}/reject`, { data: { by: 'franco', why: 'no' } })).ok(),
+  ).toBeTruthy()
+  await actAs(page, uniqueName())
+  await page.goto(`/panel/messages/${task.name}`)
+  const list = page.getByTestId('message-list')
+  await expect(list.locator('[data-system="delivered"] [data-status-icon="delivered"]')).toBeVisible()
+  await expect(list.locator('[data-system="rejected"] [data-status-icon="rejected"]')).toBeVisible()
+})
+
+test('a reply sits in its thread: the footer opens the pane and posting there sends reply_to', async ({
+  page,
+  request,
+}) => {
+  const slug = uniqueName('c')
+  const agent = await joinAs(request)
+  const parent = await postAs(request, agent.id, `#${slug}`, 'parent message')
+  await postAs(request, agent.id, `#${slug}`, 'first reply', { reply_to: parent.id })
+  await postAs(request, agent.id, `#${slug}`, 'later top level')
+  await actAs(page, uniqueName())
+  await page.goto(`/panel/messages/${slug}`)
+  const list = page.getByTestId('message-list')
+  await expect(list.getByText('later top level')).toBeVisible()
+  await expect(list.getByText('first reply')).toHaveCount(0)
+  const footer = list.getByTestId('thread-footer')
+  await expect(footer).toContainText('1 reply')
+
+  await footer.click()
+  await expect(page).toHaveURL(new RegExp(`thread=${parent.id}`))
+  const pane = page.getByTestId('thread-pane')
+  await expect(pane.getByText('parent message')).toBeVisible()
+  await expect(pane.getByText('first reply')).toBeVisible()
+
+  const box = pane.getByRole('textbox', { name: 'Reply in thread' })
+  await expect(pane.getByRole('button', { name: 'Send: empty' })).toBeVisible()
+  await box.fill('second reply')
+  const sent = nextPost(page)
+  await box.press('Enter')
+  expect((await sent).reply_to).toBe(parent.id)
+  await expect(pane.getByText('second reply')).toBeVisible()
+  await expect(footer).toContainText('2 replies')
+  await expect(list.getByText('second reply')).toHaveCount(0)
+
+  await pane.getByRole('button', { name: 'Close thread' }).click()
+  await expect(pane).toHaveCount(0)
+
+  // Hover shows "Reply in thread" on any message.
+  const later = list.getByTestId('message').filter({ hasText: 'later top level' })
+  await later.hover()
+  await later.getByRole('button', { name: 'Reply in thread' }).click()
+  await expect(page.getByTestId('thread-pane').getByText('later top level')).toBeVisible()
+  await expect(page.getByTestId('thread-pane')).toContainText('0 replies')
+})
+
+test('a question shows an Answer box; answering sends reply_to and the card flips to answered', async ({
+  page,
+  request,
+}) => {
+  const slug = uniqueName('c')
+  const agent = await joinAs(request, uniqueName('a'), 'review-42')
+  const question = await postAs(request, agent.id, `#${slug}`, 'Merge **now** or wait?', { kind: 'question' })
+  const me = uniqueName()
+  await actAs(page, me)
+  await page.goto(`/panel/messages/${slug}`)
+  const card = page.getByTestId('question-card')
+  await expect(card).toHaveAttribute('data-state', 'open')
+  await expect(card.getByTestId('author')).toHaveText(`@${agent.name}`)
+  await expect(card.locator('strong')).toHaveText('now')
+  const answer = card.getByRole('textbox', { name: `Answer @${agent.name}` })
+  await expect(card.getByRole('button', { name: 'Answer: empty' })).toBeDisabled()
+  await answer.fill('Wait for CI.')
+  const sent = nextPost(page)
+  await card.getByRole('button', { name: 'Answer', exact: true }).click()
+  expect((await sent).reply_to).toBe(question.id)
+  await expect(card).toHaveAttribute('data-state', 'answered')
+  await expect(card.getByTestId('answered-by')).toHaveText(`Answered by @${me}`)
+  await expect(card.getByTestId('answer')).toContainText('Wait for CI.')
+  await expect(card.getByRole('textbox')).toHaveCount(0)
+  // The answer is a reply: in the thread, not in the feed.
+  await expect(card.getByTestId('thread-footer')).toContainText('1 reply')
+})
+
+test('open questions for me are pinned as "Waiting for you" and counted on the channel row', async ({
+  page,
+  request,
+}) => {
+  const slug = uniqueName('c')
+  const agent = await joinAs(request, uniqueName('a'), 'review-42')
+  await postAs(request, agent.id, `#${slug}`, 'First question?', { kind: 'question' })
+  await postAs(request, agent.id, `#${slug}`, 'Just a note.')
+  await postAs(request, agent.id, `#${slug}`, 'Second question?', { kind: 'question' })
+  await actAs(page, uniqueName())
+  await page.goto(`/panel/messages/${slug}`)
+  const strip = page.getByTestId('waiting-strip')
+  await expect(strip).toHaveText(/Waiting for you: 2/)
+  const row = page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: new RegExp(`^#${slug}\\b`) })
+  await expect(row.getByTestId('question-badge')).toHaveText('2')
+  await expect(page.getByRole('navigation', { name: 'Mode' }).getByTestId('question-badge')).toBeVisible()
+
+  await strip.click()
+  await expect(page.getByTestId('question-card').first()).toBeInViewport()
+  const card = page.getByTestId('question-card').filter({ hasText: 'First question?' })
+  await card.getByRole('textbox').fill('Yes.')
+  await card.getByRole('textbox').press('Enter')
+  await expect(strip).toHaveText(/Waiting for you: 1/)
+  await expect(row.getByTestId('question-badge')).toHaveText('1')
+})
+
+test('the seeded questions: one waits in #review-42, one is answered', async ({ page }) => {
+  await actAs(page, uniqueName())
+  await page.goto('/panel/messages/review-42')
+  await expect(page.getByTestId('waiting-strip')).toHaveText(/Waiting for you: 1/)
+  const answered = page.locator('[data-testid="question-card"][data-state="answered"]')
+  await expect(answered.getByTestId('answered-by')).toHaveText('Answered by @franco')
+  await expect(answered.getByTestId('answer')).toContainText('Out of scope')
+})
+
+test('day separators, relative times, and the unread line at the read cursor', async ({ page, request }) => {
+  const slug = uniqueName('c')
+  const agent = await joinAs(request)
+  const read = await postAs(request, agent.id, `#${slug}`, 'already read')
+  await postAs(request, agent.id, `#${slug}`, 'new one')
+  await postAs(request, agent.id, `#${slug}`, 'newer one')
+  await page.addInitScript(
+    ([channel, id]) => localStorage.setItem('agc.panel.read', JSON.stringify({ [channel]: id })),
+    [`#${slug}`, read.id] as const,
+  )
+  await actAs(page, uniqueName())
+  await page.goto(`/panel/messages/${slug}`)
+  const list = page.getByTestId('message-list')
+  await expect(list.getByTestId('day-separator')).toHaveText(['Today'])
+  const time = list.getByTestId('message-group').first().locator('time').first()
+  await expect(time).toHaveText('just now')
+  await expect(time).toHaveAttribute('title', /\d/)
+  // The line sits right before the first message past the cursor.
+  const items = list.locator('ol > li')
+  const texts = await items.allTextContents()
+  const at = texts.findIndex((t) => t.includes('Unread'))
+  expect(at).toBeGreaterThan(0)
+  expect(texts[at + 1]).toContain('new one')
+  expect(texts[at - 1]).toContain('already read')
 })

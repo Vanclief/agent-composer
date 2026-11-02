@@ -17,7 +17,7 @@ the panel stays conflict-free.
 | `src/features/terminals/` (`TerminalsTab`, `TerminalPane`, mounted by `SandboxPage`) + `tests/terminals.spec.ts`                                                                               | terminals feature   |
 | `src/features/messages/` (`MessagesTab`, `MessagesPage`, `ChannelRows`, `BrowsePage`, unread, follow, message toasts) + `tests/messages.spec.ts`, `tests/talk.spec.ts`, `tests/follow.spec.ts` | messages feature    |
 | `src/features/agents/` (`AgentsPage`, `AgentPage`, the New agent and Keep… dialogs) + `tests/agents.spec.ts`                                                                                   | agents feature      |
-| everything else: `src/api/`, `src/components/`, `src/shell/`, `src/App.tsx`, `src/main.tsx`, `mock/`, `scripts/`, `tests/shell.spec.ts`, configs, `package.json`                               | foundation (shared) |
+| everything else: `src/api/`, `src/components/`, `src/shell/`, `src/App.tsx`, `src/main.tsx`, `mock/`, `scripts/`, `tests/shell.spec.ts`, `tests/presence.spec.ts`, configs, `package.json`     | foundation (shared) |
 
 - The files in `src/features/` are placeholders. Replace them freely, but keep
   the exported component names and props: `App.tsx` and `TasksPage` import
@@ -67,7 +67,7 @@ Each page sets the top bar title with `usePageTitle('…')` from
 - **One icon per concept:** import from `@/components/concept-icons`
   (`conceptIcons.task`, `.sandbox`, `.brief`, `.cpu`, `.memory`, `.image`,
   `.repo`, `.ref`, `.setup`, `.secret`, `.env`, `.volume`, `.channel`,
-  `.savedSpec`, `.terminal`, `.message`, `.human`, `.raw`). Never pick a
+  `.savedSpec`, `.terminal`, `.message`, `.human`, `.raw`, `.question`, `.thread`). Never pick a
   different Lucide icon for one of these. A new concept is added there first.
 - **Statuses are verbatim:** render `<StatusPill status={task.status} />`
   or `<StatusPill status={sandbox.status} detail={sandbox.status_error} />`.
@@ -78,7 +78,12 @@ Each page sets the top bar title with `usePageTitle('…')` from
   the green shape turned off, a dim hollow ring), `attention` for died or
   needs a hand (failed, crashed: lit red triangle, the only red on screen),
   `idle` for not started (open: hollow grey). A done thing never looks as
-  bright as a running one; a dead thing never looks like a done one.
+  bright as a running one; a dead thing never looks like a done one. A word
+  the pill doesn't know is `idle`, or `attention` when it has a `detail`.
+  `statusTier`/`tierRank` from `@/components/status-pill` give a status's
+  tier; the Tasks and Compute lists sort attention, lit, idle, off (rows
+  carry `data-tier`; off ones are muted), and their top row has
+  `<StatusLegend />` (four dots, the tier word on hover).
 - **Lists are rows, not cards:** a list item is a flat row with a hairline
   separator, no colored border (that is for the selected item and for
   grouping panels). Left to right: the status light, the name in normal
@@ -86,7 +91,11 @@ Each page sets the top bar title with `usePageTitle('…')` from
   only for things you click or things lit (a live count, a warning); a
   model name or a person is plain muted text. Franco on the task list of
   2026-11-01: equal violet cards with six chips each were "harder than it
-  should" be to read.
+  should" be to read. `TaskRow` (`src/features/tasks/TaskRow.tsx`) and
+  `SandboxRow` (`ComputePage`) are the two lists built this way: hover
+  tints the row, keyboard focus rings it violet, the age sits right in
+  muted mono, and on Compute the Stop/Start/Delete are small ghost buttons
+  (`SandboxActions quiet`).
 - **Empty states say why in place:** use `<EmptySlot onAdd={…} label="Add …" />`
   for a fillable slot, or `<EmptySlot reason="Sandbox stopped" />` when it can't
   be filled. A disabled control says why in its own label ("Create: needs a
@@ -97,6 +106,18 @@ Each page sets the top bar title with `usePageTitle('…')` from
   never rephrased, and never only as a toast.
 - `<IconChip icon={conceptIcons.memory}>4 GB</IconChip>` for icon + mono
   values, paths and ids.
+- **Avatars:** `<Avatar name size human? presence? />` (`@/components/avatar`,
+  sizes `xs` 16, `sm` 20, `md` 28, `lg` 40) is a deterministic identicon
+  hashed from the name (FNV-1a → seeded shapes in the concept hues, never
+  the status hues; `data-seed`, `data-shapes`), so a name looks the same
+  everywhere. A thin ring says who: human pink, agent or task violet; `agc`
+  gets a neutral grey mark (`data-kind` `human`/`agent`/`agc`). With
+  `presence` set, a `<PresenceDot online />` (`data-testid="presence"`,
+  `data-online`, `data-tier`) sits at its bottom-right: a filled emerald
+  dot (tier `lit`) or a hollow grey ring (tier `off`). Used in the channel
+  header, the Agents list and page (dot lit only when `awake`; the word
+  stays in its pill), the task header's manager and owner (xs) and the top
+  bar's `@me` (`data-testid="me"`).
 - Compact zinc look, dark by default (light via the sidebar toggle). Use the
   shadcn components in `@/components/ui` (button, card, badge, dialog,
   alert-dialog, input, textarea, label, tabs, tooltip, toggle, toggle-group,
@@ -130,7 +151,7 @@ Each page sets the top bar title with `usePageTitle('…')` from
   pill, a "Delivered <when>" chip, and Accept (confirms "Accept and stop N
   running sandboxes", or "Accept" when none run) and Reject… (a required
   "Why") until done. `by` is the signed-in name (`humanName()` in
-  `src/features/messages/identity.ts`). The list sorts `review` first.
+  `src/features/messages/identity.ts`). The list sorts `review` first among the lit tasks.
 - `@/api/hooks`: tasks `useTasks` (polls every 5s, or 30s while the live
   event stream is connected; sandboxes embedded newest first), `useTask(nameOrId)`, `useCreateTask` (returns at once; an
   optional `sandbox` comes back `starting`), `useDeliverTask` (`{ref, summary}`),
@@ -144,9 +165,13 @@ Each page sets the top bar title with `usePageTitle('…')` from
   (a live feed: read, then a long-poll wait loop), `useParticipants(channel)`.
   Every task or sandbox mutation refreshes both. Query keys live only in
   `queryKeys`.
-- `@/api/msg`: messaging types and calls (`/api/msg/join|leave|post|read|wait|channels|participants`),
+- `@/api/msg`: messaging types and calls (`/api/msg/join|leave|post|read|wait|channels|participants|questions`),
   hand-typed from `messaging/httpapi/httpapi.go`. Join answers 409
-  `name @x is already in use` while the name is held.
+  `name @x is already in use` while the name is held. A message's `kind`
+  is `message` (also when absent) or `question`; post takes `kind`.
+  `GET /api/msg/questions?channel=&open=1&for=<name>` answers
+  `{questions}`, each a message with `answered_by` (empty while open) and
+  `answered_at` (`null` while open); typed ahead of the Go side.
 - `@/api/terminals`: terminal types, `terminals.list/start`, and
   `terminalSocketURL(sandbox, job)`, all under `/api/sandboxes/{id}/terminals`.
   A sandbox allocated with a `command` runs it as the job `agent`. Binary frames carry bytes both ways; send
@@ -272,9 +297,65 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   channel, followed or not; never for my own messages or for the channel I
   am looking at. Everything else only bumps badges of followed channels; a
   plain message in an unfollowed channel makes no sound, toast or badge.
+- **Presence** (`src/features/messages/presence.ts`): participants carry
+  `online` and `last_seen_at` (hand-typed in `@/api/msg`; the backend is
+  adding them). `usePresence(channel)` reads `GET /api/msg/participants`
+  every 15s (and on `message.posted`, which invalidates the same query) and
+  returns name → `{online, last_seen_at}` (a name held twice is online if
+  either is). The channel header (`ChannelView`'s members strip) shows each
+  member as an avatar with its dot and the tooltip `@name · online` or
+  `@name · last seen 3 min ago`. Not yet in the message headers
+  (`MessageList`) or the sidebar rows (`ChannelRows`).
 - **Inbox page:** `/messages/<me>` is the ordinary channel view titled
   "Inbox #<me>", with the line "Your inbox: agents and tasks escalate here"
   (`data-testid="inbox-header"`) and, when empty, an empty slot saying so.
+
+## Talk mode: messages, threads, questions
+
+All in `src/features/messages/`; `ChannelView` (Talk page and a task's
+Messages tab) provides the channel context (`context.ts`) every piece reads.
+
+- **Bodies** (`MessageBody.tsx`): markdown with react-markdown and
+  remark-gfm. Raw HTML is never rendered; it shows as literal text. Code
+  blocks are mono with a copy button (`data-testid="code-block"`), links open
+  in a new tab, `@name` is a chip (`mention-chip`, solid pink when it is me)
+  and `#name` (a letter first, so `PR #42` stays text) a channel chip
+  (`channel-chip`, the `#` is its icon) linking to `/messages/<name>`. Bodies
+  clamp at about 12 lines (`max-h-60`, `data-clamped`) with "Show more".
+- **Feed** (`MessageList.tsx`): top-level messages only. Day separators
+  (`day-separator`: Today, Yesterday, then the date); headers show relative
+  times ("3 min ago", exact on hover) and the gutter the clock on hover. An
+  "Unread" line (`unread-line`) sits before the first message not from me
+  past the read cursor as it was when the channel opened (none for a
+  never-opened channel), with a "Jump to unread" pill while it is above the
+  fold. Consecutive messages from one sender within 5 minutes group
+  (`message-group`); system lines and questions stand alone.
+- **System lines** (`parts.tsx`): posts from `agc` (empty task) are compact
+  muted lines with a small agc mark (`data-testid="system-line"`,
+  `data-system`), not bubbles; the author stays for screen readers only. A
+  post starting with `# ` (the instructions) collapses to one "Instructions"
+  line with an expand toggle. "Delivered: …" gets the delivery icon,
+  "Accepted by …" and "Rejected by …" the criteria icon.
+- **Threads** (`threads.ts`, `ThreadPane.tsx`): a reply (`reply_to`, at any
+  depth) belongs to its top-level message's thread and is not in the feed;
+  a reply whose parent is not loaded stays top level. The parent shows "N
+  replies" (`thread-footer`), and hovering any message shows "Reply in
+  thread". Both open `?thread=<id>`: a pane on the right from `lg` up, a
+  full sheet below (`thread-pane`), with the replies oldest first and a
+  composer ("Reply in thread") posting with `reply_to`.
+- **Questions** (`questions.ts`): kind `question` renders as a card
+  (`question-card`, `data-state` `open`/`answered`) with the question icon,
+  the asker and an inline Answer box that posts a `reply_to` to it. The
+  first reply from someone other than the asker answers it (the server's
+  `answered_by` covers answers outside the loaded feed): the card shows
+  "Answered by @name" and that answer. Open questions for me
+  (`GET /api/msg/questions?open=1&for=<me>`, minus my own; the mock treats
+  every open question as mine) pin a "Waiting for you: N" strip
+  (`waiting-strip`) at the top of their channel that scrolls to the next one,
+  and add a pink outlined question marker (`question-badge`,
+  `QuestionBadge.tsx`) beside the unread badge on the channel row and the
+  Talk mode row. Unread counting is unchanged. The questions query key
+  includes the channels' last ids, so `message.posted` refreshes it.
 
 ## Commands (run in `panel/`)
 
@@ -329,7 +410,11 @@ hosts). Messages in `#review-42` (from @reviewer, @tester and human @franco,
 who has left so you can join as franco), `#releases`, and franco's inbox
 `#franco`: agc's two opening messages for `review-42` (the first mentions
 `@franco`) and an escalation from the review-42 agent @reviewer asking a
-decision. Creating a task
+decision. `#review-42` has a thread (franco's reply to @reviewer's first
+message), a code block, an answered question (@tester, answered by franco)
+and an open one from @reviewer to @franco; `#flaky-ci` has an open question
+from its agent @fixer. Posts take `kind`; `GET /api/msg/questions` ignores
+`for`. Creating a task
 returns at once. An allocated sandbox (`POST /api/tasks/{id}/sandboxes`, or
 `sandbox` on create) answers 201 `starting` for 2s, then `running`, and
 starts its `command` as the job `agent`. `POST /api/tasks/{id}/deliver
@@ -352,7 +437,11 @@ otherwise). Agent homes are not mock sandboxes, so `/compute/<home>` 404s.
 
 `GET /api/events` streams the live events from the mock's own
 operations (create, boot, stop/start/delete, accept, post, wake, sleep) with the 20s
-heartbeat. `notify` is true on every seeded task except `docs-pass`. Mock
+heartbeat. `notify` is true on every seeded task except `docs-pass`. Participants are listed with presence, computed per request: `agc`
+always online, an agent while its task has a running sandbox (so
+`review-42`'s are online, `flaky-ci`'s offline), a human while someone
+holds the name and `franco` always; `last_seen_at` is the participant's
+last message, else when it left, else when it joined. Mock
 only: `POST /api/msg/join` with a `task` joins as that task's agent (not
 human), so a test can post the closing message `task.done` summarizes.
 

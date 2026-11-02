@@ -14,6 +14,13 @@ import (
 // MaxBodyBytes caps a message body at 64 KiB.
 const MaxBodyBytes = 64 * 1024
 
+// Message kinds. A question is a message its asker needs answered; a
+// reply to it from anyone else answers it.
+const (
+	KindMessage  = "message"
+	KindQuestion = "question"
+)
+
 var channelRegex = regexp.MustCompile(`^#[a-z0-9][a-z0-9_-]{0,63}$`)
 
 // Message is one entry in the append-only log. The autoincrement id is
@@ -27,15 +34,18 @@ type Message struct {
 	ParticipantID string `bun:"participant_id,notnull" json:"participant_id"`
 	Task          string `bun:"task,notnull" json:"task"`
 	// Human is copied from the participant: false for agc and agents.
-	Human     bool      `bun:"human,notnull,default:false" json:"human"`
-	ReplyTo   *int64    `bun:"reply_to,nullzero" json:"reply_to,omitempty"`
-	Body      string    `bun:"body,notnull" json:"body"`
+	Human   bool   `bun:"human,notnull,default:false" json:"human"`
+	ReplyTo *int64 `bun:"reply_to,nullzero" json:"reply_to,omitempty"`
+	Body    string `bun:"body,notnull" json:"body"`
+	// Kind is message or question.
+	Kind      string    `bun:"kind,notnull,default:'message'" json:"kind"`
 	CreatedAt time.Time `bun:"created_at,notnull" json:"created_at"`
 }
 
 var _ bun.AfterCreateTableHook = (*Message)(nil)
 
-// AfterCreateTable adds the index every read and wait uses.
+// AfterCreateTable adds the index every read and wait uses, and the one
+// that finds the replies answering a question.
 func (*Message) AfterCreateTable(ctx context.Context, query *bun.CreateTableQuery) error {
 	_, err := query.DB().NewCreateIndex().
 		Model((*Message)(nil)).
@@ -47,12 +57,35 @@ func (*Message) AfterCreateTable(ctx context.Context, query *bun.CreateTableQuer
 		return ez.Wrap(err)
 	}
 
+	_, err = query.DB().NewCreateIndex().
+		Model((*Message)(nil)).
+		Index(ReplyToIndex).
+		Column("reply_to").
+		IfNotExists().
+		Exec(ctx)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
 	return nil
 }
+
+// ReplyToIndex finds the replies to a message.
+const ReplyToIndex = "messaging_messages_reply_to_idx"
 
 func ValidateChannel(channel string) error {
 	if !channelRegex.MatchString(channel) {
 		msg := fmt.Sprintf("channel %q is invalid: use # followed by 1-64 lowercase letters, digits, _ or -", channel)
+		return ez.New(ez.EINVALID, msg, nil)
+	}
+
+	return nil
+}
+
+// ValidateKind accepts message and question.
+func ValidateKind(kind string) error {
+	if kind != KindMessage && kind != KindQuestion {
+		msg := fmt.Sprintf("kind %q is invalid: use %s or %s", kind, KindMessage, KindQuestion)
 		return ez.New(ez.EINVALID, msg, nil)
 	}
 
@@ -73,6 +106,11 @@ func (m *Message) Validate() error {
 		return ez.New(ez.EINVALID, "message needs a participant", nil)
 	}
 
+	err = ValidateKind(m.Kind)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
 	if strings.TrimSpace(m.Body) == "" {
 		return ez.New(ez.EINVALID, "body is required", nil)
 	}
@@ -87,6 +125,10 @@ func (m *Message) Validate() error {
 func (m *Message) Insert(ctx context.Context, db bun.IDB) error {
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = time.Now().UTC()
+	}
+
+	if m.Kind == "" {
+		m.Kind = KindMessage
 	}
 
 	err := m.Validate()

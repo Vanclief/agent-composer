@@ -19,6 +19,9 @@ type Command struct {
 	Env map[string]string
 	// Stdin is written to the program and then closed. Nil means no input.
 	Stdin []byte
+	// User runs the program as another user. Empty means the executor's
+	// default. Only the sandbox executor can switch users.
+	User string
 }
 
 // Result is the outcome of a Command that ran to completion.

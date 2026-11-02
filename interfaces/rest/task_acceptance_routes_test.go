@@ -14,9 +14,10 @@ import (
 )
 
 // statefulRuntime boots sandboxes as running, stops them for real and
-// records the stops.
+// records the stops. A non-nil gate holds every Create until it is closed.
 type statefulRuntime struct {
-	sb *fakeSandbox
+	sb   *fakeSandbox
+	gate chan struct{}
 
 	mu       sync.Mutex
 	statuses map[string]string
@@ -24,6 +25,14 @@ type statefulRuntime struct {
 }
 
 func (f *statefulRuntime) Create(ctx context.Context, spec sandbox.Spec) (sandboxes.Sandbox, error) {
+	if f.gate != nil {
+		select {
+		case <-f.gate:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+
 	f.mu.Lock()
 	f.statuses[spec.Name] = "running"
 	f.mu.Unlock()

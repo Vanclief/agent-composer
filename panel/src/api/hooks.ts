@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 
 import { api, unwrap } from './client'
-import { msg, type Message, type MessagesResponse, type PostRequest } from './msg'
+import { msg, type Message, type MessagesResponse, type PostRequest, type QuestionsParams } from './msg'
 import { sandboxes, tasks, type CreateTaskRequest, type SandboxRequest } from './tasks'
 import { terminals, type StartTerminalRequest } from './terminals'
 import { knowledge } from './knowledge'
@@ -48,6 +48,9 @@ export const queryKeys = {
   agent: (name: string) => ['agents', name] as const,
   // A channel's newest message, by its last id (Talk's Browse page).
   lastMessage: (channel: string, last: number) => ['msg', 'last', channel, last] as const,
+  // version changes whenever a message is posted anywhere (the sum of the
+  // channels' last ids), so message.posted refreshes the questions too.
+  questions: (params: QuestionsParams, version: number) => ['msg', 'questions', params, version] as const,
 }
 
 // ---------- tasks and sandboxes (ADR 0008) ----------

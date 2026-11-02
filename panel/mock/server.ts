@@ -95,6 +95,9 @@ type Participant = {
   human: boolean
   joined_at: string
   left_at?: string
+  // Presence, computed when listed (presenceOf); not stored.
+  online?: boolean
+  last_seen_at?: string | null
 }
 
 type Message = {
@@ -104,6 +107,7 @@ type Message = {
   participant_id: string
   task: string
   reply_to?: number
+  kind: 'message' | 'question'
   body: string
   created_at: string
 }
@@ -440,13 +444,14 @@ function createState() {
     return p
   }
 
-  function post(channel: string, p: Participant, body: string, replyTo?: number) {
+  function post(channel: string, p: Participant, body: string, replyTo?: number, kind: Message['kind'] = 'message') {
     const m: Message = {
       id: nextMessageId,
       channel,
       from: p.name,
       participant_id: p.id,
       task: p.task,
+      kind,
       body,
       created_at: iso(),
     }
@@ -607,6 +612,55 @@ function createState() {
       '@franco decision needed on review-42: the third workflow/ failure is a flaky test, not the loop node. ' +
         'Quarantine it and merge the fix, or block the merge until the flake is fixed too?',
     )
+    // Questions (kind question): an open one in #review-42 to @franco, an
+    // open one in #flaky-ci, and one in #review-42 franco answered. The
+    // seeded messages in #review-42 are spread over the last half hour.
+    const ago = (m: Message, minutes: number) => {
+      m.created_at = iso(Date.now() - minutes * 60_000)
+      return m
+    }
+    const asked = ago(
+      post(
+        '#review-42',
+        tester,
+        'Is the third `workflow/` failure in scope for this review, or does it belong to #flaky-ci?',
+        undefined,
+        'question',
+      ),
+      9,
+    )
+    ago(post('#review-42', franco, 'Out of scope: #flaky-ci owns it.', asked.id), 8)
+    ago(
+      post(
+        '#review-42',
+        reviewer,
+        'The loop node test now passes:\n\n```sh\ngo test ./workflow -run TestLoopNode -count=10\nok  \tgithub.com/vanclief/agent-composer/workflow\t1.84s\n```\n\n' +
+          'Diff is on [agc/review-42](https://github.com/vanclief/agent-composer/tree/agc/review-42).',
+      ),
+      6,
+    )
+    ago(
+      post(
+        '#review-42',
+        reviewer,
+        '@franco should I squash the two fix commits into one before you merge, or keep them separate?',
+        undefined,
+        'question',
+      ),
+      4,
+    )
+    const fixer = join('fixer', 'flaky-ci', false)
+    post(
+      '#flaky-ci',
+      fixer,
+      'Which runner should I reproduce the flake on: the rig, or a GitHub Actions runner?',
+      undefined,
+      'question',
+    )
+    const reviewChannel = messages.filter((m) => m.channel === '#review-42' && m.from !== 'agc')
+    for (const [i, minutes] of [30, 28, 25, 12].entries()) {
+      ago(reviewChannel[i], minutes)
+    }
     // Direct-message channels @<human>/<task> (ahead of the backend): an
     // unread agent message in @franco/yc-pitch, and @franco/review-42,
     // read: franco answered last, and a message of mine reads everything
@@ -993,6 +1047,26 @@ function checkChannel(channel: string) {
   }
 }
 
+// Presence as the backend will send it: agc is always online; an agent is
+// online while its task has a running sandbox; a human while someone holds
+// the name, and franco always (seeded as online). last_seen_at is the
+// participant's last message, else when it left, else when it joined.
+function presenceOf(state: State, p: Participant) {
+  let online: boolean
+  if (p.name === 'agc') {
+    online = true
+  } else if (p.human) {
+    online = p.name === 'franco' || [...state.participants.values()].some((q) => q.name === p.name && !q.left_at)
+  } else {
+    // A DM's agent may belong to a task the mock does not have (yc-pitch).
+    const task = state.tasks.get(p.task) ?? [...state.tasks.values()].find((t) => t.id === p.task)
+    online = task !== undefined && state.sandboxesOf(task).some((b) => b.status === 'running')
+  }
+  const last = state.messages.filter((m) => m.participant_id === p.id).at(-1)
+  const last_seen_at: string | null = last?.created_at ?? p.left_at ?? p.joined_at ?? null
+  return { online, last_seen_at }
+}
+
 async function msgAPI(state: State, method: string, verb: string, url: URL, req: IncomingMessage) {
   if (method === 'GET' && verb === 'channels') {
     const names = new Set<string>()
@@ -1052,7 +1126,27 @@ async function msgAPI(state: State, method: string, verb: string, url: URL, req:
       .map((id) => state.participants.get(id))
       .filter((p): p is Participant => p !== undefined)
       .sort((a, b) => Number(Boolean(a.left_at)) - Number(Boolean(b.left_at)) || a.name.localeCompare(b.name))
+      .map((p) => ({ ...p, ...presenceOf(state, p) }))
     return { participants }
+  }
+
+  // Questions with who answered first: the first reply_to from someone
+  // other than the asker. Mock only: for= is accepted and ignored, so every
+  // question counts as the signed-in person's.
+  if (method === 'GET' && verb === 'questions') {
+    const channel = url.searchParams.get('channel') ?? ''
+    if (channel) {
+      checkChannel(channel)
+    }
+    const open = url.searchParams.get('open') === '1'
+    const questions = state.messages
+      .filter((m) => m.kind === 'question' && (!channel || m.channel === channel))
+      .map((q) => {
+        const answer = state.messages.find((m) => m.reply_to === q.id && m.participant_id !== q.participant_id)
+        return { ...q, answered_by: answer?.from ?? '', answered_at: answer?.created_at ?? null }
+      })
+      .filter((q) => !open || !q.answered_by)
+    return { questions }
   }
 
   if (method !== 'POST') {
@@ -1114,7 +1208,11 @@ async function msgAPI(state: State, method: string, verb: string, url: URL, req:
         throw msgError(400, `reply_to ${replyTo} is not a message in ${channel}`)
       }
     }
-    return state.post(channel, p, text, replyTo)
+    const kind = body.kind === undefined || body.kind === null ? 'message' : str(body.kind)
+    if (kind !== 'message' && kind !== 'question') {
+      throw msgError(400, `kind "${kind}" is invalid: use message or question`)
+    }
+    return state.post(channel, p, text, replyTo, kind)
   }
 
   throw msgError(404, 'no such endpoint')

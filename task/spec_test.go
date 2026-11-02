@@ -44,6 +44,7 @@ sandbox:
   image: agc-agent
   cpus: 2
   memory: 4096
+  disk: 10G
   repo: github.com/vanclief/agent-composer
   ref: master
   setup: |
@@ -80,6 +81,7 @@ sandbox:
 			Image:    "agc-agent",
 			CPUs:     2,
 			Memory:   4096,
+			Disk:     "10G",
 			Repo:     "github.com/vanclief/agent-composer",
 			Ref:      "master",
 			Setup:    "go mod download\n",
@@ -132,6 +134,15 @@ func TestParseFile(t *testing.T) {
 
 	if parsed.Title != "Review ads" || parsed.Name != "" || parsed.Sandbox.Repo != "github.com/o/n" {
 		t.Fatalf("got %+v", parsed)
+	}
+
+	if parsed.Notify != nil {
+		t.Fatalf("notify without notify: %v", *parsed.Notify)
+	}
+
+	parsed, err = ParseFile([]byte("title: Review ads\nnotify: false\n"))
+	if err != nil || parsed.Notify == nil || *parsed.Notify {
+		t.Fatalf("notify: false: got %+v, err %v", parsed, err)
 	}
 
 	parsed, err = ParseFile(nil)
@@ -267,6 +278,14 @@ func TestValidateRejects(t *testing.T) {
 		{Spec{Channels: []string{"#a:write"}}, "#a:write"},
 		{Spec{Repo: "git@github.com:o/n.git"}, "git@github.com"},
 		{Spec{Ref: "main"}, "ref"},
+		{Spec{Disk: "1G"}, "minimum is 2G"},
+		{Spec{Disk: "1500M"}, "minimum is 2G"},
+		{Spec{Disk: "10GB"}, "10GB"},
+		{Spec{Disk: "-5G"}, "-5G"},
+		{Spec{Disk: "lots"}, "lots"},
+		{Spec{Disk: "99999T"}, "too large"},
+		{Spec{Volumes: []string{"x:/home/agent:rw"}}, "mounted by agc"},
+		{Spec{Volumes: []string{"x:/home/agent/.harness/claude:rw"}}, "mounted by agc"},
 	}
 
 	for _, tc := range cases {
@@ -299,7 +318,12 @@ func TestSandboxSpec(t *testing.T) {
 		MemoryMiB: 1024,
 		Env:       map[string]string{"GOFLAGS": "-mod=mod", "AGC_TASK": "review-42", "AGC_SANDBOX": "review-42-2", "AGC_MSG_VSOCK_PORT": "5100"},
 		Secrets:   []sandbox.Secret{{Name: "GITHUB_TOKEN", Value: "v", Hosts: []string{"github.com"}}},
-		Volumes:   []sandbox.Volume{{Source: "cache", Dest: "/cache", ReadWrite: true}},
+		Volumes: []sandbox.Volume{
+			{Source: "cache", Dest: "/cache", ReadWrite: true},
+			{Source: "agc-review-42-2", Dest: "/home/agent/.harness", ReadWrite: true, QuotaMiB: 4096},
+		},
+		DiskDest:  "/home/agent",
+		DiskMiB:   0,
 		VsockPath: "/tmp/review-42-2.sock",
 		VsockPort: 5100,
 		Labels:    map[string]string{"agc.task": "review-42", "agc.sandbox": "review-42-2"},
@@ -310,5 +334,24 @@ func TestSandboxSpec(t *testing.T) {
 
 	if len(spec.Env) != 1 {
 		t.Fatalf("SandboxSpec changed the spec env: %v", spec.Env)
+	}
+
+	spec.Disk = "50g"
+	got, err = spec.SandboxSpec("review-42", "review-42-2", bindings, "/tmp/review-42-2.sock", 5100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DiskMiB != 50*1024 {
+		t.Fatalf("disk 50g: DiskMiB = %d", got.DiskMiB)
+	}
+}
+
+func TestDiskMiB(t *testing.T) {
+	cases := map[string]uint32{"": 0, "2G": 2048, "2048M": 2048, " 20g ": 20480, "1T": 1024 * 1024}
+	for disk, want := range cases {
+		got, err := Spec{Disk: disk}.DiskMiB()
+		if err != nil || got != want {
+			t.Fatalf("disk %q: got %d, %v, want %d", disk, got, err, want)
+		}
 	}
 }

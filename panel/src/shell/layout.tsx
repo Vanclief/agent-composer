@@ -9,13 +9,13 @@ import { ChannelRows } from '@/features/messages/ChannelRows'
 import { followFromEvent, useFollow } from '@/features/messages/follow'
 import { useMyName } from '@/features/messages/identity'
 import { useMessageNotifications } from '@/features/messages/notifications'
-import { UnreadBadge } from '@/features/messages/UnreadBadge'
+import { TalkBadges } from '@/features/messages/QuestionBadge'
 import { cn } from '@/lib/utils'
 
 import { MODES, ModeSwitch, useMode } from './mode'
 import { PageTitleContext } from './page-title'
 import { ThemeToggle } from './theme-toggle'
-import { LiveDot, SoundToggle } from './top-bar'
+import { LiveDot, MeChip, SoundToggle } from './top-bar'
 import { useTaskNotifications } from './notifications'
 
 export function Layout() {
@@ -47,7 +47,7 @@ export function Layout() {
           agc
         </div>
         <div className="border-b border-border p-2">
-          <ModeSwitch mode={mode} badges={{ talk: <UnreadBadge count={unread.total} mention={unread.mention} /> }} />
+          <ModeSwitch mode={mode} badges={{ talk: <TalkBadges count={unread.total} mention={unread.mention} /> }} />
         </div>
         <nav aria-label="Main" className="flex-1 overflow-y-auto p-2">
           <ul className="flex flex-col gap-0.5">
@@ -88,6 +88,7 @@ export function Layout() {
           <div className="ml-auto flex shrink-0 items-center gap-1 pl-4">
             <LiveDot />
             <SoundToggle />
+            <MeChip />
           </div>
         </header>
         <div className="min-h-0 flex-1 overflow-auto">
