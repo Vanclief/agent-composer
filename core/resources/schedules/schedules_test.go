@@ -57,6 +57,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		(*accountmodels.Account)(nil),
 		(*msgmodels.Participant)(nil),
 		(*msgmodels.Message)(nil),
+		(*msgmodels.ChannelArchive)(nil),
 		(*schedulemodels.Schedule)(nil),
 		(*schedulemodels.Item)(nil),
 	}

@@ -54,6 +54,10 @@ type ChannelInfo struct {
 	ReadOnly bool   `json:"read_only"`
 	LastID   int64  `json:"last_id"`
 	Count    int    `json:"count"`
+	// ArchivedAt is when the channel was archived (ADR 0005 "Archived
+	// channels"); only archived channels have it, and they are listed only
+	// when asked for.
+	ArchivedAt *time.Time `json:"archived_at,omitempty"`
 }
 
 // PostHook runs after every message is stored, with the stored message.
@@ -401,6 +405,17 @@ func (s *Service) Post(ctx context.Context, caller Caller, participantID, channe
 		return nil, ez.New(ez.EINVALID, fmt.Sprintf("participant @%s has left, join again", p.Name), nil)
 	}
 
+	if !isSystem(p) {
+		archived, err := msgmodels.ChannelArchived(ctx, s.db, channel)
+		if err != nil {
+			return nil, ez.Wrap(err)
+		}
+
+		if archived {
+			return nil, ez.New(ez.ENOTAUTHORIZED, "channel archived", nil)
+		}
+	}
+
 	if replyTo != nil {
 		exists, err := s.db.NewSelect().Model((*msgmodels.Message)(nil)).Where("id = ?", *replyTo).Where("channel = ?", channel).Exists(ctx)
 		if err != nil {
@@ -490,6 +505,34 @@ func (s *Service) insert(ctx context.Context, p *msgmodels.Participant, channel,
 	}
 
 	return m, nil
+}
+
+// ArchivedEvent is the data of channel.archived.
+type ArchivedEvent struct {
+	Channel    string    `json:"channel"`
+	ArchivedAt time.Time `json:"archived_at"`
+}
+
+// Archive archives channel at at (ADR 0005 "Archived channels") and
+// publishes channel.archived. It answers false, publishing nothing, when
+// the channel was already archived. Nothing un-archives a channel.
+func (s *Service) Archive(ctx context.Context, channel string, at time.Time) (bool, error) {
+	added, err := msgmodels.ArchiveChannel(ctx, s.db, channel, at)
+	if err != nil {
+		return false, ez.Wrap(err)
+	}
+
+	if !added {
+		return false, nil
+	}
+
+	s.mu.Lock()
+	bus := s.events
+	s.mu.Unlock()
+
+	bus.Publish(events.Event{Type: events.ChannelArchived, Data: ArchivedEvent{Channel: channel, ArchivedAt: at.UTC()}})
+
+	return true, nil
 }
 
 // OnPost registers hook to run after every stored message, in the
@@ -684,8 +727,38 @@ func (s *Service) WaitChannels(ctx context.Context, caller Caller, channels []st
 
 // Channels lists the channels the caller may read. A Task sees its own
 // channel and its grants, even before anyone posts. A human sees every
-// channel that has messages.
-func (s *Service) Channels(ctx context.Context, caller Caller) ([]ChannelInfo, error) {
+// channel that has messages. Archived channels are left out unless
+// archived, then they carry ArchivedAt.
+func (s *Service) Channels(ctx context.Context, caller Caller, archived bool) ([]ChannelInfo, error) {
+	channels, err := s.channels(ctx, caller)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	archives, err := msgmodels.ArchivedChannels(ctx, s.db)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	listed := []ChannelInfo{}
+	for _, channel := range channels {
+		at, ok := archives[channel.Channel]
+		if ok && !archived {
+			continue
+		}
+
+		if ok {
+			channel.ArchivedAt = &at
+		}
+
+		listed = append(listed, channel)
+	}
+
+	return listed, nil
+}
+
+// channels is Channels before archived channels are marked or left out.
+func (s *Service) channels(ctx context.Context, caller Caller) ([]ChannelInfo, error) {
 	err := checkCaller(caller)
 	if err != nil {
 		return nil, ez.Wrap(err)

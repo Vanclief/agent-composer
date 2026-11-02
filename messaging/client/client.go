@@ -110,10 +110,17 @@ func (c *Client) WaitChannels(ctx context.Context, channels []string, after int6
 	return res, nil
 }
 
-func (c *Client) Channels(ctx context.Context) (*httpapi.ChannelsResponse, error) {
+// Channels lists the channels the caller may read; archived adds the
+// archived ones (ADR 0005 "Archived channels").
+func (c *Client) Channels(ctx context.Context, archived bool) (*httpapi.ChannelsResponse, error) {
+	var query url.Values
+	if archived {
+		query = url.Values{"archived": {"1"}}
+	}
+
 	res := &httpapi.ChannelsResponse{}
 
-	err := c.do(ctx, http.MethodGet, "/channels", nil, nil, res)
+	err := c.do(ctx, http.MethodGet, "/channels", query, nil, res)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}

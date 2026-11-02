@@ -60,7 +60,7 @@ func newHomeMessaging(t *testing.T, presence homePresence, home string) (*messag
 	})
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
-	for _, table := range []interface{}{(*msgmodels.Participant)(nil), (*msgmodels.Message)(nil)} {
+	for _, table := range []interface{}{(*msgmodels.Participant)(nil), (*msgmodels.Message)(nil), (*msgmodels.ChannelArchive)(nil)} {
 		_, err = db.NewCreateTable().Model(table).Exec(context.Background())
 		if err != nil {
 			t.Fatal(err)

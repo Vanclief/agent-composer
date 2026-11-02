@@ -141,6 +141,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		(*accountmodels.Account)(nil),
 		(*msgmodels.Participant)(nil),
 		(*msgmodels.Message)(nil),
+		(*msgmodels.ChannelArchive)(nil),
 	}
 	for _, table := range tables {
 		_, err = db.NewCreateTable().Model(table).Exec(context.Background())

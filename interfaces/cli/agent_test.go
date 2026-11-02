@@ -112,7 +112,7 @@ func (m *fakeMessenger) Wait(ctx context.Context, channel string, after int64, t
 	return &httpapi.MessagesResponse{Messages: batch}, nil
 }
 
-func (m *fakeMessenger) Channels(ctx context.Context) (*httpapi.ChannelsResponse, error) {
+func (m *fakeMessenger) Channels(ctx context.Context, archived bool) (*httpapi.ChannelsResponse, error) {
 	channels := []messaging.ChannelInfo{}
 	for channel, lastID := range m.lastIDs {
 		channels = append(channels, messaging.ChannelInfo{Channel: channel, LastID: lastID})

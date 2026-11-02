@@ -34,6 +34,7 @@ func newTestDB(t *testing.T) *bun.DB {
 	tables := []interface{}{
 		(*msgmodels.Participant)(nil),
 		(*msgmodels.Message)(nil),
+		(*msgmodels.ChannelArchive)(nil),
 	}
 	for _, table := range tables {
 		_, err = db.NewCreateTable().Model(table).IfNotExists().Exec(context.Background())
@@ -188,7 +189,7 @@ func TestAccessMatrix(t *testing.T) {
 	_, err = svc.Read(ctx, Caller{}, "#releases", 0, 0)
 	wantCode(t, err, ez.ENOTAUTHORIZED)
 
-	channels, err := svc.Channels(ctx, review)
+	channels, err := svc.Channels(ctx, review, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +207,7 @@ func TestAccessMatrix(t *testing.T) {
 		}
 	}
 
-	all, err := svc.Channels(ctx, human)
+	all, err := svc.Channels(ctx, human, false)
 	if err != nil {
 		t.Fatal(err)
 	}

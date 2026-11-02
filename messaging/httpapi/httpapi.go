@@ -259,7 +259,10 @@ func (a *api) channels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	channels, err := a.svc.Channels(r.Context(), caller)
+	// ?archived=1: archived channels too (ADR 0005 "Archived channels").
+	archived := r.URL.Query().Get("archived") == "1"
+
+	channels, err := a.svc.Channels(r.Context(), caller, archived)
 	if err != nil {
 		WriteError(w, err)
 		return
