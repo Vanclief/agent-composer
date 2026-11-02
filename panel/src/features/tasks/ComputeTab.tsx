@@ -52,8 +52,15 @@ export function ComputeTab() {
           </div>
         ) : (
           <div className="flex items-center px-3 py-2">
-            {/* Outline: Accept in the rail is the page's one primary button. */}
-            <Button variant="outline" size="sm" disabled={done} onClick={() => setAllocating(true)} className="ml-auto">
+            {/* An act: a filled orange block, like Accept and Reject in the rail (eva-task.css). */}
+            <Button
+              variant="outline"
+              size="sm"
+              data-allocate
+              disabled={done}
+              onClick={() => setAllocating(true)}
+              className="ml-auto"
+            >
               <Plus className={conceptColors.sandbox.text} />{' '}
               {done ? 'Allocate compute: task is done' : 'Allocate compute'}
             </Button>
@@ -108,7 +115,7 @@ function SandboxRow({
           : 'border-l-transparent hover:bg-zinc-50 dark:hover:bg-zinc-800/40',
       )}
     >
-      <div className="flex w-20 shrink-0">
+      <div data-status-tab className="flex w-20 shrink-0">
         <StatusPill status={sandbox.status} detail={sandbox.status_error} />
       </div>
       <button

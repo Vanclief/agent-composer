@@ -172,5 +172,9 @@ export function AgentCard({
 }
 
 function FieldLabel({ text }: { text: string }) {
-  return <span className="w-14 shrink-0 text-xs text-muted-foreground">{text}</span>
+  return (
+    <span data-field-label className="w-14 shrink-0 text-xs text-muted-foreground">
+      {text}
+    </span>
+  )
 }
