@@ -101,3 +101,16 @@ evidence:
     who: franco
     when: 2026-11-01
     source: docs/decisions/0006-rules-and-beliefs.md
+
+  # ADR 0010: who merges
+  - id: franco-reviews-only-ui-and-breaking-changes
+    evidence: >-
+      Franco, on what accepting a task should mean: "Accept should be when the task needs me to
+      review something and either approve it or not. So the first thing is for AGC I think the
+      rules should be (and ideally lets use an agc rule and somehow link it to the merging, maybe
+      we need a review agent that runs that rule) that if it changes the UI or its a breaking
+      change I should review it, otherwise it should be automatically merged and the task can be
+      marked as done."
+    who: franco
+    when: 2026-11-02
+    source: agc chat

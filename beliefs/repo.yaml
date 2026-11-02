@@ -105,6 +105,10 @@ beliefs:
     belief: Done has to mean something written on the task before an agent can be trusted to say a task is done.
   - id: delivery-and-acceptance-are-different-acts
     belief: Delivering work and accepting it are different acts by different parties, and the gap between them should be visible.
+  # ADR 0010 "Who merges": grounded in Franco's own words in the agc chat.
+  - id: franco-reviews-what-he-sees-and-what-breaks
+    belief: Franco's review time goes to what he can see in the panel and to what can break others; style and correctness are covered by the mechanical rules and the tests, so a change that is neither waits for nobody.
+    evidence: [franco-reviews-only-ui-and-breaking-changes]
 
   # ADR 0012: scheduled tasks. Opinions: the prwatch framing in the brief;
   # nothing measured.

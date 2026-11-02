@@ -146,3 +146,28 @@ rules:
     judge:
       trusted: [claude_code, codex_cli]
       ask: Does the subject (a diff, script, transcript or instructions to an agent) run or tell an agent to run `git push`, `gh pr create` or anything else that pushes from an agent worktree?
+
+  # Merging (ADR 0010 "Who merges"). The task's manager judges this rule on
+  # the diff from the task's base to the delivered sha. It holds (pass) when
+  # the change is neither a UI change nor a breaking one, and the manager
+  # merges and accepts without Franco; it fails when the change is either,
+  # and the task waits for Franco's review. An unclear answer, which
+  # `agc rules judge` already reports as unclear and counts as a failure,
+  # also means "needs Franco": a missing verdict never merges anything.
+  - id: merge-needs-franco-for-ui-or-breaking
+    rule: >-
+      A delivered branch is merged into its base, and its task accepted, by the task's manager
+      without Franco when the change alters nothing a person sees or does in the panel and breaks
+      nothing that exists; a change to the UI or a breaking change waits for Franco's review.
+    judge:
+      trusted: [claude_code, codex_cli]
+      ask: >-
+        Is the diff free of both UI changes and breaking changes? A UI change alters anything a
+        person sees or does in panel/: layout, words, colors, controls or keyboard. A breaking
+        change makes something that exists stop working or change shape: a REST route or response
+        field, a CLI command or flag, a file format (task.yaml, schedule.yaml, rules, TASK.md), a
+        migration that drops or renames, a default, or a behavior other code or the tests depend
+        on. Purely additive or internal changes are neither. Answer pass only when the diff is
+        neither; answer fail, naming the file and what a person would see or what would break,
+        when it is either, or when you cannot tell.
+    because: [franco-reviews-what-he-sees-and-what-breaks]
