@@ -11,9 +11,10 @@ the panel stays conflict-free.
 
 | Path                                                                                                                                                             | Owner               |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| `src/features/tasks/` (`TasksPage`, `TaskPage`, `SpecTab`) + `tests/tasks.spec.ts`                                                                               | tasks feature       |
+| `src/features/tasks/` (`TasksPage`, `TaskPage`, `BriefTab`, `ComputeTab`) + `tests/tasks.spec.ts`                                                               | tasks feature       |
 | `src/features/create-task/` (`CreateTaskDialog`) + `tests/create-task.spec.ts`                                                                                   | create-task feature |
-| `src/features/terminals/` (`TerminalsTab`) + `tests/terminals.spec.ts`                                                                                           | terminals feature   |
+| `src/features/compute/` (`ComputePage`, `SandboxPage`)                                                                                                           | compute feature     |
+| `src/features/terminals/` (`TerminalsTab`, `TerminalPane`, mounted by `SandboxPage`) + `tests/terminals.spec.ts`                                                 | terminals feature   |
 | `src/features/messages/` (`MessagesTab`, `MessagesPage`) + `tests/messages.spec.ts`                                                                              | messages feature    |
 | everything else: `src/api/`, `src/components/`, `src/shell/`, `src/App.tsx`, `src/main.tsx`, `mock/`, `scripts/`, `tests/shell.spec.ts`, configs, `package.json` | foundation (shared) |
 
@@ -41,10 +42,12 @@ Basename `/panel`. Defined in `src/App.tsx` (foundation).
 | `/think`                                                 | redirects to `/think/beliefs`                                                                                                                                         |
 | `/think/{beliefs,decisions,rules,actions,evidence}/:id?` | Think mode pages (`src/features/think/`), read-only, `:id` opens the detail pane; `?without=<id>` shows every label as if that belief or evidence were gone (what-if) |
 | `/tasks`                                                 | `TasksPage`; "New task" opens `CreateTaskDialog`                                                                                                                      |
-| `/tasks/:name`                                           | `TaskPage`, redirects to `terminals`                                                                                                                                  |
-| `/tasks/:name/terminals`                                 | `TerminalsTab`                                                                                                                                                        |
+| `/tasks/:name`                                           | `TaskPage`, redirects to `brief`                                                                                                                                      |
+| `/tasks/:name/brief`                                     | `BriefTab`: the task's brief                                                                                                                                          |
+| `/tasks/:name/compute`                                   | `ComputeTab`: the task's sandboxes and "Allocate compute"                                                                                                             |
 | `/tasks/:name/messages`                                  | `MessagesTab` (channel `#<name>`)                                                                                                                                     |
-| `/tasks/:name/spec`                                      | `SpecTab`                                                                                                                                                             |
+| `/compute`                                               | `ComputePage`: every sandbox with its task (Work mode)                                                                                                                |
+| `/compute/:name`                                         | `SandboxPage`: one sandbox (`:name` is the sandbox) with its terminals                                                                                                |
 | `/messages`, `/messages/:channel`                        | Talk mode: `MessagesPage`; `:channel` has no `#` (`/messages/review-42` is `#review-42`)                                                                              |
 
 Each page sets the top bar title with `usePageTitle('…')` from
@@ -57,15 +60,16 @@ Each page sets the top bar title with `usePageTitle('…')` from
 - Modes are a vertical list in the sidebar; adding a mode is one entry in `MODES`.
   In Talk mode the sidebar lists every channel under Channels (`ChannelRows` in `src/shell/layout.tsx`), linking to `/messages/<name>`.
 - **One icon per concept:** import from `@/components/concept-icons`
-  (`conceptIcons.task`, `.cpu`, `.memory`, `.image`, `.repo`, `.ref`,
-  `.setup`, `.secret`, `.env`, `.volume`, `.channel`, `.savedSpec`,
-  `.terminal`, `.message`, `.human`, `.raw`). Never pick a different Lucide
-  icon for one of these. A new concept is added there first.
-- **Statuses are verbatim:** render `<StatusPill status={task.status}
-detail={task.status_error} />`. Never derive, map or relabel a status in
-  the UI. If a status is wrong, the backend has to change.
+  (`conceptIcons.task`, `.sandbox`, `.brief`, `.cpu`, `.memory`, `.image`,
+  `.repo`, `.ref`, `.setup`, `.secret`, `.env`, `.volume`, `.channel`,
+  `.savedSpec`, `.terminal`, `.message`, `.human`, `.raw`). Never pick a
+  different Lucide icon for one of these. A new concept is added there first.
+- **Statuses are verbatim:** render `<StatusPill status={task.status} />`
+  or `<StatusPill status={sandbox.status} detail={sandbox.status_error} />`.
+  Never derive, map or relabel a status in the UI. If a status is wrong, the
+  backend has to change.
 - **Empty states say why in place:** use `<EmptySlot onAdd={…} label="Add …" />`
-  for a fillable slot, or `<EmptySlot reason="Task stopped" />` when it can't
+  for a fillable slot, or `<EmptySlot reason="Sandbox stopped" />` when it can't
   be filled. A disabled control says why in its own label ("Create: needs a
   title"), never only in a tooltip.
 - **Backend errors are shown verbatim:** every API failure is an `ApiError`
@@ -84,20 +88,32 @@ detail={task.status_error} />`. Never derive, map or relabel a status in
 
 - `@/api/client`: `api` (typed openapi-fetch client for everything in
   `docs/openapi.yaml`), `unwrap(api.GET(…))`, `apiFetch` for routes not in
-  the spec, `ApiError`, and the `Task`, `TaskSpec`, `CreateTaskRequest`,
+  the spec, `ApiError`, and the `TaskSpec` (a sandbox's environment block),
   `SavedSpec` and `Secret` types.
-- `@/api/hooks`: `useTasks` (polls every 5s), `useTask(nameOrId)`,
-  `useCreateTask`, `useStopTask`, `useStartTask`, `useDeleteTask`,
-  `useSpecs`, `useSpec`, `useSaveSpec`, `useDeleteSpec`, `useSecrets`,
-  `useTerminals(task, enabled)`, `useStartTerminal(task)`, `useChannels`,
+- `@/api/tasks` (ADR 0008): `TaskView`, `SandboxView`, `SandboxRequest`
+  (the spec fields inline plus `command`), `CreateTaskRequest`, and the
+  `tasks.*`/`sandboxes.*` calls. Hand-typed until the OpenAPI spec has them.
+  A task's `status` (`open`, `running`, `done`) is computed by the server; a
+  sandbox's (`starting`, `failed` with `status_error`, `running`, `stopped`,
+  `unknown`) is read live. `{id}` accepts an id or a name everywhere.
+- `@/api/hooks`: tasks `useTasks` (polls every 5s, sandboxes embedded newest
+  first), `useTask(nameOrId)`, `useCreateTask` (returns at once; an
+  optional `sandbox` comes back `starting`), `useDoneTask`, `useDeleteTask`
+  (deletes its sandboxes too), `useAllocate(task)` (201, `starting`, then
+  `running`); sandboxes `useSandboxes`, `useSandbox(nameOrId)`,
+  `useStopSandbox`, `useStartSandbox`, `useDeleteSandbox`; terminals
+  `useTerminals(sandbox, enabled)`, `useStartTerminal(sandbox)`; `useSpecs`,
+  `useSpec`, `useSaveSpec`, `useDeleteSpec`, `useSecrets`, `useChannels`,
   `useJoin`, `useLeave`, `usePostMessage`, and `useChannelMessages(channel)`
   (a live feed: read, then a long-poll wait loop), `useParticipants(channel)`.
-  Query keys live only in `queryKeys`.
+  Every task or sandbox mutation refreshes both. Query keys live only in
+  `queryKeys`.
 - `@/api/msg`: messaging types and calls (`/api/msg/join|leave|post|read|wait|channels|participants`),
   hand-typed from `messaging/httpapi/httpapi.go`. Join answers 409
   `name @x is already in use` while the name is held.
 - `@/api/terminals`: terminal types, `terminals.list/start`, and
-  `terminalSocketURL(task, job)`. Binary frames carry bytes both ways; send
+  `terminalSocketURL(sandbox, job)`, all under `/api/sandboxes/{id}/terminals`.
+  A sandbox allocated with a `command` runs it as the job `agent`. Binary frames carry bytes both ways; send
   the text frame `{"type":"resize","rows":N,"cols":N}` to resize. The server
   closes with reason `job completed` when the program exits.
 - After `docs/openapi.yaml` changes, run `npm run types` and commit
@@ -133,14 +149,25 @@ Look at your screen with `npm run shot` and read the PNG before you report.
 
 ## Mock data (`mock/server.ts`)
 
-Tasks: `review-42` "Review 42" (running, terminals `claude` running and
-`bash` exited), `flaky-ci` "Flaky CI" (stopped), `docs-pass` (unknown, with
-`status_error`). Saved spec `backend-review`. Secrets
+Tasks (each with a brief and assignee):
+
+- `review-42` "Review 42": running, assignee `claude_code`,
+  `for: attach-rulesets-to-task-specs`; sandbox `review-42` running
+  (terminals `agent` running `claude`, and `bash` exited) and an older
+  sandbox `review-42-2` stopped.
+- `flaky-ci` "Flaky CI": open, assignee `franco`, no sandbox.
+- `docs-pass` "Docs pass": done; sandbox `docs-pass` stopped.
+- `boot-fail` "Boot fail": open; sandbox `boot-fail` failed with
+  `status_error: clone failed: repository not found`.
+
+Saved spec `backend-review`. Secrets
 `CLAUDE_CODE_OAUTH_TOKEN`, `GITHUB_TOKEN` (with hosts) and `CUSTOM` (no
 hosts). Messages in `#review-42` (from @reviewer, @tester and human @franco,
-who has left so you can join as franco) and `#releases`. Created and started
-tasks report `starting` for 2s, then `running`. The terminal WebSocket echoes
-input and acknowledges resize frames.
+who has left so you can join as franco) and `#releases`. Creating a task
+returns at once. An allocated sandbox (`POST /api/tasks/{id}/sandboxes`, or
+`sandbox` on create) answers 201 `starting` for 2s, then `running`, and
+starts its `command` as the job `agent`. The terminal WebSocket echoes input
+and acknowledges resize frames.
 
 ## Serving from agc
 

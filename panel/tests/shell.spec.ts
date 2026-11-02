@@ -33,7 +33,7 @@ test('the mode switch swaps the nav between Work and Think', async ({ page }) =>
   const mode = page.getByRole('navigation', { name: 'Mode' })
   const nav = page.getByRole('navigation', { name: 'Main' })
   await expect(mode.getByRole('link', { name: 'Work' })).toHaveAttribute('aria-current', 'page')
-  await expect(nav.getByRole('link')).toHaveText(['Tasks'])
+  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute'])
 
   await mode.getByRole('link', { name: 'Think' }).click()
   await expect(page).toHaveURL(/\/panel\/think\/beliefs$/)
@@ -44,7 +44,22 @@ test('the mode switch swaps the nav between Work and Think', async ({ page }) =>
 
   await mode.getByRole('link', { name: 'Work' }).click()
   await expect(page).toHaveURL(/\/panel\/tasks$/)
-  await expect(nav.getByRole('link')).toHaveText(['Tasks'])
+  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute'])
+})
+
+test('Work nav opens Compute, which stays in Work mode', async ({ page }) => {
+  await page.goto('/panel/tasks')
+  const mode = page.getByRole('navigation', { name: 'Mode' })
+  const nav = page.getByRole('navigation', { name: 'Main' })
+  await nav.getByRole('link', { name: 'Compute' }).click()
+  await expect(page).toHaveURL(/\/panel\/compute$/)
+  await expect(page.getByTestId('page-title')).toHaveText('Compute')
+  await expect(mode.getByRole('link', { name: 'Work' })).toHaveAttribute('aria-current', 'page')
+  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute'])
+
+  await page.goto('/panel/compute/review-42')
+  await expect(page.getByTestId('page-title')).toHaveText('review-42')
+  await expect(mode.getByRole('link', { name: 'Work' })).toHaveAttribute('aria-current', 'page')
 })
 
 test('the three modes are a vertical list', async ({ page }) => {
@@ -107,6 +122,6 @@ test('clicking a channel in the sidebar opens and highlights it', async ({ page 
 test('Work mode shows no channel rows', async ({ page }) => {
   await page.goto('/panel/tasks')
   const nav = page.getByRole('navigation', { name: 'Main' })
-  await expect(nav.getByRole('link')).toHaveText(['Tasks'])
+  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute'])
   await expect(nav.getByTestId('channel-count')).toHaveCount(0)
 })

@@ -1,7 +1,7 @@
 // The backend's status word with a colored shape (rtsdesign rule 5: color
 // AND shape). The word is printed exactly as sent; a word not listed here
 // gets the neutral question mark, never a relabel.
-import { Circle, CircleHelp, Square, Triangle, type LucideIcon } from 'lucide-react'
+import { Circle, CircleCheck, CircleHelp, Square, Triangle, type LucideIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -33,6 +33,18 @@ const FAILED: StatusStyle = {
   shape: 'fill-red-500 text-red-500',
   pill: 'border-red-500/30 text-red-700 dark:text-red-400',
 }
+// A task waiting for work: a hollow circle, dim.
+const OPEN: StatusStyle = {
+  icon: Circle,
+  shape: 'text-zinc-500',
+  pill: 'border-zinc-400/40 text-zinc-700 dark:text-zinc-300',
+}
+// A task marked done: a check, settled green.
+const DONE: StatusStyle = {
+  icon: CircleCheck,
+  shape: 'text-emerald-600 dark:text-emerald-500',
+  pill: 'border-zinc-400/40 text-zinc-600 dark:text-zinc-400',
+}
 const NEUTRAL: StatusStyle = {
   icon: CircleHelp,
   shape: 'text-zinc-500',
@@ -47,6 +59,9 @@ const STYLES: Record<string, StatusStyle> = {
   creating: TRANSITION,
   crashed: FAILED,
   error: FAILED,
+  failed: FAILED,
+  open: OPEN,
+  done: DONE,
 }
 
 type StatusPillProps = {

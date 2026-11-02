@@ -4,9 +4,9 @@ import createClient from 'openapi-fetch'
 
 import type { components, paths } from './schema'
 
-export type Task = components['schemas']['Task']
+// The environment block of a sandbox (ADR 0003, unchanged by ADR 0008).
+// Tasks and sandboxes themselves are typed in ./tasks.
 export type TaskSpec = components['schemas']['TaskSpec']
-export type CreateTaskRequest = components['schemas']['CreateTaskRequest']
 export type SavedSpec = components['schemas']['SavedSpec']
 export type Secret = components['schemas']['Secret']
 

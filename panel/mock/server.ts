@@ -6,8 +6,10 @@
 // Everything lives in memory and resets on restart. Shapes and error
 // messages follow the real handlers: tasks, specs and secrets answer errors
 // as {"error":{"code","message","request_id"}}, messaging (/api/msg/*) as
-// {"error":"..."}. The terminal WebSocket echoes what you type and answers
-// resize frames, so a terminal can be exercised end to end.
+// {"error":"..."}. Tasks and sandboxes follow ADR 0008: a task is work in
+// words, a sandbox the compute it is allocated. The terminal WebSocket
+// echoes what you type and answers resize frames, so a terminal can be
+// exercised end to end.
 import { randomBytes, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -28,16 +30,41 @@ type TaskSpec = {
   channels?: string[]
 }
 
+// A task row; status is computed in taskView, never stored.
 type Task = {
   id: string
   title: string
   name: string
-  spec: TaskSpec
-  status: string
-  status_error?: string
+  brief: string
+  assignee: string
+  for: string
+  done_at: string | null
   created_at: string
   updated_at: string
 }
+
+// A sandbox row plus the runtime's word for it (running, stopped,
+// unknown), which the real server reads live.
+type Sandbox = {
+  id: string
+  task_id: string
+  name: string
+  spec: TaskSpec
+  command: string
+  boot_error: string | null
+  booted_at: string | null
+  stopped_at: string | null
+  created_at: string
+  runtime: 'running' | 'stopped' | 'unknown'
+}
+
+type SandboxView = Omit<Sandbox, 'boot_error' | 'runtime'> & {
+  task: string
+  status: string
+  status_error?: string
+}
+
+type TaskView = Task & { status: string; sandboxes: SandboxView[] }
 
 type Terminal = { id: string; command: string[]; running: boolean }
 
@@ -94,6 +121,15 @@ const CODES: Record<number, string> = {
   409: 'ECONFLICT',
 }
 
+// Answers 201 instead of 200, like allocating a sandbox.
+class Created {
+  body: unknown
+
+  constructor(body: unknown) {
+    this.body = body
+  }
+}
+
 // Tasks, specs and secrets errors, shaped like the REST handlers.
 function apiError(status: number, message: string) {
   const error = { code: CODES[status] ?? 'EINTERNAL', message, request_id: 'mock-' + hex(4) }
@@ -147,7 +183,10 @@ function parseInteger(value: string | null, name: string) {
 
 function createState() {
   const tasks = new Map<string, Task>()
+  const sandboxes = new Map<string, Sandbox>()
+  // When a starting sandbox finishes booting.
   const readyAt = new Map<string, number>()
+  // Terminal jobs by sandbox name.
   const terminals = new Map<string, Terminal[]>()
   const specs = new Map<string, string>()
   const participants = new Map<string, Participant>()
@@ -155,40 +194,153 @@ function createState() {
   let waiters: Waiter[] = []
   let nextMessageId = 1
 
-  function addTask(title: string, name: string, spec: TaskSpec, status: string, ageMs: number, statusError = '') {
+  function addTask(title: string, name: string, fields: Partial<Task>, ageMs: number) {
     const at = iso(Date.now() - ageMs)
-    const task: Task = { id: randomUUID(), title, name, spec, status, created_at: at, updated_at: at }
-    if (statusError) {
-      task.status_error = statusError
+    const task: Task = {
+      id: randomUUID(),
+      title,
+      name,
+      brief: '',
+      assignee: '',
+      for: '',
+      done_at: null,
+      created_at: at,
+      updated_at: at,
+      ...fields,
     }
     tasks.set(name, task)
-    terminals.set(name, [])
     return task
   }
 
-  // A started task reports "starting" for two seconds, like a VM booting.
-  function view(task: Task) {
-    const ready = readyAt.get(task.name)
-    if (task.status === 'starting' && ready !== undefined && Date.now() >= ready) {
-      task.status = 'running'
-      task.updated_at = iso()
-      readyAt.delete(task.name)
+  // The first sandbox of a task is named after it, later ones <task>-2, -3.
+  function nextSandboxName(task: Task) {
+    if (!sandboxes.has(task.name)) {
+      return task.name
     }
-    return task
+    let n = 2
+    while (sandboxes.has(`${task.name}-${n}`)) {
+      n += 1
+    }
+    return `${task.name}-${n}`
+  }
+
+  // A booted, running sandbox; seeds adjust it.
+  function addSandbox(task: Task, name: string, spec: TaskSpec, command: string, ageMs: number) {
+    const at = iso(Date.now() - ageMs)
+    const sandbox: Sandbox = {
+      id: randomUUID(),
+      task_id: task.id,
+      name,
+      spec,
+      command,
+      boot_error: null,
+      booted_at: at,
+      stopped_at: null,
+      created_at: at,
+      runtime: 'running',
+    }
+    sandboxes.set(name, sandbox)
+    terminals.set(name, [])
+    return sandbox
+  }
+
+  // Allocation: the row is written as starting and boots for two seconds;
+  // then the command, if any, runs as the job "agent".
+  function allocate(task: Task, spec: TaskSpec, command: string) {
+    const sandbox = addSandbox(task, nextSandboxName(task), spec, command, 0)
+    sandbox.booted_at = null
+    readyAt.set(sandbox.name, Date.now() + BOOT_MS)
+    return sandbox
+  }
+
+  function boot(sandbox: Sandbox) {
+    const ready = readyAt.get(sandbox.name)
+    if (sandbox.booted_at !== null || sandbox.boot_error !== null || ready === undefined || Date.now() < ready) {
+      return
+    }
+    readyAt.delete(sandbox.name)
+    sandbox.booted_at = iso()
+    sandbox.runtime = 'running'
+    const command = sandbox.command.trim()
+    if (command) {
+      terminals.get(sandbox.name)?.push({ id: 'agent', command: command.split(/\s+/), running: true })
+    }
+  }
+
+  function taskName(sandbox: Sandbox) {
+    for (const task of tasks.values()) {
+      if (task.id === sandbox.task_id) {
+        return task.name
+      }
+    }
+    return ''
+  }
+
+  // Status as the server computes it: starting until booted, failed with
+  // the boot error, otherwise the runtime's word.
+  function sandboxView(sandbox: Sandbox): SandboxView {
+    boot(sandbox)
+    const { boot_error, runtime, ...row } = sandbox
+    const view: SandboxView = { ...row, task: taskName(sandbox), status: runtime }
+    if (boot_error !== null) {
+      view.status = 'failed'
+      view.status_error = boot_error
+    } else if (sandbox.booted_at === null) {
+      view.status = 'starting'
+    }
+    return view
+  }
+
+  function sandboxesOf(task: Task) {
+    const list = [...sandboxes.values()].filter((b) => b.task_id === task.id).map(sandboxView)
+    return list.sort((a, b) => b.created_at.localeCompare(a.created_at))
+  }
+
+  // done when done_at is set, otherwise running when a sandbox runs,
+  // otherwise open.
+  function taskView(task: Task): TaskView {
+    const boxes = sandboxesOf(task)
+    let status = 'open'
+    if (task.done_at) {
+      status = 'done'
+    } else if (boxes.some((b) => b.status === 'running')) {
+      status = 'running'
+    }
+    return { ...task, status, sandboxes: boxes }
   }
 
   // A task is found by UUID or by name, like TaskIdParam.
   function findTask(ref: string) {
     const byName = tasks.get(ref)
     if (byName) {
-      return view(byName)
+      return byName
     }
     for (const task of tasks.values()) {
       if (task.id === ref) {
-        return view(task)
+        return task
       }
     }
     throw apiError(404, `task ${ref} not found`)
+  }
+
+  // A sandbox is found by UUID or by name too.
+  function findSandbox(ref: string) {
+    const byName = sandboxes.get(ref)
+    if (byName) {
+      return byName
+    }
+    for (const sandbox of sandboxes.values()) {
+      if (sandbox.id === ref) {
+        return sandbox
+      }
+    }
+    throw apiError(404, `sandbox ${ref} not found`)
+  }
+
+  function deleteSandbox(sandbox: Sandbox) {
+    sandboxes.delete(sandbox.name)
+    terminals.delete(sandbox.name)
+    readyAt.delete(sandbox.name)
   }
 
   function join(name: string, task: string, human: boolean) {
@@ -237,22 +389,68 @@ function createState() {
       volumes: ['go-mod-cache:/home/agent/go/pkg/mod:rw'],
       channels: ['#releases', '#alerts:read'],
     }
-    addTask('Review 42', 'review-42', base, 'running', 40 * 60_000)
-    addTask('Flaky CI', 'flaky-ci', { image: 'agc-agent', cpus: 2, memory: 4096 }, 'stopped', 3 * 3600_000)
-    // A task from before titles existed (title equals name) whose runtime
-    // could not be asked.
-    addTask(
-      'docs-pass',
-      'docs-pass',
-      { ...base, cpus: 1, memory: 2048, ref: 'docs' },
-      'unknown',
-      2 * 86_400_000,
-      'msb: connection refused',
+    const review = addTask(
+      'Review 42',
+      'review-42',
+      {
+        brief:
+          'Review PR 42 (attach rulesets to task specs).\n\n' +
+          '- Run the tests and read the diff against the rules.\n' +
+          '- Post findings in #review-42.\n\n' +
+          'Done when every finding is posted and the PR is approved or has changes requested.',
+        assignee: 'claude_code',
+        for: 'attach-rulesets-to-task-specs',
+      },
+      40 * 60_000,
     )
+    // The sandbox running now, and an older one that was stopped.
+    addSandbox(review, 'review-42', base, 'claude', 30 * 60_000)
+    const older = addSandbox(review, 'review-42-2', base, 'claude', 38 * 60_000)
+    older.runtime = 'stopped'
+    older.stopped_at = iso(Date.now() - 32 * 60_000)
     terminals.set('review-42', [
-      { id: 'job_' + hex(4), command: ['claude'], running: true },
+      { id: 'agent', command: ['claude'], running: true },
       { id: 'job_' + hex(4), command: ['bash'], running: false },
     ])
+
+    // A human's task: no sandbox.
+    addTask(
+      'Flaky CI',
+      'flaky-ci',
+      { brief: 'Find why CI fails one run in five and fix it.', assignee: 'franco' },
+      3 * 3600_000,
+    )
+
+    const docs = addTask(
+      'Docs pass',
+      'docs-pass',
+      {
+        brief: 'Bring docs/ up to date with the REST API.',
+        assignee: 'codex_cli',
+        done_at: iso(Date.now() - 86_400_000),
+      },
+      2 * 86_400_000,
+    )
+    const docsBox = addSandbox(docs, 'docs-pass', { ...base, cpus: 1, memory: 2048, ref: 'docs' }, '', 2 * 86_400_000)
+    docsBox.runtime = 'stopped'
+    docsBox.stopped_at = iso(Date.now() - 86_400_000)
+
+    const fail = addTask(
+      'Boot fail',
+      'boot-fail',
+      { brief: 'Review the private repo.', assignee: 'claude_code' },
+      20 * 60_000,
+    )
+    const failBox = addSandbox(
+      fail,
+      'boot-fail',
+      { ...base, repo: 'github.com/vanclief/no-such-repo' },
+      'claude',
+      20 * 60_000,
+    )
+    failBox.booted_at = null
+    failBox.boot_error = 'clone failed: repository not found'
+
     specs.set(
       'backend-review',
       'image: agc-agent\ncpus: 2\nmemory: 4096\nrepo: github.com/vanclief/agent-composer\nref: master\n',
@@ -274,14 +472,18 @@ function createState() {
 
   return {
     tasks,
-    readyAt,
+    sandboxes,
     terminals,
     specs,
     participants,
     messages,
-    view,
+    taskView,
+    sandboxView,
     findTask,
+    findSandbox,
     addTask,
+    allocate,
+    deleteSandbox,
     join,
     post,
     after,
@@ -332,7 +534,7 @@ function str(value: unknown) {
 
 async function tasksAPI(state: State, method: string, rest: string[], req: IncomingMessage) {
   if (rest.length === 0 && method === 'GET') {
-    const list = [...state.tasks.values()].map(state.view)
+    const list = [...state.tasks.values()].map(state.taskView)
     list.sort((a, b) => b.created_at.localeCompare(a.created_at))
     return { tasks: list }
   }
@@ -342,39 +544,125 @@ async function tasksAPI(state: State, method: string, rest: string[], req: Incom
 
   const task = state.findTask(rest[0])
   if (rest.length === 1 && method === 'GET') {
-    return task
+    return state.taskView(task)
   }
   if (rest.length === 1 && method === 'DELETE') {
+    for (const sandbox of [...state.sandboxes.values()]) {
+      if (sandbox.task_id === task.id) {
+        state.deleteSandbox(sandbox)
+      }
+    }
     state.tasks.delete(task.name)
-    state.terminals.delete(task.name)
     return { deleted: true, name: task.name }
   }
-  if (rest.length === 2 && method === 'POST' && rest[1] === 'stop') {
-    if (task.status !== 'running') {
-      throw apiError(409, `task ${task.name} is ${task.status}, not running`)
+  if (rest.length === 2 && method === 'POST' && rest[1] === 'done') {
+    if (task.done_at) {
+      throw apiError(409, `task ${task.name} is already done`)
     }
-    task.status = 'stopped'
-    task.updated_at = iso()
-    for (const job of state.terminals.get(task.name) ?? []) {
+    task.done_at = iso()
+    task.updated_at = task.done_at
+    return state.taskView(task)
+  }
+  if (rest.length === 2 && method === 'POST' && rest[1] === 'sandboxes') {
+    const request = sandboxRequest(await readJSON(req, apiError))
+    const sandbox = state.allocate(task, request.spec, request.command)
+    return new Created(state.sandboxView(sandbox))
+  }
+  throw apiError(404, 'no such endpoint')
+}
+
+// The environment block inline plus command, validated like the server.
+function sandboxRequest(body: Record<string, unknown>) {
+  const { command, ...spec } = body
+  const known = new Set(SECRETS.map((s) => s.name))
+  for (const entry of (spec.secrets as unknown[] | undefined) ?? []) {
+    const secret = String(entry).split('@')[0]
+    if (!known.has(secret)) {
+      throw apiError(
+        400,
+        `secret ${secret} is not defined; add it to ~/.agent_composer/config/secrets.env and try again`,
+      )
+    }
+  }
+  for (const channel of (spec.channels as unknown[] | undefined) ?? []) {
+    if (!CHANNEL_RE.test(String(channel).replace(/:read$/, ''))) {
+      throw apiError(400, `channel "${channel}" is invalid: start with # and use lowercase letters, digits, _ or -`)
+    }
+  }
+  return { spec: spec as TaskSpec, command: str(command).trim() }
+}
+
+// Writes the row and returns at once; a sandbox in the request is
+// allocated after the insert and comes back as starting.
+function createTask(state: State, body: Record<string, unknown>) {
+  const title = str(body.title).trim()
+  const name = str(body.name) || slugify(title)
+  if (!name) {
+    throw apiError(400, `title "${title}" needs at least one letter or digit`)
+  }
+  if (!TASK_NAME_RE.test(name)) {
+    throw apiError(400, `name "${name}" is invalid: use 1-63 lowercase letters, digits or -, starting with a letter`)
+  }
+  if (state.tasks.has(name)) {
+    throw apiError(409, `task ${name} already exists`)
+  }
+  const sandbox = body.sandbox
+  if (sandbox !== undefined && sandbox !== null && (typeof sandbox !== 'object' || Array.isArray(sandbox))) {
+    throw apiError(400, 'sandbox must be an object')
+  }
+  const request = sandbox ? sandboxRequest(sandbox as Record<string, unknown>) : undefined
+  const task = state.addTask(
+    title || name,
+    name,
+    { brief: str(body.brief), assignee: str(body.assignee), for: str(body.for) },
+    0,
+  )
+  if (request) {
+    state.allocate(task, request.spec, request.command)
+  }
+  return state.taskView(task)
+}
+
+async function sandboxesAPI(state: State, method: string, rest: string[], req: IncomingMessage) {
+  if (rest.length === 0 && method === 'GET') {
+    const list = [...state.sandboxes.values()].map(state.sandboxView)
+    list.sort((a, b) => b.created_at.localeCompare(a.created_at))
+    return { sandboxes: list }
+  }
+
+  const sandbox = state.findSandbox(rest[0])
+  const view = state.sandboxView(sandbox)
+  if (rest.length === 1 && method === 'GET') {
+    return view
+  }
+  if (rest.length === 1 && method === 'DELETE') {
+    state.deleteSandbox(sandbox)
+    return { deleted: true, name: sandbox.name }
+  }
+  if (rest.length === 2 && method === 'POST' && rest[1] === 'stop') {
+    if (view.status !== 'running') {
+      throw apiError(409, `sandbox ${sandbox.name} is ${view.status}, not running`)
+    }
+    sandbox.runtime = 'stopped'
+    sandbox.stopped_at = iso()
+    for (const job of state.terminals.get(sandbox.name) ?? []) {
       job.running = false
     }
-    return task
+    return state.sandboxView(sandbox)
   }
   if (rest.length === 2 && method === 'POST' && rest[1] === 'start') {
-    if (task.status === 'running') {
-      throw apiError(409, `task ${task.name} is already running`)
+    if (view.status !== 'stopped' && view.status !== 'unknown') {
+      throw apiError(409, `sandbox ${sandbox.name} is ${view.status}, not stopped`)
     }
-    task.status = 'starting'
-    delete task.status_error
-    task.updated_at = iso()
-    state.readyAt.set(task.name, Date.now() + BOOT_MS)
-    return task
+    sandbox.runtime = 'running'
+    sandbox.stopped_at = null
+    return state.sandboxView(sandbox)
   }
   if (rest.length === 2 && rest[1] === 'terminals') {
-    if (task.status !== 'running') {
-      throw apiError(409, `task ${task.name} is ${task.status}; start it to use terminals`)
+    if (view.status !== 'running') {
+      throw apiError(409, `sandbox ${sandbox.name} is ${view.status}; start it to use terminals`)
     }
-    const jobs = state.terminals.get(task.name) ?? []
+    const jobs = state.terminals.get(sandbox.name) ?? []
     if (method === 'GET') {
       return { terminals: jobs }
     }
@@ -386,47 +674,11 @@ async function tasksAPI(state: State, method: string, rest: string[], req: Incom
       }
       const job: Terminal = { id: 'job_' + hex(4), command: command.split(/\s+/), running: true }
       jobs.push(job)
-      state.terminals.set(task.name, jobs)
+      state.terminals.set(sandbox.name, jobs)
       return { id: job.id }
     }
   }
   throw apiError(404, 'no such endpoint')
-}
-
-function createTask(state: State, body: Record<string, unknown>) {
-  const title = str(body.title).trim()
-  const name = str(body.name) || slugify(title)
-  const spec = (body.spec ?? {}) as TaskSpec
-  if (!name) {
-    throw apiError(400, `title "${title}" needs at least one letter or digit`)
-  }
-  if (!TASK_NAME_RE.test(name)) {
-    throw apiError(400, `name "${name}" is invalid: use 1-63 lowercase letters, digits or -, starting with a letter`)
-  }
-  if (state.tasks.has(name)) {
-    throw apiError(409, `task ${name} already exists`)
-  }
-  if (typeof spec !== 'object' || spec === null || Array.isArray(spec)) {
-    throw apiError(400, 'spec must be an object')
-  }
-  const known = new Set(SECRETS.map((s) => s.name))
-  for (const entry of spec.secrets ?? []) {
-    const secret = String(entry).split('@')[0]
-    if (!known.has(secret)) {
-      throw apiError(
-        400,
-        `secret ${secret} is not defined; add it to ~/.agent_composer/config/secrets.env and try again`,
-      )
-    }
-  }
-  for (const channel of spec.channels ?? []) {
-    if (!CHANNEL_RE.test(String(channel).replace(/:read$/, ''))) {
-      throw apiError(400, `channel "${channel}" is invalid: start with # and use lowercase letters, digits, _ or -`)
-    }
-  }
-  const task = state.addTask(title || name, name, spec, 'starting', 0)
-  state.readyAt.set(name, Date.now() + BOOT_MS)
-  return task
 }
 
 async function specsAPI(state: State, method: string, rest: string[], req: IncomingMessage) {
@@ -609,6 +861,8 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
     let body: unknown
     if (parts[1] === 'tasks') {
       body = await tasksAPI(state, method, parts.slice(2), req)
+    } else if (parts[1] === 'sandboxes') {
+      body = await sandboxesAPI(state, method, parts.slice(2), req)
     } else if (parts[1] === 'specs') {
       body = await specsAPI(state, method, parts.slice(2), req)
     } else if (parts[1] === 'secrets' && parts.length === 2 && method === 'GET') {
@@ -620,9 +874,14 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
     } else {
       throw apiError(404, 'no such endpoint')
     }
-    if (!res.destroyed) {
-      send(res, 200, body)
+    if (res.destroyed) {
+      return
     }
+    if (body instanceof Created) {
+      send(res, 201, body.body)
+      return
+    }
+    send(res, 200, body)
   } catch (err) {
     if (err instanceof HttpError) {
       send(res, err.status, err.body)
@@ -633,14 +892,14 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
   }
 }
 
-// /api/tasks/:id/terminals/:job/ws. Binary frames are terminal bytes both
+// /api/sandboxes/:id/terminals/:job/ws. Binary frames are terminal bytes both
 // ways; a text frame {"type":"resize","rows":N,"cols":N} resizes. The mock
 // echoes input and acknowledges resizes. A finished job replays a line and
 // closes with "job completed", like the real socket.
-function attachTerminal(ws: WebSocket, task: Task, job: Terminal) {
+function attachTerminal(ws: WebSocket, sandbox: Sandbox, job: Terminal) {
   const write = (text: string) => ws.send(Buffer.from(text), { binary: true })
 
-  write(`\x1b[2mmock terminal · ${task.name} · ${job.command.join(' ')}\x1b[0m\r\n`)
+  write(`\x1b[2mmock terminal · ${sandbox.name} · ${job.command.join(' ')}\x1b[0m\r\n`)
   if (!job.running) {
     write('[process exited]\r\n')
     ws.close(1000, 'job completed')
@@ -678,7 +937,7 @@ export async function startMock(port = 8790, host = '127.0.0.1'): Promise<MockSe
 
   server.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://mock')
-    const match = /^\/api\/tasks\/([^/]+)\/terminals\/([^/]+)\/ws$/.exec(url.pathname)
+    const match = /^\/api\/sandboxes\/([^/]+)\/terminals\/([^/]+)\/ws$/.exec(url.pathname)
     const refuse = (status: number, message: string) => {
       const body = JSON.stringify({ error: { code: CODES[status], message, request_id: 'mock-' + hex(4) } })
       socket.end(
@@ -690,26 +949,27 @@ export async function startMock(port = 8790, host = '127.0.0.1'): Promise<MockSe
       refuse(404, 'no such endpoint')
       return
     }
-    let task: Task
+    let sandbox: Sandbox
     try {
-      task = state.findTask(decodeURIComponent(match[1]))
+      sandbox = state.findSandbox(decodeURIComponent(match[1]))
     } catch (err) {
       const message =
         err instanceof HttpError ? (err.body as { error: { message: string } }).error.message : String(err)
       refuse(404, message)
       return
     }
-    if (task.status !== 'running') {
-      refuse(409, `task ${task.name} is ${task.status}; start it to use terminals`)
+    const status = state.sandboxView(sandbox).status
+    if (status !== 'running') {
+      refuse(409, `sandbox ${sandbox.name} is ${status}; start it to use terminals`)
       return
     }
     const jobID = decodeURIComponent(match[2])
-    const job = (state.terminals.get(task.name) ?? []).find((j) => j.id === jobID)
+    const job = (state.terminals.get(sandbox.name) ?? []).find((j) => j.id === jobID)
     if (!job) {
       refuse(404, `terminal ${jobID} not found`)
       return
     }
-    wss.handleUpgrade(req, socket, head, (ws) => attachTerminal(ws, task, job))
+    wss.handleUpgrade(req, socket, head, (ws) => attachTerminal(ws, sandbox, job))
   })
 
   await new Promise<void>((resolve) => server.listen(port, host, resolve))

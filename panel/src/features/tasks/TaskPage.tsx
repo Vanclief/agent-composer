@@ -1,5 +1,5 @@
-// /tasks/:name/*: the task header with its actions, then the terminals,
-// messages and spec tabs rendered through <Outlet/>.
+// /tasks/:name/*: the task header with its actions, then the brief, compute
+// and messages tabs rendered through <Outlet/>.
 import { ArrowLeft } from 'lucide-react'
 import { Link, NavLink, Outlet, useNavigate, useParams } from 'react-router'
 
@@ -15,9 +15,9 @@ import { usePageTitle } from '@/shell/page-title'
 import { TaskActions, useTaskActions } from './TaskActions'
 
 const TABS: { to: string; label: string; concept: Concept }[] = [
-  { to: 'terminals', label: 'Terminals', concept: 'terminal' },
+  { to: 'brief', label: 'Brief', concept: 'brief' },
+  { to: 'compute', label: 'Compute', concept: 'sandbox' },
   { to: 'messages', label: 'Messages', concept: 'message' },
-  { to: 'spec', label: 'Spec', concept: 'raw' },
 ]
 
 export function TaskPage() {
@@ -68,7 +68,7 @@ export function TaskPage() {
         <IconChip icon={conceptIcons.channel} concept="channel" title="Name and channel" className="shrink-0">
           {data.name}
         </IconChip>
-        <StatusPill status={data.status} detail={data.status_error} />
+        <StatusPill status={data.status} />
         <TaskActions task={data} actions={actions} onDeleted={() => navigate('/tasks')} className="ml-auto shrink-0" />
       </div>
       <ErrorText error={actions.error ?? task.error} className="mx-6 mt-4" />

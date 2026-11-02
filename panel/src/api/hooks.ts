@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { api, unwrap, type CreateTaskRequest, type Task } from './client'
+import { api, unwrap } from './client'
 import { msg, type Message, type MessagesResponse, type PostRequest } from './msg'
+import { sandboxes, tasks, type CreateTaskRequest, type SandboxRequest } from './tasks'
 import { terminals, type StartTerminalRequest } from './terminals'
 import { knowledge } from './knowledge'
 import { keepPreviousData } from '@tanstack/react-query'
 
-// How often the tasks list refetches, so statuses stay live.
+// How often tasks, sandboxes and terminals refetch, so statuses stay live.
 export const TASKS_POLL_MS = 5000
 // First page of a channel, the wait timeout, and how many messages a
 // channel keeps in memory.
@@ -19,11 +20,13 @@ const KEEP_MESSAGES = 500
 const WAIT_RETRY_MS = 5000
 
 // Every key is under its resource's root, so invalidating
-// queryKeys.tasks also refreshes each task and its terminals.
+// queryKeys.sandboxes also refreshes each sandbox and its terminals.
 export const queryKeys = {
   tasks: ['tasks'] as const,
   task: (ref: string) => ['tasks', ref] as const,
-  terminals: (task: string) => ['tasks', task, 'terminals'] as const,
+  sandboxes: ['sandboxes'] as const,
+  sandbox: (ref: string) => ['sandboxes', ref] as const,
+  terminals: (sandbox: string) => ['sandboxes', sandbox, 'terminals'] as const,
   specs: ['specs'] as const,
   spec: (name: string) => ['specs', name] as const,
   secrets: ['secrets'] as const,
@@ -37,12 +40,13 @@ export const queryKeys = {
   participants: (channel: string) => ['msg', 'participants', channel] as const,
 }
 
-// ---------- tasks ----------
+// ---------- tasks and sandboxes (ADR 0008) ----------
 
+// Every task, newest first, each with its sandboxes embedded.
 export function useTasks() {
   return useQuery({
     queryKey: queryKeys.tasks,
-    queryFn: async () => (await unwrap(api.GET('/tasks'))).tasks,
+    queryFn: async ({ signal }) => (await tasks.list(signal)).tasks,
     refetchInterval: TASKS_POLL_MS,
   })
 }
@@ -51,38 +55,74 @@ export function useTasks() {
 export function useTask(ref: string | undefined) {
   return useQuery({
     queryKey: queryKeys.task(ref ?? ''),
-    queryFn: () => unwrap(api.GET('/tasks/{id}', { params: { path: { id: ref ?? '' } } })),
+    queryFn: ({ signal }) => tasks.get(ref ?? '', signal),
     enabled: Boolean(ref),
     refetchInterval: TASKS_POLL_MS,
   })
 }
 
-function useTaskMutation<TVariables, TData>(mutationFn: (variables: TVariables) => Promise<TData>) {
+// A task's status follows its sandboxes, so every task or sandbox change
+// refreshes both.
+function useWorkMutation<TVariables, TData>(mutationFn: (variables: TVariables) => Promise<TData>) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn,
-    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.tasks }),
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sandboxes }),
+      ]),
   })
 }
 
+// Returns at once; a sandbox in the request comes back as starting.
 export function useCreateTask() {
-  return useTaskMutation((request: CreateTaskRequest) => unwrap(api.POST('/tasks', { body: request })))
+  return useWorkMutation((request: CreateTaskRequest) => tasks.create(request))
 }
 
-export function useStopTask() {
-  return useTaskMutation((ref: string): Promise<Task> =>
-    unwrap(api.POST('/tasks/{id}/stop', { params: { path: { id: ref } } })),
-  )
+export function useDoneTask() {
+  return useWorkMutation((ref: string) => tasks.done(ref))
 }
 
-export function useStartTask() {
-  return useTaskMutation((ref: string): Promise<Task> =>
-    unwrap(api.POST('/tasks/{id}/start', { params: { path: { id: ref } } })),
-  )
-}
-
+// Deletes the task's sandboxes, then the task.
 export function useDeleteTask() {
-  return useTaskMutation((ref: string) => unwrap(api.DELETE('/tasks/{id}', { params: { path: { id: ref } } })))
+  return useWorkMutation((ref: string) => tasks.delete(ref))
+}
+
+// Allocates task a new sandbox: 201 with status starting, then running.
+export function useAllocate(task: string) {
+  return useWorkMutation((request: SandboxRequest) => tasks.allocate(task, request))
+}
+
+// Every sandbox, newest first, with its task's name.
+export function useSandboxes() {
+  return useQuery({
+    queryKey: queryKeys.sandboxes,
+    queryFn: async ({ signal }) => (await sandboxes.list(signal)).sandboxes,
+    refetchInterval: TASKS_POLL_MS,
+  })
+}
+
+// ref is a sandbox name or UUID.
+export function useSandbox(ref: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.sandbox(ref ?? ''),
+    queryFn: ({ signal }) => sandboxes.get(ref ?? '', signal),
+    enabled: Boolean(ref),
+    refetchInterval: TASKS_POLL_MS,
+  })
+}
+
+export function useStopSandbox() {
+  return useWorkMutation((ref: string) => sandboxes.stop(ref))
+}
+
+export function useStartSandbox() {
+  return useWorkMutation((ref: string) => sandboxes.start(ref))
+}
+
+export function useDeleteSandbox() {
+  return useWorkMutation((ref: string) => sandboxes.delete(ref))
 }
 
 // ---------- saved specs ----------
@@ -131,22 +171,22 @@ export function useSecrets() {
 
 // ---------- terminals ----------
 
-// Only a running task has terminals; pass enabled=false otherwise, or the
-// query fails with the backend's "start it to use terminals" error.
-export function useTerminals(task: string | undefined, enabled = true) {
+// Only a running sandbox has terminals; pass enabled=false otherwise, or
+// the query fails with the backend's "start it to use terminals" error.
+export function useTerminals(sandbox: string | undefined, enabled = true) {
   return useQuery({
-    queryKey: queryKeys.terminals(task ?? ''),
-    queryFn: async () => (await terminals.list(task ?? '')).terminals,
-    enabled: Boolean(task) && enabled,
+    queryKey: queryKeys.terminals(sandbox ?? ''),
+    queryFn: async ({ signal }) => (await terminals.list(sandbox ?? '', signal)).terminals,
+    enabled: Boolean(sandbox) && enabled,
     refetchInterval: TASKS_POLL_MS,
   })
 }
 
-export function useStartTerminal(task: string) {
+export function useStartTerminal(sandbox: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (request: StartTerminalRequest) => terminals.start(task, request),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.terminals(task) }),
+    mutationFn: (request: StartTerminalRequest) => terminals.start(sandbox, request),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.terminals(sandbox) }),
   })
 }
 

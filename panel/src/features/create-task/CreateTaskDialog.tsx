@@ -156,8 +156,10 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
     if (!ready || !current || create.isPending) {
       return
     }
+    // TODO(ADR 0008): the create-task feature adds brief, assignee, for and
+    // command, and makes the sandbox optional.
     create.mutate(
-      { title: title.trim(), spec: formToSpec(current) },
+      { title: title.trim(), brief: '', assignee: '', for: '', sandbox: formToSpec(current) },
       {
         onSuccess: (task) => {
           setForm(blankForm())
