@@ -155,6 +155,8 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 	case *workflowworktrees.DeleteRequest:
 		return s.WorkflowAPI.Worktrees.Delete(request.GetContext(), nil, body)
 
+	case *tasks.GetDefaultsRequest:
+		return s.TasksAPI.GetDefaults(request.GetContext(), nil, body)
 	case *tasks.ListRequest:
 		return s.TasksAPI.List(request.GetContext(), nil, body)
 	case *tasks.GetRequest:
