@@ -22,4 +22,6 @@ type Config struct {
 	Promtail promtail.Config           `mapstructure:"promtail"`
 	Postgres postgres.ConnectionConfig `mapstructure:"postgres"`
 	SQLite   sqlite.ConnectionConfig   `mapstructure:"sqlite"`
+	// Defaults fill in a task's assignee, model and owner (ADR 0009).
+	Defaults DefaultsSettings `mapstructure:"defaults"`
 }

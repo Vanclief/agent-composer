@@ -125,17 +125,19 @@ func New(rootCtx context.Context, db bun.IDB, msg *messaging.Service, rt Runtime
 // from the row, otherwise the runtime's word verbatim, or unknown with
 // StatusError when the runtime cannot say.
 type SandboxView struct {
-	ID          uuid.UUID  `json:"id"`
-	TaskID      uuid.UUID  `json:"task_id"`
-	Task        string     `json:"task"`
-	Name        string     `json:"name"`
-	Spec        task.Spec  `json:"spec"`
-	Command     string     `json:"command"`
-	Status      string     `json:"status"`
-	StatusError string     `json:"status_error,omitempty"`
-	BootedAt    *time.Time `json:"booted_at"`
-	StoppedAt   *time.Time `json:"stopped_at"`
-	CreatedAt   time.Time  `json:"created_at"`
+	ID      uuid.UUID `json:"id"`
+	TaskID  uuid.UUID `json:"task_id"`
+	Task    string    `json:"task"`
+	Name    string    `json:"name"`
+	Spec    task.Spec `json:"spec"`
+	Command string    `json:"command"`
+	// Instructions is the TASK.md written into the sandbox, verbatim.
+	Instructions string     `json:"instructions"`
+	Status       string     `json:"status"`
+	StatusError  string     `json:"status_error,omitempty"`
+	BootedAt     *time.Time `json:"booted_at"`
+	StoppedAt    *time.Time `json:"stopped_at"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 // validateRef checks a request names a sandbox by exactly one of id or
@@ -189,22 +191,23 @@ func decodeSpec(record *taskmodels.Sandbox) (task.Spec, error) {
 // view reads the status. A running sandbox gets its messaging listener if
 // no agc process serves it yet, which covers sandboxes booted or started by
 // a CLI process that has since exited.
-func (api *API) view(ctx context.Context, record *taskmodels.Sandbox, taskName string) (*SandboxView, error) {
+func (api *API) view(ctx context.Context, record *taskmodels.Sandbox, owner *taskmodels.Task) (*SandboxView, error) {
 	spec, err := decodeSpec(record)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
 	view := &SandboxView{
-		ID:        record.ID,
-		TaskID:    record.TaskID,
-		Task:      taskName,
-		Name:      record.Name,
-		Spec:      spec,
-		Command:   record.Command,
-		BootedAt:  record.BootedAt,
-		StoppedAt: record.StoppedAt,
-		CreatedAt: record.CreatedAt,
+		ID:           record.ID,
+		TaskID:       record.TaskID,
+		Task:         owner.Name,
+		Name:         record.Name,
+		Spec:         spec,
+		Command:      record.Command,
+		Instructions: record.Instructions,
+		BootedAt:     record.BootedAt,
+		StoppedAt:    record.StoppedAt,
+		CreatedAt:    record.CreatedAt,
 	}
 
 	if record.BootError != nil {
@@ -242,7 +245,7 @@ func (api *API) view(ctx context.Context, record *taskmodels.Sandbox, taskName s
 	view.Status = status
 
 	if status == StatusRunning {
-		err = api.startSandboxListener(record.Name, taskName, spec)
+		err = api.startSandboxListener(record.Name, owner, spec)
 		if err != nil {
 			log.Warn().Err(err).Str("sandbox", record.Name).Msg("cannot start sandbox messaging listener")
 		}
@@ -260,7 +263,7 @@ func (api *API) TaskSandboxes(ctx context.Context, owner *taskmodels.Task) ([]Sa
 
 	views := []SandboxView{}
 	for i := range records {
-		view, err := api.view(ctx, &records[i], owner.Name)
+		view, err := api.view(ctx, &records[i], owner)
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}

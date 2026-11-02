@@ -29,7 +29,7 @@
 
 ## Repo map
 
-- `core/resources/<x>`: resource APIs (business logic), one file per verb. `tasks` is the work (title, brief, assignee, done; status computed); `sandboxes` is the compute a task is allocated (one VM each: async boot, stop/start/delete, terminals, the per-sandbox messaging socket), ADR 0008.
+- `core/resources/<x>`: resource APIs (business logic), one file per verb. `tasks` is the work (title, brief, assignee, model, manager, owner, done; status computed); `sandboxes` is the compute a task is allocated (one VM each: async boot, stop/start/delete, terminals, the per-sandbox messaging socket), ADR 0008. ADR 0009: `defaults: { harness, model, owner }` in the config file (env `AGC_DEFAULT_HARNESS|MODEL|OWNER`) fill in a task; `manager` is required; the sandbox stores its TASK.md as `instructions` (`sandboxes.Instructions`) and, for a harness with no `command`, runs `agc agent run` (`interfaces/cli/agent.go`) as the job `agent`; on create agc posts the opening message and the instructions in `#<task>` as the reserved participant `agc` (`tasks.OpeningMessage`); `/done` from the manager or owner in `#<task>` sets `done_at`; a sandbox may post in `#<owner>`.
 - `core/resources/knowledge`: read-only REST over `knowledge/`, loading `evidence/ beliefs/ decisions/ rules/ actions/` under `<home>/knowledge` (or `AGC_KNOWLEDGE_DIR`) on every request; list (`?without=`), why, doubt and conflicts.
 - `interfaces/rest`: echo server; routes in `api_routes.go`, handlers in `handler/`, dispatch type switch in `server/server.go`.
 - `interfaces/cli`: the `agc` command-line interface.
@@ -38,10 +38,10 @@
 - `executor`: host and sandbox executors.
 - `task`: the task.yaml file and the sandbox environment spec (`Spec`, `Sandbox`), saved specs.
 - `secrets`: secret placeholders bound to hosts.
-- `messaging`: messaging transport and identity.
+- `messaging`: messaging transport and identity; `PostAsSystem` posts as `agc`, `OnPost` hooks run after every post; messages carry `human`. `messaging/guest-readme.md` is `/etc/agc/README.md` in the image.
 - `images/agc-agent`: the agent image that runs inside sandboxes.
 - `panel/`: React control panel, see `panel/CLAUDE.md`. `web/` is the older workflow builder UI.
-- `docs/decisions`: ADRs 0001–0009 (tasks and sandboxes: 0003, 0008); read the relevant one before changing that area.
+- `docs/decisions`: ADRs 0001–0009 (tasks and sandboxes: 0003, 0008; messaging: 0005; knowledge: 0006; proposals and gates: 0007; task agents, managers and owners: 0009); read the relevant one before changing that area.
 - `docs/openapi.yaml`: REST API spec.
 
 ## Adding a REST endpoint, checklist

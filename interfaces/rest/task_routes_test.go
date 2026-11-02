@@ -41,6 +41,11 @@ type taskRoutes struct {
 func newTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *taskRoutes {
 	t.Helper()
 
+	// The built-in defaults, with franco as the configured owner.
+	t.Setenv("AGC_DEFAULT_HARNESS", "")
+	t.Setenv("AGC_DEFAULT_MODEL", "")
+	t.Setenv("AGC_DEFAULT_OWNER", "franco")
+
 	sqldb, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +83,7 @@ func newTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *task
 	server := &restserver.Server{
 		Ctrl:         ctrl,
 		RateLimiter:  ratelimit.NewWindowCounter(10, 100),
-		TasksAPI:     tasks.NewAPI(ctrl, sandboxesAPI, secretsPath, specs),
+		TasksAPI:     tasks.NewAPI(ctrl, sandboxesAPI, msg, secretsPath, specs),
 		SandboxesAPI: sandboxesAPI,
 		Messaging:    msg,
 	}
@@ -157,7 +162,7 @@ func TestCreateTaskReturnsAtOnceWithAStartingSandbox(t *testing.T) {
 	sb := &fakeSandbox{}
 	routes := newTaskRoutes(t, &fakeRuntime{sb: sb}, "")
 
-	status, body := routes.do(http.MethodPost, "/api/tasks", `{"title":"Fix login","brief":"Make 2FA work.","assignee":"claude_code","for":"login-works","sandbox":{"repo":"github.com/o/n","cpus":2,"command":"claude --dangerously-skip-permissions"}}`)
+	status, body := routes.do(http.MethodPost, "/api/tasks", `{"title":"Fix login","brief":"Make 2FA work.","assignee":"claude_code","manager":"orchestrator","for":"login-works","sandbox":{"repo":"github.com/o/n","cpus":2,"command":"claude --dangerously-skip-permissions"}}`)
 	if status != http.StatusOK {
 		t.Fatalf("status %d, body %s", status, body)
 	}
@@ -210,7 +215,7 @@ func TestTaskAndSandboxRoutes(t *testing.T) {
 	routes := newTaskRoutes(t, &fakeRuntime{sb: &fakeSandbox{}}, "")
 
 	routes.check(t, []routeCase{
-		{http.MethodPost, "/api/tasks", `{"title":"Review facebook ads","brief":"Find the ads that lose money."}`, http.StatusOK, `"title":"Review facebook ads","name":"review-facebook-ads","brief":"Find the ads that lose money."`},
+		{http.MethodPost, "/api/tasks", `{"title":"Review facebook ads","brief":"Find the ads that lose money.","manager":"franco"}`, http.StatusOK, `"title":"Review facebook ads","name":"review-facebook-ads","brief":"Find the ads that lose money."`},
 		{http.MethodGet, "/api/tasks/review-facebook-ads", "", http.StatusOK, `"status":"open","done_at":null`},
 		{http.MethodGet, "/api/tasks/review-facebook-ads", "", http.StatusOK, `"sandboxes":[]`},
 		{http.MethodPost, "/api/tasks", `{"title":"No brief"}`, http.StatusBadRequest, "brief is required"},
@@ -229,7 +234,8 @@ func TestTaskAndSandboxRoutes(t *testing.T) {
 
 	routes.check(t, []routeCase{
 		{http.MethodGet, "/api/tasks", "", http.StatusOK, `"name":"review-facebook-ads-2"`},
-		{http.MethodGet, "/api/sandboxes/review-facebook-ads-2", "", http.StatusOK, `"command":"bash","status":"stopped"`},
+		{http.MethodGet, "/api/sandboxes/review-facebook-ads-2", "", http.StatusOK, `"command":"bash","instructions":"# Review facebook ads\n`},
+		{http.MethodGet, "/api/sandboxes/review-facebook-ads-2", "", http.StatusOK, `"status":"stopped"`},
 		{http.MethodPost, "/api/sandboxes/review-facebook-ads/stop", "", http.StatusOK, `"status":"stopped"`},
 		{http.MethodPost, "/api/sandboxes/review-facebook-ads/start", "", http.StatusOK, `"stopped_at":null`},
 		{http.MethodDelete, "/api/sandboxes/review-facebook-ads-2", "", http.StatusOK, `{"deleted":true,"name":"review-facebook-ads-2"}`},

@@ -40,6 +40,9 @@ func TestConfigReportPostgresOptIn(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("ENVIRONMENT", "LOCAL")
+	t.Setenv("AGC_DEFAULT_HARNESS", "")
+	t.Setenv("AGC_DEFAULT_MODEL", "")
+	t.Setenv("AGC_DEFAULT_OWNER", "")
 
 	configDir := filepath.Join(home, DEFAULT_CONFIG_DIR)
 	err := os.MkdirAll(configDir, 0755)
@@ -49,7 +52,7 @@ func TestConfigReportPostgresOptIn(t *testing.T) {
 
 	err = os.WriteFile(
 		filepath.Join(configDir, "local.config.json"),
-		[]byte(`{"postgres": {"host": "localhost:5432", "database": "agc_test"}}`),
+		[]byte(`{"postgres": {"host": "localhost:5432", "database": "agc_test"}, "defaults": {"model": "claude-sonnet-5", "owner": "franco"}}`),
 		0644,
 	)
 	if err != nil {
@@ -74,6 +77,10 @@ func TestConfigReportPostgresOptIn(t *testing.T) {
 	}
 	if report.PostgresHost != "localhost:5432" || report.PostgresDatabase != "agc_test" {
 		t.Fatalf("unexpected postgres details: %q %q", report.PostgresHost, report.PostgresDatabase)
+	}
+	want := DefaultsSettings{Harness: "claude_code", Model: "claude-sonnet-5", Owner: "franco"}
+	if report.Defaults != want {
+		t.Fatalf("defaults = %+v, want %+v", report.Defaults, want)
 	}
 	if !strings.Contains(report.Source, "postgres section in") {
 		t.Fatalf("the source must explain the opt-in: %q", report.Source)

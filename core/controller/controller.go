@@ -191,6 +191,9 @@ func (controller *Controller) Setup() error {
 // are created from the models only when missing, which never changes a table
 // that is already there, so models/migrations does that.
 func (controller *Controller) migrateDB() error {
+	// Existing tasks get the configured owner as manager and owner.
+	migrations.DefaultOwner = controller.Defaults().Owner
+
 	err := runMigrations(context.Background(), controller.DB.DB, migrations.Migrations)
 	if err != nil {
 		controller.DB.Close() // nolint:errcheck // The migration error is the one that matters

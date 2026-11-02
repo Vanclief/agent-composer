@@ -14,6 +14,10 @@ import (
 
 var nameRegex = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 
+// SystemName is the participant agc itself posts as (ADR 0009). It is
+// neither human nor in a task, and no one else may join with it.
+const SystemName = "agc"
+
 // Participant is a name agc handed out on join. The id is the identity,
 // the name is only unique while the participant is active.
 type Participant struct {
@@ -50,7 +54,7 @@ func (p *Participant) Validate() error {
 		return ez.Wrap(err)
 	}
 
-	if !p.Human && p.Task == "" {
+	if !p.Human && p.Task == "" && p.Name != SystemName {
 		return ez.New(ez.EINVALID, "participant must belong to a task or be human", nil)
 	}
 

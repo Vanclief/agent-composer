@@ -15,6 +15,7 @@ import (
 
 	"github.com/vanclief/agent-composer/messaging"
 	"github.com/vanclief/agent-composer/messaging/httpapi"
+	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/task"
 )
 
@@ -27,13 +28,37 @@ func (api *API) socketPath(name string) string {
 	return filepath.Join(api.socketDir, name+".sock")
 }
 
-func (api *API) startSandboxListener(name string, taskName string, spec task.Spec) error {
-	grants, err := spec.Grants()
+func (api *API) startSandboxListener(name string, owner *taskmodels.Task, spec task.Spec) error {
+	grants, err := Grants(owner, spec)
 	if err != nil {
 		return ez.Wrap(err)
 	}
 
-	return api.startListener(name, taskName, grants)
+	return api.startListener(name, owner.Name, grants)
+}
+
+// Grants are the channels a sandbox of owner may use besides #<task>: the
+// spec's, and the task owner's inbox #<owner> read-write when the task has
+// an owner (ADR 0009 item 5).
+func Grants(owner *taskmodels.Task, spec task.Spec) ([]messaging.Grant, error) {
+	grants, err := spec.Grants()
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	if owner.Owner == "" {
+		return grants, nil
+	}
+
+	inbox := "#" + owner.Owner
+	for i := range grants {
+		if grants[i].Channel == inbox {
+			grants[i].ReadOnly = false
+			return grants, nil
+		}
+	}
+
+	return append(grants, messaging.Grant{Channel: inbox}), nil
 }
 
 // startListener serves messaging for the sandbox called name, as the task

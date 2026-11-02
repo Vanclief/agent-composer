@@ -33,9 +33,10 @@ const (
 	LabelSandbox = "agc.sandbox"
 	// HomeDir is the sandbox user's home, where the repo is cloned.
 	HomeDir = "/home/agent"
-	// EnvTask and EnvMsgVsockPort are set by agc in every sandbox. EnvTask
-	// is the Task name.
+	// EnvTask, EnvSandbox and EnvMsgVsockPort are set by agc in every
+	// sandbox. EnvTask is the Task name, EnvSandbox the sandbox's.
 	EnvTask         = "AGC_TASK"
+	EnvSandbox      = "AGC_SANDBOX"
 	EnvMsgVsockPort = "AGC_MSG_VSOCK_PORT"
 )
 
@@ -79,6 +80,9 @@ type File struct {
 	Title    string   `yaml:"title"`
 	Brief    string   `yaml:"brief"`
 	Assignee string   `yaml:"assignee"`
+	Model    string   `yaml:"model"`
+	Manager  string   `yaml:"manager"`
+	Owner    string   `yaml:"owner"`
 	For      string   `yaml:"for"`
 	Sandbox  *Sandbox `yaml:"sandbox"`
 }
@@ -111,6 +115,9 @@ func ParseFile(data []byte) (File, error) {
 	f.Name = strings.TrimSpace(f.Name)
 	f.Title = strings.TrimSpace(f.Title)
 	f.Assignee = strings.TrimSpace(f.Assignee)
+	f.Model = strings.TrimSpace(f.Model)
+	f.Manager = strings.TrimSpace(f.Manager)
+	f.Owner = strings.TrimSpace(f.Owner)
 	f.For = strings.TrimSpace(f.For)
 
 	return f, nil
@@ -170,7 +177,7 @@ func (s Spec) Validate() error {
 			return ez.New(ez.EINVALID, fmt.Sprintf("env %q is not a valid variable name", name), nil)
 		}
 
-		if name == EnvTask || name == EnvMsgVsockPort {
+		if name == EnvTask || name == EnvSandbox || name == EnvMsgVsockPort {
 			return ez.New(ez.EINVALID, fmt.Sprintf("env %s is set by agc and cannot be overridden", name), nil)
 		}
 	}
@@ -223,6 +230,7 @@ func (s Spec) SandboxSpec(taskName string, name string, bindings []secrets.Bindi
 		env[k] = v
 	}
 	env[EnvTask] = taskName
+	env[EnvSandbox] = name
 	env[EnvMsgVsockPort] = strconv.FormatUint(uint64(vsockPort), 10)
 
 	volumes := []sandbox.Volume{}

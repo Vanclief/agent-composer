@@ -3,6 +3,7 @@ package sandboxes
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"github.com/vanclief/ez"
 
@@ -18,7 +19,7 @@ func (api *API) Resume(ctx context.Context) error {
 		return ez.Wrap(err)
 	}
 
-	taskNames, err := api.taskNames(ctx)
+	owners, err := api.tasksByID(ctx)
 	if err != nil {
 		return ez.Wrap(err)
 	}
@@ -47,7 +48,7 @@ func (api *API) Resume(ctx context.Context) error {
 			continue
 		}
 
-		err = api.startSandboxListener(name, taskNames[record.TaskID.String()], spec)
+		err = api.startSandboxListener(name, owners.of(record), spec)
 		if err != nil {
 			log.Warn().Err(err).Str("sandbox", name).Msg("cannot resume sandbox messaging")
 		}
@@ -56,17 +57,31 @@ func (api *API) Resume(ctx context.Context) error {
 	return nil
 }
 
-// taskNames maps every task id to its name.
-func (api *API) taskNames(ctx context.Context) (map[string]string, error) {
+// taskIndex maps task ids to tasks.
+type taskIndex map[uuid.UUID]*taskmodels.Task
+
+// of returns the task a sandbox is allocated to, or an empty task when it
+// is gone.
+func (index taskIndex) of(record *taskmodels.Sandbox) *taskmodels.Task {
+	owner, ok := index[record.TaskID]
+	if !ok {
+		return &taskmodels.Task{}
+	}
+
+	return owner
+}
+
+// tasksByID indexes every task by id.
+func (api *API) tasksByID(ctx context.Context) (taskIndex, error) {
 	tasks, err := taskmodels.ListTasks(ctx, api.db)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	names := map[string]string{}
-	for _, record := range tasks {
-		names[record.ID.String()] = record.Name
+	index := taskIndex{}
+	for i := range tasks {
+		index[tasks[i].ID] = &tasks[i]
 	}
 
-	return names, nil
+	return index, nil
 }

@@ -26,12 +26,15 @@ type Sandbox struct {
 	// Spec is the environment block the sandbox booted from.
 	Spec json.RawMessage `bun:"type:jsonb" json:"spec"`
 	// Command is started as the first terminal once booted. Empty means none.
-	Command   string     `bun:"command,notnull,default:''" json:"command"`
-	BootError *string    `bun:"boot_error" json:"boot_error"`
-	BootedAt  *time.Time `bun:"booted_at" json:"booted_at"`
-	StoppedAt *time.Time `bun:"stopped_at" json:"stopped_at"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	Command string `bun:"command,notnull,default:''" json:"command"`
+	// Instructions is the TASK.md written into the sandbox, byte for byte
+	// (ADR 0009 item 3).
+	Instructions string     `bun:"instructions,notnull,default:''" json:"instructions"`
+	BootError    *string    `bun:"boot_error" json:"boot_error"`
+	BootedAt     *time.Time `bun:"booted_at" json:"booted_at"`
+	StoppedAt    *time.Time `bun:"stopped_at" json:"stopped_at"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 func (s *Sandbox) Validate() error {

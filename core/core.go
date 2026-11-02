@@ -90,7 +90,7 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 
 	specs := task.Store{Dir: filepath.Join(home, "config", "specs")}
 	sandboxesAPI := sandboxes.NewAPI(rootCtx, ctrl, msg, sandboxes.SandboxRuntime{}, secretsPath, filepath.Join(home, "tasks"))
-	tasksAPI := tasks.NewAPI(ctrl, sandboxesAPI, secretsPath, specs)
+	tasksAPI := tasks.NewAPI(ctrl, sandboxesAPI, msg, secretsPath, specs)
 
 	// Sandboxes keep running while agc is down. Their messaging listeners
 	// come back here.

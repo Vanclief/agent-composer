@@ -33,6 +33,9 @@ title: Review PR 42
 brief: |
   Review PR 42 and post findings.
 assignee: claude_code
+model: ' claude-opus-5-5 '
+manager: orchestrator
+owner: franco
 for: review-prs
 sandbox:
   image: agc-agent
@@ -58,6 +61,9 @@ sandbox:
 
 	if loaded.Name != "review-42" || loaded.Title != "Review PR 42" || loaded.Assignee != "claude_code" || loaded.For != "review-prs" {
 		t.Fatalf("got %+v", loaded)
+	}
+	if loaded.Model != "claude-opus-5-5" || loaded.Manager != "orchestrator" || loaded.Owner != "franco" {
+		t.Fatalf("model, manager, owner = %q, %q, %q", loaded.Model, loaded.Manager, loaded.Owner)
 	}
 	if loaded.Brief != "Review PR 42 and post findings.\n" {
 		t.Fatalf("brief = %q", loaded.Brief)
@@ -285,7 +291,7 @@ func TestSandboxSpec(t *testing.T) {
 		Image:     "agc-agent",
 		CPUs:      2,
 		MemoryMiB: 1024,
-		Env:       map[string]string{"GOFLAGS": "-mod=mod", "AGC_TASK": "review-42", "AGC_MSG_VSOCK_PORT": "5100"},
+		Env:       map[string]string{"GOFLAGS": "-mod=mod", "AGC_TASK": "review-42", "AGC_SANDBOX": "review-42-2", "AGC_MSG_VSOCK_PORT": "5100"},
 		Secrets:   []sandbox.Secret{{Name: "GITHUB_TOKEN", Value: "v", Hosts: []string{"github.com"}}},
 		Volumes:   []sandbox.Volume{{Source: "cache", Dest: "/cache", ReadWrite: true}},
 		VsockPath: "/tmp/review-42-2.sock",

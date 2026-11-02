@@ -27,5 +27,5 @@ func (api *API) Get(ctx context.Context, requester interface{}, request *GetRequ
 		return nil, ez.Wrap(err)
 	}
 
-	return api.view(ctx, record, owner.Name)
+	return api.view(ctx, record, owner)
 }
