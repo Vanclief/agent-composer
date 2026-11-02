@@ -58,7 +58,13 @@ that mock a backend and settles what it left open.
 5. **Memory is the volume, and the transcript is the record.** The home
    sandbox gets the named volume `agc-<name>` of ADR 0008 "Disk and
    transcripts", so `~/.claude` and `~/.codex` outlive the VM and the
-   sandbox. The agent's memory files and every harness session live there;
+   sandbox. The volume is the agent's, not the home's: every home of the
+   agent mounts `agc-<name>` whatever the sandbox is called, so a home
+   allocated after the last one was deleted (named `<name>-2` because the
+   kept volume holds `<name>`) reuses it, and the harness sessions,
+   `agc-sessions.json` and `agc-cursor.json` carry over (seen on the rig,
+   2026-11-02: a new home on `agc-<name>-2` replayed old turns). A task's
+   sandbox keeps its own volume, named after the sandbox. The agent's memory files and every harness session live there;
    agc writes no second copy of anything. `GET /api/agents/{name}/turns`
    lists the agent's turns read from those session files, one per message
    batch it answered: `{ n, started_at, ended_at, channel, injected: [message
@@ -93,7 +99,16 @@ that mock a backend and settles what it left open.
    rejects `@` names and the list leaves it out. A match on
    an `asleep` agent starts the home (item 4); on an `awake` one it is picked
    up by the running loop. The loop is `agc agent run --agent <name>` inside
-   the home, the job `agent` of ADR 0009, reading "messages since my last
+   the home, the job `agent` of ADR 0009. It joins messaging as the
+   agent's `<name>`, never the home's name or `<name>-2`, with `agent`
+   set to the home, since `TurnFor`, `@<name>` mentions and `Accepted by
+   <name>.` all compare that name. When a participant of that name is
+   still joined and messaging's presence says it is absent (its sandbox
+   is gone or not running: a deleted home's), the join takes the name
+   over and marks the old participant left; a human's name, or one whose
+   sandbox is running, is refused (409) and the loop exits with the
+   error. Only a home's join takes over; a task's sandbox still moves on
+   to `<name>-2`. The loop reads "messages since my last
    turn" over the sandbox's messaging socket as records (`id`, `channel`,
    `from`, `kind`, `human`, `body`, `created_at`), the agent's own messages
    left out; how the records become a prompt is the role's business (ADR
