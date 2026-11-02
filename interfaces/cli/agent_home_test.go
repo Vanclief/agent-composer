@@ -77,6 +77,11 @@ type fakeHomeMessenger struct {
 	left     []string
 	slept    bool
 	nextID   int64
+	// failures fail the next waits, one each, before the script.
+	failures []error
+	// strict rejects a wait naming a channel messaging's check rejects,
+	// as the home socket does.
+	strict bool
 }
 
 func (m *fakeHomeMessenger) Join(ctx context.Context, name string) (*msgmodels.Participant, error) {
@@ -121,6 +126,21 @@ func (m *fakeHomeMessenger) Read(ctx context.Context, channel string, after int6
 func (m *fakeHomeMessenger) WaitChannels(ctx context.Context, channels []string, after int64, timeout time.Duration) (*httpapi.MessagesResponse, error) {
 	m.waits = append(m.waits, fmt.Sprintf("%s after %d", strings.Join(channels, ","), after))
 	m.timeouts = append(m.timeouts, timeout)
+
+	if len(m.failures) > 0 {
+		failure := m.failures[0]
+		m.failures = m.failures[1:]
+		return nil, failure
+	}
+
+	if m.strict {
+		for _, channel := range channels {
+			err := msgmodels.ValidateChannel(channel)
+			if err != nil {
+				return nil, ez.Wrap(err)
+			}
+		}
+	}
 
 	if len(m.script) == 0 {
 		if m.idle {
@@ -443,4 +463,63 @@ func fromAgcIn(id int64, channel string, body string) msgmodels.Message {
 	m.ParticipantID = "p-agc"
 
 	return m
+}
+
+func TestHomeLoopBacksOffAndDropsAnInvalidChannel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	down := ez.New(ez.EUNAVAILABLE, "agc messaging is unreachable", nil)
+	msg := &fakeHomeMessenger{
+		cancel:   cancel,
+		nextID:   100,
+		strict:   true,
+		agent:    msgclient.AgentResponse{Agent: msgclient.AgentView{Name: "reviewer-1", Role: "reviewer"}, Channels: []string{"@franco/reviewer-1", "#b"}, Idle: "15m"},
+		failures: []error{down, down, down, down, down, down},
+		script: [][]msgmodels.Message{
+			{homeMsg(10, "#b", "agc", 0, "Delivered: fix-login")},
+		},
+	}
+	harness := &homeHarness{}
+	loop, _ := newHomeLoop(t, msg, harness)
+	logs := &strings.Builder{}
+	loop.log = logs
+	pauses := []time.Duration{}
+	loop.backoff = func(ctx context.Context, d time.Duration) {
+		pauses = append(pauses, d)
+	}
+
+	err := loop.run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Doubling from 2s, capped at 30s.
+	wantPauses := []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second, 30 * time.Second, 30 * time.Second}
+	if !reflect.DeepEqual(pauses, wantPauses) {
+		t.Fatalf("pauses = %v, want %v", pauses, wantPauses)
+	}
+
+	// The invalid channel is dropped and the wait asked again at once
+	// without it, in every cycle; it never costs a back-off.
+	both := "@franco/reviewer-1,#b after 0"
+	wantWaits := []string{both, both, both, both, both, both, both, "#b after 0", "@franco/reviewer-1,#b after 10", "#b after 10"}
+	if !reflect.DeepEqual(msg.waits, wantWaits) {
+		t.Fatalf("waits = %q, want %q", msg.waits, wantWaits)
+	}
+
+	if len(harness.turns) != 1 || !strings.Contains(harness.turns[0].prompt, "Delivered: fix-login") {
+		t.Fatalf("turns = %#v, want one on the delivery", harness.turns)
+	}
+
+	out := logs.String()
+	if strings.Count(out, "wait failed") != 1 || !strings.Contains(out, "unreachable") {
+		t.Fatalf("the failure is not logged once:\n%s", out)
+	}
+	if strings.Count(out, "leaving @franco/reviewer-1 out of the wait") != 1 {
+		t.Fatalf("the dropped channel is not logged once:\n%s", out)
+	}
+	if strings.Count(out, "wait works again") != 1 {
+		t.Fatalf("the recovery is not logged once:\n%s", out)
+	}
 }
