@@ -18,11 +18,11 @@ import (
 	"github.com/vanclief/agent-composer/models/agent"
 )
 
-// UsageSource reads an account's usage from its provider, given the
-// secrets.env name holding its credential. The accounts-usage fetcher
-// fills it; until it is set every account's usage is null.
+// UsageSource reads an account's usage by account name. PollerUsage
+// serves the usage poller's readings; until a source is set every
+// account's usage is null.
 type UsageSource interface {
-	Usage(ctx context.Context, secretName string) (*UsageView, error)
+	Usage(ctx context.Context, name string) (*UsageView, error)
 }
 
 // SecretUsers reports the sandboxes still running (or booting) whose spec
@@ -149,7 +149,7 @@ func (api *API) view(ctx context.Context, record *account.Account) *AccountView 
 		return view
 	}
 
-	usage, err := source.Usage(ctx, record.Secret)
+	usage, err := source.Usage(ctx, record.Name)
 	if err != nil {
 		usage = &UsageView{UpdatedAt: time.Now().UTC(), Windows: []UsageWindow{}, Error: ez.ErrorMessage(err)}
 	}

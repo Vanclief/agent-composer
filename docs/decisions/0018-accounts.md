@@ -80,6 +80,9 @@ System default entry and the other accounts, and "Manage Accounts…".
   the panel (an OAuth device flow, `claude setup-token` style) would write
   the same line and row, and let a greyed "Sign in again to use this
   account" entry refresh an expired token.
-- **Usage.** Anthropic oauth usage is filled by a fetcher
-  (`core/resources/accounts/usage`, set with `accounts.API.SetUsage`);
-  until it is wired, `usage` is null. OpenAI usage is a later follow-up.
+- **Usage.** Anthropic oauth usage is filled by a poller
+  (`core/resources/accounts/usage`) that only `agc rest` runs, every 10
+  minutes; `core.NewStack` connects it (`SetLister` with the accounts API,
+  `accounts.API.SetUsage` with `accounts.PollerUsage`), and `usage` is null
+  until its first reading of the account. Each cycle logs one info line
+  with counts only. OpenAI usage is a later follow-up.
