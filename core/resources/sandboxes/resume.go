@@ -77,6 +77,12 @@ func (api *API) recoverAtStart(ctx context.Context, record *taskmodels.Sandbox, 
 	log.Info().Str("sandbox", record.Name).Str("task", owner.Name).Str("status", status).Msg("restarting a sandbox that went down without being stopped")
 
 	err := api.Restart(ctx, record, owner)
+	reason, ok := NotRelaunched(err)
+	if ok {
+		log.Warn().Str("sandbox", record.Name).Str("reason", reason).Msg("restarted the sandbox without its agent")
+		api.tell(ctx, owner, owner.Name+" came back after a restart, but "+reason+".")
+		return
+	}
 	if err != nil {
 		log.Warn().Err(err).Str("sandbox", record.Name).Msg("cannot restart the sandbox after agc started")
 		api.tell(ctx, owner, RecoveryFailed(owner.Name, record.Name, status, err))

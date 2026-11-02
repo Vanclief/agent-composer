@@ -198,3 +198,64 @@ func TestRecoverable(t *testing.T) {
 		}
 	}
 }
+
+func TestResumeNotesAnImageWithoutTheAgentLoop(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	owner := insertTask(t, env.db, "old-image")
+
+	record := insertBooted(t, env.db, owner, "old-image", time.Now())
+	record.Command = GuestAgc + " agent run --harness claude_code --task old-image"
+	err := record.Update(ctx, env.db, "command")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.rt.statuses["old-image"] = StatusCrashed
+	// The image's agc answers `agent run --help` with an error.
+	env.rt.runFailOn = "agent"
+
+	err = env.api.Resume(ctx, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{"old-image came back after a restart, but its agent was not relaunched: the sandbox's image predates `agc agent run`."}
+	if !reflect.DeepEqual(systemPosts(t, env, "#old-image"), want) {
+		t.Fatalf("#old-image = %q", systemPosts(t, env, "#old-image"))
+	}
+	for _, call := range env.rt.Calls() {
+		if strings.HasPrefix(call, "terminal ") {
+			t.Fatalf("started the agent on an old image: %v", env.rt.Calls())
+		}
+	}
+	if env.rt.statuses["old-image"] != StatusRunning {
+		t.Fatal("the sandbox was not started")
+	}
+}
+
+func TestStoppedCrashedSandboxReadsStopped(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	now := time.Now()
+	owner := insertTask(t, env.db, "halted")
+
+	record := insertBooted(t, env.db, owner, "halted", now)
+	env.rt.statuses["halted"] = StatusCrashed
+
+	view, err := env.api.view(ctx, record, owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Status != StatusCrashed {
+		t.Fatalf("status = %q, want crashed before agc stops it", view.Status)
+	}
+
+	record.StoppedAt = &now
+	view, err = env.api.view(ctx, record, owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Status != StatusStopped {
+		t.Fatalf("status = %q, want stopped once agc stopped it", view.Status)
+	}
+}

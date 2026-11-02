@@ -36,7 +36,8 @@ const (
 
 	// StatusStarting and StatusFailed are agc's words for a sandbox that
 	// has not booted yet or failed to. Every other status is the runtime's
-	// word, verbatim.
+	// word, verbatim, except a crashed VM agc has stopped, which is
+	// stopped.
 	StatusStarting = "starting"
 	StatusFailed   = "failed"
 	StatusRunning  = "running"
@@ -318,6 +319,12 @@ func (api *API) view(ctx context.Context, record *taskmodels.Sandbox, owner *tas
 		return view, nil
 	}
 	view.Status = status
+
+	// msb keeps saying crashed after agc stops a crashed VM; agc stopped
+	// it, so it is stopped (ADR 0017).
+	if status == StatusCrashed && record.StoppedAt != nil {
+		view.Status = StatusStopped
+	}
 
 	if status == StatusRunning {
 		err = api.startSandboxListener(record.Name, owner, spec)

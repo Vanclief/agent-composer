@@ -102,3 +102,17 @@ func TestStoppedOrDoneSandboxIsNotRestarted(t *testing.T) {
 		t.Fatalf("restarted with restarts: 0")
 	}
 }
+
+func TestRestartWithoutTheAgentIsSaid(t *testing.T) {
+	e := newEnv(t)
+	e.probe.status = sandboxes.StatusCrashed
+	e.probe.restartErr = &sandboxes.AgentNotRelaunched{Reason: "its agent was not relaunched: the sandbox's image predates `agc agent run`"}
+
+	e.at(t, time.Minute)
+
+	want := []string{"dms-whatsapp crashed; agc restarted it (restart 1 of 3 this hour), but its agent was not relaunched: the sandbox's image predates `agc agent run`."}
+	got := e.posts(t, "#dms-whatsapp")
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("#dms-whatsapp = %q, want %q", got, want)
+	}
+}

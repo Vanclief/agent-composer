@@ -67,7 +67,16 @@ zero, although its harness session was still on the volume.
    continues." A sandbox that cannot start is logged, posted once ("…
    did not come back after a restart: sandbox … is crashed and could not
    start: …") and skipped. A task with two such sandboxes gets one line
-   for each.
+   for each. A sandbox whose image predates `agc agent run` (built before
+   2026-11-01 evening) is started but its agent is not: `Restart` asks the
+   guest agc for `agent run --help` first, and the line says "… came back
+   after a restart, but its agent was not relaunched: the sandbox's image
+   predates `agc agent run`."
+
+   A crashed VM that agc then stops reads `stopped`, not `crashed`: msb
+   keeps reporting `crashed` after the stop, and `stopped_at` says agc
+   stopped it (observed by claude_mac restarting by hand after the
+   reboot).
 
 4. **The watchdog restarts a crashed sandbox, a few times an hour.** A new
    condition in `core/watchdog`: a recoverable sandbox msb reports

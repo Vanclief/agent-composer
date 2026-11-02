@@ -360,6 +360,12 @@ func (w *Watchdog) restart(ctx context.Context, record *taskmodels.Task, box *ta
 	log.Info().Str("task", record.Name).Str("sandbox", box.Name).Msg("restarting a crashed sandbox")
 
 	err := w.probe.Restart(ctx, box, record)
+	reason, ok := sandboxes.NotRelaunched(err)
+	if ok {
+		entry.lastErr = ""
+		w.tell(ctx, record, fmt.Sprintf("%s crashed; agc restarted it (%s), but %s.", box.Name, tries, reason))
+		return
+	}
 	if err != nil {
 		entry.lastErr = ez.ErrorMessage(err)
 		log.Warn().Err(err).Str("sandbox", box.Name).Msg("watchdog cannot restart the crashed sandbox")

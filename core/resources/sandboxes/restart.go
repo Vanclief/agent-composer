@@ -2,6 +2,7 @@ package sandboxes
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -20,6 +21,28 @@ const StatusCrashed = "crashed"
 // jobClockSlack allows for msb's job clock running behind agc's when
 // Restart tells a job started by the runtime from one left from before.
 const jobClockSlack = time.Minute
+
+// AgentNotRelaunched is what Restart returns when the sandbox runs again
+// but its agent could not be relaunched, for a reason that will not go
+// away by trying again: callers post Reason and do not count it a failure.
+type AgentNotRelaunched struct {
+	Reason string
+}
+
+func (e *AgentNotRelaunched) Error() string {
+	return e.Reason
+}
+
+// NotRelaunched returns the reason when err is an AgentNotRelaunched.
+func NotRelaunched(err error) (string, bool) {
+	target := &AgentNotRelaunched{}
+	ok := errors.As(err, &target)
+	if !ok {
+		return "", false
+	}
+
+	return target.Reason, true
+}
 
 // Recoverable reports whether a sandbox the runtime reports as status
 // should be started again on its own (ADR 0017): it booted, agc never
@@ -87,11 +110,11 @@ func (api *API) Restart(ctx context.Context, record *taskmodels.Sandbox, owner *
 	}
 
 	err = api.startAgentJob(ctx, record, spec, startedAt)
-	if err != nil {
-		return ez.Wrap(err)
-	}
-
 	api.publishCurrent(ctx, record, owner)
+	if err != nil {
+		// Not wrapped: callers tell an AgentNotRelaunched by its type.
+		return err
+	}
 
 	return nil
 }
@@ -126,6 +149,18 @@ func (api *API) startAgentJob(ctx context.Context, record *taskmodels.Sandbox, s
 		job := newestWithCommand(jobs, fields)
 		if job != nil && job.Running && job.CreatedAt.After(startedAt.Add(-jobClockSlack)) {
 			return nil
+		}
+	}
+
+	// Images built before 2026-11-01 carry an agc without `agent run`;
+	// its command would exit at once.
+	if fields[0] == GuestAgc && len(fields) > 2 && fields[1] == "agent" {
+		result, err := sb.Run(ctx, executor.Command{Name: GuestAgc, Args: []string{"agent", "run", "--help"}})
+		if err != nil {
+			return ez.Wrap(err)
+		}
+		if result.ExitCode != 0 {
+			return &AgentNotRelaunched{Reason: "its agent was not relaunched: the sandbox's image predates `agc agent run`"}
 		}
 	}
 
