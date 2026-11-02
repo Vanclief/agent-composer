@@ -11,7 +11,7 @@ for: panel-reads-like-an-instrument
 accept:
   - The html element always carries class dark (set in panel/index.html, no script reading agc.panel.theme), next-themes is no longer imported anywhere, the sidebar has no theme toggle, and the light token block in panel/src/index.css is gone so the design-system tokens are the only ones
   - npm run shot has no --theme flag and panel/CLAUDE.md says the panel is dark only; tests/shell.spec.ts no longer tests the toggle and make panel-check passes
-  - actions/panel.yaml marks remove-the-light-theme done with { who: claude_code, when: 2026-11-02 } and go run . rules check rules/ passes
+  - "actions/panel.yaml marks remove-the-light-theme done with { who: claude_code, when: 2026-11-02 } and go run . rules check rules/ passes"
   - Branch agc/panel-dark-only pushed and not merged; the delivery lists the screenshot path of /tasks
 brief: |
   Franco decided the panel is dark only (docs/design/panel.md, action
