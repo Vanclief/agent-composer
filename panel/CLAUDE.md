@@ -68,7 +68,13 @@ Each page sets the top bar title with `usePageTitle('…')` from
 - **Statuses are verbatim:** render `<StatusPill status={task.status} />`
   or `<StatusPill status={sandbox.status} detail={sandbox.status_error} />`.
   Never derive, map or relabel a status in the UI. If a status is wrong, the
-  backend has to change.
+  backend has to change. The pill's look follows the rtsdesign tiers
+  (`data-tier`): `lit` for alive (running: filled green; starting/stopping:
+  pulsing blue; review: filled amber), `off` for ended well (done, stopped:
+  the green shape turned off, a dim hollow ring), `attention` for died or
+  needs a hand (failed, crashed: lit red triangle, the only red on screen),
+  `idle` for not started (open: hollow grey). A done thing never looks as
+  bright as a running one; a dead thing never looks like a done one.
 - **Empty states say why in place:** use `<EmptySlot onAdd={…} label="Add …" />`
   for a fillable slot, or `<EmptySlot reason="Sandbox stopped" />` when it can't
   be filled. A disabled control says why in its own label ("Create: needs a
