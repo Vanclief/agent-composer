@@ -656,7 +656,7 @@ export interface components {
             repo?: string;
             /** @description Branch, tag or commit checked out after the clone. */
             ref?: string;
-            /** @description Bash script run once after the clone, in the repo. */
+            /** @description Bash script run once after the clone, in the repo. Before it runs, agc marks the Claude Code and Codex first-run prompts (onboarding, theme, folder trust, bypass permissions) as answered. */
             setup?: string;
             /** @description NAME or NAME@host1,host2. */
             secrets?: string[];
