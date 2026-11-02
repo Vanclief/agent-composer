@@ -48,24 +48,32 @@ test('the inbox is pinned first with its unread badge in the mention color', asy
   await expect(talkBadge(page)).toHaveAttribute('data-mention', 'true')
 })
 
-test('opening the inbox clears its badge, and it stays read after a reload', async ({ page }) => {
+test('opening the inbox clears its badge, and it stays read after a reload', async ({ page, request }) => {
+  // An inbox of its own: other workers post to #franco while this runs.
+  const me = `me-${suffix()}`
+  await page.addInitScript((n) => localStorage.setItem('agc.panel.human', n), me)
+  const agent = await joinAgent(request)
+  const escalation = `@${me} decision needed ${suffix()}`
+  await post(request, agent.id, `#${me}`, 'Task opened for you.')
+  await post(request, agent.id, `#${me}`, escalation)
+
   await page.goto('/panel/messages')
   const inbox = page.getByTestId('inbox-row')
-  await expect(inbox.getByTestId('unread-badge')).toBeVisible()
+  await expect(inbox.getByTestId('unread-badge')).toHaveText('2')
   await inbox.click()
-  await expect(page).toHaveURL(/\/panel\/messages\/franco$/)
-  await expect(page.getByTestId('page-title')).toHaveText('Inbox #franco')
+  await expect(page).toHaveURL(new RegExp(`/panel/messages/${me}$`))
+  await expect(page.getByTestId('page-title')).toHaveText(`Inbox #${me}`)
   await expect(page.getByTestId('inbox-header')).toHaveText('Your inbox: agents and tasks escalate here')
-  await expect(page.getByText('decision needed on review-42')).toBeVisible()
+  await expect(page.getByText(escalation)).toBeVisible()
   await expect(inbox.getByTestId('unread-badge')).toHaveCount(0)
   await expect(inbox).toHaveAttribute('data-unread', 'false')
   const read = await page.evaluate(() => JSON.parse(localStorage.getItem('agc.panel.read') ?? '{}'))
-  expect(read['#franco']).toBeGreaterThan(0)
+  expect(read[`#${me}`]).toBeGreaterThan(0)
 
   await page.goto('/panel/messages/releases')
   await expect(page.getByTestId('inbox-row')).toHaveAttribute('data-unread', 'false')
   await page.reload()
-  await expect(page.getByTestId('channel-rows').getByRole('link', { name: /^#review-42\b/ })).toBeVisible()
+  await expect(page.getByTestId('channel-rows').getByRole('link', { name: /^#releases\b/ })).toBeVisible()
   await expect(page.getByTestId('inbox-row').getByTestId('unread-badge')).toHaveCount(0)
 })
 
