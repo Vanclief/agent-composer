@@ -19,6 +19,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/vanclief/agent-composer/core/controller"
+	"github.com/vanclief/agent-composer/core/events"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	"github.com/vanclief/agent-composer/interfaces/rest/handler"
@@ -34,6 +35,8 @@ type taskRoutes struct {
 	e      *echo.Echo
 	db     *bun.DB
 	server *restserver.Server
+	// volumes stands in for msb's named volume directory.
+	volumes string
 }
 
 // newTaskRoutes serves the API routes over an in-memory database, with rt as
@@ -45,6 +48,8 @@ func newTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *task
 	t.Setenv("AGC_DEFAULT_HARNESS", "")
 	t.Setenv("AGC_DEFAULT_MODEL", "")
 	t.Setenv("AGC_DEFAULT_OWNER", "franco")
+	volumes := t.TempDir()
+	t.Setenv(sandboxes.EnvVolumeRoot, volumes)
 
 	sqldb, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
@@ -77,16 +82,21 @@ func newTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *task
 	}
 
 	ctrl := &controller.Controller{DB: &relational.DB{DB: db}}
+	bus := events.New()
 	msg := messaging.NewService(db)
+	msg.SetEvents(bus)
 	specs := task.Store{Dir: filepath.Join(t.TempDir(), "specs")}
 	sandboxesAPI := sandboxes.NewAPI(context.Background(), ctrl, msg, rt, secretsPath, socketDir)
 	msg.SetPresence(sandboxesAPI)
+	tasksAPI := tasks.NewAPI(ctrl, sandboxesAPI, msg, secretsPath, specs)
+	tasksAPI.SetEvents(bus)
 	server := &restserver.Server{
 		Ctrl:         ctrl,
 		RateLimiter:  ratelimit.NewWindowCounter(10, 100),
-		TasksAPI:     tasks.NewAPI(ctrl, sandboxesAPI, msg, secretsPath, specs),
+		TasksAPI:     tasksAPI,
 		SandboxesAPI: sandboxesAPI,
 		Messaging:    msg,
+		Events:       bus,
 	}
 	t.Cleanup(func() {
 		sandboxesAPI.Wait()
@@ -96,7 +106,7 @@ func newTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *task
 	e := echo.New()
 	addAPIRoutes(e, handler.NewHandler(server))
 
-	return &taskRoutes{e: e, db: db, server: server}
+	return &taskRoutes{e: e, db: db, server: server, volumes: volumes}
 }
 
 // do serves one request and returns its status and body.

@@ -42,7 +42,14 @@ func (api *API) Stop(ctx context.Context, requester interface{}, request *StopRe
 		return nil, ez.Wrap(err)
 	}
 
-	return api.view(ctx, record, owner)
+	view, err := api.view(ctx, record, owner)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	api.publish(view)
+
+	return view, nil
 }
 
 // stop shuts the VM down, stops the listener and sets stopped_at: what
@@ -68,8 +75,9 @@ func (api *API) stop(ctx context.Context, record *taskmodels.Sandbox) error {
 
 // stopOnce is stop for the task's acceptance, which may reach the same
 // sandbox twice (StopTask and the end of its boot): the second finds
-// stopped_at set and does nothing.
-func (api *API) stopOnce(ctx context.Context, id uuid.UUID) error {
+// stopped_at set and does nothing. A stop it makes is published as
+// sandbox.status, like Stop's.
+func (api *API) stopOnce(ctx context.Context, id uuid.UUID, owner *taskmodels.Task) error {
 	api.stopping.Lock()
 	defer api.stopping.Unlock()
 
@@ -82,7 +90,14 @@ func (api *API) stopOnce(ctx context.Context, id uuid.UUID) error {
 		return nil
 	}
 
-	return api.stop(ctx, record)
+	err = api.stop(ctx, record)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	api.publishCurrent(ctx, record, owner)
+
+	return nil
 }
 
 // StopTask stops every running sandbox of an accepted task the way Stop
@@ -115,7 +130,7 @@ func (api *API) StopTask(ctx context.Context, owner *taskmodels.Task) {
 			continue
 		}
 
-		err = api.stopOnce(ctx, record.ID)
+		err = api.stopOnce(ctx, record.ID, owner)
 		if err != nil {
 			log.Warn().Err(err).Str("task", owner.Name).Str("sandbox", record.Name).Msg("cannot stop the accepted task's sandbox")
 		}
@@ -135,7 +150,7 @@ func (api *API) stopIfTaskDone(ctx context.Context, record *taskmodels.Sandbox, 
 		return
 	}
 
-	err = api.stopOnce(ctx, record.ID)
+	err = api.stopOnce(ctx, record.ID, owner)
 	if err != nil {
 		log.Warn().Err(err).Str("task", owner.Name).Str("sandbox", record.Name).Msg("cannot stop the accepted task's sandbox after its boot")
 		return

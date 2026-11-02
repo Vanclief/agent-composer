@@ -5,8 +5,12 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"github.com/vanclief/ez"
 
+	"github.com/vanclief/agent-composer/core/events"
+	"github.com/vanclief/agent-composer/messaging"
+	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 )
 
@@ -57,19 +61,109 @@ func (api *API) Accept(ctx context.Context, requester interface{}, request *Acce
 }
 
 func (api *API) accept(ctx context.Context, record *taskmodels.Task, by string) error {
-	if record.DoneAt != nil {
-		return nil
-	}
-
-	err := record.MarkAccepted(ctx, api.db, by)
+	accepted, err := api.markDone(ctx, record, by)
 	if err != nil {
 		return ez.Wrap(err)
+	}
+
+	if !accepted {
+		return nil
 	}
 
 	api.post(ctx, record, "Accepted by "+by+".")
 	api.stopSandboxes(ctx, record)
 
 	return nil
+}
+
+// markDone sets done_at and accepted_by, the one place that does, and
+// reports whether this call did. The first time it publishes task.done
+// with the task's summary (doneSummary); a task already done, even by an
+// accept racing this one, publishes nothing.
+func (api *API) markDone(ctx context.Context, record *taskmodels.Task, by string) (bool, error) {
+	accepted, err := record.MarkAccepted(ctx, api.db, by)
+	if err != nil {
+		return false, ez.Wrap(err)
+	}
+
+	if !accepted || api.events == nil {
+		return accepted, nil
+	}
+
+	view, err := api.view(ctx, record)
+	if err != nil {
+		log.Warn().Err(err).Str("task", record.Name).Msg("cannot read the task for task.done")
+		return true, nil
+	}
+
+	summary, err := api.doneSummary(ctx, record)
+	if err != nil {
+		log.Warn().Err(err).Str("task", record.Name).Msg("cannot read the summary for task.done")
+	}
+
+	api.events.Publish(events.Event{Type: events.TaskDone, Data: DoneEvent{Task: view, Summary: summary}})
+
+	return true, nil
+}
+
+// summaryLength caps the summary in task.done, in runes.
+const summaryLength = 500
+
+// summaryPage is how many messages doneSummary reads at a time.
+const summaryPage = 50
+
+// doneSummary is the summary task.done carries: the task's summary when
+// it is delivered, otherwise the body of the last message in #<task> from
+// neither a human nor agc, the agent's closing words, skipping /accept
+// and /reject commands; cut to 500 runes, "" when there is none.
+func (api *API) doneSummary(ctx context.Context, record *taskmodels.Task) (string, error) {
+	if record.DeliveredAt != nil && record.Summary != "" {
+		return cutSummary(record.Summary), nil
+	}
+
+	var before int64
+	for {
+		var messages []msgmodels.Message
+
+		query := api.db.NewSelect().
+			Model(&messages).
+			Where("channel = ?", messaging.TaskChannel(record.Name)).
+			Where("human = ?", false).
+			Where(`"from" != ?`, msgmodels.SystemName).
+			Order("id DESC").
+			Limit(summaryPage)
+		if before > 0 {
+			query = query.Where("id < ?", before)
+		}
+
+		err := query.Scan(ctx)
+		if err != nil {
+			return "", ez.Wrap(err)
+		}
+
+		for _, m := range messages {
+			_, command := ParseCommand(m.Body)
+			if !command {
+				return cutSummary(m.Body), nil
+			}
+		}
+
+		if len(messages) < summaryPage {
+			return "", nil
+		}
+
+		before = messages[len(messages)-1].ID
+	}
+}
+
+// cutSummary cuts body to summaryLength runes.
+func cutSummary(body string) string {
+	runes := []rune(body)
+	if len(runes) > summaryLength {
+		runes = runes[:summaryLength]
+	}
+
+	return string(runes)
 }
 
 // stopSandboxes stops the task's running sandboxes the way

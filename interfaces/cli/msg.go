@@ -53,6 +53,12 @@ func msgCommand() *cli.Command {
 				Action: msgPost,
 			},
 			{
+				Name:      "ask",
+				Usage:     "Post a question: it shows as waiting on the channel's readers until someone else replies to it",
+				ArgsUsage: "<#channel> <text...>",
+				Action:    msgAsk,
+			},
+			{
 				Name:      "read",
 				Usage:     "Print messages after a cursor, oldest first",
 				ArgsUsage: "<#channel>",
@@ -139,6 +145,29 @@ func msgPost(c *cli.Context) error {
 	body := strings.Join(args[1:], " ")
 
 	m, err := newMsgClient().Post(c.Context, state.ParticipantID, msgChannel(args[0]), body, replyTo)
+	if err != nil {
+		return err
+	}
+
+	return printJSON(m)
+}
+
+// msgAsk is msgPost for a question, over the same transport. Answer it
+// with agc msg post --reply-to <its id>.
+func msgAsk(c *cli.Context) error {
+	args, err := msgArgs(c, 2)
+	if err != nil {
+		return err
+	}
+
+	state, err := loadMsgState()
+	if err != nil {
+		return err
+	}
+
+	body := strings.Join(args[1:], " ")
+
+	m, err := newMsgClient().Ask(c.Context, state.ParticipantID, msgChannel(args[0]), body)
 	if err != nil {
 		return err
 	}

@@ -24,11 +24,13 @@ func newTestServer(t *testing.T) *httptest.Server {
 		return messaging.Caller{Task: "review-42"}, nil
 	}
 
-	return newServerAs(t, task)
+	server, _ := newServerAs(t, task)
+
+	return server
 }
 
-// newServerAs serves a fresh in-memory messaging service to caller.
-func newServerAs(t *testing.T, caller func(*http.Request) (messaging.Caller, error)) *httptest.Server {
+// newServerAs serves a fresh service with caller resolving every request.
+func newServerAs(t *testing.T, caller func(*http.Request) (messaging.Caller, error)) (*httptest.Server, *messaging.Service) {
 	t.Helper()
 
 	sqldb, err := sql.Open("sqlite", ":memory:")
@@ -52,10 +54,11 @@ func newServerAs(t *testing.T, caller func(*http.Request) (messaging.Caller, err
 		}
 	}
 
-	server := httptest.NewServer(New(messaging.NewService(db), caller))
+	svc := messaging.NewService(db)
+	server := httptest.NewServer(New(svc, caller))
 	t.Cleanup(server.Close)
 
-	return server
+	return server, svc
 }
 
 func call(t *testing.T, method, url, body string, out any) int {
@@ -165,7 +168,7 @@ func TestReadMarksHumanSeen(t *testing.T) {
 	human := func(*http.Request) (messaging.Caller, error) {
 		return messaging.Caller{Human: true}, nil
 	}
-	server := newServerAs(t, human)
+	server, _ := newServerAs(t, human)
 
 	var p msgmodels.Participant
 	call(t, http.MethodPost, server.URL+"/join", `{"name":"franco"}`, &p)

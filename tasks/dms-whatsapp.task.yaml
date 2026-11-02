@@ -87,7 +87,10 @@ sandbox:
   memory: 6144
   repo: https://github.com/vanclief/agent-composer
   ref: feat/tasks-microsandbox
+  # agc splits command on whitespace, so a prompt cannot be passed inline;
+  # setup writes a one-line script that hands claude the whole brief.
   setup: |
     cd /home/agent/agent-composer/panel && npm ci && npx playwright install chromium
+    printf '%s\n' '#!/bin/sh' 'exec claude "$(cat /home/agent/TASK.md)"' > /home/agent/run.sh
   secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
-  command: claude Read /home/agent/TASK.md and do everything it says, start to finish, without waiting for me.
+  command: bash /home/agent/run.sh

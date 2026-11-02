@@ -74,7 +74,7 @@ func join(t *testing.T, svc *Service, caller Caller, name string) *msgmodels.Par
 func post(t *testing.T, svc *Service, caller Caller, p *msgmodels.Participant, channel, body string) *msgmodels.Message {
 	t.Helper()
 
-	m, err := svc.Post(context.Background(), caller, p.ID, channel, body, nil)
+	m, err := svc.Post(context.Background(), caller, p.ID, channel, body, nil, "")
 	if err != nil {
 		t.Fatalf("post to %s: %v", channel, err)
 	}
@@ -158,7 +158,7 @@ func TestAccessMatrix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = svc.Post(ctx, review, agent.ID, "#alerts", "ack", nil)
+	_, err = svc.Post(ctx, review, agent.ID, "#alerts", "ack", nil, "")
 	wantCode(t, err, ez.ENOTAUTHORIZED)
 
 	// Ungranted channel: no read, no wait, no post.
@@ -169,7 +169,7 @@ func TestAccessMatrix(t *testing.T) {
 	}
 	_, err = svc.Wait(ctx, review, "#build-7", 0, time.Millisecond)
 	wantCode(t, err, ez.ENOTAUTHORIZED)
-	_, err = svc.Post(ctx, review, agent.ID, "#build-7", "hi", nil)
+	_, err = svc.Post(ctx, review, agent.ID, "#build-7", "hi", nil, "")
 	wantCode(t, err, ez.ENOTAUTHORIZED)
 
 	// Humans are unrestricted.
@@ -227,27 +227,27 @@ func TestPostIdentityComesFromParticipant(t *testing.T) {
 	}
 
 	// Another task cannot post as this participant, even in its own channel.
-	_, err := svc.Post(ctx, other, agent.ID, "#build-7", "spoof", nil)
+	_, err := svc.Post(ctx, other, agent.ID, "#build-7", "spoof", nil, "")
 	wantCode(t, err, ez.ENOTAUTHORIZED)
 
 	// Neither can a human.
-	_, err = svc.Post(ctx, human, agent.ID, "#review-42", "spoof", nil)
+	_, err = svc.Post(ctx, human, agent.ID, "#review-42", "spoof", nil, "")
 	wantCode(t, err, ez.ENOTAUTHORIZED)
 
-	_, err = svc.Post(ctx, review, "nope", "#review-42", "hi", nil)
+	_, err = svc.Post(ctx, review, "nope", "#review-42", "hi", nil, "")
 	wantCode(t, err, ez.ENOTFOUND)
 
-	_, err = svc.Post(ctx, review, agent.ID, "#review-42", "  ", nil)
+	_, err = svc.Post(ctx, review, agent.ID, "#review-42", "  ", nil, "")
 	wantCode(t, err, ez.EINVALID)
 
-	_, err = svc.Post(ctx, review, agent.ID, "#review-42", strings.Repeat("x", msgmodels.MaxBodyBytes+1), nil)
+	_, err = svc.Post(ctx, review, agent.ID, "#review-42", strings.Repeat("x", msgmodels.MaxBodyBytes+1), nil, "")
 	wantCode(t, err, ez.EINVALID)
 
 	err = svc.Leave(ctx, review, agent.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = svc.Post(ctx, review, agent.ID, "#review-42", "still here?", nil)
+	_, err = svc.Post(ctx, review, agent.ID, "#review-42", "still here?", nil, "")
 	wantCode(t, err, ez.EINVALID)
 }
 
@@ -350,7 +350,7 @@ func TestReplyToValidation(t *testing.T) {
 	question := post(t, svc, review, agent, "#review-42", "question")
 	elsewhere := post(t, svc, review, agent, "#releases", "elsewhere")
 
-	answer, err := svc.Post(ctx, review, agent.ID, "#review-42", "answer", &question.ID)
+	answer, err := svc.Post(ctx, review, agent.ID, "#review-42", "answer", &question.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,11 +358,11 @@ func TestReplyToValidation(t *testing.T) {
 		t.Fatalf("reply_to not stored: %+v", answer)
 	}
 
-	_, err = svc.Post(ctx, review, agent.ID, "#review-42", "answer", &elsewhere.ID)
+	_, err = svc.Post(ctx, review, agent.ID, "#review-42", "answer", &elsewhere.ID, "")
 	wantCode(t, err, ez.EINVALID)
 
 	missing := int64(999)
-	_, err = svc.Post(ctx, review, agent.ID, "#review-42", "answer", &missing)
+	_, err = svc.Post(ctx, review, agent.ID, "#review-42", "answer", &missing, "")
 	wantCode(t, err, ez.EINVALID)
 }
 

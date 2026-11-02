@@ -29,14 +29,20 @@ tags:
     description: >
       A sandbox is the compute a task is allocated: one microsandbox VM (ADR 0003, ADR 0008).
       Once booted, its status is read live from the runtime and passed through verbatim.
+  - name: Events
+    description: >
+      The live feed: a server-sent events stream of what changes tasks, sandboxes and channels.
   - name: Knowledge
     description: >
       Evidence, beliefs, decisions and rules (ADR 0006), read only. Labels are computed on every
       request and never stored; checks are never run.
   - name: Messaging
     description: >
-      Channels, participants and messages (ADR 0005), served under /msg. A participant's
-      presence (online, last_seen_at) is computed on every request and never stored.
+      Channels, participants and messages (ADR 0005), served by the same handler on agc's REST API
+      for humans and on each sandbox's socket for its task. Only the routes below are documented
+      here; join, leave, read, wait and channels are in messaging/httpapi. A participant's
+      presence (online, last_seen_at) is computed on every request and never stored. Errors
+      are `{"error": "<message>"}`.
 paths:
   /agents/specs:
     get:
@@ -653,7 +659,8 @@ paths:
         stopped is logged and does not fail the accept (ADR 0010 item 4).
         Nothing is deleted, and a stopped sandbox can be started again. A task already done is
         returned as it is. The body is optional. `/accept` posted in #<task> by the manager or
-        the owner, and `/accept <task>` posted by the owner in #<owner>, do the same.
+        the owner, and `/accept <task>` posted by the owner in #<owner>, do the same. The first
+        accept publishes `task.done` on GET /events, and each sandbox it stops `sandbox.status`.
       parameters:
         - $ref: '#/components/parameters/TaskIdParam'
       requestBody:
@@ -799,8 +806,9 @@ paths:
       operationId: deleteSandbox
       summary: Delete a sandbox
       description: >
-        Cancels a boot in progress, stops the VM if needed and removes it with its disk and
-        uncommitted work. Volumes and the task's channel history are kept.
+        Cancels a boot in progress, stops the VM if needed and removes it with its disk (including
+        /home/agent) and uncommitted work. Volumes, among them the sandbox's own volume with the
+        harness transcripts, and the task's channel history are kept.
       parameters:
         - $ref: '#/components/parameters/SandboxIdParam'
       responses:
@@ -944,6 +952,62 @@ paths:
       responses:
         '101':
           description: Switching to the WebSocket protocol.
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /sandboxes/{id}/transcripts:
+    get:
+      tags: [Sandboxes]
+      operationId: listTranscripts
+      summary: List a sandbox's harness transcripts
+      description: >
+        The Claude Code and Codex session files (.claude/projects/**/*.jsonl,
+        .codex/sessions/**/*.jsonl) on the sandbox's volume, newest first. Read on the host side
+        of the volume, never through the VM, so it works for stopped sandboxes and, by name, for
+        deleted ones whose volume is left. Links are not listed.
+      parameters:
+        - $ref: '#/components/parameters/SandboxIdParam'
+      responses:
+        '200':
+          description: Transcripts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranscriptList'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /sandboxes/{id}/transcripts/{path}:
+    get:
+      tags: [Sandboxes]
+      operationId: getTranscript
+      summary: Stream one harness transcript
+      description: >
+        Streams one transcript as JSON Lines from the host side of the sandbox's volume (Range
+        requests supported). path is a listed path, relative to the volume and under
+        .claude/projects/ or .codex/sessions/; its slashes are path separators. A path with
+        "..", "." or empty segments is refused (400), and so is anything but a regular file.
+      parameters:
+        - $ref: '#/components/parameters/SandboxIdParam'
+        - name: path
+          in: path
+          required: true
+          description: Transcript path relative to the volume, as listed.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The transcript.
+          content:
+            application/x-ndjson:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
         '500':
@@ -1174,6 +1238,112 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
+  /events:
+    get:
+      tags: [Events]
+      operationId: streamEvents
+      summary: Stream live events
+      description: >
+        Server-sent events (`text/event-stream`, `Cache-Control: no-cache`) until the client goes
+        away. Each event is `id: <n>` (the event number), `event: <type>` and `data: <json>`; the
+        server sends the comment `: ping` every 20 seconds as a heartbeat. Missed events are never
+        replayed: after a reconnect, refetch. A client that falls too far behind is disconnected.
+        Types and their data:
+        `task.created` (TaskCreatedEvent) when a task is created, after its sandbox, if any, is
+        allocated;
+        `task.done` (TaskDoneEvent) when a task is accepted, the first time only;
+        `sandbox.status` (SandboxStatusEvent) on every status change: allocated (starting),
+        booted, failed, stopped (by POST /sandboxes/{id}/stop or by the task's accept, also
+        right after a boot that finished once the task was accepted), started, and deleted
+        (status `deleted`);
+        `message.posted` (MessagePostedEvent) for every message stored in any channel, agc's
+        included.
+      responses:
+        '200':
+          description: The stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: >
+                  Frames as described above; each data is one of the event schemas
+                  (TaskCreatedEvent, TaskDoneEvent, SandboxStatusEvent, MessagePostedEvent).
+        '500':
+          $ref: '#/components/responses/Error'
+  /msg/post:
+    post:
+      tags: [Messaging]
+      operationId: postMessage
+      summary: Post a message or a question
+      description: >
+        Appends a message to a channel as the given participant, which must belong to the caller;
+        agc fills in `from`, `task` and `human`. `kind` is `message` (the default) or `question`;
+        anything else is 400. A reply (`reply_to`) to a question from someone other than its
+        asker answers it. Inside a sandbox `agc msg post` and `agc msg ask` reach the same call
+        over the sandbox's socket, limited to the task's channels.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MsgPostRequest'
+      responses:
+        '200':
+          description: The stored message.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsgMessage'
+        '400':
+          $ref: '#/components/responses/MsgError'
+        '401':
+          $ref: '#/components/responses/MsgError'
+        '404':
+          $ref: '#/components/responses/MsgError'
+        '500':
+          $ref: '#/components/responses/MsgError'
+  /msg/questions:
+    get:
+      tags: [Messaging]
+      operationId: listQuestions
+      summary: List questions and whether they are answered
+      description: >
+        Messages of kind `question`, newest first, at most 500. Each carries its answer, the first
+        reply to it from someone other than the asker (by participant and by name), computed on
+        every request and never stored; `answer_id`, `answered_by` and `answered_at` are null
+        while it is open. A sandbox sees only its task's channels.
+      parameters:
+        - name: channel
+          in: query
+          description: Only questions in this channel, e.g. `#fix-login`.
+          schema:
+            type: string
+        - name: open
+          in: query
+          description: '`1` keeps only unanswered questions; `0` or absent keeps all.'
+          schema:
+            type: string
+            enum: ['0', '1', 'true', 'false']
+        - name: for
+          in: query
+          description: >
+            Only questions in the channels this person reads: their inbox `#<name>` and `#<task>`
+            for every task they manage or own.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The questions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsgQuestionsResponse'
+        '400':
+          $ref: '#/components/responses/MsgError'
+        '401':
+          $ref: '#/components/responses/MsgError'
+        '500':
+          $ref: '#/components/responses/MsgError'
   /msg/participants:
     get:
       tags: [Messaging]
@@ -1301,18 +1471,18 @@ components:
       schema:
         type: string
   responses:
-    MsgError:
-      description: A messaging error, as the message alone.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/MsgErrorResponse'
     Error:
       description: Error response with machine-readable code and request identifier.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    MsgError:
+      description: Messaging error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MsgErrorResponse'
   schemas:
     ErrorResponse:
       type: object
@@ -1784,6 +1954,11 @@ components:
         memory:
           type: integer
           description: MiB.
+        disk:
+          type: string
+          description: >
+            Size of /home/agent, a private ext4 disk removed with the sandbox: a whole number
+            followed by M, G or T, such as 10G. Default 20G, minimum 2G.
         repo:
           type: string
           description: host/owner/name or an https URL, cloned to /home/agent/<name>.
@@ -1849,6 +2024,11 @@ components:
         for:
           type: string
           description: Id of the knowledge action or decision the task serves; empty for none.
+        notify:
+          type: boolean
+          description: >
+            The panel shows a toast and plays a chime when the task starts (task.created) and when
+            it is done (task.done).
         status:
           type: string
           enum: [open, running, review, done]
@@ -1893,6 +2073,7 @@ components:
         - manager
         - owner
         - for
+        - notify
         - status
         - done_at
         - accepted_by
@@ -1946,6 +2127,10 @@ components:
             sandboxes may post in #<owner>.
         for:
           type: string
+        notify:
+          type: boolean
+          default: true
+          description: Notify in the panel when the task starts and when it is done (task.yaml `notify:`).
         sandbox:
           $ref: '#/components/schemas/SandboxRequest'
     DeliverTaskRequest:
@@ -2007,12 +2192,18 @@ components:
         instructions:
           type: string
           description: The TASK.md written into the sandbox at /home/agent/TASK.md, byte for byte (ADR 0009).
+        volume:
+          type: string
+          description: >
+            The named volume agc-<name> holding the harness homes (~/.claude, ~/.codex) and their
+            transcripts, mounted at /home/agent/.harness and kept after the sandbox is deleted.
+            Empty for sandboxes booted before volumes.
         status:
           type: string
           description: >
             starting until booted, failed when the boot failed (status_error says why), otherwise
             the runtime's word verbatim (running, stopped), or unknown when the runtime cannot be
-            asked (status_error says why).
+            asked (status_error says why). In a sandbox.status event, deleted once it is gone.
         status_error:
           type: string
           description: Why the status is failed or unknown.
@@ -2043,11 +2234,117 @@ components:
         - spec
         - command
         - instructions
+        - volume
         - status
         - booted_at
         - stopped_at
         - created_at
         - work
+    ChannelMessage:
+      type: object
+      description: A message in a channel, as /api/msg returns it (ADR 0005).
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Also the read cursor; ids are totally ordered per channel.
+        channel:
+          type: string
+        from:
+          type: string
+        participant_id:
+          type: string
+        task:
+          type: string
+          description: The poster's task; empty for a human and for agc.
+        human:
+          type: boolean
+        reply_to:
+          type: integer
+          format: int64
+        body:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - channel
+        - from
+        - participant_id
+        - task
+        - human
+        - body
+        - created_at
+    TaskCreatedEvent:
+      type: object
+      description: Data of `task.created`.
+      properties:
+        task:
+          $ref: '#/components/schemas/Task'
+      required:
+        - task
+    TaskDoneEvent:
+      type: object
+      description: Data of `task.done`.
+      properties:
+        task:
+          $ref: '#/components/schemas/Task'
+        summary:
+          type: string
+          description: >
+            The task's `summary` when it is delivered; otherwise the body of the last message in
+            #<task> from neither a human nor agc (`/accept` and `/reject` commands skipped). Cut to
+            500 characters; empty when there is none.
+      required:
+        - task
+        - summary
+    SandboxStatusEvent:
+      type: object
+      description: Data of `sandbox.status`; status is `deleted` once the sandbox is gone.
+      properties:
+        sandbox:
+          $ref: '#/components/schemas/Sandbox'
+      required:
+        - sandbox
+    MessagePostedEvent:
+      type: object
+      description: Data of `message.posted`.
+      properties:
+        message:
+          $ref: '#/components/schemas/ChannelMessage'
+      required:
+        - message
+    TranscriptList:
+      type: object
+      properties:
+        volume:
+          type: string
+          description: The volume read.
+        transcripts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transcript'
+      required:
+        - volume
+        - transcripts
+    Transcript:
+      type: object
+      properties:
+        path:
+          type: string
+          description: Relative to the volume, which the guest sees at /home/agent/.harness.
+        size:
+          type: integer
+          format: int64
+          description: Bytes.
+        modified_at:
+          type: string
+          format: date-time
+      required:
+        - path
+        - size
+        - modified_at
     SandboxWork:
       type: object
       properties:
@@ -3005,6 +3302,101 @@ components:
           type: string
       required:
         - error
+    MsgKind:
+      type: string
+      enum: [message, question]
+      description: A question waits on the channel's readers until someone else replies to it.
+    MsgPostRequest:
+      type: object
+      properties:
+        participant_id:
+          type: string
+          description: The id join returned; it must belong to the caller.
+        channel:
+          type: string
+          description: '`#` followed by 1-64 lowercase letters, digits, _ or -.'
+        body:
+          type: string
+          description: Plain text, at most 64 KiB.
+        reply_to:
+          type: integer
+          format: int64
+          description: Id of a message in the same channel this replies to.
+        kind:
+          $ref: '#/components/schemas/MsgKind'
+      required:
+        - participant_id
+        - channel
+        - body
+    MsgMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Also the read cursor; ids are totally ordered per channel.
+        channel:
+          type: string
+        from:
+          type: string
+          description: The sender's name, filled in by agc.
+        participant_id:
+          type: string
+        task:
+          type: string
+          description: The sender's task, empty for humans and for agc.
+        human:
+          type: boolean
+        reply_to:
+          type: integer
+          format: int64
+        body:
+          type: string
+        kind:
+          $ref: '#/components/schemas/MsgKind'
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - channel
+        - from
+        - participant_id
+        - task
+        - human
+        - body
+        - kind
+        - created_at
+    MsgQuestion:
+      allOf:
+        - $ref: '#/components/schemas/MsgMessage'
+        - type: object
+          properties:
+            answer_id:
+              type: integer
+              format: int64
+              nullable: true
+              description: The first reply from someone other than the asker.
+            answered_by:
+              type: string
+              nullable: true
+            answered_at:
+              type: string
+              format: date-time
+              nullable: true
+          required:
+            - answer_id
+            - answered_by
+            - answered_at
+    MsgQuestionsResponse:
+      type: object
+      properties:
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/MsgQuestion'
+      required:
+        - questions
     MsgParticipantList:
       type: object
       properties:

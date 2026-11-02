@@ -9,6 +9,7 @@ import { Link, useParams } from 'react-router'
 
 import type { AgentView } from '@/api/agents'
 import { useAgent, useSleepAgent, useWakeAgent } from '@/api/hooks'
+import { Avatar } from '@/components/avatar'
 import { conceptColors, conceptIcons, type Concept } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
@@ -60,7 +61,7 @@ export function AgentPage() {
           <span data-testid="agent-state">
             <StatusPill status={a.state} />
           </span>
-          <conceptIcons.agent aria-hidden className={cn('size-4 shrink-0', color.text)} />
+          <Avatar name={a.name} size="md" presence={a.state === 'awake'} />
           <h2
             data-testid="agent-name"
             className={cn('truncate font-mono text-base', a.kept ? 'font-semibold' : 'text-muted-foreground')}

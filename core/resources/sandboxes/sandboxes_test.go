@@ -121,7 +121,11 @@ type fakeSandbox struct {
 }
 
 func (s *fakeSandbox) Run(ctx context.Context, cmd executor.Command) (*executor.Result, error) {
-	s.rt.record("run " + cmd.Name + " " + strings.Join(cmd.Args, " ") + " in " + cmd.Dir)
+	call := "run " + cmd.Name + " " + strings.Join(cmd.Args, " ") + " in " + cmd.Dir
+	if cmd.User != "" {
+		call += " as " + cmd.User
+	}
+	s.rt.record(call)
 	if len(cmd.Args) > 0 && cmd.Args[0] == s.rt.runFailOn {
 		return &executor.Result{ExitCode: 128, Stderr: []byte("fatal: repository not found\n")}, nil
 	}
@@ -197,6 +201,9 @@ func newTestEnv(t *testing.T) *testEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// No test reads the host's msb volumes.
+	t.Setenv(EnvVolumeRoot, t.TempDir())
 
 	db := newTestDB(t)
 	rt := newFakeRuntime()
@@ -317,6 +324,8 @@ func TestAllocate(t *testing.T) {
 
 	wantCalls := []string{
 		"create review-42",
+		"run chown agent:agent /home/agent in  as root",
+		"run bash -c " + homeScript + " in ",
 		"run git clone https://github.com/vanclief/agent-composer.git /home/agent/agent-composer in ",
 		"run bash -c " + script + " in ",
 		"write /home/agent/TASK.md",
@@ -348,6 +357,57 @@ func TestAllocate(t *testing.T) {
 	}
 	if created.VsockPath != socket || created.VsockPort != 5100 {
 		t.Fatalf("vsock = %s:%d", created.VsockPath, created.VsockPort)
+	}
+
+	// /home/agent is a private disk of the default size; the harness homes
+	// are on the named volume agc-<sandbox>, recorded on the row.
+	if created.DiskDest != "/home/agent" || created.DiskMiB != 0 {
+		t.Fatalf("disk = %s %d", created.DiskDest, created.DiskMiB)
+	}
+	harness := sandbox.Volume{Source: "agc-review-42", Dest: "/home/agent/.harness", ReadWrite: true, QuotaMiB: 4096}
+	if len(created.Volumes) != 1 || created.Volumes[0] != harness {
+		t.Fatalf("volumes = %+v", created.Volumes)
+	}
+	if view.Volume != "agc-review-42" || got.Volume != "agc-review-42" {
+		t.Fatalf("volume = %q, %q", view.Volume, got.Volume)
+	}
+}
+
+// A deleted sandbox's volume stays on the host with its transcripts, so its
+// name is not reused: the next sandbox must not inherit them.
+func TestAllocateSkipsNamesWithAVolumeLeft(t *testing.T) {
+	env := newTestEnv(t)
+	insertTask(t, env.db, "fix")
+
+	err := os.MkdirAll(filepath.Join(env.api.volumeRoot, "agc-fix", ".claude"), 0o755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	view, err := env.api.Allocate(context.Background(), nil, &AllocateRequest{TaskName: "fix", Sandbox: task.Sandbox{Spec: task.Spec{Disk: "8G"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Name != "fix-2" || view.Volume != "agc-fix-2" || view.Spec.Disk != "8G" {
+		t.Fatalf("view = %+v", view)
+	}
+
+	env.api.Wait()
+	if env.rt.created[0].DiskMiB != 8192 {
+		t.Fatalf("disk = %d MiB", env.rt.created[0].DiskMiB)
+	}
+}
+
+func TestAllocateRejectsSmallDisk(t *testing.T) {
+	env := newTestEnv(t)
+	insertTask(t, env.db, "fix")
+
+	_, err := env.api.Allocate(context.Background(), nil, &AllocateRequest{TaskName: "fix", Sandbox: task.Sandbox{Spec: task.Spec{Disk: "1G"}}})
+	if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), "minimum is 2G") {
+		t.Fatalf("err = %v", err)
+	}
+	if len(env.rt.Calls()) != 0 {
+		t.Fatalf("calls = %q", env.rt.Calls())
 	}
 }
 
@@ -398,7 +458,7 @@ func TestAllocateWithRef(t *testing.T) {
 	env.api.Wait()
 
 	calls := env.rt.Calls()
-	if calls[2] != "run git -C /home/agent/n checkout v1.2.0 in " {
+	if calls[4] != "run git -C /home/agent/n checkout v1.2.0 in " {
 		t.Fatalf("calls = %q", calls)
 	}
 }
@@ -414,7 +474,7 @@ func TestAllocateWithoutRepoTrustsHome(t *testing.T) {
 	env.api.Wait()
 
 	calls := env.rt.Calls()
-	if !strings.HasPrefix(calls[1], "run bash -c ") || !strings.Contains(calls[1], "dir='/home/agent'\n") {
+	if !strings.HasPrefix(calls[3], "run bash -c ") || !strings.Contains(calls[3], "dir='/home/agent'\n") {
 		t.Fatalf("calls = %q", calls)
 	}
 }
@@ -515,6 +575,8 @@ func TestAllocateCloneFails(t *testing.T) {
 
 	wantCalls := []string{
 		"create review-42",
+		"run chown agent:agent /home/agent in  as root",
+		"run bash -c " + homeScript + " in ",
 		"run git clone https://github.com/vanclief/agent-composer.git /home/agent/agent-composer in ",
 		"detach",
 		"stop review-42",

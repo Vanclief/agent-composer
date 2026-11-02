@@ -9,6 +9,7 @@ import (
 	"github.com/vanclief/ez"
 
 	"github.com/vanclief/agent-composer/core/controller"
+	"github.com/vanclief/agent-composer/core/events"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
@@ -21,16 +22,19 @@ import (
 // the creator's messaging name and is required; an empty assignee, model
 // or owner gets the configured default (ADR 0009 item 1).
 type CreateRequest struct {
-	Title    string        `json:"title"`
-	Name     string        `json:"name"`
-	Brief    string        `json:"brief"`
-	Accept   []string      `json:"accept"`
-	Assignee string        `json:"assignee"`
-	Model    string        `json:"model"`
-	Manager  string        `json:"manager"`
-	Owner    string        `json:"owner"`
-	For      string        `json:"for"`
-	Sandbox  *task.Sandbox `json:"sandbox"`
+	Title    string   `json:"title"`
+	Name     string   `json:"name"`
+	Brief    string   `json:"brief"`
+	Accept   []string `json:"accept"`
+	Assignee string   `json:"assignee"`
+	Model    string   `json:"model"`
+	Manager  string   `json:"manager"`
+	Owner    string   `json:"owner"`
+	For      string   `json:"for"`
+	// Notify asks the panel to notify when the task starts and when it is
+	// done. Omitted means true.
+	Notify  *bool         `json:"notify,omitempty"`
+	Sandbox *task.Sandbox `json:"sandbox"`
 }
 
 func (r CreateRequest) Validate() error {
@@ -220,6 +224,7 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 		Manager:  strings.TrimSpace(request.Manager),
 		Owner:    applied.Owner,
 		For:      strings.TrimSpace(request.For),
+		Notify:   request.Notify == nil || *request.Notify,
 	}
 
 	err = record.Insert(ctx, api.db)
@@ -229,7 +234,7 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 
 	if request.Sandbox == nil {
 		api.open(ctx, record, nil)
-		return newView(record, []sandboxes.SandboxView{}), nil
+		return api.created(newView(record, []sandboxes.SandboxView{})), nil
 	}
 
 	// The allocation's own view is used, read before its boot started, so
@@ -242,7 +247,14 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 
 	api.open(ctx, record, allocated)
 
-	return newView(record, []sandboxes.SandboxView{*allocated}), nil
+	return api.created(newView(record, []sandboxes.SandboxView{*allocated})), nil
+}
+
+// created publishes task.created with view and returns it.
+func (api *API) created(view *TaskView) *TaskView {
+	api.events.Publish(events.Event{Type: events.TaskCreated, Data: CreatedEvent{Task: view}})
+
+	return view
 }
 
 // removeUnallocated deletes a task whose sandbox could not be allocated, so

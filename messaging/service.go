@@ -14,6 +14,7 @@ import (
 	"github.com/uptrace/bun"
 	"github.com/vanclief/ez"
 
+	"github.com/vanclief/agent-composer/core/events"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 )
 
@@ -59,6 +60,9 @@ type Service struct {
 	// presence answers whether an agent's sandbox runs, nil when unwired.
 	presence Presence
 
+	// channelsFor names the channels a person reads besides their inbox.
+	channelsFor ChannelsFor
+
 	// system serializes taking the reserved name agc.
 	system sync.Mutex
 
@@ -69,6 +73,22 @@ type Service struct {
 
 	// now is the clock, swapped in tests.
 	now func() time.Time
+
+	// events gets message.posted for every stored message, nil drops them.
+	events *events.Bus
+}
+
+// PostedEvent is the data of message.posted.
+type PostedEvent struct {
+	Message *msgmodels.Message `json:"message"`
+}
+
+// SetEvents publishes message.posted on bus for every message stored from
+// now on, before the post hooks run.
+func (s *Service) SetEvents(bus *events.Bus) {
+	s.mu.Lock()
+	s.events = bus
+	s.mu.Unlock()
 }
 
 func NewService(db bun.IDB) *Service {
@@ -210,10 +230,19 @@ func (s *Service) Leave(ctx context.Context, caller Caller, participantID string
 	return nil
 }
 
-// Post appends a message. Sender fields come from the participant row,
-// never from the input.
-func (s *Service) Post(ctx context.Context, caller Caller, participantID, channel, body string, replyTo *int64) (*msgmodels.Message, error) {
+// Post appends a message of kind, message or question; empty is message.
+// Sender fields come from the participant row, never from the input.
+func (s *Service) Post(ctx context.Context, caller Caller, participantID, channel, body string, replyTo *int64, kind string) (*msgmodels.Message, error) {
 	err := checkCaller(caller)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	if kind == "" {
+		kind = msgmodels.KindMessage
+	}
+
+	err = msgmodels.ValidateKind(kind)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -252,11 +281,11 @@ func (s *Service) Post(ctx context.Context, caller Caller, participantID, channe
 		}
 	}
 
-	return s.insert(ctx, p, channel, body, replyTo)
+	return s.insert(ctx, p, channel, body, replyTo, kind)
 }
 
 // insert stores a message from p, wakes the waiters and runs the hooks.
-func (s *Service) insert(ctx context.Context, p *msgmodels.Participant, channel, body string, replyTo *int64) (*msgmodels.Message, error) {
+func (s *Service) insert(ctx context.Context, p *msgmodels.Participant, channel, body string, replyTo *int64, kind string) (*msgmodels.Message, error) {
 	m := &msgmodels.Message{
 		Channel:       channel,
 		From:          p.Name,
@@ -265,6 +294,7 @@ func (s *Service) insert(ctx context.Context, p *msgmodels.Participant, channel,
 		Human:         p.Human,
 		ReplyTo:       replyTo,
 		Body:          body,
+		Kind:          kind,
 	}
 
 	err := m.Insert(ctx, s.db)
@@ -276,7 +306,10 @@ func (s *Service) insert(ctx context.Context, p *msgmodels.Participant, channel,
 	close(s.posted)
 	s.posted = make(chan struct{})
 	hooks := s.hooks
+	bus := s.events
 	s.mu.Unlock()
+
+	bus.Publish(events.Event{Type: events.MessagePosted, Data: PostedEvent{Message: m}})
 
 	for _, hook := range hooks {
 		hook(ctx, m)
@@ -312,7 +345,7 @@ func (s *Service) PostAsSystem(ctx context.Context, channel, body string) (*msgm
 		return nil, ez.Wrap(err)
 	}
 
-	return s.insert(ctx, p, channel, body, nil)
+	return s.insert(ctx, p, channel, body, nil, msgmodels.KindMessage)
 }
 
 // systemParticipant returns agc's active participant, joining it the first
