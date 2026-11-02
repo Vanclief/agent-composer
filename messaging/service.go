@@ -227,11 +227,72 @@ func (s *Service) Join(ctx context.Context, caller Caller, name string) (*msgmod
 	}
 
 	err = p.Insert(ctx, s.db)
+	if err == nil {
+		return p, nil
+	}
+
+	joinErr := s.joinError(ctx, name, err)
+	if caller.Human || caller.Agent == "" || ez.ErrorCode(joinErr) != ez.ECONFLICT {
+		return nil, joinErr
+	}
+
+	// A persistent agent's home joins as the agent's name whatever the
+	// home is called (ADR 0016 item 6), so it takes the name over from a
+	// participant left behind by a home that is gone or stopped.
+	took, err := s.takeStale(ctx, name)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+	if !took {
+		return nil, joinErr
+	}
+
+	err = p.Insert(ctx, s.db)
 	if err != nil {
 		return nil, s.joinError(ctx, name, err)
 	}
 
 	return p, nil
+}
+
+// takeStale releases name from the active participant holding it when
+// that participant is an agent presence says is absent: its sandbox is
+// gone or not running. A human's name, agc's and a running agent's are
+// never taken; without presence nothing is.
+func (s *Service) takeStale(ctx context.Context, name string) (bool, error) {
+	s.mu.Lock()
+	presence := s.presence
+	s.mu.Unlock()
+
+	if presence == nil {
+		return false, nil
+	}
+
+	holder := &msgmodels.Participant{}
+
+	err := s.db.NewSelect().Model(holder).Where("active_name = ?", name).Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, ez.Wrap(err)
+	}
+
+	if holder.Human || isSystem(holder) {
+		return false, nil
+	}
+
+	now := s.now()
+	if s.online(ctx, presence, holder, now, now) {
+		return false, nil
+	}
+
+	err = holder.Leave(ctx, s.db)
+	if err != nil {
+		return false, ez.Wrap(err)
+	}
+
+	return true, nil
 }
 
 // joinError tells a taken name from any other insert failure. The
