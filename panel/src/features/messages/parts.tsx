@@ -1,7 +1,7 @@
 // The pieces of a feed: a message row (gutter, header, body, thread
 // footer, the hover "Reply in thread"), agc's system lines, and question
 // cards with their Answer box.
-import { useState, type KeyboardEvent } from 'react'
+import { useMemo, useState, type KeyboardEvent } from 'react'
 import { Check, ChevronRight, Hexagon } from 'lucide-react'
 import { Link } from 'react-router'
 
@@ -17,6 +17,8 @@ import { cn } from '@/lib/utils'
 import { useChannel } from './context'
 import { MarkdownText, MessageBody } from './MessageBody'
 import { answerOf } from './questions'
+import { AcceptActions, QuestionBody } from './QuestionParts'
+import { parseQuestion } from './questionShape'
 import { useSend } from './send'
 import { clock, exact, relative } from './time'
 
@@ -312,8 +314,11 @@ function AnswerBox({ question }: { question: Message }) {
   )
 }
 
-// A question: who asks, the body, then the Answer box until someone other
-// than the asker replies; then "Answered by @name" and that first answer.
+// A question: who asks, the body (the title, labelled rows and View diff,
+// QuestionParts.tsx), Accept and Reject… for "Accept <task>?", then the
+// Answer box until someone other than the asker replies; then "Answered by
+// @name" and that first answer. At most 72ch wide, from the message
+// column's left edge.
 export function QuestionCard({ message }: { message: Message }) {
   const { threads, questions } = useChannel()
   const replies = threads.replies(message.id)
@@ -321,6 +326,7 @@ export function QuestionCard({ message }: { message: Message }) {
   const info = questions.get(message.id)
   const answeredBy = answer?.from ?? info?.answered_by ?? ''
   const answeredAt = answer?.created_at ?? info?.answered_at ?? null
+  const shape = useMemo(() => parseQuestion(message.body), [message.body])
   const Icon = conceptIcons.question
   const color = conceptColors.question
   return (
@@ -333,7 +339,7 @@ export function QuestionCard({ message }: { message: Message }) {
         data-state={answeredBy ? 'answered' : 'open'}
         title={`#${message.id}`}
         className={cn(
-          'flex min-w-0 flex-1 flex-col gap-1.5 rounded-md border px-3 py-2',
+          'flex max-w-[72ch] min-w-0 flex-1 flex-col gap-2 rounded-md border px-4 py-3',
           answeredBy ? 'border-border' : [color.border, 'bg-pink-500/5'],
         )}
       >
@@ -344,7 +350,8 @@ export function QuestionCard({ message }: { message: Message }) {
           </span>
           <Header message={message} time={false} />
         </div>
-        <MessageBody body={message.body} />
+        <QuestionBody shape={shape} />
+        {shape.accept && <AcceptActions question={message} task={shape.accept} />}
         {answeredBy ? (
           <div data-testid="answer" className="flex flex-col gap-0.5 border-l-2 border-border pl-2">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
