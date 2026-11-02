@@ -19,3 +19,14 @@ proposals:
     when: 2026-11-01
     became: proposals-pass-through-human-gates
     accepted: { who: franco, when: 2026-11-01 }
+
+  # Franco asked why agc messaging has no DMs (2026-11-01). ADR 0005 left
+  # private channels out to ship the transport; this adds them with one
+  # access rule and no new table. Task dms-whatsapp builds it.
+  - id: dms-are-human-task-channels
+    proposes: decision
+    proposal: A direct message is a channel named @<human>/<task> that only that task and humans may read, listed in the panel as the human's inbox, with `agc msg post @franco` expanding to the task's own DM channel.
+    because: [messaging-over-per-task-vsock, task-vms-have-no-path-to-agc]
+    by: claude_code
+    when: 2026-11-01
+
