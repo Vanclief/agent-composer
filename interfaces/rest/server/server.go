@@ -230,6 +230,11 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
 		defer cancel()
 		return s.SandboxesAPI.Delete(ctx, nil, body)
+	// A collection deletes many sandboxes, each through Delete's path.
+	case *sandboxes.GCRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 10*time.Minute)
+		defer cancel()
+		return s.SandboxesAPI.GC(ctx, nil, body)
 	case *sandboxes.ListTerminalsRequest:
 		return s.SandboxesAPI.ListTerminals(request.GetContext(), nil, body)
 	case *sandboxes.StartTerminalRequest:
