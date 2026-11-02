@@ -54,7 +54,7 @@ type agentMessenger interface {
 	Wait(ctx context.Context, channel string, after int64, timeout time.Duration) (*httpapi.MessagesResponse, error)
 	Channels(ctx context.Context) (*httpapi.ChannelsResponse, error)
 	// Deliver is agc task deliver on the sandbox's socket.
-	Deliver(ctx context.Context, summary string, report json.RawMessage, out any) error
+	Deliver(ctx context.Context, summary string, report json.RawMessage, files map[string][]byte, out any) error
 }
 
 // agentLoop is `agc agent run` (ADR 0009 item 2, ADR 0010): it joins
@@ -383,7 +383,7 @@ func (l *agentLoop) turn(ctx context.Context, p *msgmodels.Participant, prompt s
 
 		var view any
 		// DONE: delivers the summary only, with no report.
-		err = l.msg.Deliver(ctx, summary, nil, &view)
+		err = l.msg.Deliver(ctx, summary, nil, nil, &view)
 		if err == nil {
 			l.logf("delivered, waiting for review")
 			return next

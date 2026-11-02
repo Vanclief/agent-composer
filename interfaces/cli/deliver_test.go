@@ -265,3 +265,62 @@ func TestTaskDeliverReadsAReportAfterTheSummary(t *testing.T) {
 		t.Fatalf("err %v", err)
 	}
 }
+
+// Inside a sandbox, --report with shots reads each shot's PNG from its
+// file and sends it with the delivery, in files under its label; a shot
+// whose file cannot be read stops agc before anything is sent.
+func TestTaskDeliverSendsShotsOverTheSocket(t *testing.T) {
+	var got httpapi.DeliverRequest
+	sent := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sent++
+
+		err := json.NewDecoder(r.Body).Decode(&got)
+		if err != nil {
+			t.Error(err)
+		}
+
+		httpapi.WriteJSON(w, http.StatusOK, tasks.TaskView{Name: "fix-login", Status: tasks.StatusReview})
+	}))
+	defer server.Close()
+
+	t.Setenv("AGC_SERVER", "")
+	t.Setenv("AGC_TASK", "fix-login")
+	t.Setenv("AGC_MSG_URL", server.URL)
+
+	dir := t.TempDir()
+	before := []byte("\x89PNG\r\n\x1a\nbefore")
+	after := []byte("\x89PNG\r\n\x1a\nafter")
+	for name, data := range map[string][]byte{"before.png": before, "after.png": after} {
+		err := os.WriteFile(filepath.Join(dir, name), data, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	report := `{"criteria":[{"met":"yes"}],"shots":[` +
+		`{"label":"before","file":"` + filepath.Join(dir, "before.png") + `"},` +
+		`{"label":"after","file":"` + filepath.Join(dir, "after.png") + `"}]}`
+
+	_, _, err := runAgcStdin(t, report, "task", "deliver", "--report", "-", "Moved the button.")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if sent != 1 || string(got.Report) != report || len(got.Files) != 2 {
+		t.Fatalf("sent %d, request %+v", sent, got)
+	}
+	if !bytes.Equal(got.Files["before"], before) || !bytes.Equal(got.Files["after"], after) {
+		t.Fatalf("files %q", got.Files)
+	}
+
+	missing := `{"criteria":[{"met":"yes"}],"shots":[{"label":"after","file":"` + filepath.Join(dir, "nope.png") + `"}]}`
+	_, _, err = runAgcStdin(t, missing, "task", "deliver", "--report", "-", "x")
+	if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), "cannot read the shot after") {
+		t.Fatalf("err %v", err)
+	}
+	if sent != 1 {
+		t.Fatalf("a shot that cannot be read must not be sent: sent %d", sent)
+	}
+}
