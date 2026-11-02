@@ -175,6 +175,18 @@ func (c *Client) DeleteSandbox(ctx context.Context, ref string) (*sandboxes.Dele
 	return out, nil
 }
 
+// GCSandboxes deletes, or with DryRun lists, the stopped sandboxes of
+// tasks done longer than Keep ago.
+func (c *Client) GCSandboxes(ctx context.Context, request *sandboxes.GCRequest) (*sandboxes.GCResponse, error) {
+	out := &sandboxes.GCResponse{}
+	err := c.do(ctx, http.MethodPost, "/api/sandboxes/gc", request, out)
+	if err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
 func (c *Client) sandboxCall(ctx context.Context, method string, ref string, suffix string) (*sandboxes.SandboxView, error) {
 	out := &sandboxes.SandboxView{}
 	err := c.do(ctx, method, "/api/sandboxes/"+url.PathEscape(ref)+suffix, nil, out)
