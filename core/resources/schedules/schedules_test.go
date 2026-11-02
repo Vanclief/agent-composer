@@ -438,6 +438,7 @@ func TestCreateRejects(t *testing.T) {
 		{"command", func(r *CreateRequest) { r.Poll.Command = " " }, "poll.command is required"},
 		{"secret", func(r *CreateRequest) { r.Poll.Secrets = []string{"github_token"} }, "secret name"},
 		{"secret-hosts", func(r *CreateRequest) { r.Poll.Secrets = []string{"GITHUB_TOKEN@api.github.com"} }, "runs on the host"},
+		{"secret-as", func(r *CreateRequest) { r.Poll.Secrets = []string{"GITHUB_BOT as GITHUB_TOKEN"} }, `"GITHUB_BOT as GITHUB_TOKEN" renames the secret`},
 		{"syntax", func(r *CreateRequest) { r.Task.Brief = "Review {{.url" }, "task.brief is not a valid template"},
 		{"manager", func(r *CreateRequest) { r.Task.Manager = "" }, "manager is required"},
 		{"brief", func(r *CreateRequest) { r.Task.Brief = "" }, "brief is required"},

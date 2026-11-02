@@ -25,11 +25,13 @@ var KnownHosts = map[string][]string{
 	"ANTHROPIC_API_KEY":       {"api.anthropic.com"},
 	"CLAUDE_CODE_OAUTH_TOKEN": {"api.anthropic.com"},
 	"OPENAI_API_KEY":          {"api.openai.com"},
+	"CODEX_API_KEY":           {"api.openai.com"},
 	"GITHUB_TOKEN":            {"api.github.com", "github.com"},
 }
 
 var (
 	nameRe = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
+	envRe  = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 	hostRe = regexp.MustCompile(`^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
 )
 
@@ -142,23 +144,49 @@ func (s *Store) Names() []string {
 	return names
 }
 
-// Request is one entry from a Task spec `secrets:` list.
+// Request is one entry from a Task spec `secrets:` list. Name is the entry
+// in the secrets file, Env the guest variable it is handed to (Name unless
+// the entry says `as`).
 type Request struct {
 	Name  string
+	Env   string
 	Hosts []string
 }
 
-// ParseRequest parses "NAME" or "NAME@host1,host2". Hosts are lowercase
-// hostnames with an optional leading "*." wildcard, and no scheme, path or
-// port.
+// ParseRequest parses "NAME", "NAME@host1,host2", "NAME as ENV" or
+// "NAME as ENV@host1,host2". Hosts are lowercase hostnames with an optional
+// leading "*." wildcard, and no scheme, path or port. ENV must look like an
+// environment variable name, [A-Z_][A-Z0-9_]*.
 func ParseRequest(s string) (Request, error) {
-	name, hostList, hasHosts := strings.Cut(strings.TrimSpace(s), "@")
+	entry := strings.TrimSpace(s)
+	left, hostList, hasHosts := strings.Cut(entry, "@")
+
+	fields := strings.Fields(left)
+	name := strings.TrimSpace(left)
+	env := ""
+	if len(fields) > 1 {
+		if len(fields) != 3 || fields[1] != "as" {
+			msg := fmt.Sprintf("secret %q must be NAME, NAME@hosts, NAME as ENV or NAME as ENV@hosts", entry)
+			return Request{}, ez.New(ez.EINVALID, msg, nil)
+		}
+		name = fields[0]
+		env = fields[2]
+	}
+
 	if !nameRe.MatchString(name) {
 		msg := fmt.Sprintf("secret name %q must match [A-Z][A-Z0-9_]*", name)
 		return Request{}, ez.New(ez.EINVALID, msg, nil)
 	}
 
-	req := Request{Name: name}
+	if env == "" {
+		env = name
+	}
+	if !envRe.MatchString(env) {
+		msg := fmt.Sprintf("secret %q: variable %q must match [A-Z_][A-Z0-9_]*", entry, env)
+		return Request{}, ez.New(ez.EINVALID, msg, nil)
+	}
+
+	req := Request{Name: name, Env: env}
 	if !hasHosts {
 		return req, nil
 	}
@@ -175,15 +203,27 @@ func ParseRequest(s string) (Request, error) {
 	return req, nil
 }
 
-// Binding is what the sandbox receives: name, value, allowed hosts.
+// String is the request as a spec entry: "NAME" or "NAME as ENV", without
+// hosts.
+func (r Request) String() string {
+	if r.Env == "" || r.Env == r.Name {
+		return r.Name
+	}
+
+	return r.Name + " as " + r.Env
+}
+
+// Binding is what the sandbox receives: the secret's name in the secrets
+// file, the guest variable it is handed to, its value and allowed hosts.
 type Binding struct {
 	Name  string
+	Env   string
 	Value string
 	Hosts []string
 }
 
 // Resolve returns one Binding per request. Hosts come from the request when
-// given, otherwise from KnownHosts. Every problem is reported in one error and
+// given, otherwise from KnownHosts[Env], otherwise from KnownHosts[Name]. Every problem is reported in one error and
 // its code is the code of the first problem found.
 func (s *Store) Resolve(requests []Request) ([]Binding, error) {
 	bindings := make([]Binding, 0, len(requests))
@@ -199,18 +239,27 @@ func (s *Store) Resolve(requests []Request) ([]Binding, error) {
 			}
 		}
 
+		env := req.Env
+		if env == "" {
+			env = req.Name
+		}
+
 		hosts := req.Hosts
+		if len(hosts) == 0 {
+			hosts = KnownHosts[env]
+		}
 		if len(hosts) == 0 {
 			hosts = KnownHosts[req.Name]
 		}
 		if len(hosts) == 0 {
-			problems = append(problems, fmt.Sprintf("secret %s has no known hosts: write %s@host in the spec", req.Name, req.Name))
+			entry := req.String()
+			problems = append(problems, fmt.Sprintf("secret %s has no known hosts: write %s@host in the spec", entry, entry))
 			if code == "" {
 				code = ez.EINVALID
 			}
 		}
 
-		bindings = append(bindings, Binding{Name: req.Name, Value: value, Hosts: append([]string(nil), hosts...)})
+		bindings = append(bindings, Binding{Name: req.Name, Env: env, Value: value, Hosts: append([]string(nil), hosts...)})
 	}
 
 	if len(problems) > 0 {

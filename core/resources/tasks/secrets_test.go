@@ -34,7 +34,8 @@ func TestListSecrets(t *testing.T) {
 	want := `{"secrets":[` +
 		`{"name":"ANTHROPIC_API_KEY","hosts":["api.anthropic.com"]},` +
 		`{"name":"CUSTOM","hosts":[]},` +
-		`{"name":"GITHUB_TOKEN","hosts":["api.github.com","github.com"]}]}`
+		`{"name":"GITHUB_TOKEN","hosts":["api.github.com","github.com"]}],` +
+		`"harnesses":[{"id":"codex_cli","reads":["CODEX_API_KEY"]},{"id":"claude_code","reads":["CLAUDE_CODE_OAUTH_TOKEN","ANTHROPIC_API_KEY"]},{"id":"pi","reads":[]}]}`
 	if string(data) != want {
 		t.Fatalf("json = %s, want %s", data, want)
 	}

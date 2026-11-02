@@ -12,13 +12,51 @@ import (
 	"github.com/vanclief/agent-composer/models/agent"
 )
 
-// HarnessInfo describes one harness: whether its binary is installed
-// and which models it can run.
+// HarnessInfo describes one harness: whether its binary is installed,
+// which models it can run and the variables it takes its credentials from.
 type HarnessInfo struct {
 	ID        agent.Harness `json:"id"`
 	Binary    string        `json:"binary"`
 	Available bool          `json:"available"`
 	Models    []string      `json:"models"`
+	Reads     []string      `json:"reads"`
+}
+
+// HarnessReads is one harness and the environment variables it takes its
+// credentials from, in order of preference. A secret entry
+// "NAME as <one of these>" runs the harness on that account (ADR 0004
+// "Accounts").
+type HarnessReads struct {
+	ID    agent.Harness `json:"id"`
+	Reads []string      `json:"reads"`
+}
+
+// Credential variables per harness, in order of preference.
+//
+// Codex: agc runs `codex exec`, and codex-rs/login reads CODEX_API_KEY first
+// ("takes precedence over any other auth method"); the Codex docs state
+// "CODEX_API_KEY is only supported in codex exec" and show OPENAI_API_KEY
+// only piped into `codex login --with-api-key`, not read by the CLI itself.
+//
+// Claude Code: the subscription token from `claude setup-token`, then an API
+// key.
+//
+// pi: its key depends on the provider of the model it runs, so no one
+// variable is listed.
+var (
+	codexReads  = []string{"CODEX_API_KEY"}
+	claudeReads = []string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"}
+	piReads     = []string{}
+)
+
+// ListHarnessReads returns every known harness with the variables it reads,
+// in the order ListHarnessInfo lists them. It runs nothing.
+func ListHarnessReads() []HarnessReads {
+	return []HarnessReads{
+		{ID: agent.HarnessCodexCLI, Reads: append([]string{}, codexReads...)},
+		{ID: agent.HarnessClaudeCode, Reads: append([]string{}, claudeReads...)},
+		{ID: agent.HarnessPi, Reads: append([]string{}, piReads...)},
+	}
 }
 
 // Model knowledge is per harness: pi (`pi --list-models`) and codex
@@ -74,6 +112,7 @@ func ListHarnessInfo(ctx context.Context) []HarnessInfo {
 		Binary:    "codex",
 		Available: binaryAvailable("codex"),
 		Models:    codexModels,
+		Reads:     codexReads,
 	}
 	if codex.Available {
 		models := listCodexModels(ctx)
@@ -89,6 +128,7 @@ func ListHarnessInfo(ctx context.Context) []HarnessInfo {
 			Binary:    "claude",
 			Available: binaryAvailable("claude"),
 			Models:    claudeModels,
+			Reads:     claudeReads,
 		},
 	}
 
@@ -96,6 +136,7 @@ func ListHarnessInfo(ctx context.Context) []HarnessInfo {
 		ID:        agent.HarnessPi,
 		Binary:    "pi",
 		Available: binaryAvailable("pi"),
+		Reads:     piReads,
 	}
 	if pi.Available {
 		pi.Models = listPiModels(ctx)

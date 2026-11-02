@@ -62,7 +62,7 @@ type Spec struct {
 	Repo     string            `yaml:"repo" json:"repo"`     // "github.com/owner/name" or a full https URL
 	Ref      string            `yaml:"ref" json:"ref"`
 	Setup    string            `yaml:"setup" json:"setup"`       // bash script run once after the clone
-	Secrets  []string          `yaml:"secrets" json:"secrets"`   // "NAME" or "NAME@h1,h2"
+	Secrets  []string          `yaml:"secrets" json:"secrets"`   // "NAME", "NAME@h1,h2" or "NAME as ENV[@h1,h2]" (an account, ADR 0004)
 	Env      map[string]string `yaml:"env" json:"env"`           // plain, readable by agents
 	Volumes  []string          `yaml:"volumes" json:"volumes"`   // "NAME:DEST[:rw]" or "host:PATH:DEST[:rw]"
 	Channels []string          `yaml:"channels" json:"channels"` // "#name" or "#name:read"
@@ -209,10 +209,28 @@ func (s Spec) Validate() error {
 		return ez.New(ez.EINVALID, fmt.Sprintf("ref %q must not start with -", s.Ref), nil)
 	}
 
+	// Two entries may not hand the guest the same variable when either is an
+	// account (NAME as ENV, ADR 0004 "Accounts"). A plain NAME listed twice
+	// is left as it was before accounts, so existing specs keep validating.
+	type envEntry struct {
+		entry   string
+		renamed bool
+	}
+	envEntries := map[string]envEntry{}
 	for _, entry := range s.Secrets {
-		_, err := secrets.ParseRequest(entry)
+		request, err := secrets.ParseRequest(entry)
 		if err != nil {
 			return ez.Wrap(err)
+		}
+
+		renamed := request.Env != request.Name
+		previous, taken := envEntries[request.Env]
+		if taken && (renamed || previous.renamed) {
+			msg := fmt.Sprintf("secret %q: variable %s is already set by %q", strings.TrimSpace(entry), request.Env, previous.entry)
+			return ez.New(ez.EINVALID, msg, nil)
+		}
+		if !taken {
+			envEntries[request.Env] = envEntry{entry: strings.TrimSpace(entry), renamed: renamed}
 		}
 	}
 
@@ -324,11 +342,17 @@ func (s Spec) SandboxSpec(taskName string, name string, bindings []secrets.Bindi
 	}, nil
 }
 
-// SandboxSecrets turns resolved bindings into the sandbox's secrets.
+// SandboxSecrets turns resolved bindings into the sandbox's secrets, each
+// named after the guest variable it is handed to (binding.Env, which is the
+// secret's own name unless the entry said `as`).
 func SandboxSecrets(bindings []secrets.Binding) []sandbox.Secret {
 	sandboxSecrets := []sandbox.Secret{}
 	for _, binding := range bindings {
-		sandboxSecrets = append(sandboxSecrets, sandbox.Secret{Name: binding.Name, Value: binding.Value, Hosts: binding.Hosts})
+		env := binding.Env
+		if env == "" {
+			env = binding.Name
+		}
+		sandboxSecrets = append(sandboxSecrets, sandbox.Secret{Name: env, Value: binding.Value, Hosts: binding.Hosts})
 	}
 
 	return sandboxSecrets
