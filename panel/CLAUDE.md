@@ -9,15 +9,15 @@ the panel stays conflict-free.
 
 ## Who owns what
 
-| Path                                                                                                                                                             | Owner               |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| `src/features/tasks/` (`TasksPage`, `TaskPage`, `BriefTab`, `ComputeTab`) + `tests/tasks.spec.ts`                                                                | tasks feature       |
-| `src/features/create-task/` (`CreateTaskDialog`) + `tests/create-task.spec.ts`                                                                                   | create-task feature |
-| `src/features/compute/` (`ComputePage`, `SandboxPage`)                                                                                                           | compute feature     |
-| `src/features/terminals/` (`TerminalsTab`, `TerminalPane`, mounted by `SandboxPage`) + `tests/terminals.spec.ts`                                                 | terminals feature   |
-| `src/features/messages/` (`MessagesTab`, `MessagesPage`, `ChannelRows`, unread, message toasts) + `tests/messages.spec.ts`, `tests/talk.spec.ts`                 | messages feature    |
-| `src/features/agents/` (`AgentsPage`, `AgentPage`, the New agent and Keep… dialogs) + `tests/agents.spec.ts`                                                     | agents feature      |
-| everything else: `src/api/`, `src/components/`, `src/shell/`, `src/App.tsx`, `src/main.tsx`, `mock/`, `scripts/`, `tests/shell.spec.ts`, configs, `package.json` | foundation (shared) |
+| Path                                                                                                                                                                                           | Owner               |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `src/features/tasks/` (`TasksPage`, `TaskPage`, `BriefTab`, `ComputeTab`) + `tests/tasks.spec.ts`                                                                                              | tasks feature       |
+| `src/features/create-task/` (`CreateTaskDialog`) + `tests/create-task.spec.ts`                                                                                                                 | create-task feature |
+| `src/features/compute/` (`ComputePage`, `SandboxPage`)                                                                                                                                         | compute feature     |
+| `src/features/terminals/` (`TerminalsTab`, `TerminalPane`, mounted by `SandboxPage`) + `tests/terminals.spec.ts`                                                                               | terminals feature   |
+| `src/features/messages/` (`MessagesTab`, `MessagesPage`, `ChannelRows`, `BrowsePage`, unread, follow, message toasts) + `tests/messages.spec.ts`, `tests/talk.spec.ts`, `tests/follow.spec.ts` | messages feature    |
+| `src/features/agents/` (`AgentsPage`, `AgentPage`, the New agent and Keep… dialogs) + `tests/agents.spec.ts`                                                                                   | agents feature      |
+| everything else: `src/api/`, `src/components/`, `src/shell/`, `src/App.tsx`, `src/main.tsx`, `mock/`, `scripts/`, `tests/shell.spec.ts`, configs, `package.json`                               | foundation (shared) |
 
 - The files in `src/features/` are placeholders. Replace them freely, but keep
   the exported component names and props: `App.tsx` and `TasksPage` import
@@ -51,7 +51,8 @@ Basename `/panel`. Defined in `src/App.tsx` (foundation).
 | `/compute/:name`                                         | `SandboxPage`: one sandbox (`:name` is the sandbox) with its terminals                                                                                                |
 | `/agents`                                                | `AgentsPage`: every persistent agent (Work mode); "New agent" makes a numbered one                                                                                    |
 | `/agents/:name`                                          | `AgentPage`: one agent, its home sandbox, tasks, conversations and identity                                                                                           |
-| `/messages`, `/messages/:channel`                        | Talk mode: `MessagesPage`; `:channel` has no `#` (`/messages/review-42` is `#review-42`)                                                                              |
+| `/messages`, `/messages/:channel`                        | Talk mode: `MessagesPage`; `:channel` has no `#` (`/messages/review-42` is `#review-42`); a DM keeps its `@`, encoded (`/messages/%40franco%2Fyc-pitch`)              |
+| `/messages/browse`                                       | `BrowsePage`: every channel, with Follow / Following (so a channel named `#browse` has no URL)                                                                        |
 
 Each page sets the top bar title with `usePageTitle('…')` from
 `@/shell/page-title`.
@@ -61,7 +62,7 @@ Each page sets the top bar title with `usePageTitle('…')` from
 - Follow `/Users/vanclief/.claude/skills/rtsdesign/SKILL.md`: icons, slots,
   chips and numbers instead of sentences; explanations go in tooltips.
 - Modes are a vertical list in the sidebar; adding a mode is one entry in `MODES`.
-  In Talk mode the sidebar lists every channel under Channels (`ChannelRows` in `src/features/messages/ChannelRows.tsx`, mounted by the shell), linking to `/messages/<name>`; see Talk mode below.
+  In Talk mode the sidebar lists the followed channels under Channels (`ChannelRows` in `src/features/messages/ChannelRows.tsx`, mounted by the shell), linking to `/messages/<name>`; see Talk mode below.
   `ModeSwitch` takes an optional `badges` slot per mode (Talk: the unread total).
 - **One icon per concept:** import from `@/components/concept-icons`
   (`conceptIcons.task`, `.sandbox`, `.brief`, `.cpu`, `.memory`, `.image`,
@@ -220,28 +221,57 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
 - **Me:** the signed-in name is `useMyName()` (`src/features/messages/identity.ts`,
   localStorage `agc.panel.human`, default `franco`); it follows "Join as…".
   My inbox is the channel `#<me>` (ADR 0009 item 5).
-- **Sidebar** (`ChannelRows`): a pinned first row "Inbox" (inbox icon,
-  `data-testid="inbox-row"`) for `#<me>`, shown even before it has a message;
-  then the group "Tasks" (channels named after a task from `useTasks`), then
-  "Other" (`role="group"`, `aria-label` the group name). Each row has an
+- **Sidebar** (`ChannelRows`), followed channels only: a pinned first row
+  "Inbox" (inbox icon, `data-testid="inbox-row"`) for `#<me>`, shown even
+  before it has a message; then the groups "Direct" (my DMs, `data-testid="dm-row"`,
+  each `@<other>` with the task name dim; `<other>` is the newest participant
+  neither me nor `agc`, else the task), "Tasks" (channels named after a task
+  from `useTasks`) and "Other" (`role="group"`, `aria-label` the group name);
+  last a dim "Browse channels…" row (`data-testid="browse-link"`) to
+  `/messages/browse`. Each row has an
   `UnreadBadge` (`data-testid="unread-badge"`, `data-mention`) and is bold
   while unread (`data-unread`); the badge is pink when an unread message
   mentions `@<me>` (whole word). The Talk row in the mode switch shows the
   total, pink when any unread message mentions me.
+- **DMs:** a channel named `@<me>/<task>` is a direct message of mine (the
+  backend's DM channels, `isDMOf` in `unread.ts`). Its page is titled
+  "Direct @<me>/<task>". The mock seeds `@franco/yc-pitch` (one unread
+  message from @pitcher) and `@franco/review-42` (read: franco answered last)
+  and accepts `@<human>/<task>` names.
+- **Following** (`src/features/messages/follow.ts`, `useFollow()`):
+  localStorage `agc.panel.follow` maps a channel to `{ on, at }`, `at` being
+  the newest message id the decision covers. A channel is followed when I
+  opened it (`MessagesPage` and a task's Messages tab), or a message newer
+  than `at` is mine, is in my inbox or a DM of mine, or mentions `@<me>`
+  (`addressesMe` in `unread.ts`); those follow from `message.posted` (wired
+  in the shell) and from the unread scan. `#<me>` is always followed; a DM
+  is followed until unfollowed. Unfollow with the outlined "Following"
+  toggle (`FollowToggle`, `data-testid="follow-toggle"`) on the channel
+  header (`data-testid="channel-header"`) or a Browse row; it sets `at` to
+  the channel's last id, so only a newer mention or DM follows it again.
+- **Browse** (`BrowsePage`, `/messages/browse`): every channel as a flat row
+  (`data-testid="browse-row"`, `data-channel`): kind icon (inbox, DM,
+  task, other), name, kind, last activity (`browse-last`, from the newest
+  message, `queryKeys.lastMessage`) and the toggle ("Inbox: always",
+  disabled, on `#<me>`). The filter box filters by name as you type.
 - **Read state** (`src/features/messages/unread.ts`, `useUnread()`,
   `markRead`): localStorage `agc.panel.read` maps `#channel` → last read
   message id. `ChannelView` (Talk page and a task's Messages tab) marks every
   message it shows read. A channel whose `last_id` is past its cursor is read
   from the cursor (`queryKeys.unread`) to count messages not from me, so
   `message.posted` (which refreshes channels) bumps counts without a reload.
-  A never-opened channel counts all its messages.
+  A message of mine reads everything before it in that channel. A
+  never-opened channel counts all its messages after my last one. The Talk
+  badge counts only followed channels, my DMs and unread mentions of me.
 - **Notifications** (`src/features/messages/notifications.tsx`, wired next
   to the task ones in the shell): a top-right toast "Inbox" or "Mentioned
-  you" (`data-testid="toast-message"`, `data-id`, `data-channel`) with the
+  you" or "Direct" (`data-testid="toast-message"`, `data-id`, `data-channel`) with the
   sender, channel and the body's first 160 characters, an "Open" action to
   `/messages/<channel>`, and the chime (speaker toggle applies). Only for
-  messages in `#<me>` or mentioning `@<me>`; never for my own messages or
-  for the channel I am looking at. Everything else only bumps badges.
+  messages in `#<me>`, in a DM of mine, or mentioning `@<me>`, in any
+  channel, followed or not; never for my own messages or for the channel I
+  am looking at. Everything else only bumps badges of followed channels; a
+  plain message in an unfollowed channel makes no sound, toast or badge.
 - **Inbox page:** `/messages/<me>` is the ordinary channel view titled
   "Inbox #<me>", with the line "Your inbox: agents and tasks escalate here"
   (`data-testid="inbox-header"`) and, when empty, an empty slot saying so.

@@ -6,9 +6,10 @@ import { NavLink, Outlet } from 'react-router'
 import { useLiveEvents, type LiveEvent } from '@/api/events'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { ChannelRows } from '@/features/messages/ChannelRows'
+import { followFromEvent, useFollow } from '@/features/messages/follow'
+import { useMyName } from '@/features/messages/identity'
 import { useMessageNotifications } from '@/features/messages/notifications'
 import { UnreadBadge } from '@/features/messages/UnreadBadge'
-import { useUnread } from '@/features/messages/unread'
 import { cn } from '@/lib/utils'
 
 import { MODES, ModeSwitch, useMode } from './mode'
@@ -22,16 +23,19 @@ export function Layout() {
   const mode = useMode()
   const taskNotifications = useTaskNotifications()
   const messageNotifications = useMessageNotifications()
+  const me = useMyName()
   useLiveEvents(
     useCallback(
       (event: LiveEvent) => {
         taskNotifications(event)
         messageNotifications(event)
+        followFromEvent(event, me)
       },
-      [taskNotifications, messageNotifications],
+      [taskNotifications, messageNotifications, me],
     ),
   )
-  const unread = useUnread()
+  // Unread only across followed channels, my inbox, my DMs and mentions.
+  const unread = useFollow()
 
   return (
     <div className="flex h-screen overflow-hidden">

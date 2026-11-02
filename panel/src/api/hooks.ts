@@ -46,6 +46,8 @@ export const queryKeys = {
   unread: (channel: string, after: number, last: number) => ['msg', 'unread', channel, after, last] as const,
   agents: ['agents'] as const,
   agent: (name: string) => ['agents', name] as const,
+  // A channel's newest message, by its last id (Talk's Browse page).
+  lastMessage: (channel: string, last: number) => ['msg', 'last', channel, last] as const,
 }
 
 // ---------- tasks and sandboxes (ADR 0008) ----------

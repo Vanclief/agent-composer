@@ -607,6 +607,14 @@ function createState() {
       '@franco decision needed on review-42: the third workflow/ failure is a flaky test, not the loop node. ' +
         'Quarantine it and merge the fix, or block the merge until the flake is fixed too?',
     )
+    // Direct-message channels @<human>/<task> (ahead of the backend): an
+    // unread agent message in @franco/yc-pitch, and @franco/review-42,
+    // read: franco answered last, and a message of mine reads everything
+    // before it (src/features/messages/unread.ts).
+    const pitcher = join('pitcher', 'yc-pitch', false)
+    post('@franco/review-42', reviewer, 'PR 42 is ready for your eyes when you have a minute.')
+    post('@franco/review-42', franco, 'Thanks, looking after lunch.')
+    post('@franco/yc-pitch', pitcher, 'Draft 3 of the YC pitch is up: should the demo lead or close?')
     // The seeded human has left, so the panel can join as @franco.
     franco.left_at = iso()
   }
@@ -980,7 +988,7 @@ async function specsAPI(state: State, method: string, rest: string[], req: Incom
 }
 
 function checkChannel(channel: string) {
-  if (!CHANNEL_RE.test(channel)) {
+  if (!CHANNEL_RE.test(channel) && !DM_RE.test(channel)) {
     throw msgError(400, `channel "${channel}" is invalid: use # followed by 1-64 lowercase letters, digits, _ or -`)
   }
 }
@@ -2284,3 +2292,6 @@ async function agentsAPI(state: State, method: string, rest: string[], req: Inco
   }
   throw apiError(404, 'no such endpoint')
 }
+
+// Direct-message channels, @<human>/<task> (another task adds them to agc).
+const DM_RE = /^@[a-z0-9][a-z0-9_-]{0,63}\/[a-z0-9][a-z0-9_-]{0,63}$/

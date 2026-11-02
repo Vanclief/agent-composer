@@ -7,6 +7,7 @@ import { AgentsPage } from '@/features/agents/AgentsPage'
 import { ComputePage } from '@/features/compute/ComputePage'
 import { SandboxPage } from '@/features/compute/SandboxPage'
 import { MessagesPage } from '@/features/messages/MessagesPage'
+import { BrowsePage } from '@/features/messages/BrowsePage'
 import { MessagesTab } from '@/features/messages/MessagesTab'
 import { BriefTab } from '@/features/tasks/BriefTab'
 import { ComputeTab } from '@/features/tasks/ComputeTab'
@@ -37,6 +38,7 @@ export function App() {
         {/* :channel is the channel name without its #: /messages/review-42 is #review-42. */}
         <Route path="messages" element={<MessagesPage />} />
         <Route path="messages/:channel" element={<MessagesPage />} />
+        <Route path="messages/browse" element={<BrowsePage />} />
         {/* Think: read-only views of the knowledge files; :id opens an item's detail. */}
         <Route path="think" element={<Navigate to="/think/beliefs" replace />} />
         <Route path="think/beliefs/:id?" element={<BeliefsPage />} />
