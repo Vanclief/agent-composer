@@ -60,9 +60,13 @@ not.
    | `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` | `api.anthropic.com` |
    | `OPENAI_API_KEY` | `api.openai.com` |
    | `GITHUB_TOKEN` | `api.github.com`, `github.com` |
+   | `AGC_PEER_TOKEN` | none: agc's own ([ADR 0018](0018-peer-servers.md)) |
 
    Any other name must declare hosts in the spec, `NAME@host1,host2`, or
-   creation fails with a message naming the missing hosts. Substitution is
+   creation fails with a message naming the missing hosts. A name bound to
+   no host is agc's own secret: agc reads it from the secrets file and
+   checks it (the token peer servers share), never sends it to a third
+   party, and refuses it to every spec, with or without `NAME@host`. Substitution is
    headers only, which covers bearer tokens and Basic auth; query and body
    substitution are opt-in per entry.
 

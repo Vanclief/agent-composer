@@ -1062,6 +1062,224 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/servers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the servers sandboxes can run on
+         * @description local, then each peer in the config's servers: by name (ADR 0018). For each: whether it answered its host report now (peers are asked at once, 3s each), the cpus and memory its running sandboxes' specs add up to (read from this server's rows, msb's defaults for a spec that sets none), what its host has free (cpus less those in use, never below zero, and the host's own free memory report), and the host report itself.
+         */
+        get: operations["listServers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peer/host": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * This server's report of its host
+         * @description What the primary asks a peer for GET /servers. Needs the peer token.
+         */
+        get: operations["peerHost"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peer/secrets/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check this server's secrets file has every secret
+         * @description The primary asks before it inserts a sandbox on this peer, so a missing secret fails the allocation at once. Names and hosts only; values never travel. 404 names each missing secret, this server (by the name the primary gives it) and its secrets file.
+         */
+        post: operations["peerCheckSecrets"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peer/vms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create and boot a VM for the primary
+         * @description Fills the secrets from this server's secrets file, starts the VM's socket forwarder (its requests go to the primary's /peer/sockets/{name}/...), then creates the VM with its vsock on that socket and the label agc.server=<server>. Needs primary: { url } in this server's config (503 without it). The peer keeps no row; the primary does.
+         */
+        post: operations["peerCreateVM"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peer/vms/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The VM's name, the primary's sandbox name. */
+                name: components["parameters"]["VMNameParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read a VM's status
+         * @description msb's word, verbatim. 404 when msb does not know the VM.
+         */
+        get: operations["peerVMStatus"];
+        put?: never;
+        post?: never;
+        /**
+         * Remove a stopped VM and its disk
+         * @description Its volumes stay on this server. Stops the forwarder and removes its socket.
+         */
+        delete: operations["peerRemoveVM"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peer/vms/{name}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The VM's name, the primary's sandbox name. */
+                name: components["parameters"]["VMNameParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Boot a stopped VM
+         * @description Reads the secrets' values again from this server's file and brings the forwarder back first.
+         */
+        post: operations["peerStartVM"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peer/vms/{name}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The VM's name, the primary's sandbox name. */
+                name: components["parameters"]["VMNameParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Shut a VM down and keep its disk */
+        post: operations["peerStopVM"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peer/vms/{name}/exec": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The VM's name, the primary's sandbox name. */
+                name: components["parameters"]["VMNameParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * One executor call in a running VM
+         * @description op is one of run, look_path, write_file, read_file, remove_file, start_terminal, list_terminals: the primary's boot (clone, agent config, TASK.md, setup, the command), its unpushed-work check and its terminal routes, made here. A command that exits non-zero is a 200 with its exit_code.
+         */
+        post: operations["peerExec"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peer/vms/{name}/terminals/{job}/ws": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Attach to a VM's terminal over WebSocket
+         * @description The same frames as /sandboxes/{id}/terminals/{job}/ws. The primary relays it to the panel, which never talks to a peer.
+         */
+        get: operations["peerAttachTerminal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peer/sockets/{name}/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The sandbox whose socket the request came in on. */
+                name: string;
+                /** @description The socket path, such as post, wait, task/deliver or agent. */
+                path: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A request a peer forwarded from a sandbox's socket
+         * @description Served on the primary. Every route of a sandbox's socket (messaging, agc task deliver, a home's agent and task routes), any method, answered exactly as the sandbox's own socket would be had it run here: as its task, or for a home as its agent, from this server's rows. The peer vouches for which sandbox spoke (the path); nothing in the request says who it speaks as. 403 for a sandbox that runs here. Errors are the socket's `{"error": "<message>"}`.
+         */
+        post: operations["peerSocket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1436,6 +1654,8 @@ export interface components {
         SandboxRequest: components["schemas"]["TaskSpec"] & {
             /** @description Started as the first terminal once booted, split on whitespace, in the repo (or /home/agent without one). Empty runs the agent loop (agc agent run) when the task's assignee is a harness, and nothing for a person. */
             command?: string;
+            /** @description The agc server whose msb runs the sandbox (ADR 0018): local, or a name in the config's servers:. Empty is local. An unknown name fails with 400 naming the known servers; a secret the peer's own secrets file lacks fails with 404 naming the secret and the server. */
+            server?: string;
         };
         Sandbox: {
             /** Format: uuid */
@@ -1457,6 +1677,8 @@ export interface components {
             instructions: string;
             /** @description The named volume agc-<name> holding the harness homes (~/.claude, ~/.codex) and their transcripts, mounted at /home/agent/.harness and kept after the sandbox is deleted. Empty for sandboxes booted before volumes. */
             volume: string;
+            /** @description The agc server whose msb runs the VM (ADR 0018): local, or a peer's name from the config's servers:. A peer's sandbox has its volume on the peer. */
+            server: string;
             /** @description starting until booted, failed when the boot failed (status_error says why), otherwise the runtime's word verbatim (running, stopped), or unknown when the runtime cannot be asked (status_error says why). In a sandbox.status event, deleted once it is gone. */
             status: string;
             /** @description Why the status is failed or unknown. */
@@ -2191,6 +2413,129 @@ export interface components {
              */
             last_seen_at: string | null;
         };
+        Capacity: {
+            cpus: number;
+            memory_mib: number;
+        };
+        /** @description A server's own report of its host, read live. */
+        HostReport: {
+            os: string;
+            arch: string;
+            cpus: number;
+            memory_mib: number;
+            /** @description Linux's MemAvailable; macOS's free, inactive and speculative pages. */
+            free_memory_mib: number;
+            /** @description Why memory could not be read; the memory fields are then zero. */
+            free_memory_error?: string;
+        };
+        Server: {
+            /** @description local for this server, else its name in servers:. */
+            name: string;
+            /** @description The peer's root; empty for local. */
+            url: string;
+            reachable: boolean;
+            /** @description Why a peer is not reachable. */
+            error?: string;
+            /** @description Its running sandboxes. */
+            sandboxes: number;
+            in_use: components["schemas"]["Capacity"];
+            free: components["schemas"]["Capacity"];
+            host: components["schemas"]["HostReport"] | null;
+        };
+        ServerList: {
+            servers: components["schemas"]["Server"][];
+        };
+        /** @description A secret by name and hosts; the peer reads the value from its own file. */
+        PeerSecret: {
+            name: string;
+            hosts: string[];
+        };
+        CheckSecretsRequest: {
+            /** @description The name the primary gives this peer, used in errors. */
+            server: string;
+            secrets?: components["schemas"]["PeerSecret"][];
+        };
+        CheckSecretsResponse: {
+            ok: boolean;
+        };
+        PeerVolume: {
+            source?: string;
+            dest?: string;
+            read_write?: boolean;
+            /** @description Source is a path on the peer. */
+            host_path?: boolean;
+            quota_mib?: number;
+        };
+        /** @description The VM to boot, without secret values and without a vsock path (the peer's own). */
+        VMSpec: {
+            name: string;
+            image?: string;
+            cpus?: number;
+            memory_mib?: number;
+            user?: string;
+            env?: {
+                [key: string]: string;
+            };
+            secrets?: components["schemas"]["PeerSecret"][];
+            volumes?: components["schemas"]["PeerVolume"][];
+            disk_dest?: string;
+            disk_mib?: number;
+            vsock_port?: number;
+            labels?: {
+                [key: string]: string;
+            };
+        };
+        CreateVMRequest: {
+            /** @description The name the primary gives this peer. */
+            server: string;
+            spec: components["schemas"]["VMSpec"];
+        };
+        StartVMRequest: {
+            server: string;
+            secrets?: components["schemas"]["PeerSecret"][];
+        };
+        VM: {
+            name: string;
+            /** @description msb's word, verbatim; deleted after a remove. */
+            status: string;
+        };
+        PeerCommand: {
+            name: string;
+            args?: string[];
+            dir?: string;
+            env?: {
+                [key: string]: string;
+            };
+            /** Format: byte */
+            stdin?: string;
+            user?: string;
+        };
+        ExecRequest: {
+            /** @enum {string} */
+            op: "run" | "look_path" | "write_file" | "read_file" | "remove_file" | "start_terminal" | "list_terminals";
+            command?: components["schemas"]["PeerCommand"];
+            /** @description For the file ops; for look_path, the program's name. */
+            path?: string;
+            /**
+             * Format: byte
+             * @description For write_file.
+             */
+            data?: string;
+        };
+        PeerResult: {
+            /** Format: byte */
+            stdout: string;
+            /** Format: byte */
+            stderr: string;
+            exit_code: number;
+        };
+        ExecResponse: {
+            result?: components["schemas"]["PeerResult"];
+            /** Format: byte */
+            data?: string;
+            terminal?: components["schemas"]["Terminal"];
+            terminals?: components["schemas"]["Terminal"][];
+        };
     };
     responses: {
         /** @description Error response with machine-readable code and request identifier. */
@@ -2213,6 +2558,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description The VM's name, the primary's sandbox name. */
+        VMNameParam: string;
         /** @description Agent name, e.g. reviewer-1. */
         AgentNameParam: string;
         /** @description Turn number, from 1. */
@@ -4169,6 +4516,292 @@ export interface operations {
                     "application/json": components["schemas"]["MsgParticipant"];
                 };
             };
+            404: components["responses"]["MsgError"];
+        };
+    };
+    listServers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The servers. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerList"];
+                };
+            };
+            500: components["responses"]["Error"];
+        };
+    };
+    peerHost: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The host report. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostReport"];
+                };
+            };
+            401: components["responses"]["Error"];
+            503: components["responses"]["Error"];
+        };
+    };
+    peerCheckSecrets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckSecretsRequest"];
+            };
+        };
+        responses: {
+            /** @description Every secret is set. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckSecretsResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    peerCreateVM: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateVMRequest"];
+            };
+        };
+        responses: {
+            /** @description The VM, running. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VM"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            503: components["responses"]["Error"];
+        };
+    };
+    peerVMStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The VM's name, the primary's sandbox name. */
+                name: components["parameters"]["VMNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The VM. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VM"];
+                };
+            };
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    peerRemoveVM: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The VM's name, the primary's sandbox name. */
+                name: components["parameters"]["VMNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The VM, deleted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VM"];
+                };
+            };
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    peerStartVM: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The VM's name, the primary's sandbox name. */
+                name: components["parameters"]["VMNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartVMRequest"];
+            };
+        };
+        responses: {
+            /** @description The VM with its status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VM"];
+                };
+            };
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    peerStopVM: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The VM's name, the primary's sandbox name. */
+                name: components["parameters"]["VMNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The VM, stopped. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VM"];
+                };
+            };
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    peerExec: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The VM's name, the primary's sandbox name. */
+                name: components["parameters"]["VMNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExecRequest"];
+            };
+        };
+        responses: {
+            /** @description What the op returns. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            503: components["responses"]["Error"];
+        };
+    };
+    peerAttachTerminal: {
+        parameters: {
+            query?: {
+                /** @description Bytes of recent output replayed first, default 65536. */
+                replay?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The VM's name, the primary's sandbox name. */
+                name: components["parameters"]["VMNameParam"];
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Switching to the WebSocket protocol. */
+            101: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    peerSocket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The sandbox whose socket the request came in on. */
+                name: string;
+                /** @description The socket path, such as post, wait, task/deliver or agent. */
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The socket's answer. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["MsgError"];
+            403: components["responses"]["MsgError"];
             404: components["responses"]["MsgError"];
         };
     };

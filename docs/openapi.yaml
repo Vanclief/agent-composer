@@ -43,6 +43,15 @@ tags:
     description: >
       Persistent agents (ADR 0016). An agent's memory is its volume agc-<name>, and the harness
       transcripts on it are the record its turns are read from.
+  - name: Servers
+    description: >
+      The agc servers sandboxes run on (ADR 0018): local, and the peers in the config's
+      servers:. A sandbox's server is set at allocation and never changes.
+  - name: Peers
+    description: >
+      The routes a peer serves its primary, and the primary's end of a peer VM's forwarded
+      socket, all under the shared AGC_PEER_TOKEN (ADR 0018). Off (503) on a server whose
+      secrets file has no token. Not for the panel.
   - name: Events
     description: >
       The live feed: a server-sent events stream of what changes tasks, sandboxes and channels.
@@ -1947,8 +1956,308 @@ paths:
                 $ref: '#/components/schemas/MsgParticipant'
         '404':
           $ref: '#/components/responses/MsgError'
+  /servers:
+    get:
+      tags: [Servers]
+      operationId: listServers
+      summary: List the servers sandboxes can run on
+      description: >
+        local, then each peer in the config's servers: by name (ADR 0018). For each: whether it
+        answered its host report now (peers are asked at once, 3s each), the cpus and memory its
+        running sandboxes' specs add up to (read from this server's rows, msb's defaults for a
+        spec that sets none), what its host has free (cpus less those in use, never below zero,
+        and the host's own free memory report), and the host report itself.
+      responses:
+        '200':
+          description: The servers.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerList'
+        '500':
+          $ref: '#/components/responses/Error'
+  /peer/host:
+    get:
+      tags: [Peers]
+      operationId: peerHost
+      summary: This server's report of its host
+      description: What the primary asks a peer for GET /servers. Needs the peer token.
+      security:
+        - peerToken: []
+      responses:
+        '200':
+          description: The host report.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostReport'
+        '401':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /peer/secrets/check:
+    post:
+      tags: [Peers]
+      operationId: peerCheckSecrets
+      summary: Check this server's secrets file has every secret
+      description: >
+        The primary asks before it inserts a sandbox on this peer, so a missing secret fails the
+        allocation at once. Names and hosts only; values never travel. 404 names each missing
+        secret, this server (by the name the primary gives it) and its secrets file.
+      security:
+        - peerToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckSecretsRequest'
+      responses:
+        '200':
+          description: Every secret is set.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckSecretsResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /peer/vms:
+    post:
+      tags: [Peers]
+      operationId: peerCreateVM
+      summary: Create and boot a VM for the primary
+      description: >
+        Fills the secrets from this server's secrets file, starts the VM's socket forwarder (its
+        requests go to the primary's /peer/sockets/{name}/...), then creates the VM with its
+        vsock on that socket and the label agc.server=<server>. Needs primary: { url } in this
+        server's config (503 without it). The peer keeps no row; the primary does.
+      security:
+        - peerToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVMRequest'
+      responses:
+        '200':
+          description: The VM, running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VM'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /peer/vms/{name}:
+    parameters:
+      - $ref: '#/components/parameters/VMNameParam'
+    get:
+      tags: [Peers]
+      operationId: peerVMStatus
+      summary: Read a VM's status
+      description: msb's word, verbatim. 404 when msb does not know the VM.
+      security:
+        - peerToken: []
+      responses:
+        '200':
+          description: The VM.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VM'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Peers]
+      operationId: peerRemoveVM
+      summary: Remove a stopped VM and its disk
+      description: Its volumes stay on this server. Stops the forwarder and removes its socket.
+      security:
+        - peerToken: []
+      responses:
+        '200':
+          description: The VM, deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VM'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /peer/vms/{name}/start:
+    parameters:
+      - $ref: '#/components/parameters/VMNameParam'
+    post:
+      tags: [Peers]
+      operationId: peerStartVM
+      summary: Boot a stopped VM
+      description: Reads the secrets' values again from this server's file and brings the forwarder back first.
+      security:
+        - peerToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartVMRequest'
+      responses:
+        '200':
+          description: The VM with its status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VM'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /peer/vms/{name}/stop:
+    parameters:
+      - $ref: '#/components/parameters/VMNameParam'
+    post:
+      tags: [Peers]
+      operationId: peerStopVM
+      summary: Shut a VM down and keep its disk
+      security:
+        - peerToken: []
+      responses:
+        '200':
+          description: The VM, stopped.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VM'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /peer/vms/{name}/exec:
+    parameters:
+      - $ref: '#/components/parameters/VMNameParam'
+    post:
+      tags: [Peers]
+      operationId: peerExec
+      summary: One executor call in a running VM
+      description: >
+        op is one of run, look_path, write_file, read_file, remove_file, start_terminal,
+        list_terminals: the primary's boot (clone, agent config, TASK.md, setup, the command),
+        its unpushed-work check and its terminal routes, made here. A command that exits
+        non-zero is a 200 with its exit_code.
+      security:
+        - peerToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecRequest'
+      responses:
+        '200':
+          description: What the op returns.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /peer/vms/{name}/terminals/{job}/ws:
+    get:
+      tags: [Peers]
+      operationId: peerAttachTerminal
+      summary: Attach to a VM's terminal over WebSocket
+      description: >
+        The same frames as /sandboxes/{id}/terminals/{job}/ws. The primary relays it to the
+        panel, which never talks to a peer.
+      security:
+        - peerToken: []
+      parameters:
+        - $ref: '#/components/parameters/VMNameParam'
+        - name: job
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: replay
+          in: query
+          description: Bytes of recent output replayed first, default 65536.
+          schema:
+            type: integer
+      responses:
+        '101':
+          description: Switching to the WebSocket protocol.
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /peer/sockets/{name}/{path}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        description: The sandbox whose socket the request came in on.
+        schema:
+          type: string
+      - name: path
+        in: path
+        required: true
+        description: The socket path, such as post, wait, task/deliver or agent.
+        schema:
+          type: string
+    post:
+      tags: [Peers]
+      operationId: peerSocket
+      summary: A request a peer forwarded from a sandbox's socket
+      description: >
+        Served on the primary. Every route of a sandbox's socket (messaging, agc task deliver, a
+        home's agent and task routes), any method, answered exactly as the sandbox's own socket
+        would be had it run here: as its task, or for a home as its agent, from this server's
+        rows. The peer vouches for which sandbox spoke (the path); nothing in the request says
+        who it speaks as. 403 for a sandbox that runs here. Errors are the socket's
+        `{"error": "<message>"}`.
+      security:
+        - peerToken: []
+      responses:
+        '200':
+          description: The socket's answer.
+        '401':
+          $ref: '#/components/responses/MsgError'
+        '403':
+          $ref: '#/components/responses/MsgError'
+        '404':
+          $ref: '#/components/responses/MsgError'
 components:
+  securitySchemes:
+    peerToken:
+      type: http
+      scheme: bearer
+      description: AGC_PEER_TOKEN from the secrets file of both servers (ADR 0018).
   parameters:
+    VMNameParam:
+      name: name
+      in: path
+      required: true
+      description: The VM's name, the primary's sandbox name.
+      schema:
+        type: string
     AgentNameParam:
       name: name
       in: path
@@ -2885,6 +3194,13 @@ components:
                 Started as the first terminal once booted, split on whitespace, in the repo (or
                 /home/agent without one). Empty runs the agent loop (agc agent run) when the
                 task's assignee is a harness, and nothing for a person.
+            server:
+              type: string
+              description: >
+                The agc server whose msb runs the sandbox (ADR 0018): local, or a name in the
+                config's servers:. Empty is local. An unknown name fails with 400 naming the
+                known servers; a secret the peer's own secrets file lacks fails with 404 naming
+                the secret and the server.
     Sandbox:
       type: object
       properties:
@@ -2924,6 +3240,11 @@ components:
             The named volume agc-<name> holding the harness homes (~/.claude, ~/.codex) and their
             transcripts, mounted at /home/agent/.harness and kept after the sandbox is deleted.
             Empty for sandboxes booted before volumes.
+        server:
+          type: string
+          description: >
+            The agc server whose msb runs the VM (ADR 0018): local, or a peer's name from the
+            config's servers:. A peer's sandbox has its volume on the peer.
         status:
           type: string
           description: >
@@ -2962,6 +3283,7 @@ components:
         - command
         - instructions
         - volume
+        - server
         - status
         - booted_at
         - stopped_at
@@ -4669,3 +4991,234 @@ components:
         - joined_at
         - online
         - last_seen_at
+    Capacity:
+      type: object
+      properties:
+        cpus:
+          type: integer
+        memory_mib:
+          type: integer
+      required: [cpus, memory_mib]
+    HostReport:
+      type: object
+      description: A server's own report of its host, read live.
+      properties:
+        os:
+          type: string
+        arch:
+          type: string
+        cpus:
+          type: integer
+        memory_mib:
+          type: integer
+        free_memory_mib:
+          type: integer
+          description: Linux's MemAvailable; macOS's free, inactive and speculative pages.
+        free_memory_error:
+          type: string
+          description: Why memory could not be read; the memory fields are then zero.
+      required: [os, arch, cpus, memory_mib, free_memory_mib]
+    Server:
+      type: object
+      properties:
+        name:
+          type: string
+          description: local for this server, else its name in servers:.
+        url:
+          type: string
+          description: The peer's root; empty for local.
+        reachable:
+          type: boolean
+        error:
+          type: string
+          description: Why a peer is not reachable.
+        sandboxes:
+          type: integer
+          description: Its running sandboxes.
+        in_use:
+          $ref: '#/components/schemas/Capacity'
+        free:
+          $ref: '#/components/schemas/Capacity'
+        host:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/HostReport'
+      required: [name, url, reachable, sandboxes, in_use, free, host]
+    ServerList:
+      type: object
+      properties:
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Server'
+      required: [servers]
+    PeerSecret:
+      type: object
+      description: A secret by name and hosts; the peer reads the value from its own file.
+      properties:
+        name:
+          type: string
+        hosts:
+          type: array
+          items:
+            type: string
+      required: [name, hosts]
+    CheckSecretsRequest:
+      type: object
+      properties:
+        server:
+          type: string
+          description: The name the primary gives this peer, used in errors.
+        secrets:
+          type: array
+          items:
+            $ref: '#/components/schemas/PeerSecret'
+      required: [server]
+    CheckSecretsResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+      required: [ok]
+    PeerVolume:
+      type: object
+      properties:
+        source:
+          type: string
+        dest:
+          type: string
+        read_write:
+          type: boolean
+        host_path:
+          type: boolean
+          description: Source is a path on the peer.
+        quota_mib:
+          type: integer
+    VMSpec:
+      type: object
+      description: The VM to boot, without secret values and without a vsock path (the peer's own).
+      properties:
+        name:
+          type: string
+        image:
+          type: string
+        cpus:
+          type: integer
+        memory_mib:
+          type: integer
+        user:
+          type: string
+        env:
+          type: object
+          additionalProperties:
+            type: string
+        secrets:
+          type: array
+          items:
+            $ref: '#/components/schemas/PeerSecret'
+        volumes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PeerVolume'
+        disk_dest:
+          type: string
+        disk_mib:
+          type: integer
+        vsock_port:
+          type: integer
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+      required: [name]
+    CreateVMRequest:
+      type: object
+      properties:
+        server:
+          type: string
+          description: The name the primary gives this peer.
+        spec:
+          $ref: '#/components/schemas/VMSpec'
+      required: [server, spec]
+    StartVMRequest:
+      type: object
+      properties:
+        server:
+          type: string
+        secrets:
+          type: array
+          items:
+            $ref: '#/components/schemas/PeerSecret'
+      required: [server]
+    VM:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          description: msb's word, verbatim; deleted after a remove.
+      required: [name, status]
+    PeerCommand:
+      type: object
+      properties:
+        name:
+          type: string
+        args:
+          type: array
+          items:
+            type: string
+        dir:
+          type: string
+        env:
+          type: object
+          additionalProperties:
+            type: string
+        stdin:
+          type: string
+          format: byte
+        user:
+          type: string
+      required: [name]
+    ExecRequest:
+      type: object
+      properties:
+        op:
+          type: string
+          enum: [run, look_path, write_file, read_file, remove_file, start_terminal, list_terminals]
+        command:
+          $ref: '#/components/schemas/PeerCommand'
+        path:
+          type: string
+          description: For the file ops; for look_path, the program's name.
+        data:
+          type: string
+          format: byte
+          description: For write_file.
+      required: [op]
+    PeerResult:
+      type: object
+      properties:
+        stdout:
+          type: string
+          format: byte
+        stderr:
+          type: string
+          format: byte
+        exit_code:
+          type: integer
+      required: [stdout, stderr, exit_code]
+    ExecResponse:
+      type: object
+      properties:
+        result:
+          $ref: '#/components/schemas/PeerResult'
+        data:
+          type: string
+          format: byte
+        terminal:
+          $ref: '#/components/schemas/Terminal'
+        terminals:
+          type: array
+          items:
+            $ref: '#/components/schemas/Terminal'

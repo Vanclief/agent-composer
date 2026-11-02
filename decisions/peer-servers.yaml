@@ -1,0 +1,8 @@
+# ADR 0018: peer servers. Its own file so sibling branches do not collide
+# in decisions/repo.yaml.
+decisions:
+  - id: peer-servers-run-sandboxes-for-one-primary
+    decision: "One primary agc holds tasks, messaging, knowledge and the panel and allocates sandboxes on peer agc servers named in its config, through one Runtime per server chosen by the sandbox row's server; a peer forwards each VM's whole socket to the primary, which answers it as the sandbox's own socket, and resolves secrets from its own file, so secrets never travel and a shared AGC_PEER_TOKEN bound to no host guards the peer routes."
+    because: [tasks-run-in-microsandbox-vms, secrets-are-placeholders-bound-to-hosts, messaging-over-per-task-vsock, rig-is-only-kvm-host, task-vms-have-no-path-to-agc, vsock-has-nothing-to-firewall, agents-can-exfiltrate-what-they-read, placeholder-secrets-work]
+    adr: docs/decisions/0018-peer-servers.md
+    decided: { who: franco, when: 2026-11-02 }

@@ -1,0 +1,22 @@
+# Task peer-servers (2026-11-02): one agc allocates sandboxes on other agc
+# servers (ADR 0018). Its own file so sibling branches do not collide.
+proposals:
+  # ADR 0018 item 10. rig-services-bind-localhost says services on the rig
+  # bind 127.0.0.1; a peer must be reachable from its primary and the
+  # primary from the peer. agc rest binds ":" + app.port (all interfaces)
+  # unless listen: says otherwise, so the rule was never enforced by the
+  # code. Franco picks one of the two below; the rule is not changed here.
+  - id: peer-servers-reach-each-other
+    proposes: rule
+    proposal: "agc servers that are peers bind to their LAN address (listen: <lan ip>:1202) and accept the peer routes only with AGC_PEER_TOKEN, every other service on the rig keeps binding 127.0.0.1; or, instead, every agc server keeps listen: 127.0.0.1:1202 and peers reach each other only over an SSH tunnel or Tailscale, with servers: and primary: naming the tunnel's local end."
+    because: [rig-is-on-home-lan-without-firewall, rig-holds-real-secrets, agents-can-exfiltrate-what-they-read]
+    by: claude_code
+    when: 2026-11-02
+
+  - id: peer-servers-code
+    proposes: code
+    proposal: "core/resources/peers: a Remote Runtime per peer over /api/peer/* under AGC_PEER_TOKEN, chosen by the sandbox row's new server column through a router behind api.rt; the peer forwards each VM's whole socket to the primary's /api/peer/sockets/<sandbox>/, answered as the sandbox's own socket; secrets filled on the peer from its own file; config servers:, primary:, listen:; GET /api/servers (ADR 0018)."
+    because: [peer-servers-run-sandboxes-for-one-primary]
+    by: claude_code
+    when: 2026-11-02
+    change: agc/peer-servers

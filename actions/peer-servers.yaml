@@ -1,0 +1,45 @@
+# Open follow-ups of ADR 0018 (peer servers). Its own file so sibling
+# branches do not collide in actions/repo.yaml.
+actions:
+  # ADR 0018, Consequences: a sandbox's server is set at allocation.
+  - id: move-a-sandbox-between-servers
+    action: "Let a stopped sandbox move to another server: copy its home disk and its volume agc-<name> to the target's msb, change the row's server, and start it there, refusing while it runs."
+    because: [peer-servers-run-sandboxes-for-one-primary]
+    opened: { who: franco, when: 2026-11-02 }
+
+  # ADR 0018 item 1: peers do not know each other.
+  - id: peers-of-peers
+    action: "Decide whether a peer may have peers of its own (a primary reaching a machine only through another peer), and if so how a forwarded socket finds its way back to the primary."
+    because: [peer-servers-run-sandboxes-for-one-primary]
+    opened: { who: franco, when: 2026-11-02 }
+
+  # ADR 0018 item 12: GET /api/servers reports capacity; nothing uses it.
+  - id: pick-a-server-by-free-capacity
+    action: "When a sandbox names no server, pick one by the free cpus and memory GET /api/servers reports (local first while it fits), and say in the sandbox's view why that server."
+    because: [peer-servers-run-sandboxes-for-one-primary]
+    opened: { who: franco, when: 2026-11-02 }
+
+  # ADR 0018, Consequences: one shared token cannot tell peers apart.
+  - id: a-token-per-peer
+    action: "Give each peer its own token (AGC_PEER_TOKEN_<NAME> on the primary), so the primary knows which peer forwarded a socket request and refuses one for a sandbox on another server."
+    because: [peer-servers-run-sandboxes-for-one-primary, agents-can-exfiltrate-what-they-read]
+    opened: { who: franco, when: 2026-11-02 }
+
+  # ADR 0018 item 11: the watchdog and recovery read msb's job log through
+  # executor.JobWatcher, on their branches; a peer's sandbox has none yet.
+  - id: peer-sandboxes-keep-a-job-log
+    action: "Once executor.JobWatcher is merged, implement it on the peer's sandbox handle with two more exec ops (list_jobs, tail_job), so the watchdog and recovery see a peer's agent job like a local one."
+    because: [peer-servers-run-sandboxes-for-one-primary]
+    opened: { who: franco, when: 2026-11-02 }
+
+  # ADR 0018, Consequences: a peer's volumes stay on the peer.
+  - id: read-transcripts-from-a-peer
+    action: "Serve a peer sandbox's transcripts and turns through the primary: a peer route that reads its volume agc-<name> host-side, called by the transcripts and turns readers when the sandbox's server is a peer."
+    because: [peer-servers-run-sandboxes-for-one-primary]
+    opened: { who: franco, when: 2026-11-02 }
+
+  # ADR 0018: no panel UI here; a panel task adds the pool view.
+  - id: panel-shows-server-pools
+    action: "Show GET /api/servers as a pool view in the panel (each server's sandboxes, in use and free, unreachable ones with their error) and let the Allocate compute form pick sandbox.server."
+    because: [peer-servers-run-sandboxes-for-one-primary]
+    opened: { who: franco, when: 2026-11-02 }
