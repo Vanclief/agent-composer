@@ -33,7 +33,7 @@ test('the mode switch swaps the nav between Work and Think', async ({ page }) =>
   const mode = page.getByRole('navigation', { name: 'Mode' })
   const nav = page.getByRole('navigation', { name: 'Main' })
   await expect(mode.getByRole('link', { name: 'Work' })).toHaveAttribute('aria-current', 'page')
-  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute'])
+  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute', 'Agents'])
 
   await mode.getByRole('link', { name: 'Think' }).click()
   await expect(page).toHaveURL(/\/panel\/think\/beliefs$/)
@@ -44,7 +44,7 @@ test('the mode switch swaps the nav between Work and Think', async ({ page }) =>
 
   await mode.getByRole('link', { name: 'Work' }).click()
   await expect(page).toHaveURL(/\/panel\/tasks$/)
-  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute'])
+  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute', 'Agents'])
 })
 
 test('Work nav opens Compute, which stays in Work mode', async ({ page }) => {
@@ -55,7 +55,7 @@ test('Work nav opens Compute, which stays in Work mode', async ({ page }) => {
   await expect(page).toHaveURL(/\/panel\/compute$/)
   await expect(page.getByTestId('page-title')).toHaveText('Compute')
   await expect(mode.getByRole('link', { name: 'Work' })).toHaveAttribute('aria-current', 'page')
-  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute'])
+  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute', 'Agents'])
 
   await page.goto('/panel/compute/review-42')
   await expect(page.getByTestId('page-title')).toHaveText('review-42')
@@ -118,6 +118,6 @@ test('clicking a channel in the sidebar opens and highlights it', async ({ page 
 test('Work mode shows no channel rows', async ({ page }) => {
   await page.goto('/panel/tasks')
   const nav = page.getByRole('navigation', { name: 'Main' })
-  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute'])
+  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute', 'Agents'])
   await expect(nav.getByTestId('channel-rows')).toHaveCount(0)
 })

@@ -38,6 +38,7 @@ export const MODES: Record<Mode, { label: string; icon: LucideIcon; concept: Con
     nav: [
       { to: '/tasks', label: 'Tasks', concept: 'task' },
       { to: '/compute', label: 'Compute', concept: 'sandbox' },
+      { to: '/agents', label: 'Agents', concept: 'agent' },
     ],
   },
   talk: {

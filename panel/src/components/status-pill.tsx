@@ -69,6 +69,10 @@ const STYLES: Record<string, StatusStyle> = {
   open: OPEN,
   done: DONE,
   review: REVIEW,
+  // An agent's state: its home sandbox running, stopped, or starting.
+  awake: RUNNING,
+  asleep: STOPPED,
+  waking: TRANSITION,
 }
 
 type StatusPillProps = {

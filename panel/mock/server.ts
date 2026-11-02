@@ -1141,6 +1141,8 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
       body = await msgAPI(state, method, parts[2], url, req)
     } else if (parts[1] === 'knowledge' && method === 'GET') {
       body = knowledgeAPI(parts.slice(2), url)
+    } else if (parts[1] === 'agents') {
+      body = await agentsAPI(state, method, parts.slice(2), req)
     } else {
       throw apiError(404, 'no such endpoint')
     }
@@ -2054,6 +2056,231 @@ function knowledgeAPI(rest: string[], url: URL) {
   }
   if (rest.length === 2 && rest[0] === 'doubt') {
     return knowledgeDoubt(k, rest[1])
+  }
+  throw apiError(404, 'no such endpoint')
+}
+
+// ---------- agents (persistent agents, proposal) ----------
+//
+// GET /api/agents, GET /api/agents/:name, POST /api/agents {role, harness?,
+// model?} (answers 201 with the numbered agent <role>-<n>, asleep, no home),
+// POST /api/agents/:name/keep {name, role?} (names or renames it, sets
+// kept), /wake (asleep → waking, then awake after 2s; the first wake sets
+// home to the agent's name) and /sleep (awake → asleep). Each state change
+// emits agent.state {agent}. A task's status is read live from the tasks.
+// Function declarations only, like the knowledge section above.
+
+type MockAgent = {
+  name: string
+  role: string
+  kept: boolean
+  harness: string
+  model: string
+  owner: string
+  state: 'awake' | 'asleep' | 'waking'
+  home: string | null
+  tasks: string[]
+  conversations: { channel: string; last_at: string }[]
+  last_active_at: string | null
+  created_at: string
+}
+
+type MockAgents = {
+  list: MockAgent[]
+  // The highest number handed out per role (lowercased), so a kept
+  // agent's number is never reused.
+  numbers: Map<string, number>
+}
+
+const AGENT_NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/
+
+function agentsOf(state: State): MockAgents {
+  const holder = state as State & { agentsMock?: MockAgents }
+  if (!holder.agentsMock) {
+    holder.agentsMock = agentsSeed()
+  }
+  return holder.agentsMock
+}
+
+function agentsSeed(): MockAgents {
+  const ago = (minutes: number) => iso(Date.now() - minutes * 60_000)
+  const base = { harness: 'claude_code', model: 'claude-opus-5-5', owner: 'franco' }
+  const list: MockAgent[] = [
+    {
+      ...base,
+      name: 'orchestrator-1',
+      role: 'Orchestrator',
+      kept: false,
+      state: 'awake',
+      home: 'orchestrator-1',
+      tasks: ['review-42', 'flaky-ci'],
+      conversations: [
+        { channel: '#franco', last_at: ago(3) },
+        { channel: '#review-42', last_at: ago(5) },
+        { channel: '#flaky-ci', last_at: ago(40) },
+      ],
+      last_active_at: ago(3),
+      created_at: ago(60 * 26),
+    },
+    {
+      ...base,
+      name: 'reviewer-2',
+      role: 'Reviewer',
+      kept: false,
+      state: 'asleep',
+      home: 'reviewer-2',
+      tasks: [],
+      conversations: [{ channel: '#franco', last_at: ago(60 * 5) }],
+      last_active_at: ago(60 * 5),
+      created_at: ago(60 * 30),
+    },
+    {
+      ...base,
+      name: 'ada',
+      role: 'Reviewer',
+      kept: true,
+      state: 'asleep',
+      home: 'ada',
+      tasks: ['docs-pass'],
+      conversations: [
+        { channel: '#franco', last_at: ago(60 * 20) },
+        { channel: '#docs-pass', last_at: ago(60 * 22) },
+      ],
+      last_active_at: ago(60 * 20),
+      created_at: ago(60 * 24 * 4),
+    },
+    {
+      // Seeded waking and left there: the mock only finishes wakes it starts.
+      ...base,
+      name: 'writer-1',
+      role: 'Writer',
+      kept: false,
+      state: 'waking',
+      home: 'writer-1',
+      tasks: [],
+      conversations: [{ channel: '#franco', last_at: ago(1) }],
+      last_active_at: ago(1),
+      created_at: ago(2),
+    },
+  ]
+  // ada was reviewer-1.
+  const numbers = new Map([
+    ['orchestrator', 1],
+    ['reviewer', 2],
+    ['writer', 1],
+  ])
+  return { list, numbers }
+}
+
+function agentView(state: State, agent: MockAgent) {
+  return {
+    ...agent,
+    tasks: agent.tasks.map((name) => {
+      const task = state.tasks.get(name)
+      return { name, status: task ? state.taskView(task).status : 'deleted' }
+    }),
+    conversations: agent.conversations.map((c) => ({ ...c })),
+  }
+}
+
+function findAgent(state: State, name: string) {
+  const agent = agentsOf(state).list.find((a) => a.name === name)
+  if (!agent) {
+    throw apiError(404, `agent ${name} not found`)
+  }
+  return agent
+}
+
+function emitAgent(state: State, agent: MockAgent) {
+  state.emit('agent.state', { agent: agentView(state, agent) })
+}
+
+async function agentsAPI(state: State, method: string, rest: string[], req: IncomingMessage) {
+  const mock = agentsOf(state)
+  if (rest.length === 0 && method === 'GET') {
+    return { agents: mock.list.map((a) => agentView(state, a)) }
+  }
+  if (rest.length === 0 && method === 'POST') {
+    const body = await readJSON(req, apiError)
+    const role = str(body.role).trim()
+    if (!role) {
+      throw apiError(400, 'role is required')
+    }
+    const harness = str(body.harness).trim() || 'claude_code'
+    if (!HARNESSES.includes(harness)) {
+      throw apiError(400, `unknown harness ${harness}`)
+    }
+    const model = str(body.model).trim() || (harness === 'claude_code' ? 'claude-opus-5-5' : '')
+    const prefix = slugify(role)
+    if (!prefix) {
+      throw apiError(400, `role ${role} has no letters or digits to name an agent from`)
+    }
+    const n = (mock.numbers.get(prefix) ?? 0) + 1
+    mock.numbers.set(prefix, n)
+    const now = iso()
+    const agent: MockAgent = {
+      name: `${prefix}-${n}`,
+      role,
+      kept: false,
+      harness,
+      model,
+      owner: 'franco',
+      state: 'asleep',
+      home: null,
+      tasks: [],
+      conversations: [{ channel: '#franco', last_at: now }],
+      last_active_at: null,
+      created_at: now,
+    }
+    mock.list.push(agent)
+    return new Created(agentView(state, agent))
+  }
+
+  const agent = findAgent(state, rest[0])
+  if (rest.length === 1 && method === 'GET') {
+    return agentView(state, agent)
+  }
+  if (rest.length === 2 && method === 'POST' && rest[1] === 'keep') {
+    const body = await readJSON(req, apiError)
+    const name = str(body.name).trim()
+    if (!AGENT_NAME_RE.test(name)) {
+      throw apiError(400, 'name must be lowercase letters, digits and dashes')
+    }
+    if (name !== agent.name && mock.list.some((a) => a.name === name)) {
+      throw apiError(409, `agent ${name} already exists`)
+    }
+    const role = str(body.role).trim()
+    agent.name = name
+    if (role) {
+      agent.role = role
+    }
+    agent.kept = true
+    return agentView(state, agent)
+  }
+  if (rest.length === 2 && method === 'POST' && rest[1] === 'wake') {
+    if (agent.state !== 'asleep') {
+      throw apiError(409, `agent ${agent.name} is ${agent.state}; only an asleep agent can be woken`)
+    }
+    agent.state = 'waking'
+    agent.home = agent.home ?? agent.name
+    emitAgent(state, agent)
+    setTimeout(() => {
+      if (agent.state !== 'waking') {
+        return
+      }
+      agent.state = 'awake'
+      agent.last_active_at = iso()
+      emitAgent(state, agent)
+    }, BOOT_MS)
+    return agentView(state, agent)
+  }
+  if (rest.length === 2 && method === 'POST' && rest[1] === 'sleep') {
+    if (agent.state !== 'awake') {
+      throw apiError(409, `agent ${agent.name} is ${agent.state}; only an awake agent can sleep`)
+    }
+    agent.state = 'asleep'
+    emitAgent(state, agent)
+    return agentView(state, agent)
   }
   throw apiError(404, 'no such endpoint')
 }

@@ -1,0 +1,120 @@
+// /agents: every persistent agent, one row each: state (verbatim), name
+// (bold when kept, muted and "numbered" while not), role, harness and
+// model, how many tasks it manages and when it was last active. Awake
+// first, then waking, then asleep. "New agent" makes a numbered one.
+import { useMemo, useState } from 'react'
+import { Clock, Plus } from 'lucide-react'
+import { Link } from 'react-router'
+
+import type { AgentView } from '@/api/agents'
+import { useAgents } from '@/api/hooks'
+import { conceptColors, conceptIcons } from '@/components/concept-icons'
+import { EmptySlot } from '@/components/empty-slot'
+import { ErrorText } from '@/components/error-text'
+import { IconChip } from '@/components/icon-chip'
+import { StatusPill } from '@/components/status-pill'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
+import { usePageTitle } from '@/shell/page-title'
+
+import { HarnessChip, KeptBadge, RoleChip } from './AgentChips'
+import { NewAgentDialog } from './AgentDialogs'
+import { lastActive, sortAgents } from './format'
+
+const color = conceptColors.agent
+
+export function AgentsPage() {
+  usePageTitle('Agents')
+  const agents = useAgents()
+  const [creating, setCreating] = useState(false)
+  const sorted = useMemo(() => sortAgents(agents.data ?? []), [agents.data])
+
+  return (
+    <div className="flex flex-col gap-4 p-6">
+      <div className="flex items-center justify-between">
+        <span
+          title="Agents"
+          data-testid="agent-count"
+          className="inline-flex items-center gap-1.5 text-sm text-zinc-500 tabular-nums dark:text-zinc-400"
+        >
+          <conceptIcons.agent className={cn('size-4', color.text)} />
+          {agents.data?.length ?? '–'}
+        </span>
+        <Button onClick={() => setCreating(true)} className={color.solid}>
+          <Plus /> New agent
+        </Button>
+      </div>
+      <ErrorText error={agents.error} />
+      {agents.isPending && (
+        <div className="flex flex-col gap-2" aria-label="Loading agents">
+          <Skeleton className="h-12" />
+          <Skeleton className="h-12" />
+          <Skeleton className="h-12" />
+        </div>
+      )}
+      {agents.data?.length === 0 && (
+        <EmptySlot
+          reason="No agents yet. An agent is born from a role and gets a number; keep the ones worth keeping."
+          className="self-start"
+        />
+      )}
+      {sorted.length > 0 && (
+        <ul aria-label="Agents" className="flex flex-col gap-2">
+          {sorted.map((agent) => (
+            <AgentRow key={agent.name} agent={agent} />
+          ))}
+        </ul>
+      )}
+      <NewAgentDialog open={creating} onOpenChange={setCreating} />
+    </div>
+  )
+}
+
+// The whole row opens the agent.
+function AgentRow({ agent }: { agent: AgentView }) {
+  const count = agent.tasks.length
+  return (
+    <li
+      data-agent={agent.name}
+      className={cn(
+        'relative flex items-center gap-3 rounded-xl border bg-white px-4 py-2.5 text-sm shadow-sm transition-colors hover:bg-pink-500/5 dark:bg-zinc-900/60 dark:hover:bg-pink-500/10',
+        color.border,
+      )}
+    >
+      <div data-testid="agent-state" className="flex w-20 shrink-0">
+        <StatusPill status={agent.state} />
+      </div>
+      <conceptIcons.agent aria-hidden className={cn('size-4 shrink-0', color.text)} />
+      <Link
+        to={`/agents/${encodeURIComponent(agent.name)}`}
+        className={cn(
+          'truncate font-mono after:absolute after:inset-0 after:content-[""]',
+          agent.kept ? 'font-semibold' : 'text-muted-foreground',
+        )}
+      >
+        {agent.name}
+      </Link>
+      {!agent.kept && <KeptBadge kept={false} />}
+      <RoleChip role={agent.role} />
+      <HarnessChip agent={agent} />
+      <span
+        data-testid="agent-tasks"
+        title={`Manages ${count} ${count === 1 ? 'task' : 'tasks'}`}
+        className="inline-flex shrink-0 items-center gap-1 text-xs text-zinc-600 tabular-nums dark:text-zinc-400"
+      >
+        <conceptIcons.task aria-hidden className={cn('size-3.5', conceptColors.task.text)} />
+        {count}
+      </span>
+      <span className="relative z-10 ml-auto shrink-0">
+        <IconChip
+          icon={Clock}
+          title={agent.last_active_at ? `Last active ${new Date(agent.last_active_at).toLocaleString()}` : undefined}
+          className="font-sans"
+        >
+          {lastActive(agent.last_active_at)}
+        </IconChip>
+      </span>
+    </li>
+  )
+}

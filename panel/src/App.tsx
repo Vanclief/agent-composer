@@ -2,6 +2,8 @@
 // under src/features/<feature>/ (see CLAUDE.md); this file only wires them.
 import { Navigate, Route, Routes } from 'react-router'
 
+import { AgentPage } from '@/features/agents/AgentPage'
+import { AgentsPage } from '@/features/agents/AgentsPage'
 import { ComputePage } from '@/features/compute/ComputePage'
 import { SandboxPage } from '@/features/compute/SandboxPage'
 import { MessagesPage } from '@/features/messages/MessagesPage'
@@ -29,6 +31,9 @@ export function App() {
         {/* Compute (ADR 0008): every sandbox; :name is a sandbox with its terminals. */}
         <Route path="compute" element={<ComputePage />} />
         <Route path="compute/:name" element={<SandboxPage />} />
+        {/* Persistent agents: :name is the agent's number or kept name. */}
+        <Route path="agents" element={<AgentsPage />} />
+        <Route path="agents/:name" element={<AgentPage />} />
         {/* :channel is the channel name without its #: /messages/review-42 is #review-42. */}
         <Route path="messages" element={<MessagesPage />} />
         <Route path="messages/:channel" element={<MessagesPage />} />
