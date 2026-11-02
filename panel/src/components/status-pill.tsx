@@ -76,6 +76,12 @@ const FAILED: StatusStyle = {
   pill: 'border-red-500/60 text-red-700 dark:text-red-400',
 }
 // Open: the green LED off, not started yet.
+const OPEN: StatusStyle = {
+  tier: 'idle',
+  shape: <span className={cn(dot, GREEN_OFF)} />,
+  pill: 'border-emerald-500/25 text-emerald-800/70 dark:text-emerald-300/60',
+}
+// A word this panel does not know: the same dark LED, grey text.
 const IDLE: StatusStyle = {
   tier: 'idle',
   shape: <span className={cn(dot, GREEN_OFF)} />,
@@ -93,7 +99,7 @@ const STYLES: Record<string, StatusStyle> = {
   crashed: CRASHED,
   error: FAILED,
   failed: FAILED,
-  open: IDLE,
+  open: OPEN,
   // An agent's state: its home sandbox running, stopped, or starting.
   awake: RUNNING,
   asleep: STOPPED,
@@ -149,7 +155,7 @@ export function StatusPill({ status, detail, className }: StatusPillProps) {
 const LEGEND: [StatusTier, StatusStyle][] = [
   ['attention', CRASHED],
   ['lit', RUNNING],
-  ['idle', IDLE],
+  ['idle', OPEN],
   ['off', DONE],
 ]
 

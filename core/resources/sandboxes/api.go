@@ -83,6 +83,11 @@ type API struct {
 	// deliver serves agc task deliver on the sandbox sockets; nil until
 	// the tasks API sets it with OnDeliver.
 	deliver DeliverFunc
+	// homes serves the agent routes on agent homes' sockets; nil until
+	// the agents API sets it with SetHomes.
+	homes Homes
+	// onStatus runs after every sandbox.status publication.
+	onStatus func(view SandboxView)
 
 	// stopping serializes stopOnce.
 	stopping sync.Mutex
@@ -113,6 +118,22 @@ func (api *API) publish(view *SandboxView) {
 	}
 
 	api.events.Publish(events.Event{Type: events.SandboxStatus, Data: StatusEvent{Sandbox: *view}})
+
+	api.mu.Lock()
+	onStatus := api.onStatus
+	api.mu.Unlock()
+
+	if onStatus != nil {
+		onStatus(*view)
+	}
+}
+
+// OnStatus sets what runs after every sandbox.status publication, with the
+// view sent; the agents API uses it to publish agent.state for homes.
+func (api *API) OnStatus(fn func(view SandboxView)) {
+	api.mu.Lock()
+	api.onStatus = fn
+	api.mu.Unlock()
 }
 
 // publishCurrent reads the sandbox's view and sends it, for status changes
@@ -177,9 +198,13 @@ func New(rootCtx context.Context, db bun.IDB, msg *messaging.Service, rt Runtime
 // from the row, otherwise the runtime's word verbatim, or unknown with
 // StatusError when the runtime cannot say.
 type SandboxView struct {
-	ID      uuid.UUID `json:"id"`
-	TaskID  uuid.UUID `json:"task_id"`
-	Task    string    `json:"task"`
+	ID     uuid.UUID `json:"id"`
+	TaskID uuid.UUID `json:"task_id"`
+	// Task is the task's name, empty for an agent's home.
+	Task string `json:"task"`
+	// Agent is the name of the persistent agent whose home this is
+	// (ADR 0016), empty for a task's sandbox.
+	Agent   string    `json:"agent"`
 	Name    string    `json:"name"`
 	Spec    task.Spec `json:"spec"`
 	Command string    `json:"command"`
@@ -229,12 +254,27 @@ func (api *API) findWithTask(ctx context.Context, id uuid.UUID, name string) (*t
 		return nil, nil, ez.Wrap(err)
 	}
 
-	owner, err := taskmodels.GetTaskByID(ctx, api.db, record.TaskID)
+	owner, err := api.ownerOf(ctx, record)
 	if err != nil {
 		return nil, nil, ez.Wrap(err)
 	}
 
 	return record, owner, nil
+}
+
+// ownerOf returns the task the sandbox is allocated to, or an empty task
+// for an agent's home, which has none (ADR 0016).
+func (api *API) ownerOf(ctx context.Context, record *taskmodels.Sandbox) (*taskmodels.Task, error) {
+	if record.TaskID == uuid.Nil {
+		return &taskmodels.Task{}, nil
+	}
+
+	owner, err := taskmodels.GetTaskByID(ctx, api.db, record.TaskID)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return owner, nil
 }
 
 func decodeSpec(record *taskmodels.Sandbox) (task.Spec, error) {
@@ -259,6 +299,7 @@ func baseView(record *taskmodels.Sandbox, owner *taskmodels.Task) (*SandboxView,
 		ID:           record.ID,
 		TaskID:       record.TaskID,
 		Task:         owner.Name,
+		Agent:        record.Agent,
 		Name:         record.Name,
 		Spec:         spec,
 		Command:      record.Command,
@@ -318,7 +359,7 @@ func (api *API) view(ctx context.Context, record *taskmodels.Sandbox, owner *tas
 	view.Status = status
 
 	if status == StatusRunning {
-		err = api.startSandboxListener(record.Name, owner, spec)
+		err = api.startSandboxListener(record, owner, spec)
 		if err != nil {
 			log.Warn().Err(err).Str("sandbox", record.Name).Msg("cannot start sandbox messaging listener")
 		}

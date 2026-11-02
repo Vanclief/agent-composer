@@ -120,12 +120,16 @@ func taskCommand() *cli.Command {
 
 // valueFlags are the flags leafArgs reads with a value after them.
 var valueFlags = map[string]string{
-	"--server": "server",
-	"--file":   "file",
-	"-f":       "file",
-	"--by":     "by",
-	"--why":    "why",
-	"--task":   "task",
+	"--server":  "server",
+	"--file":    "file",
+	"-f":        "file",
+	"--by":      "by",
+	"--why":     "why",
+	"--task":    "task",
+	"--as":      "as",
+	"--role":    "role",
+	"--harness": "harness",
+	"--model":   "model",
 }
 
 // leafArgs returns the positional arguments. urfave/cli stops reading
@@ -290,7 +294,9 @@ func taskCreate(c *cli.Context) error {
 			pageURL = client.New(server).TaskURL(created.Name)
 		}
 
-		waitBoot := server == "" || c.Bool("wait")
+		// In-process the boot runs here, so it is waited for; a server
+		// or an agent's home boots it elsewhere.
+		waitBoot := (server == "" && !insideHome()) || c.Bool("wait")
 		if len(created.Sandboxes) == 0 || !waitBoot {
 			return printCreatedTask(c, created, pageURL, false)
 		}
@@ -398,6 +404,18 @@ func fillTaskDefaults(request *tasks.CreateRequest, defaults controller.Defaults
 // msg join), else the configured owner, and says what it set; field is
 // how the file spells the key, for the error.
 func fillManager(manager *string, defaults controller.DefaultsSettings, field string) (string, error) {
+	// In an agent's home agc makes the agent the manager whatever is
+	// asked (ADR 0016 item 8).
+	if insideHome() {
+		agent := os.Getenv(sandboxes.EnvAgent)
+		filled := ""
+		if strings.TrimSpace(*manager) != agent {
+			filled = "manager: this agent (agc sets it)"
+		}
+		*manager = agent
+		return filled, nil
+	}
+
 	if strings.TrimSpace(*manager) != "" {
 		return "", nil
 	}

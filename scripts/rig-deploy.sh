@@ -10,6 +10,10 @@ AGC_RIG_PORT="${AGC_RIG_PORT:-1202}"
 # Knowledge directory the server reads (AGC_KNOWLEDGE_DIR). The checkout
 # itself by default, so Think mode shows this repo's beliefs and rules.
 AGC_RIG_KNOWLEDGE="${AGC_RIG_KNOWLEDGE:-$AGC_RIG_SRC}"
+# Agent templates the server reads (AGC_AGENTS_DIR, ADR 0016): the
+# checkout's agents/ by default, so a template pushed to the branch is live
+# after a deploy.
+AGC_RIG_AGENTS="${AGC_RIG_AGENTS:-$AGC_RIG_SRC/agents}"
 # The person tasks escalate to and are owned by when none is given (ADR 0009).
 AGC_RIG_OWNER="${AGC_RIG_OWNER:-franco}"
 
@@ -34,6 +38,7 @@ Environment (current value):
   AGC_RIG_RUN   server working dir  (${AGC_RIG_RUN}, log: agc-rest.log)
   AGC_RIG_PORT  server port         (${AGC_RIG_PORT})
   AGC_RIG_KNOWLEDGE  knowledge dir  (${AGC_RIG_KNOWLEDGE})
+  AGC_RIG_AGENTS  agent templates dir (${AGC_RIG_AGENTS})
   AGC_RIG_OWNER  default task owner  (${AGC_RIG_OWNER})
 EOF
 }
@@ -79,6 +84,7 @@ RUN=$(printf '%q' "$AGC_RIG_RUN")
 PORT=$(printf '%q' "$AGC_RIG_PORT")
 HOST=$(printf '%q' "$AGC_RIG_HOST")
 KNOWLEDGE=$(printf '%q' "$AGC_RIG_KNOWLEDGE")
+AGENTS=$(printf '%q' "$AGC_RIG_AGENTS")
 OWNER=$(printf '%q' "$AGC_RIG_OWNER")
 $(
   cat <<'REMOTE'
@@ -86,6 +92,7 @@ export PATH="$HOME/.local/bin:$HOME/go/bin:/usr/local/go/bin:$PATH"
 SRC="${SRC/#\~/$HOME}"
 RUN="${RUN/#\~/$HOME}"
 KNOWLEDGE="${KNOWLEDGE/#\~/$HOME}"
+AGENTS="${AGENTS/#\~/$HOME}"
 
 # The rig's global git config rewrites GitHub HTTPS to SSH and it has no key,
 # so every git network command runs with GIT_CONFIG_GLOBAL=/dev/null.
@@ -106,7 +113,7 @@ make install
 echo "==> restarting"
 pkill -x agc || true
 cd "$RUN"
-(AGC_KNOWLEDGE_DIR="$KNOWLEDGE" AGC_DEFAULT_OWNER="$OWNER" nohup agc rest > agc-rest.log 2>&1 < /dev/null &)
+(AGC_KNOWLEDGE_DIR="$KNOWLEDGE" AGC_AGENTS_DIR="$AGENTS" AGC_DEFAULT_OWNER="$OWNER" nohup agc rest > agc-rest.log 2>&1 < /dev/null &)
 
 for _ in $(seq 20); do
   if curl -fsS -o /dev/null "127.0.0.1:$PORT/api/tasks" 2>/dev/null; then

@@ -1,4 +1,4 @@
-// Talk mode as an inbox: #franco pinned first, unread badges from the
+// Talk as an inbox: #franco pinned first, unread badges from the
 // read state in localStorage, and toasts only for my inbox and mentions.
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 
@@ -24,7 +24,7 @@ function nav(page: Page) {
 }
 
 function talkBadge(page: Page) {
-  return page.getByRole('navigation', { name: 'Mode' }).getByTestId('unread-badge')
+  return page.getByTestId('area-badge-talk').getByTestId('unread-badge')
 }
 
 async function openLive(page: Page, path: string) {

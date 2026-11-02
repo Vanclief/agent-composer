@@ -138,10 +138,10 @@
 }
 /* Labels: condensed, uppercase, spaced. */
 .dark h1[data-testid='page-title'],
-.dark nav[aria-label='Mode'] a,
+.dark nav[aria-label='Main'] button[data-testid^='area-header-'],
 .dark nav[aria-label='Main'] a,
 .dark aside > div:first-child,
-.dark ul[aria-label='Tasks'] > li > div:first-child > a,
+.dark ul[aria-label='Tasks'] > li > div > a[href^='/panel/tasks/']:not([data-testid]),
 .dark button:has(> svg.lucide-plus) {
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -165,23 +165,23 @@
   color: oklch(0.1 0 0);
   border-radius: 0;
 }
-/* Mode rows: the active one is an inverted block, the others outlined. */
-.dark nav[aria-label='Mode'] a {
+/* Area headers: outlined blocks; the current area is an inverted block. */
+.dark nav[aria-label='Main'] button[data-testid^='area-header-'] {
   border: 1px solid var(--eva-dim);
   border-radius: 0;
   color: var(--foreground);
   background: transparent;
 }
-.dark nav[aria-label='Mode'] a:hover {
+.dark nav[aria-label='Main'] button[data-testid^='area-header-']:hover {
   background: var(--accent);
   color: var(--accent-foreground);
 }
-.dark nav[aria-label='Mode'] a[data-active='true'] {
+.dark nav[aria-label='Main'] button[data-testid^='area-header-'][data-current='true'] {
   background: var(--eva);
   color: oklch(0.1 0 0);
   border-color: var(--eva);
 }
-.dark nav[aria-label='Mode'] a[data-active='true'] svg {
+.dark nav[aria-label='Main'] button[data-testid^='area-header-'][data-current='true'] svg {
   color: oklch(0.1 0 0);
 }
 /* Pages: a left bar marks the active one. */
@@ -228,26 +228,30 @@
   border-color: oklch(0.74 0.19 48 / 20%);
   border-left-color: oklch(0.74 0.19 48 / 25%);
 }
-.dark ul[aria-label='Tasks'] > li[data-tier='attention'] {
+.dark ul[aria-label='Tasks'] > li[data-attention='me'] {
+  border-color: var(--eva);
+  border-left-color: var(--eva);
+}
+.dark ul[aria-label='Tasks'] > li[data-tier='attention']:not([data-attention]) {
   border-color: var(--eva-red);
   border-left-color: var(--eva-red);
 }
-/* Attention rows wear hazard stripes along the top. */
-.dark ul[aria-label='Tasks'] > li[data-tier='attention']::before {
+/* A dead row wears hazard stripes along the top. */
+.dark ul[aria-label='Tasks'] > li[data-tier='attention']:not([data-attention])::before {
   content: '';
   position: absolute;
   inset: 0 0 auto 0;
   height: 5px;
   background: repeating-linear-gradient(-45deg, var(--eva-red) 0 8px, transparent 8px 16px);
 }
-.dark ul[aria-label='Tasks'] > li > div:first-child > a {
+.dark ul[aria-label='Tasks'] > li > div > a[href^='/panel/tasks/']:not([data-testid]) {
   color: var(--foreground);
   font-size: 1rem;
 }
-.dark ul[aria-label='Tasks'] > li[data-tier='off'] > div:first-child > a {
+.dark ul[aria-label='Tasks'] > li[data-tier='off'] > div > a[href^='/panel/tasks/']:not([data-testid]) {
   color: var(--muted-foreground);
 }
-.dark ul[aria-label='Tasks'] > li > div:first-child > span {
+.dark ul[aria-label='Tasks'] > li > div > span[title] {
   color: var(--muted-foreground);
 }
 /* Status words: a bracketed, square readout. */
@@ -300,5 +304,27 @@
   color: var(--muted-foreground);
   text-transform: uppercase;
   letter-spacing: 0.1em;
+  border-radius: 0;
+}
+/* What a row asks of me: square outlined chips; the count badge a solid block. */
+.dark [data-testid='act'] {
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  border: 1px solid var(--eva);
+  color: var(--eva);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+}
+.dark [data-testid='tasks-badge'],
+.dark [data-testid^='area-badge-'] > span,
+.dark span[data-testid$='-badge'] {
+  border-radius: 0;
+}
+.dark [data-testid='attention-mark'] {
+  background: var(--eva);
+  box-shadow: 0 0 6px 1px var(--eva-dim);
   border-radius: 0;
 }

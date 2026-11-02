@@ -100,8 +100,8 @@ func (s *Service) Participant(ctx context.Context, caller Caller, participantID 
 		return nil, ez.Wrap(err)
 	}
 
-	if !caller.Human && p.Task != caller.Task {
-		channels := []string{TaskChannel(caller.Task)}
+	if !s.everywhere(caller) && !owns(caller, p) {
+		channels := ownChannels(caller)
 		for _, grant := range caller.Grants {
 			channels = append(channels, grant.Channel)
 		}
@@ -210,6 +210,12 @@ func (s *Service) online(ctx context.Context, presence Presence, p *msgmodels.Pa
 
 	if presence == nil {
 		return true
+	}
+
+	// A persistent agent is online while its home runs (ADR 0016).
+	if p.Agent != "" {
+		running, _ := presence.SandboxRunning(ctx, p.Agent)
+		return running
 	}
 
 	// An agent joins as its sandbox's name (ADR 0009, $AGC_SANDBOX).

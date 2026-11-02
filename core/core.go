@@ -11,6 +11,7 @@ import (
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/events"
+	"github.com/vanclief/agent-composer/core/resources/agents"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
 	"github.com/vanclief/agent-composer/core/resources/knowledge"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
@@ -41,6 +42,8 @@ type Stack struct {
 	// scheduler (ADR 0012).
 	SchedulesAPI *schedules.API
 	KnowledgeAPI *knowledge.API
+	// AgentsAPI is persistent agents (ADR 0016).
+	AgentsAPI *agents.API
 	// Events is the live feed behind GET /api/events.
 	Events *events.Bus
 }
@@ -123,6 +126,16 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	}
 	knowledgeAPI := knowledge.NewAPI(knowledgeDir)
 
+	// The agents directory holds the role templates, <role>.yaml
+	// (ADR 0016). The API wakes agents on posts, answers messaging's main
+	// check and serves the agent routes on homes' sockets.
+	agentsDir := os.Getenv("AGC_AGENTS_DIR")
+	if agentsDir == "" {
+		agentsDir = filepath.Join(home, "agents")
+	}
+	agentsAPI := agents.NewAPI(ctrl, tasksAPI, msg, agentsDir)
+	agentsAPI.SetEvents(bus)
+
 	return &Stack{
 		Controller:   ctrl,
 		Scheduler:    sch,
@@ -133,6 +146,7 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		TasksAPI:     tasksAPI,
 		SchedulesAPI: schedulesAPI,
 		KnowledgeAPI: knowledgeAPI,
+		AgentsAPI:    agentsAPI,
 		Events:       bus,
 	}, nil
 }

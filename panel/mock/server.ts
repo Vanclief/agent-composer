@@ -1119,6 +1119,9 @@ async function msgAPI(state: State, method: string, verb: string, url: URL, req:
   // Everyone who has posted in the channel: active first, then departed,
   // each by name, like Service.Participants.
   if (method === 'GET' && verb === 'participants') {
+    if (url.searchParams.get('all') === '1') {
+      return { participants: allParticipants(state) }
+    }
     const channel = url.searchParams.get('channel') ?? ''
     checkChannel(channel)
     const ids = new Set(state.messages.filter((m) => m.channel === channel).map((m) => m.participant_id))
@@ -1249,6 +1252,8 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
       body = knowledgeAPI(parts.slice(2), url)
     } else if (parts[1] === 'agents') {
       body = await agentsAPI(state, method, parts.slice(2), req)
+    } else if (parts[1] === 'defaults' && parts.length === 2 && method === 'GET') {
+      body = DEFAULTS
     } else {
       throw apiError(404, 'no such endpoint')
     }
@@ -2393,3 +2398,15 @@ async function agentsAPI(state: State, method: string, rest: string[], req: Inco
 
 // Direct-message channels, @<human>/<task> (another task adds them to agc).
 const DM_RE = /^@[a-z0-9][a-z0-9_-]{0,63}\/[a-z0-9][a-z0-9_-]{0,63}$/
+
+// GET /api/defaults (ADR 0009, ahead of the Go side): what fills in a task
+// and who the server's owner and reserved system participant are.
+const DEFAULTS = { harness: 'claude_code', model: 'claude-opus-5-5', owner: 'franco', system: 'agc' }
+
+// GET /api/msg/participants?all=1, as Service.AllParticipants: everyone who
+// ever joined, in any channel or none, active first, then departed, by name.
+function allParticipants(state: State) {
+  return [...state.participants.values()]
+    .sort((a, b) => Number(Boolean(a.left_at)) - Number(Boolean(b.left_at)) || a.name.localeCompare(b.name))
+    .map((p) => ({ ...p, ...presenceOf(state, p) }))
+}

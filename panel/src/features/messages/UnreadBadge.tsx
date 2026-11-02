@@ -1,4 +1,4 @@
-// The unread count on a channel row and on the Talk mode row: neutral,
+// The unread count on a channel row and on the Talk group header: neutral,
 // pink when an unread message mentions @<me>. Nothing while all is read.
 import { cn } from '@/lib/utils'
 

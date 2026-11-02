@@ -246,3 +246,30 @@ func TestWaitOnSeveralChannels(t *testing.T) {
 		t.Fatalf("refused channel: status %d, error %q", status, failure.Error)
 	}
 }
+
+func TestParticipantsAll(t *testing.T) {
+	humanCaller := func(*http.Request) (messaging.Caller, error) {
+		return messaging.Caller{Human: true}, nil
+	}
+	server, _ := newServerAs(t, humanCaller)
+
+	var p msgmodels.Participant
+	status := call(t, http.MethodPost, server.URL+"/join", `{"name":"franco"}`, &p)
+	if status != http.StatusOK {
+		t.Fatalf("join: status %d, participant %+v", status, p)
+	}
+
+	// franco never posted, so no channel lists them, but ?all=1 does.
+	var participants ParticipantsResponse
+	status = call(t, http.MethodGet, server.URL+"/participants?all=1", "", &participants)
+	if status != http.StatusOK || len(participants.Participants) != 1 || participants.Participants[0].Name != "franco" {
+		t.Fatalf("participants?all=1: status %d, response %+v", status, participants)
+	}
+
+	task := newTestServer(t)
+	var failure ErrorResponse
+	status = call(t, http.MethodGet, task.URL+"/participants?all=1", "", &failure)
+	if status != http.StatusForbidden {
+		t.Fatalf("want 403 for a task listing everyone, got %d %+v", status, failure)
+	}
+}

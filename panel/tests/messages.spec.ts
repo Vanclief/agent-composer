@@ -350,7 +350,7 @@ test('a reply sits in its thread: the footer opens the pane and posting there se
   const sent = nextPost(page)
   await box.press('Enter')
   expect((await sent).reply_to).toBe(parent.id)
-  await expect(pane.getByText('second reply')).toBeVisible()
+  await expect(pane.getByTestId('thread-messages').getByText('second reply')).toBeVisible()
   await expect(footer).toContainText('2 replies')
   await expect(list.getByText('second reply')).toHaveCount(0)
 
@@ -408,7 +408,7 @@ test('open questions for me are pinned as "Waiting for you" and counted on the c
   await expect(strip).toHaveText(/Waiting for you: 2/)
   const row = page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: new RegExp(`^#${slug}\\b`) })
   await expect(row.getByTestId('question-badge')).toHaveText('2')
-  await expect(page.getByRole('navigation', { name: 'Mode' }).getByTestId('question-badge')).toBeVisible()
+  await expect(page.getByTestId('area-badge-talk').getByTestId('question-badge')).toBeVisible()
 
   await strip.click()
   await expect(page.getByTestId('question-card').first()).toBeInViewport()

@@ -11,6 +11,7 @@ import { knowledge } from './knowledge'
 import { keepPreviousData } from '@tanstack/react-query'
 import { livePollMs } from './live'
 import { agents, type CreateAgentRequest, type KeepAgentRequest } from './agents'
+import { defaults } from './defaults'
 
 // How often tasks, sandboxes and terminals refetch, so statuses stay live.
 export const TASKS_POLL_MS = 5000
@@ -51,6 +52,9 @@ export const queryKeys = {
   // version changes whenever a message is posted anywhere (the sum of the
   // channels' last ids), so message.posted refreshes the questions too.
   questions: (params: QuestionsParams, version: number) => ['msg', 'questions', params, version] as const,
+  defaults: ['defaults'] as const,
+  // Everyone who ever joined (?all=1), under the participants root.
+  allParticipants: ['msg', 'participants', '*all'] as const,
 }
 
 // ---------- tasks and sandboxes (ADR 0008) ----------
@@ -442,4 +446,27 @@ export function useWakeAgent(name: string) {
 
 export function useSleepAgent(name: string) {
   return useAgentMutation(() => agents.sleep(name))
+}
+
+// ---------- server defaults and every participant (ahead of the Go side) ----------
+
+// GET /api/defaults: rarely changes, read once per session.
+export function useDefaults() {
+  return useQuery({
+    queryKey: queryKeys.defaults,
+    queryFn: ({ signal }) => defaults.get(signal),
+    staleTime: Infinity,
+    retry: false,
+  })
+}
+
+// Everyone who ever joined messaging, by name. Under the participants root,
+// so message.posted refreshes it.
+export function useAllParticipants() {
+  return useQuery({
+    queryKey: queryKeys.allParticipants,
+    queryFn: async ({ signal }) => (await msg.allParticipants(signal)).participants,
+    refetchInterval: livePollMs,
+    retry: false,
+  })
 }

@@ -69,3 +69,32 @@ test('the legend shows the four tiers, words only on hover', async ({ page }) =>
     expect(tiers).toEqual(TIERS.map((tier) => [tier, tier]))
   }
 })
+
+test('open is the green LED off, an unknown word the same LED with grey text', async ({ page }) => {
+  // A status this panel does not know, injected into the task list.
+  await page.route('**/api/tasks', async (route) => {
+    const response = await route.fetch()
+    const body = await response.json()
+    body.tasks = [
+      {
+        ...body.tasks.find((t: { name: string }) => t.name === 'flaky-ci'),
+        id: 'x-paused',
+        name: 'paused-x',
+        status: 'paused',
+      },
+      ...body.tasks,
+    ]
+    await route.fulfill({ response, json: body })
+  })
+  await page.goto('/panel/tasks')
+  const open = page.locator('[data-task="flaky-ci"]').getByTestId('task-status').locator('[data-status]')
+  await expect(open).toHaveAttribute('data-tier', 'idle')
+  await expect(open.locator('[aria-hidden] > span')).toHaveClass(/bg-emerald-950/)
+  await expect(open).not.toHaveClass(/zinc/)
+
+  const unknown = page.locator('[data-task="paused-x"]').getByTestId('task-status').locator('[data-status]')
+  await expect(unknown).toHaveText('paused')
+  await expect(unknown).toHaveAttribute('data-tier', 'idle')
+  await expect(unknown.locator('[aria-hidden] > span')).toHaveClass(/bg-emerald-950/)
+  await expect(unknown).toHaveClass(/zinc/)
+})

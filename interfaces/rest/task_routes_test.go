@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"github.com/vanclief/agent-composer/core/resources/agents"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,12 +20,14 @@ import (
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/events"
+	"github.com/vanclief/agent-composer/core/resources/agents"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/schedules"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	"github.com/vanclief/agent-composer/interfaces/rest/handler"
 	restserver "github.com/vanclief/agent-composer/interfaces/rest/server"
 	"github.com/vanclief/agent-composer/messaging"
+	agentmodels "github.com/vanclief/agent-composer/models/agent"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 	schedulemodels "github.com/vanclief/agent-composer/models/schedule"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
@@ -80,6 +81,7 @@ func serveTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *ta
 		(*msgmodels.Message)(nil),
 		(*schedulemodels.Schedule)(nil),
 		(*schedulemodels.Item)(nil),
+		(*agentmodels.Agent)(nil),
 	}
 	for _, table := range tables {
 		_, err = db.NewCreateTable().Model(table).Exec(context.Background())
@@ -106,6 +108,9 @@ func serveTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *ta
 	tasksAPI.SetEvents(bus)
 	schedulesAPI := schedules.NewAPI(ctrl, tasksAPI, secretsPath)
 	schedulesAPI.SetEvents(bus)
+	// The templates the repo ships, agents/ at its root.
+	agentsAPI := agents.NewAPI(ctrl, tasksAPI, msg, filepath.Join("..", "..", "agents"))
+	agentsAPI.SetEvents(bus)
 	server := &restserver.Server{
 		Ctrl:         ctrl,
 		RateLimiter:  ratelimit.NewWindowCounter(10, 100),
@@ -113,11 +118,13 @@ func serveTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *ta
 		SandboxesAPI: sandboxesAPI,
 		SchedulesAPI: schedulesAPI,
 		TurnsAPI:     agents.NewTurnsAPI(volumes, sandboxesAPI),
+		AgentsAPI:    agentsAPI,
 		Messaging:    msg,
 		Events:       bus,
 	}
 	t.Cleanup(func() {
 		schedulesAPI.Wait()
+		agentsAPI.Wait()
 		sandboxesAPI.Wait()
 		_ = os.RemoveAll(socketDir)
 	})

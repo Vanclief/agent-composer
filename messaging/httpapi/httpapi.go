@@ -68,6 +68,28 @@ type ParticipantsResponse struct {
 // handler here does not.
 const DeliverPath = "/task/deliver"
 
+// The routes an agent's home serves on its socket besides messaging (ADR
+// 0016); only home sockets serve them. The agent loop reads AgentPath on
+// every wait cycle and posts AgentSleepPath once idle. agc task create,
+// get, accept and reject inside a home use the task routes, since a home
+// cannot reach agc rest; that short list is all a manager needs.
+const (
+	AgentPath      = "/agent"
+	AgentSleepPath = "/agent/sleep"
+	TasksPath      = "/tasks"
+	// TaskPath, TaskAcceptPath and TaskRejectPath are patterns; {name} is
+	// the task's name.
+	TaskPath       = "/tasks/{name}"
+	TaskAcceptPath = "/tasks/{name}/accept"
+	TaskRejectPath = "/tasks/{name}/reject"
+)
+
+// RejectBody is the body of a reject from an agent's home: why the task
+// goes back.
+type RejectBody struct {
+	Why string `json:"why"`
+}
+
 // DeliverRequest is the body of a delivery: what the agent says it did.
 type DeliverRequest struct {
 	Summary string `json:"summary"`
@@ -250,7 +272,14 @@ func (a *api) participants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	participants, err := a.svc.Participants(r.Context(), caller, r.URL.Query().Get("channel"))
+	// ?all=1: everyone who ever joined, in any channel (humans only).
+	query := r.URL.Query()
+	var participants []messaging.ParticipantView
+	if query.Get("all") == "1" {
+		participants, err = a.svc.AllParticipants(r.Context(), caller)
+	} else {
+		participants, err = a.svc.Participants(r.Context(), caller, query.Get("channel"))
+	}
 	if err != nil {
 		WriteError(w, err)
 		return

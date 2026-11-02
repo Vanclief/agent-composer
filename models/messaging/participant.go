@@ -23,9 +23,13 @@ const SystemName = "agc"
 type Participant struct {
 	bun.BaseModel `bun:"table:messaging_participants"`
 
-	ID       string     `bun:"id,pk" json:"id"`
-	Name     string     `bun:"name,notnull" json:"name"`
-	Task     string     `bun:"task,notnull" json:"task"` // empty for humans
+	ID   string `bun:"id,pk" json:"id"`
+	Name string `bun:"name,notnull" json:"name"`
+	Task string `bun:"task,notnull" json:"task"` // empty for humans
+	// Agent is the home sandbox of the persistent agent that joined
+	// (ADR 0016), empty for everyone else. It is the agent's first name
+	// and does not change when the agent is renamed.
+	Agent    string     `bun:"agent,notnull,default:''" json:"agent"`
 	Human    bool       `bun:"human,notnull" json:"human"`
 	JoinedAt time.Time  `bun:"joined_at,notnull" json:"joined_at"`
 	LeftAt   *time.Time `bun:"left_at,nullzero" json:"left_at,omitempty"`
@@ -54,8 +58,8 @@ func (p *Participant) Validate() error {
 		return ez.Wrap(err)
 	}
 
-	if !p.Human && p.Task == "" && p.Name != SystemName {
-		return ez.New(ez.EINVALID, "participant must belong to a task or be human", nil)
+	if !p.Human && p.Task == "" && p.Agent == "" && p.Name != SystemName {
+		return ez.New(ez.EINVALID, "participant must belong to a task or an agent, or be human", nil)
 	}
 
 	return nil

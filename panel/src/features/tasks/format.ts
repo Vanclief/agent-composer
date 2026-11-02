@@ -102,10 +102,14 @@ function statusRank(status: string) {
   return tierRank(status) * 10 + (i < 0 ? STATUS_ORDER.length : i)
 }
 
-export function sortTasks<T extends { status: string; created_at: string }>(list: T[]) {
-  return [...list].sort(
-    (a, b) => statusRank(a.status) - statusRank(b.status) || b.created_at.localeCompare(a.created_at),
-  )
+// waitsOnMe puts a task in the attention group whatever its status
+// (attention.tsx); inside the group the status order still holds.
+export function sortTasks<T extends { status: string; created_at: string }>(
+  list: T[],
+  waitsOnMe: (task: T) => boolean = () => false,
+) {
+  const rank = (t: T) => (waitsOnMe(t) ? -100 : 0) + statusRank(t.status)
+  return [...list].sort((a, b) => rank(a) - rank(b) || b.created_at.localeCompare(a.created_at))
 }
 
 // shortAge as words after a verb: "just now", "5m ago".

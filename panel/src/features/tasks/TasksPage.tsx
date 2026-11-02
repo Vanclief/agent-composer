@@ -1,7 +1,8 @@
 // /tasks: every task as one flat row (TaskRow): status, title and name,
 // then who works on it, who manages it, what it is for and its compute. Sorted by status
-// light: attention, lit (review, then running), idle (open), off (done),
-// newest first inside each; a done row recedes.
+// light: attention (also every task waiting on me, attention.tsx), lit
+// (review, then running), idle (open), off (done), newest first inside
+// each; a done row recedes.
 import { useMemo, useState } from 'react'
 import { Plus } from 'lucide-react'
 
@@ -16,6 +17,7 @@ import { CreateTaskDialog } from '@/features/create-task/CreateTaskDialog'
 import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/shell/page-title'
 
+import { useAttention } from './attention'
 import { sortTasks } from './format'
 import { TaskRow } from './TaskRow'
 
@@ -23,7 +25,11 @@ export function TasksPage() {
   usePageTitle('Tasks')
   const tasks = useTasks()
   const [creating, setCreating] = useState(false)
-  const sorted = useMemo(() => sortTasks(tasks.data ?? []), [tasks.data])
+  const attention = useAttention()
+  const sorted = useMemo(
+    () => sortTasks(tasks.data ?? [], (t) => attention(t).mine.length > 0),
+    [tasks.data, attention],
+  )
   const TaskIcon = conceptIcons.task
 
   return (
@@ -53,7 +59,7 @@ export function TasksPage() {
       {Boolean(tasks.data?.length) && (
         <ul aria-label="Tasks" className="flex flex-col divide-y divide-border border-y border-border">
           {sorted.map((task) => (
-            <TaskRow key={task.id} task={task} />
+            <TaskRow key={task.id} task={task} attention={attention(task)} />
           ))}
         </ul>
       )}

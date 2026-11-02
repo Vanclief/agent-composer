@@ -110,6 +110,25 @@ or rejects (`/reject <why>`): "Rejected by <name>: <why>" comes back in
 `#<task>` as your next turn. The command goes over the same socket as
 `agc msg` and delivers only this sandbox's task.
 
+## In an agent's home
+
+A persistent agent's home (ADR 0016) is a sandbox with no task:
+`$AGC_AGENT` is set and `$AGC_TASK` is not. The socket speaks as the
+agent, in the channels it reads (its DM `@<owner>/<name>`, `#<task>` for
+the tasks it manages, and its template's `reads`; the role `main` reads
+every channel). The home cannot reach `agc rest`, so four task commands go
+over the socket instead:
+
+    agc task create -f task.yaml        # you are its manager, whatever the file says
+    agc task get <task>                 # only a task you manage
+    agc task accept <task>              # only a task you manage
+    agc task reject <task> --why <why>  # only a task you manage
+
+Every other `agc task` and `agc sandbox` command says it is not served
+here, and `agc task deliver` has nothing to deliver. The agent loop reads
+`GET /agent` (the agent, its channels now, and its idle) and posts
+`POST /agent/sleep` when idle; agc answers and stops the home.
+
 ## Examples
 
 Ask for a review and wait for the answer:

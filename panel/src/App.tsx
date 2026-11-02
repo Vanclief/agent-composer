@@ -14,7 +14,7 @@ import { TaskPage } from '@/features/tasks/TaskPage'
 import { TasksPage } from '@/features/tasks/TasksPage'
 import { ActionsPage, BeliefsPage, DecisionsPage, EvidencePage, RulesPage } from '@/features/think/ThinkPages'
 import { Layout } from '@/shell/layout'
-import { HomeRedirect } from '@/shell/mode'
+import { HomeRedirect } from '@/shell/areas'
 
 export function App() {
   return (

@@ -35,6 +35,13 @@ booted_at TIMESTAMP, stopped_at TIMESTAMP, created_at TIMESTAMP NOT NULL, update
 		}
 	}
 
+	// The later column too (createAgents), so the current model can read
+	// the rows.
+	err = addColumn(ctx, db, "sandboxes", "agent", "TEXT NOT NULL DEFAULT ''")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	record, err := task.GetSandboxByName(ctx, db, "stop-icon")
 	if err != nil {
 		t.Fatal(err)

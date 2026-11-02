@@ -1,4 +1,4 @@
-// Talk mode's channel list under Channels, mounted by the shell
+// The Talk group's channel list under Channels, mounted by the shell
 // (src/shell/layout.tsx). Only followed channels (follow.ts): Inbox (#<me>)
 // pinned first, even before it has a message; then Direct (my DMs,
 // @<me>/<task>), then Tasks (channels named after a task), then Other; last
