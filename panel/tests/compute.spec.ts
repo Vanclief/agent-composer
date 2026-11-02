@@ -58,11 +58,11 @@ test('sandboxes are grouped by status in order, with counts', async ({ page, req
       .toBe(true)
   }
 
-  // Once booted, the card moves to running.
+  // Once booted, the row moves to running.
   await expect(group(page, 'running').getByRole('article', { name: fresh })).toBeVisible({ timeout: 10_000 })
 })
 
-test('a card shows its task chip linking to the task, and opens its sandbox', async ({ page }) => {
+test('a row shows its task linking to the task, and opens its sandbox', async ({ page }) => {
   await page.goto('/panel/compute')
   const review = card(page, 'review-42')
   await expect(review.getByTitle('CPUs')).toHaveText('2')
@@ -74,7 +74,7 @@ test('a card shows its task chip linking to the task, and opens its sandbox', as
   await expect(page).toHaveURL(/\/panel\/tasks\/review-42/)
 
   await page.goto('/panel/compute')
-  // Until the task titles load, the task chip reads docs-pass too.
+  // Until the task titles load, the task link reads docs-pass too.
   await expect(card(page, 'docs-pass').getByRole('link', { name: 'Docs pass' })).toBeVisible()
   await card(page, 'docs-pass').getByRole('link', { name: 'docs-pass' }).click()
   await expect(page).toHaveURL(/\/panel\/compute\/docs-pass$/)

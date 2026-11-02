@@ -1,7 +1,7 @@
-// /compute: every sandbox with its task (ADR 0008), as cards grouped by
+// /compute: every sandbox with its task (ADR 0008), as flat rows grouped by
 // status, each verbatim, the groups sorted by status light: attention
 // (failed), lit (starting, running), idle (unknown and any other word), off
-// (stopped). A stopped card recedes.
+// (stopped). A stopped row recedes.
 import { Link } from 'react-router'
 
 import { useSandboxes, useTasks } from '@/api/hooks'
@@ -14,7 +14,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/shell/page-title'
 
-import { CommandChip, MomentChip, SandboxActions, SpecChips, StatusError, TaskChip } from './SandboxParts'
+import { formatMemory, sandboxMoment, shortAge } from './format'
+import { SandboxActions, StatusError } from './SandboxParts'
 
 const ORDER = ['failed', 'starting', 'running', 'unknown', 'stopped']
 const color = conceptColors.sandbox
@@ -41,10 +42,10 @@ export function ComputePage() {
       </div>
       <ErrorText error={sandboxes.error} />
       {sandboxes.isPending && (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(22rem,1fr))] gap-3" aria-label="Loading sandboxes">
-          <Skeleton className="h-36" />
-          <Skeleton className="h-36" />
-          <Skeleton className="h-36" />
+        <div className="flex flex-col gap-2" aria-label="Loading sandboxes">
+          <Skeleton className="h-12" />
+          <Skeleton className="h-12" />
+          <Skeleton className="h-12" />
         </div>
       )}
       {sandboxes.data?.length === 0 && (
@@ -58,10 +59,10 @@ export function ComputePage() {
               {list.length}
             </span>
           </h2>
-          <ul className="grid grid-cols-[repeat(auto-fill,minmax(22rem,1fr))] gap-3">
+          <ul className="flex flex-col divide-y divide-border border-y border-border">
             {list.map((sandbox) => (
               <li key={sandbox.id}>
-                <SandboxCard sandbox={sandbox} taskTitle={titles.get(sandbox.task)} />
+                <SandboxRow sandbox={sandbox} taskTitle={titles.get(sandbox.task)} />
               </li>
             ))}
           </ul>
@@ -87,40 +88,88 @@ function groupByStatus(list: SandboxView[]) {
   return [...groups].sort(([a, ga], [b, gb]) => rank(a, ga) - rank(b, gb))
 }
 
-// The whole card opens the sandbox; the task chip and buttons sit above the
-// card's link so they work on their own.
-export function SandboxCard({ sandbox, taskTitle }: { sandbox: SandboxView; taskTitle?: string }) {
+// One sandbox as a flat row (panel/CLAUDE.md "Lists are rows, not
+// cards"): its light, its name, the task it serves and the age; under it,
+// muted, cpus · memory · image · command, the boot error in red when there
+// is one, and small Stop/Start/Delete. The whole row opens the sandbox; the
+// task link and the buttons sit above that.
+export function SandboxRow({ sandbox, taskTitle }: { sandbox: SandboxView; taskTitle?: string }) {
   const tier = statusTier(sandbox.status, sandbox.status_error)
+  const off = tier === 'off'
+  const moment = sandboxMoment(sandbox)
   return (
     <article
       aria-label={sandbox.name}
+      data-status={sandbox.status}
       data-tier={tier}
-      className={cn(
-        'relative flex h-full flex-col gap-2.5 rounded-xl border border-border bg-white p-3.5 shadow-sm transition-colors hover:bg-zinc-50 dark:bg-zinc-900/60 dark:hover:bg-zinc-800/60',
-        color.edge,
-        tier === 'off' && 'text-muted-foreground shadow-none',
-      )}
+      className="relative flex flex-col gap-1 px-3 py-2 text-sm transition-colors hover:bg-zinc-500/5 has-[a:focus-visible]:rounded-md has-[a:focus-visible]:ring-1 has-[a:focus-visible]:ring-violet-500/70 dark:hover:bg-zinc-500/10"
     >
-      <div className="flex items-center gap-2">
-        <StatusPill status={sandbox.status} detail={sandbox.status_error} />
-        <conceptIcons.sandbox aria-hidden className={cn('size-4 shrink-0', color.text)} />
+      <div className="flex items-center gap-3">
+        <div className="flex w-20 shrink-0">
+          <StatusPill status={sandbox.status} detail={sandbox.status_error} />
+        </div>
         <Link
           to={`/compute/${encodeURIComponent(sandbox.name)}`}
-          className="truncate font-mono text-sm font-medium after:absolute after:inset-0 after:content-['']"
+          className={cn(
+            'truncate font-mono outline-none after:absolute after:inset-0 after:content-[""]',
+            off && 'text-muted-foreground',
+          )}
         >
           {sandbox.name}
         </Link>
-        <MomentChip sandbox={sandbox} className="ml-auto" />
+        <Link
+          to={`/tasks/${encodeURIComponent(sandbox.task)}`}
+          title={`Task ${sandbox.task}`}
+          className="relative z-10 inline-flex min-w-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline"
+        >
+          <conceptIcons.task aria-hidden className={cn('size-3.5 shrink-0 opacity-70', conceptColors.task.text)} />
+          <span className="truncate">{taskTitle || sandbox.task}</span>
+        </Link>
+        <span
+          title={`${moment.label} ${new Date(moment.at).toLocaleString()}`}
+          className="relative z-10 ml-auto shrink-0 font-mono text-xs text-muted-foreground tabular-nums"
+        >
+          {shortAge(moment.at)}
+        </span>
       </div>
-      <div className="relative z-10 flex">
-        <TaskChip task={sandbox.task} title={taskTitle} />
+      <div
+        className={cn(
+          'flex flex-wrap items-center gap-x-1.5 gap-y-1 pl-[5.75rem] font-mono text-xs text-muted-foreground',
+          off && 'opacity-70',
+        )}
+      >
+        {specParts(sandbox).map(([title, value], i) => (
+          <span key={title} className="inline-flex items-center gap-1.5">
+            {i > 0 && (
+              <span aria-hidden className="opacity-50">
+                ·
+              </span>
+            )}
+            <span title={title}>{value}</span>
+          </span>
+        ))}
+        <SandboxActions sandbox={sandbox} quiet className="relative z-10 ml-auto" />
       </div>
-      <div className="flex flex-wrap gap-1.5">
-        <SpecChips sandbox={sandbox} />
-        <CommandChip command={sandbox.command} />
-      </div>
-      <StatusError sandbox={sandbox} />
-      <SandboxActions sandbox={sandbox} className="relative z-10 mt-auto" />
+      <StatusError sandbox={sandbox} className="pl-[5.75rem]" />
     </article>
   )
+}
+
+// cpus, memory, image and command, each with its tooltip, in that order.
+function specParts(sandbox: SandboxView) {
+  const { spec } = sandbox
+  const parts: [string, string][] = []
+  if (spec.cpus) {
+    parts.push(['CPUs', String(spec.cpus)])
+  }
+  if (spec.memory) {
+    parts.push(['Memory', formatMemory(spec.memory)])
+  }
+  if (spec.image) {
+    parts.push(['Image', spec.image])
+  }
+  if (sandbox.command.trim()) {
+    parts.push(['Command (the agent terminal)', sandbox.command])
+  }
+  return parts
 }

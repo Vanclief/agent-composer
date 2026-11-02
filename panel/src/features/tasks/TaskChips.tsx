@@ -1,12 +1,11 @@
 // The chips that say who works on a task, who manages it, what it is for
-// and what compute it has. Shared by the list cards and the task header.
+// Used by the task header; list rows (TaskRow) use muted text instead.
 import { Link } from 'react-router'
 
 import { useKnowledge } from '@/api/hooks'
 import type { TaskView } from '@/api/tasks'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { IconChip } from '@/components/icon-chip'
-import { StatusPill } from '@/components/status-pill'
 import { cn } from '@/lib/utils'
 
 import { assignedToHarness } from './format'
@@ -70,8 +69,9 @@ function PersonChip({ role, name }: { role: 'manager' | 'owner'; name: string })
 }
 
 // The knowledge action or decision the task serves, linking to it in Think.
-// An id that is not a decision is taken for an action.
-export function ForChip({ task }: { task: TaskView }) {
+// An id that is not a decision is taken for an action. plain drops the chip
+// for muted text (list rows).
+export function ForChip({ task, plain = false }: { task: TaskView; plain?: boolean }) {
   const knowledge = useKnowledge()
   if (!task.for) {
     return null
@@ -86,51 +86,14 @@ export function ForChip({ task }: { task: TaskView }) {
       data-testid="for"
       title={`For the ${concept} ${task.for}`}
       className={cn(
-        'relative z-10 inline-flex max-w-72 items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-xs hover:underline',
-        color.bg,
-        color.border,
-        color.text,
+        'relative z-10 inline-flex max-w-72 items-center gap-1 font-mono text-xs hover:underline',
+        plain
+          ? 'text-muted-foreground hover:text-foreground'
+          : ['rounded-md border px-1.5 py-0.5', color.bg, color.border, color.text],
       )}
     >
-      <Icon aria-hidden className="size-3.5 shrink-0" />
+      <Icon aria-hidden className={cn('size-3.5 shrink-0', plain && color.text, plain && 'opacity-70')} />
       <span className="truncate">{task.for}</span>
     </Link>
-  )
-}
-
-// How many sandboxes the task has and the newest one's status, verbatim.
-export function SandboxSummary({ task }: { task: TaskView }) {
-  const Icon = conceptIcons.sandbox
-  const newest = task.sandboxes[0]
-  if (!newest) {
-    return (
-      <span
-        data-testid="sandbox-summary"
-        title="No sandbox allocated"
-        className="inline-flex items-center gap-1 rounded-md border border-dashed border-zinc-300 px-1.5 py-0.5 font-mono text-xs text-zinc-500 dark:border-zinc-700"
-      >
-        <Icon aria-hidden className="size-3.5 shrink-0" />
-        no sandbox
-      </span>
-    )
-  }
-  const count = task.sandboxes.length
-  return (
-    <span
-      data-testid="sandbox-summary"
-      title={`${count} ${count === 1 ? 'sandbox' : 'sandboxes'}; newest ${newest.name}`}
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-md border py-0.5 pr-0.5 pl-1.5 font-mono text-xs',
-        conceptColors.sandbox.bg,
-        conceptColors.sandbox.border,
-        conceptColors.sandbox.text,
-      )}
-    >
-      <Icon aria-hidden className="size-3.5 shrink-0" />
-      <span data-testid="sandbox-count" className="tabular-nums">
-        {count}
-      </span>
-      <StatusPill status={newest.status} detail={newest.status_error} className="bg-background py-0" />
-    </span>
   )
 }
