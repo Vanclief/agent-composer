@@ -40,14 +40,8 @@ export function TaskRow({ task, attention }: { task: TaskView; attention?: Atten
         />
       )}
       <div className="flex items-center gap-3">
-        <div className="flex shrink-0 items-center gap-1.5">
-          <div data-testid="task-status" className="flex w-20 shrink-0">
-            <StatusPill status={task.status} />
-          </div>
-          {attention?.mine.map((act) => (
-            <ActChip key={act.act} act={act} />
-          ))}
-          {other && <WaitsOn names={attention?.others ?? []} className="-ml-1" />}
+        <div data-testid="task-status" className="flex w-20 shrink-0">
+          <StatusPill status={task.status} />
         </div>
         <Link
           to={`/tasks/${encodeURIComponent(task.name)}`}
@@ -61,12 +55,18 @@ export function TaskRow({ task, attention }: { task: TaskView; attention?: Atten
         <span title="Name, also the channel" className="truncate font-mono text-xs text-zinc-400 dark:text-zinc-500">
           {task.name}
         </span>
-        <span
-          title={`Created ${new Date(task.created_at).toLocaleString()}`}
-          className="relative z-10 ml-auto shrink-0 font-mono text-xs text-muted-foreground tabular-nums"
-        >
-          {shortAge(task.created_at)}
-        </span>
+        <div data-testid="task-acts" className="ml-auto flex shrink-0 items-center gap-1.5">
+          {other && <WaitsOn names={attention?.others ?? []} />}
+          {attention?.mine.map((act) => (
+            <ActChip key={act.act} act={act} />
+          ))}
+          <span
+            title={`Created ${new Date(task.created_at).toLocaleString()}`}
+            className="relative z-10 ml-2 shrink-0 font-mono text-xs text-muted-foreground tabular-nums"
+          >
+            {shortAge(task.created_at)}
+          </span>
+        </div>
       </div>
       <div
         className={cn(

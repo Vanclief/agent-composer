@@ -474,3 +474,50 @@
   border-bottom: 1px solid var(--eva-dim);
   letter-spacing: 0.2em;
 }
+
+/* The status is the loudest word on a row: alive states are filled blocks
+   with black text, the LED set in them; settled states stay outlined. */
+.dark [data-testid='task-status'] {
+  width: 7rem;
+}
+.dark [data-testid='task-status'] span[data-status][data-tier] {
+  font-size: 0.78rem;
+  padding: 3px 10px 2px;
+  border-width: 1px;
+}
+.dark [data-testid='task-status'] span[data-status][data-tier='lit'] {
+  color: oklch(0.1 0 0);
+  font-weight: 700;
+}
+.dark [data-testid='task-status'] span[data-status='running'][data-tier='lit'] {
+  background: var(--eva-green);
+  border-color: var(--eva-green);
+}
+.dark [data-testid='task-status'] span[data-status='review'][data-tier='lit'] {
+  background: oklch(0.86 0.18 92);
+  border-color: oklch(0.86 0.18 92);
+}
+.dark [data-testid='task-status'] span[data-status][data-tier='lit']:not([data-status='running']):not([data-status='review']) {
+  background: oklch(0.78 0.12 220);
+  border-color: oklch(0.78 0.12 220);
+}
+.dark [data-testid='task-status'] span[data-status][data-tier='attention'] {
+  background: var(--eva-red);
+  border-color: var(--eva-red);
+  color: oklch(0.1 0 0);
+  font-weight: 700;
+}
+.dark [data-testid='task-status'] span[data-status][data-tier='lit'] [aria-hidden] > span,
+.dark [data-testid='task-status'] span[data-status][data-tier='attention'] [aria-hidden] > span {
+  box-shadow: 0 0 0 1px oklch(0.1 0 0 / 60%);
+}
+/* Acts at the far right: the row ends with what it asks of me. */
+.dark [data-testid='task-acts'] [data-testid='act'] {
+  background: var(--eva);
+  color: oklch(0.1 0 0);
+  font-weight: 700;
+  padding: 2px 8px;
+}
+.dark [data-testid='task-acts'] [data-testid='act']:hover {
+  background: oklch(0.85 0.17 55);
+}
