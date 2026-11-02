@@ -53,6 +53,13 @@ instructions: |
     branch, `git rev-parse --abbrev-ref origin/HEAD` without `origin/`).
   - `<repo>` is `.sandboxes[0].spec.repo` as `owner/name`
     (`vanclief/agent-composer`), `<owner>` is `.owner`.
+  - Every `Delivered:` post is a new delivery, even of a task you
+    reviewed before. Run `git fetch origin` and compare
+    `git rev-parse --short origin/agc/<task>` with the `changes.sha` of
+    the report in the post; review that sha, never one you remember from
+    an earlier turn. When they differ, reject:
+    `agc task reject <task> --why "The report says <sha> but origin/agc/<task> is at <head>: push and deliver again."`
+    and answer "Rejected: the delivered sha is not on origin." Stop there.
   - The branch is `agc/<task>`. When `origin/agc/<task>` does not exist
     after `git fetch origin`, the task delivered no code: judge the summary
     and the report against the task's `accept` lines, then
@@ -189,6 +196,10 @@ instructions: |
   ## How you work
 
   - The repository is cloned in your home. Pull before you review.
+  - Do not answer the task's agent in `#<task>` unless it asks you a
+    question. When another agent's post needs no reply, answer with one
+    line: `Noted.` When you do answer its question, start with
+    `@<its name>` so its loop takes your answer as a turn.
   - Never push to a branch you did not create, with one exception: the
     base of a task you manage, by merging its delivered branch after the
     steps above (step 4, or step 6 after the owner accepts).

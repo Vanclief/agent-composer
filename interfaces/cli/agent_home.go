@@ -32,9 +32,6 @@ const (
 	cursorFile = "agc-cursor.json"
 	// maxThreadDepth bounds following reply_to to a thread's root.
 	maxThreadDepth = 100
-	// deliveredPrefix is how agc reports a delivery in #<task>
-	// (core/resources/tasks): a turn for the task's manager.
-	deliveredPrefix = "Delivered: "
 )
 
 // AgentRecord is one message as a persistent agent's turn sees it (ADR
@@ -134,6 +131,9 @@ type homeLoop struct {
 	parents map[int64]int64
 	// dropped holds the channels already logged as left out of a wait.
 	dropped map[string]bool
+	// pending holds, per session key, other agents' plain posts that were
+	// no turn, shown with the next turn in that thread.
+	pending map[string][]AgentRecord
 }
 
 // homeTurn is the work of one turn: the new messages of one thread.
@@ -300,46 +300,51 @@ func (l *homeLoop) leave() {
 	}
 }
 
-// isTurn reports whether m is for the agent: not its own, not agc's
-// except a rejection, a delivery (the agent manages the task), an accept
-// by someone else (the reviewer merges after the owner accepts) or a
-// question naming it, and not older than since.
+// isTurn reports whether m is for the agent (msgmodels.TurnFor: a
+// person's post, another agent's question or post naming it, agc's
+// rejection, delivery, accept by someone else or question naming it,
+// never its own) and not older than since.
 func (l *homeLoop) isTurn(m msgmodels.Message, since time.Time) bool {
-	if m.ParticipantID == l.me.ID || m.From == l.me.Name {
-		return false
-	}
-
 	if !since.IsZero() && m.CreatedAt.Before(since) {
 		return false
 	}
 
-	if !isSystem(m) {
-		return true
+	return msgmodels.TurnFor(&m, l.me)
+}
+
+// isContext reports whether m, not a turn, is another agent's plain post
+// the agent is shown with the next turn in its thread.
+func (l *homeLoop) isContext(m msgmodels.Message, since time.Time) bool {
+	if !since.IsZero() && m.CreatedAt.Before(since) {
+		return false
 	}
 
-	if strings.HasPrefix(m.Body, rejectedPrefix) || strings.HasPrefix(m.Body, deliveredPrefix) {
-		return true
+	if m.ParticipantID == l.me.ID || m.From == l.me.Name {
+		return false
 	}
 
-	if strings.HasPrefix(m.Body, acceptedPrefix) {
-		return m.Body != acceptedPrefix+l.me.Name+"."
-	}
-
-	return m.Kind == msgmodels.KindQuestion && strings.Contains(m.Body, "@"+l.me.Name)
+	return msgmodels.FromAgent(&m)
 }
 
 // plan groups the messages that are turns by thread: one turn per root,
 // in the order the roots first appear, or, for main, one turn for all.
+// Another agent's plain post is no turn (ADR 0016 item 6); it is kept as
+// context and shown with the next turn in its thread.
 func (l *homeLoop) plan(ctx context.Context, messages []msgmodels.Message, since time.Time) []homeTurn {
 	for _, m := range messages {
 		l.parents[m.ID] = parentOf(m)
+	}
+
+	if l.pending == nil {
+		l.pending = map[string][]AgentRecord{}
 	}
 
 	turns := []homeTurn{}
 	index := map[string]int{}
 
 	for _, m := range messages {
-		if !l.isTurn(m, since) {
+		turn := l.isTurn(m, since)
+		if !turn && !l.isContext(m, since) {
 			continue
 		}
 
@@ -347,6 +352,11 @@ func (l *homeLoop) plan(ctx context.Context, messages []msgmodels.Message, since
 		key := threadSessionKey(m.Channel, root)
 		if l.role == mainRole {
 			key = mainSessionKey
+		}
+
+		if !turn {
+			l.pending[key] = append(l.pending[key], newAgentRecord(m))
+			continue
 		}
 
 		i, ok := index[key]
@@ -359,7 +369,9 @@ func (l *homeLoop) plan(ctx context.Context, messages []msgmodels.Message, since
 		// main answers in the thread of the newest message it was given.
 		turns[i].channel = m.Channel
 		turns[i].root = root
+		turns[i].records = append(turns[i].records, l.pending[key]...)
 		turns[i].records = append(turns[i].records, newAgentRecord(m))
+		delete(l.pending, key)
 	}
 
 	return turns

@@ -15,29 +15,22 @@ import (
 
 // fromSystem reports whether agc itself posted m.
 func fromSystem(m *msgmodels.Message) bool {
-	return m.From == msgmodels.SystemName && !m.Human && m.Task == "" && m.Agent == ""
+	return msgmodels.FromSystem(m)
 }
 
-// The posts of agc in #<task> (core/resources/tasks) that are a turn for
-// the task's manager: a delivery to review, and an accept to act on (the
-// reviewer merges after the owner accepts).
-const (
-	deliveredPrefix = "Delivered: "
-	acceptedPrefix  = "Accepted by "
-)
-
 // forManager reports whether agc's post m may wake the manager of its
-// task: a delivery or an accept (managesChannel then leaves out the
-// manager's own accept).
+// task: a delivery to review, or an accept to act on (the reviewer merges
+// after the owner accepts; TurnFor leaves out the manager's own accept).
 func forManager(m *msgmodels.Message) bool {
-	return strings.HasPrefix(m.Body, deliveredPrefix) || strings.HasPrefix(m.Body, acceptedPrefix)
+	return strings.HasPrefix(m.Body, msgmodels.DeliveredPrefix) || strings.HasPrefix(m.Body, msgmodels.AcceptedPrefix)
 }
 
 // onPost is the wake hook (ADR 0016 item 6): every asleep agent that reads
-// the message's channel is woken, except for an agent's own posts and
-// agc's own posts, which wake only the manager of the task whose channel
-// they are in, and only for a delivery or an accept (forManager). Wakes
-// run in the background so a post never waits on a VM.
+// the message's channel is woken when the message is a turn for it
+// (msgmodels.TurnFor): a person's post, another agent's question or post
+// naming it, never its own post; agc's own posts wake only the manager of
+// the task whose channel they are in, and only for a delivery or an accept
+// (forManager). Wakes run in the background so a post never waits on a VM.
 func (api *API) onPost(ctx context.Context, m *msgmodels.Message) {
 	if fromSystem(m) && !forManager(m) {
 		return
@@ -60,8 +53,8 @@ func (api *API) onPost(ctx context.Context, m *msgmodels.Message) {
 	}
 }
 
-// toWake returns the asleep agents whose channels match the message's,
-// leaving out the agent that posted it.
+// toWake returns the asleep agents whose channels match the message's
+// and for which it is a turn (msgmodels.TurnFor).
 func (api *API) toWake(ctx context.Context, m *msgmodels.Message) []agent.Agent {
 	records, err := agent.ListAgents(ctx, api.db)
 	if err != nil {
@@ -73,7 +66,8 @@ func (api *API) toWake(ctx context.Context, m *msgmodels.Message) []agent.Agent 
 	for i := range records {
 		record := &records[i]
 
-		if m.Agent != "" && m.Agent == record.Home {
+		reader := &msgmodels.Participant{Name: record.Name, Agent: record.Home}
+		if !msgmodels.TurnFor(m, reader) {
 			continue
 		}
 
@@ -122,13 +116,8 @@ func (api *API) toWake(ctx context.Context, m *msgmodels.Message) []agent.Agent 
 }
 
 // managesChannel reports whether agc's post m is in #<task> of a task
-// record manages and is not the agent's own accept ("Accepted by
-// <agent>."), which needs no turn.
+// record manages.
 func (api *API) managesChannel(ctx context.Context, record *agent.Agent, m *msgmodels.Message) (bool, error) {
-	if m.Body == acceptedPrefix+record.Name+"." {
-		return false, nil
-	}
-
 	managed, err := api.managed(ctx, record)
 	if err != nil {
 		return false, ez.Wrap(err)
