@@ -41,29 +41,29 @@
   /* Eva look (Franco, 2026-11-02): warm black ground, orange type and frames. */
   --radius: 0;
   --background: oklch(0.13 0.008 60);
-  --foreground: oklch(0.8 0.17 55);
+  --foreground: oklch(0.92 0.02 80);
   --card: oklch(0.16 0.01 60);
-  --card-foreground: oklch(0.8 0.17 55);
+  --card-foreground: oklch(0.92 0.02 80);
   --popover: oklch(0.16 0.01 60);
-  --popover-foreground: oklch(0.8 0.17 55);
+  --popover-foreground: oklch(0.92 0.02 80);
   --primary: oklch(0.74 0.19 48);
   --primary-foreground: oklch(0.1 0 0);
   --secondary: oklch(0.22 0.03 55);
-  --secondary-foreground: oklch(0.8 0.17 55);
+  --secondary-foreground: oklch(0.92 0.02 80);
   --muted: oklch(0.2 0.02 55);
-  --muted-foreground: oklch(0.62 0.1 55);
+  --muted-foreground: oklch(0.62 0.03 70);
   --accent: oklch(0.24 0.04 55);
-  --accent-foreground: oklch(0.85 0.17 55);
+  --accent-foreground: oklch(0.92 0.02 80);
   --destructive: oklch(0.62 0.25 27);
   --border: oklch(0.74 0.19 48 / 35%);
   --input: oklch(0.74 0.19 48 / 25%);
   --ring: oklch(0.8 0.14 200);
   --sidebar: oklch(0.11 0.006 60);
-  --sidebar-foreground: oklch(0.8 0.17 55);
+  --sidebar-foreground: oklch(0.92 0.02 80);
   --sidebar-primary: oklch(0.74 0.19 48);
   --sidebar-primary-foreground: oklch(0.1 0 0);
   --sidebar-accent: oklch(0.22 0.03 55);
-  --sidebar-accent-foreground: oklch(0.85 0.17 55);
+  --sidebar-accent-foreground: oklch(0.92 0.02 80);
   --sidebar-border: oklch(0.74 0.19 48 / 35%);
   --sidebar-ring: oklch(0.8 0.14 200);
 }
@@ -124,17 +124,28 @@
 }
 
 /* Eva look, the Tasks page test (Franco, 2026-11-02). Unlayered on purpose:
-   these rules override Tailwind utilities on the shell and the Tasks list. */
+   these rules override Tailwind utilities on the shell and the Tasks list.
+   Palette: orange for frames, tabs and emphasis; pale text; green alive,
+   yellow review, red dead, cyan for the thing you are on. */
 .dark {
   --eva: oklch(0.74 0.19 48);
   --eva-dim: oklch(0.74 0.19 48 / 40%);
+  --eva-faint: oklch(0.74 0.19 48 / 12%);
   --eva-red: oklch(0.62 0.25 27);
   --eva-green: oklch(0.8 0.2 150);
+  --eva-yellow: oklch(0.86 0.18 92);
   --eva-cyan: oklch(0.8 0.14 200);
+  --eva-ink: oklch(0.1 0 0);
+  --cut: 12px;
   color-scheme: dark;
 }
 .dark body {
   font-weight: 500;
+  background-color: var(--background);
+  background-image:
+    linear-gradient(oklch(0.74 0.19 48 / 6%) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.74 0.19 48 / 6%) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 /* Labels: condensed, uppercase, spaced. */
 .dark h1[data-testid='page-title'],
@@ -147,205 +158,24 @@
   letter-spacing: 0.08em;
   font-weight: 600;
 }
-.dark h1[data-testid='page-title'] {
-  font-size: 1.25rem;
-  letter-spacing: 0.18em;
-}
-/* Frames: one-pixel orange lines, square. */
+/* Shell: black panels, orange one-pixel frames. */
 .dark aside,
 .dark aside > div,
 .dark main > header {
   border-color: var(--eva-dim);
+  background-color: var(--sidebar);
 }
-.dark aside {
-  background: var(--sidebar);
+.dark aside > div:first-child {
+  letter-spacing: 0.2em;
 }
 .dark aside > div:first-child > span {
   background: var(--eva);
-  color: oklch(0.1 0 0);
+  color: var(--eva-ink);
   border-radius: 0;
 }
-/* Area headers: outlined blocks; the current area is an inverted block. */
-.dark nav[aria-label='Main'] button[data-testid^='area-header-'] {
-  border: 1px solid var(--eva-dim);
-  border-radius: 0;
-  color: var(--foreground);
-  background: transparent;
-}
-.dark nav[aria-label='Main'] button[data-testid^='area-header-']:hover {
-  background: var(--accent);
-  color: var(--accent-foreground);
-}
-.dark nav[aria-label='Main'] button[data-testid^='area-header-'][data-current='true'] {
-  background: var(--eva);
-  color: oklch(0.1 0 0);
-  border-color: var(--eva);
-}
-.dark nav[aria-label='Main'] button[data-testid^='area-header-'][data-current='true'] svg {
-  color: oklch(0.1 0 0);
-}
-/* Pages: a left bar marks the active one. */
-.dark nav[aria-label='Main'] a {
-  border-radius: 0;
-  border-left: 3px solid transparent;
-  color: var(--muted-foreground);
-  background: transparent;
-}
-.dark nav[aria-label='Main'] a:hover {
-  color: var(--foreground);
-  background: var(--accent);
-}
-.dark nav[aria-label='Main'] a[aria-current='page'] {
-  border-left-color: var(--eva);
-  color: var(--foreground);
-  background: var(--secondary);
-}
-/* The task list: every row a framed block; the tier shows on its left edge. */
-.dark ul[aria-label='Tasks'] {
-  border: 0;
-  gap: 6px;
-}
-.dark ul[aria-label='Tasks'] > li {
-  position: relative;
-  border: 1px solid var(--eva-dim);
-  border-left-width: 4px;
-  background: var(--card);
-  padding: 10px 14px 10px 16px;
-}
-.dark ul[aria-label='Tasks'] > li + li {
-  border-top-width: 1px;
-}
-.dark ul[aria-label='Tasks'] > li:hover {
-  background: var(--secondary);
-}
-.dark ul[aria-label='Tasks'] > li[data-tier='lit'] {
-  border-left-color: var(--eva);
-}
-.dark ul[aria-label='Tasks'] > li[data-tier='idle'] {
-  border-left-color: var(--eva-dim);
-}
-.dark ul[aria-label='Tasks'] > li[data-tier='off'] {
-  border-color: oklch(0.74 0.19 48 / 20%);
-  border-left-color: oklch(0.74 0.19 48 / 25%);
-}
-.dark ul[aria-label='Tasks'] > li[data-attention='me'] {
-  border-color: var(--eva);
-  border-left-color: var(--eva);
-}
-.dark ul[aria-label='Tasks'] > li[data-tier='attention']:not([data-attention]) {
-  border-color: var(--eva-red);
-  border-left-color: var(--eva-red);
-}
-/* A dead row wears hazard stripes along the top. */
-.dark ul[aria-label='Tasks'] > li[data-tier='attention']:not([data-attention])::after {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 5px;
-  background: repeating-linear-gradient(-45deg, var(--eva-red) 0 8px, transparent 8px 16px);
-}
-.dark ul[aria-label='Tasks'] > li > div > a[href^='/panel/tasks/']:not([data-testid]) {
-  color: var(--foreground);
-  font-size: 1rem;
-}
-.dark ul[aria-label='Tasks'] > li[data-tier='off'] > div > a[href^='/panel/tasks/']:not([data-testid]) {
-  color: var(--muted-foreground);
-}
-.dark ul[aria-label='Tasks'] > li > div > span[title] {
-  color: var(--muted-foreground);
-}
-/* Status words: a bracketed, square readout. */
-.dark span[data-status][data-tier] {
-  border-radius: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-}
-.dark span[data-status][data-tier='lit'][data-status='running'] {
-  border-color: var(--eva-green);
-  color: var(--eva-green);
-}
-.dark span[data-status][data-tier='off'] {
-  border-color: var(--eva-dim);
-  color: var(--muted-foreground);
-}
-.dark span[data-status][data-tier='idle'] {
-  border-color: var(--eva-dim);
-  color: var(--muted-foreground);
-}
-.dark span[data-status][data-tier='attention'] {
-  border-color: var(--eva-red);
-  color: var(--eva-red);
-}
-/* The compute chip and the new-task button, squared and in the frame color. */
-.dark a[data-testid='sandbox-summary'] {
-  border-radius: 0;
-  background: transparent;
-  border-color: var(--eva-dim);
-  color: var(--foreground);
-}
-.dark a[data-testid='sandbox-summary'] [data-status] {
-  background: transparent;
-}
-.dark button:has(> svg.lucide-plus) {
-  border-radius: 0;
-  background: transparent;
-  border: 1px solid var(--eva);
-  color: var(--eva);
-}
-.dark button:has(> svg.lucide-plus):hover {
-  background: var(--eva);
-  color: oklch(0.1 0 0);
-}
-/* Top bar readouts in the frame color. */
-.dark [data-testid='live-status'],
-.dark [data-testid='me'] {
-  color: var(--muted-foreground);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  border-radius: 0;
-}
-/* What a row asks of me: square outlined chips; the count badge a solid block. */
-.dark [data-testid='act'] {
-  border-radius: 0;
-  box-shadow: none;
-  background: transparent;
-  border: 1px solid var(--eva);
-  color: var(--eva);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-}
-.dark [data-testid='tasks-badge'],
-.dark [data-testid^='area-badge-'] > span,
-.dark span[data-testid$='-badge'] {
-  border-radius: 0;
-}
-.dark [data-testid='attention-mark'] {
-  background: var(--eva);
-  box-shadow: 0 0 6px 1px var(--eva-dim);
-  border-radius: 0;
-}
-
-/* Instrument layer: the display behind, the frame tabs, indexes and corner
-   marks that make a list read as a panel. */
-.dark body {
-  background-color: var(--background);
-  background-image:
-    linear-gradient(oklch(0.74 0.19 48 / 6%) 1px, transparent 1px),
-    linear-gradient(90deg, oklch(0.74 0.19 48 / 6%) 1px, transparent 1px);
-  background-size: 24px 24px;
-}
-.dark aside,
-.dark main > header {
-  background-color: var(--sidebar);
-}
-/* The top bar ends in a ruler: a line with a tick every 24px. */
+/* The top bar ends in a ruler: a line with a tick every grid cell. */
 .dark main > header {
   position: relative;
-  border-bottom: 1px solid var(--eva-dim);
 }
 .dark main > header::after {
   content: '';
@@ -356,84 +186,38 @@
   height: 5px;
   background: repeating-linear-gradient(90deg, var(--eva-dim) 0 1px, transparent 1px 24px);
 }
-/* The page title is a filled tab in the frame. */
+/* The page title is a filled tab in the frame, cut at its top right. */
 .dark h1[data-testid='page-title'] {
   background: var(--eva);
-  color: oklch(0.1 0 0);
-  padding: 2px 12px 1px;
+  color: var(--eva-ink);
+  padding: 2px 18px 1px 12px;
   font-size: 1rem;
   line-height: 1.5;
+  letter-spacing: 0.18em;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
 }
 .dark h1[data-testid='page-title'] > * {
   color: oklch(0.1 0 0 / 65%);
 }
-/* The task list is one framed panel; rows are its lines, indexed. */
-.dark ul[aria-label='Tasks'] {
-  counter-reset: row;
-  gap: 4px;
-}
-.dark ul[aria-label='Tasks'] > li {
-  padding-left: 48px;
-  counter-increment: row;
-}
-.dark ul[aria-label='Tasks'] > li::before {
-  content: counter(row, decimal-leading-zero);
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 32px;
-  display: grid;
-  place-items: center;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.05em;
-  color: var(--eva);
-  border-right: 1px solid var(--eva-dim);
-  background: oklch(0.74 0.19 48 / 8%);
-}
-.dark ul[aria-label='Tasks'] > li[data-tier='off']::before {
+.dark [data-testid='live-status'],
+.dark [data-testid='me'] {
   color: var(--muted-foreground);
-  background: transparent;
-}
-/* A corner mark on every row's top right. */
-.dark ul[aria-label='Tasks'] > li > div:first-of-type::after {
-  content: '';
-  position: absolute;
-  top: -1px;
-  right: -1px;
-  width: 10px;
-  height: 10px;
-  border-top: 2px solid var(--eva);
-  border-right: 2px solid var(--eva);
-}
-.dark ul[aria-label='Tasks'] > li[data-tier='off'] > div:first-of-type::after {
-  border-color: var(--eva-dim);
-}
-/* Alive statuses read as filled tabs; the rest stay outlined. */
-.dark span[data-status][data-tier='lit'] {
-  background: oklch(0.74 0.19 48 / 12%);
-}
-/* Counts beside the legend: telemetry. */
-.dark [data-testid='status-counts'] {
-  font-family: var(--font-mono);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.7rem;
-  color: var(--muted-foreground);
+  letter-spacing: 0.1em;
+  border-radius: 0;
 }
-.dark [data-testid='status-counts'] b {
-  color: var(--foreground);
-  font-weight: 600;
-}
-
-/* The sidebar as an index: areas numbered, pages hanging off a rail. */
+/* Sidebar: numbered area headers as outlined blocks, the current one filled;
+   pages hang off a rail; the page you are on is cyan. */
 .dark nav[aria-label='Main'] {
   counter-reset: area;
   gap: 10px;
 }
 .dark nav[aria-label='Main'] button[data-testid^='area-header-'] {
   counter-increment: area;
+  border: 1px solid var(--eva-dim);
+  border-radius: 0;
+  color: var(--eva);
+  background: transparent;
 }
 .dark nav[aria-label='Main'] button[data-testid^='area-header-']::before {
   content: counter(area, decimal-leading-zero);
@@ -446,15 +230,43 @@
 .dark nav[aria-label='Main'] button[data-testid^='area-header-'] > svg:first-of-type {
   display: none;
 }
+.dark nav[aria-label='Main'] button[data-testid^='area-header-']:hover {
+  background: var(--eva-faint);
+}
+.dark nav[aria-label='Main'] button[data-testid^='area-header-'][data-current='true'] {
+  background: var(--eva);
+  color: var(--eva-ink);
+  border-color: var(--eva);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+}
+.dark nav[aria-label='Main'] button[data-testid^='area-header-'][data-current='true'] svg {
+  color: var(--eva-ink);
+}
 .dark nav[aria-label='Main'] button[data-testid^='area-header-'] + ul {
   margin-left: 10px;
   padding-left: 8px;
   border-left: 1px solid var(--eva-dim);
 }
-.dark nav[aria-label='Main'] button[data-testid^='area-header-'] + ul a[aria-current='page'] {
-  background: oklch(0.74 0.19 48 / 12%);
+.dark nav[aria-label='Main'] a {
+  border-radius: 0;
+  border-left: 3px solid transparent;
+  color: var(--muted-foreground);
+  background: transparent;
 }
-/* The list's header is a strip with its own ruler. */
+.dark nav[aria-label='Main'] a:hover {
+  color: var(--foreground);
+  background: var(--accent);
+}
+.dark nav[aria-label='Main'] a[aria-current='page'] {
+  border-left-color: var(--eva-cyan);
+  color: var(--eva-cyan);
+  background: oklch(0.8 0.14 200 / 10%);
+}
+.dark nav[aria-label='Main'] a[aria-current='page'] svg {
+  color: var(--eva-cyan);
+}
+/* The list header: a strip with its own ruler; the new-task control an
+   outlined block. */
 .dark div:has(> ul[aria-label='Tasks']) > div:first-child {
   position: relative;
   padding-bottom: 10px;
@@ -469,55 +281,202 @@
   height: 4px;
   background: repeating-linear-gradient(90deg, var(--eva-dim) 0 1px, transparent 1px 12px);
 }
-/* The logo block: a filled tab like the title. */
-.dark aside > div:first-child {
-  border-bottom: 1px solid var(--eva-dim);
-  letter-spacing: 0.2em;
+.dark [data-testid='status-counts'] {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  color: var(--muted-foreground);
 }
-
-/* The status is the loudest word on a row: alive states are filled blocks
-   with black text, the LED set in them; settled states stay outlined. */
+.dark [data-testid='status-counts'] b {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.dark button:has(> svg.lucide-plus) {
+  border-radius: 0;
+  background: transparent;
+  border: 1px solid var(--eva);
+  color: var(--eva);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+.dark button:has(> svg.lucide-plus):hover {
+  background: var(--eva);
+  color: var(--eva-ink);
+}
+/* Rows: each task a chamfered plate. The plate is drawn by the row's own
+   background (the frame color) and a pseudo-element one pixel inside (the
+   fill), both cut at the top right and the bottom left; the content sits
+   above them. The status is a tab fused into the plate's left edge. */
+.dark ul[aria-label='Tasks'] {
+  border: 0;
+  gap: 6px;
+  counter-reset: row;
+}
+.dark ul[aria-label='Tasks'] > li {
+  position: relative;
+  isolation: isolate;
+  counter-increment: row;
+  border: 0;
+  background: var(--eva-dim);
+  padding: 10px 14px 10px calc(7.5rem + 14px);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+}
+.dark ul[aria-label='Tasks'] > li + li {
+  border-top: 0;
+}
+.dark ul[aria-label='Tasks'] > li::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  background: var(--card);
+  clip-path: polygon(0 0, calc(100% - var(--cut) + 1px) 0, 100% calc(var(--cut) - 1px), 100% 100%, calc(var(--cut) - 1px) 100%, 0 calc(100% - var(--cut) + 1px));
+}
+.dark ul[aria-label='Tasks'] > li:hover::after {
+  background: var(--secondary);
+}
+.dark ul[aria-label='Tasks'] > li > * {
+  position: relative;
+  z-index: 1;
+}
+.dark ul[aria-label='Tasks'] > li[data-attention='me'] {
+  background: var(--eva);
+}
+.dark ul[aria-label='Tasks'] > li[data-tier='attention']:not([data-attention]) {
+  background: var(--eva-red);
+}
+.dark ul[aria-label='Tasks'] > li[data-tier='off'] {
+  background: oklch(0.74 0.19 48 / 22%);
+}
+/* The row index, small, at the top right inside the cut. */
+.dark ul[aria-label='Tasks'] > li::before {
+  content: counter(row, decimal-leading-zero);
+  position: absolute;
+  z-index: 1;
+  right: 16px;
+  top: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  color: var(--eva-dim);
+}
+/* The status tab: the left edge of the plate, top to bottom, in the
+   status color for alive and dead states, outlined and dim for the rest. */
+.dark ul[aria-label='Tasks'] > li > div:first-of-type {
+  position: static;
+}
 .dark [data-testid='task-status'] {
-  width: 7rem;
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  bottom: 1px;
+  width: 7.5rem;
+  display: flex;
+  z-index: 1;
+  border-right: 1px solid var(--eva-dim);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, calc(var(--cut) - 1px) 100%, 0 calc(100% - var(--cut) + 1px));
 }
 .dark [data-testid='task-status'] span[data-status][data-tier] {
-  font-size: 0.78rem;
-  padding: 3px 10px 2px;
-  border-width: 1px;
+  flex: 1;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  padding: 0 8px 0 14px;
+  color: var(--muted-foreground);
+  background: var(--eva-faint);
 }
-.dark [data-testid='task-status'] span[data-status][data-tier='lit'] {
-  color: oklch(0.1 0 0);
+.dark [data-testid='task-status'] span[data-status][data-tier='lit'],
+.dark [data-testid='task-status'] span[data-status][data-tier='attention'] {
+  color: var(--eva-ink);
   font-weight: 700;
 }
 .dark [data-testid='task-status'] span[data-status='running'][data-tier='lit'] {
   background: var(--eva-green);
-  border-color: var(--eva-green);
 }
 .dark [data-testid='task-status'] span[data-status='review'][data-tier='lit'] {
-  background: oklch(0.86 0.18 92);
-  border-color: oklch(0.86 0.18 92);
+  background: var(--eva-yellow);
 }
 .dark [data-testid='task-status'] span[data-status][data-tier='lit']:not([data-status='running']):not([data-status='review']) {
   background: oklch(0.78 0.12 220);
-  border-color: oklch(0.78 0.12 220);
 }
 .dark [data-testid='task-status'] span[data-status][data-tier='attention'] {
   background: var(--eva-red);
-  border-color: var(--eva-red);
-  color: oklch(0.1 0 0);
-  font-weight: 700;
 }
 .dark [data-testid='task-status'] span[data-status][data-tier='lit'] [aria-hidden] > span,
 .dark [data-testid='task-status'] span[data-status][data-tier='attention'] [aria-hidden] > span {
   box-shadow: 0 0 0 1px oklch(0.1 0 0 / 60%);
 }
-/* Acts at the far right: the row ends with what it asks of me. */
-.dark [data-testid='task-acts'] [data-testid='act'] {
+.dark ul[aria-label='Tasks'] > li > [data-testid='attention-mark'] {
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  bottom: 1px;
+  width: 3px;
+  border-radius: 0;
   background: var(--eva);
-  color: oklch(0.1 0 0);
-  font-weight: 700;
-  padding: 2px 8px;
+  box-shadow: none;
+  z-index: 2;
 }
-.dark [data-testid='task-acts'] [data-testid='act']:hover {
+/* Title, name, meta. */
+.dark ul[aria-label='Tasks'] > li > div > a[href^='/panel/tasks/']:not([data-testid]) {
+  color: var(--foreground);
+  font-size: 1rem;
+}
+.dark ul[aria-label='Tasks'] > li[data-tier='off'] > div > a[href^='/panel/tasks/']:not([data-testid]) {
+  color: var(--muted-foreground);
+}
+.dark ul[aria-label='Tasks'] > li > div > span[title] {
+  color: var(--muted-foreground);
+}
+/* Status readouts elsewhere (the compute chip, the counts): square mono. */
+.dark span[data-status][data-tier] {
+  border-radius: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+.dark a[data-testid='sandbox-summary'] {
+  border-radius: 0;
+  background: transparent;
+  border-color: oklch(0.62 0.03 70 / 50%);
+  color: var(--foreground);
+}
+.dark a[data-testid='sandbox-summary'] [data-status] {
+  background: transparent;
+}
+.dark a[data-testid='sandbox-summary'] [data-status][data-tier='lit'] {
+  color: var(--eva-green);
+  border-color: var(--eva-green);
+}
+.dark a[data-testid='sandbox-summary'] [data-status][data-tier='attention'] {
+  color: var(--eva-red);
+  border-color: var(--eva-red);
+}
+/* Acts at the far right: filled orange blocks, cut at the top right. */
+.dark [data-testid='act'] {
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--eva);
+  color: var(--eva-ink);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 10px 2px 8px;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+}
+.dark [data-testid='act']:hover {
   background: oklch(0.85 0.17 55);
+}
+.dark [data-testid='tasks-badge'],
+.dark span[data-testid$='-badge'] {
+  border-radius: 0;
+}
+/* The meta line aligns with the title now that the status is a tab. */
+.dark ul[aria-label='Tasks'] > li > div:nth-of-type(2) {
+  padding-left: 0;
 }
