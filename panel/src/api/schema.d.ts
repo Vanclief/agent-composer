@@ -283,7 +283,7 @@ export interface paths {
         put?: never;
         /**
          * Accept a task
-         * @description Sets `done_at` and `accepted_by`, posts "Accepted by <name>." in #<task> as agc, then stops every running sandbox of the task as POST /sandboxes/{id}/stop does, and every starting one as soon as its boot finishes, keeping its disk; a sandbox that cannot be stopped is logged and does not fail the accept (ADR 0010 item 4). Nothing is deleted, and a stopped sandbox can be started again. A task already done is returned as it is. The body is optional. `/accept` posted in #<task> by the manager or the owner, and `/accept <task>` posted by the owner in #<owner>, do the same.
+         * @description Sets `done_at` and `accepted_by`, posts "Accepted by <name>." in #<task> as agc, then stops every running sandbox of the task as POST /sandboxes/{id}/stop does, and every starting one as soon as its boot finishes, keeping its disk; a sandbox that cannot be stopped is logged and does not fail the accept (ADR 0010 item 4). Nothing is deleted, and a stopped sandbox can be started again. A task already done is returned as it is. The body is optional. `/accept` posted in #<task> by the manager or the owner, and `/accept <task>` posted by the owner in #<owner>, do the same. The first accept publishes `task.done` on GET /events, and each sandbox it stops `sandbox.status`.
          */
         post: operations["acceptTask"];
         delete?: never;
@@ -602,6 +602,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream live events
+         * @description Server-sent events (`text/event-stream`, `Cache-Control: no-cache`) until the client goes away. Each event is `id: <n>` (the event number), `event: <type>` and `data: <json>`; the server sends the comment `: ping` every 20 seconds as a heartbeat. Missed events are never replayed: after a reconnect, refetch. A client that falls too far behind is disconnected. Types and their data: `task.created` (TaskCreatedEvent) when a task is created, after its sandbox, if any, is allocated; `task.done` (TaskDoneEvent) when a task is accepted, the first time only; `sandbox.status` (SandboxStatusEvent) on every status change: allocated (starting), booted, failed, stopped (by POST /sandboxes/{id}/stop or by the task's accept, also right after a boot that finished once the task was accepted), started, and deleted (status `deleted`); `message.posted` (MessagePostedEvent) for every message stored in any channel, agc's included.
+         */
+        get: operations["streamEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -857,6 +877,8 @@ export interface components {
             owner: string;
             /** @description Id of the knowledge action or decision the task serves; empty for none. */
             for: string;
+            /** @description The panel shows a toast and plays a chime when the task starts (task.created) and when it is done (task.done). */
+            notify: boolean;
             /**
              * @description Computed: done when done_at is set, otherwise review when delivered_at is set, otherwise running when a sandbox is running, otherwise open (ADR 0010 item 3).
              * @enum {string}
@@ -901,6 +923,11 @@ export interface components {
             /** @description The human the task answers to, a messaging name. Defaults to the configured owner; its sandboxes may post in #<owner>. */
             owner?: string;
             for?: string;
+            /**
+             * @description Notify in the panel when the task starts and when it is done (task.yaml `notify:`).
+             * @default true
+             */
+            notify: boolean;
             sandbox?: components["schemas"]["SandboxRequest"];
         };
         DeliverTaskRequest: {
@@ -935,7 +962,7 @@ export interface components {
             command: string;
             /** @description The TASK.md written into the sandbox at /home/agent/TASK.md, byte for byte (ADR 0009). */
             instructions: string;
-            /** @description starting until booted, failed when the boot failed (status_error says why), otherwise the runtime's word verbatim (running, stopped), or unknown when the runtime cannot be asked (status_error says why). */
+            /** @description starting until booted, failed when the boot failed (status_error says why), otherwise the runtime's word verbatim (running, stopped), or unknown when the runtime cannot be asked (status_error says why). In a sandbox.status event, deleted once it is gone. */
             status: string;
             /** @description Why the status is failed or unknown. */
             status_error?: string;
@@ -947,6 +974,43 @@ export interface components {
             created_at: string;
             /** @description What stopping or deleting the sandbox would lose (ADR 0008 item 6), read live from its clone. Set by GET /sandboxes/{id} and by the list with work=1 when the sandbox is running and has a repo; null otherwise, and null when the check failed. */
             work: components["schemas"]["SandboxWork"] | null;
+        };
+        /** @description A message in a channel, as /api/msg returns it (ADR 0005). */
+        ChannelMessage: {
+            /**
+             * Format: int64
+             * @description Also the read cursor; ids are totally ordered per channel.
+             */
+            id: number;
+            channel: string;
+            from: string;
+            participant_id: string;
+            /** @description The poster's task; empty for a human and for agc. */
+            task: string;
+            human: boolean;
+            /** Format: int64 */
+            reply_to?: number;
+            body: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        /** @description Data of `task.created`. */
+        TaskCreatedEvent: {
+            task: components["schemas"]["Task"];
+        };
+        /** @description Data of `task.done`. */
+        TaskDoneEvent: {
+            task: components["schemas"]["Task"];
+            /** @description The task's `summary` when it is delivered; otherwise the body of the last message in #<task> from neither a human nor agc (`/accept` and `/reject` commands skipped). Cut to 500 characters; empty when there is none. */
+            summary: string;
+        };
+        /** @description Data of `sandbox.status`; status is `deleted` once the sandbox is gone. */
+        SandboxStatusEvent: {
+            sandbox: components["schemas"]["Sandbox"];
+        };
+        /** @description Data of `message.posted`. */
+        MessagePostedEvent: {
+            message: components["schemas"]["ChannelMessage"];
         };
         SandboxWork: {
             /** @description The clone has uncommitted changes (git status --porcelain printed a line). */
@@ -2540,6 +2604,27 @@ export interface operations {
                 };
             };
             400: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    streamEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The stream. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
             500: components["responses"]["Error"];
         };
     };

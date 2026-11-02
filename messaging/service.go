@@ -14,6 +14,7 @@ import (
 	"github.com/uptrace/bun"
 	"github.com/vanclief/ez"
 
+	"github.com/vanclief/agent-composer/core/events"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 )
 
@@ -58,6 +59,22 @@ type Service struct {
 
 	// system serializes taking the reserved name agc.
 	system sync.Mutex
+
+	// events gets message.posted for every stored message, nil drops them.
+	events *events.Bus
+}
+
+// PostedEvent is the data of message.posted.
+type PostedEvent struct {
+	Message *msgmodels.Message `json:"message"`
+}
+
+// SetEvents publishes message.posted on bus for every message stored from
+// now on, before the post hooks run.
+func (s *Service) SetEvents(bus *events.Bus) {
+	s.mu.Lock()
+	s.events = bus
+	s.mu.Unlock()
 }
 
 func NewService(db bun.IDB) *Service {
@@ -265,7 +282,10 @@ func (s *Service) insert(ctx context.Context, p *msgmodels.Participant, channel,
 	close(s.posted)
 	s.posted = make(chan struct{})
 	hooks := s.hooks
+	bus := s.events
 	s.mu.Unlock()
+
+	bus.Publish(events.Event{Type: events.MessagePosted, Data: PostedEvent{Message: m}})
 
 	for _, hook := range hooks {
 		hook(ctx, m)

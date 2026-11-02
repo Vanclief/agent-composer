@@ -29,6 +29,9 @@ tags:
     description: >
       A sandbox is the compute a task is allocated: one microsandbox VM (ADR 0003, ADR 0008).
       Once booted, its status is read live from the runtime and passed through verbatim.
+  - name: Events
+    description: >
+      The live feed: a server-sent events stream of what changes tasks, sandboxes and channels.
   - name: Knowledge
     description: >
       Evidence, beliefs, decisions and rules (ADR 0006), read only. Labels are computed on every
@@ -649,7 +652,8 @@ paths:
         stopped is logged and does not fail the accept (ADR 0010 item 4).
         Nothing is deleted, and a stopped sandbox can be started again. A task already done is
         returned as it is. The body is optional. `/accept` posted in #<task> by the manager or
-        the owner, and `/accept <task>` posted by the owner in #<owner>, do the same.
+        the owner, and `/accept <task>` posted by the owner in #<owner>, do the same. The first
+        accept publishes `task.done` on GET /events, and each sandbox it stops `sandbox.status`.
       parameters:
         - $ref: '#/components/parameters/TaskIdParam'
       requestBody:
@@ -1168,6 +1172,38 @@ paths:
                 $ref: '#/components/schemas/KnowledgeConflictSet'
         '400':
           $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /events:
+    get:
+      tags: [Events]
+      operationId: streamEvents
+      summary: Stream live events
+      description: >
+        Server-sent events (`text/event-stream`, `Cache-Control: no-cache`) until the client goes
+        away. Each event is `id: <n>` (the event number), `event: <type>` and `data: <json>`; the
+        server sends the comment `: ping` every 20 seconds as a heartbeat. Missed events are never
+        replayed: after a reconnect, refetch. A client that falls too far behind is disconnected.
+        Types and their data:
+        `task.created` (TaskCreatedEvent) when a task is created, after its sandbox, if any, is
+        allocated;
+        `task.done` (TaskDoneEvent) when a task is accepted, the first time only;
+        `sandbox.status` (SandboxStatusEvent) on every status change: allocated (starting),
+        booted, failed, stopped (by POST /sandboxes/{id}/stop or by the task's accept, also
+        right after a boot that finished once the task was accepted), started, and deleted
+        (status `deleted`);
+        `message.posted` (MessagePostedEvent) for every message stored in any channel, agc's
+        included.
+      responses:
+        '200':
+          description: The stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: >
+                  Frames as described above; each data is one of the event schemas
+                  (TaskCreatedEvent, TaskDoneEvent, SandboxStatusEvent, MessagePostedEvent).
         '500':
           $ref: '#/components/responses/Error'
 components:
@@ -1792,6 +1828,11 @@ components:
         for:
           type: string
           description: Id of the knowledge action or decision the task serves; empty for none.
+        notify:
+          type: boolean
+          description: >
+            The panel shows a toast and plays a chime when the task starts (task.created) and when
+            it is done (task.done).
         status:
           type: string
           enum: [open, running, review, done]
@@ -1836,6 +1877,7 @@ components:
         - manager
         - owner
         - for
+        - notify
         - status
         - done_at
         - accepted_by
@@ -1889,6 +1931,10 @@ components:
             sandboxes may post in #<owner>.
         for:
           type: string
+        notify:
+          type: boolean
+          default: true
+          description: Notify in the panel when the task starts and when it is done (task.yaml `notify:`).
         sandbox:
           $ref: '#/components/schemas/SandboxRequest'
     DeliverTaskRequest:
@@ -1955,7 +2001,7 @@ components:
           description: >
             starting until booted, failed when the boot failed (status_error says why), otherwise
             the runtime's word verbatim (running, stopped), or unknown when the runtime cannot be
-            asked (status_error says why).
+            asked (status_error says why). In a sandbox.status event, deleted once it is gone.
         status_error:
           type: string
           description: Why the status is failed or unknown.
@@ -1991,6 +2037,81 @@ components:
         - stopped_at
         - created_at
         - work
+    ChannelMessage:
+      type: object
+      description: A message in a channel, as /api/msg returns it (ADR 0005).
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Also the read cursor; ids are totally ordered per channel.
+        channel:
+          type: string
+        from:
+          type: string
+        participant_id:
+          type: string
+        task:
+          type: string
+          description: The poster's task; empty for a human and for agc.
+        human:
+          type: boolean
+        reply_to:
+          type: integer
+          format: int64
+        body:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - channel
+        - from
+        - participant_id
+        - task
+        - human
+        - body
+        - created_at
+    TaskCreatedEvent:
+      type: object
+      description: Data of `task.created`.
+      properties:
+        task:
+          $ref: '#/components/schemas/Task'
+      required:
+        - task
+    TaskDoneEvent:
+      type: object
+      description: Data of `task.done`.
+      properties:
+        task:
+          $ref: '#/components/schemas/Task'
+        summary:
+          type: string
+          description: >
+            The task's `summary` when it is delivered; otherwise the body of the last message in
+            #<task> from neither a human nor agc (`/accept` and `/reject` commands skipped). Cut to
+            500 characters; empty when there is none.
+      required:
+        - task
+        - summary
+    SandboxStatusEvent:
+      type: object
+      description: Data of `sandbox.status`; status is `deleted` once the sandbox is gone.
+      properties:
+        sandbox:
+          $ref: '#/components/schemas/Sandbox'
+      required:
+        - sandbox
+    MessagePostedEvent:
+      type: object
+      description: Data of `message.posted`.
+      properties:
+        message:
+          $ref: '#/components/schemas/ChannelMessage'
+      required:
+        - message
     SandboxWork:
       type: object
       properties:

@@ -28,6 +28,12 @@ done_at TIMESTAMP, created_at TIMESTAMP NOT NULL, updated_at TIMESTAMP NOT NULL)
 		t.Fatal(err)
 	}
 
+	// The earlier task notify migration, so the model can read the row.
+	err = taskNotify(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Twice: the second run, as on a fresh database, changes nothing.
 	for range 2 {
 		err = taskAcceptance(ctx, db)

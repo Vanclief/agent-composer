@@ -134,6 +134,15 @@ func TestParseFile(t *testing.T) {
 		t.Fatalf("got %+v", parsed)
 	}
 
+	if parsed.Notify != nil {
+		t.Fatalf("notify without notify: %v", *parsed.Notify)
+	}
+
+	parsed, err = ParseFile([]byte("title: Review ads\nnotify: false\n"))
+	if err != nil || parsed.Notify == nil || *parsed.Notify {
+		t.Fatalf("notify: false: got %+v, err %v", parsed, err)
+	}
+
 	parsed, err = ParseFile(nil)
 	if err != nil || !reflect.DeepEqual(parsed, File{}) {
 		t.Fatalf("empty file: got %+v, err %v", parsed, err)

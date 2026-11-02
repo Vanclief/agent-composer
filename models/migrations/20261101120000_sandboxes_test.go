@@ -69,6 +69,11 @@ spec BLOB, created_at TIMESTAMP NOT NULL, updated_at TIMESTAMP NOT NULL)`)
 		t.Fatal(err)
 	}
 
+	err = taskNotify(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	err = taskAcceptance(ctx, db)
 	if err != nil {
 		t.Fatal(err)

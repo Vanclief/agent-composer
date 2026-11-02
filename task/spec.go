@@ -86,7 +86,9 @@ type File struct {
 	Manager  string   `yaml:"manager"`
 	Owner    string   `yaml:"owner"`
 	For      string   `yaml:"for"`
-	Sandbox  *Sandbox `yaml:"sandbox"`
+	// Notify is nil when the file does not say, and the task then notifies.
+	Notify  *bool    `yaml:"notify"`
+	Sandbox *Sandbox `yaml:"sandbox"`
 }
 
 // LoadFile reads a task.yaml.
