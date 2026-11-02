@@ -18,6 +18,7 @@ var ALL = []interface{}{
 	(*account.Account)(nil),
 	(*hook.Hook)(nil),
 	(*messaging.Participant)(nil), (*messaging.Message)(nil),
+	(*messaging.ChannelArchive)(nil),
 	(*agent.Conversation)(nil),
 	(*agent.Spec)(nil),
 	(*agent.Agent)(nil),
