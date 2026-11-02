@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -810,6 +811,63 @@ func TestWakeHookWakesOnlyMatchingAsleepAgents(t *testing.T) {
 		}
 	})
 
+	t.Run("agc's delivery and accept wake the task's manager", func(t *testing.T) {
+		env := newTestEnv(t)
+		env.create(t, "reviewer")
+		env.create(t, "reviewer")
+
+		_, err := env.tasks.Create(ctx, nil, &tasks.CreateRequest{Name: "review-42", Brief: "Review it.", Manager: "reviewer-2"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.api.Wait()
+
+		_, err = env.tasks.Deliver(ctx, nil, &tasks.DeliverRequest{Name: "review-42", Summary: "Reviewed."})
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.api.Wait()
+
+		woken := env.woken("reviewer-1", "reviewer-2")
+		if !reflect.DeepEqual(woken, []string{"reviewer-2"}) {
+			t.Fatalf("woken by the delivery = %q, want reviewer-2 only", woken)
+		}
+
+		// The owner accepts while the manager sleeps: the task is done,
+		// still in the manager's Reads, and "Accepted by franco." wakes it.
+		_, err = env.api.Sleep(ctx, nil, &SleepRequest{Name: "reviewer-2"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.sbx.Wait()
+		before := len(env.rt.Calls())
+
+		_, err = env.tasks.Accept(ctx, nil, &tasks.AcceptRequest{Name: "review-42", By: "franco"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.api.Wait()
+
+		calls := env.rt.Calls()[before:]
+		if !slices.Contains(calls, "start reviewer-2") || slices.Contains(calls, "create reviewer-1") {
+			t.Fatalf("calls after the accept = %q, want reviewer-2 started only", calls)
+		}
+
+		// The manager's own accept wakes nobody.
+		record, err := agent.GetAgentByName(ctx, env.db, "reviewer-2")
+		if err != nil {
+			t.Fatal(err)
+		}
+		own := &msgmodels.Message{From: msgmodels.SystemName, Channel: "#review-42", Body: "Accepted by reviewer-2."}
+		manages, err := env.api.managesChannel(ctx, record, own)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if manages {
+			t.Fatal("the manager's own accept is a turn for it")
+		}
+	})
+
 	t.Run("awake agents are left to their loop", func(t *testing.T) {
 		env := newTestEnv(t)
 		env.create(t, "main")
@@ -884,6 +942,15 @@ func TestHomeSocketServesTheAgent(t *testing.T) {
 		t.Fatalf("post outside its channels: %v, want ENOTAUTHORIZED", err)
 	}
 
+	// Its owner's inbox is granted, so it can ask the owner there.
+	asked, err := client.Ask(ctx, p.ID, "#franco", "Merge review-42?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asked.Kind != msgmodels.KindQuestion || asked.Agent != "reviewer-1" {
+		t.Fatalf("question in #franco = %+v", asked)
+	}
+
 	_, err = env.tasks.Create(ctx, nil, &tasks.CreateRequest{Title: "Not mine", Brief: "b", Manager: "franco"})
 	if err != nil {
 		t.Fatal(err)
@@ -934,6 +1001,15 @@ func TestHomeSocketServesTheAgent(t *testing.T) {
 	}
 	if accepted.Status != "done" || accepted.AcceptedBy != "reviewer-1" {
 		t.Fatalf("accepted = %+v", accepted)
+	}
+
+	// A done task stays in its manager's channels.
+	got, err = client.Agent(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.Channels, []string{"@franco/reviewer-1", "#review-42"}) {
+		t.Fatalf("channels after accept = %q, want #review-42 kept", got.Channels)
 	}
 
 	err = client.Deliver(ctx, "done", nil, &tasks.TaskView{})

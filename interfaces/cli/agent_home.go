@@ -280,7 +280,8 @@ func (l *homeLoop) leave() {
 }
 
 // isTurn reports whether m is for the agent: not its own, not agc's
-// except a rejection, a delivery (the agent manages the task) or a
+// except a rejection, a delivery (the agent manages the task), an accept
+// by someone else (the reviewer merges after the owner accepts) or a
 // question naming it, and not older than since.
 func (l *homeLoop) isTurn(m msgmodels.Message, since time.Time) bool {
 	if m.ParticipantID == l.me.ID || m.From == l.me.Name {
@@ -297,6 +298,10 @@ func (l *homeLoop) isTurn(m msgmodels.Message, since time.Time) bool {
 
 	if strings.HasPrefix(m.Body, rejectedPrefix) || strings.HasPrefix(m.Body, deliveredPrefix) {
 		return true
+	}
+
+	if strings.HasPrefix(m.Body, acceptedPrefix) {
+		return m.Body != acceptedPrefix+l.me.Name+"."
 	}
 
 	return m.Kind == msgmodels.KindQuestion && strings.Contains(m.Body, "@"+l.me.Name)

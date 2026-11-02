@@ -211,7 +211,10 @@ func (api *API) find(ctx context.Context, name string) (*agent.Agent, error) {
 	return agent.GetAgentByName(ctx, api.db, name)
 }
 
-// managed returns the tasks whose manager is the agent, oldest first.
+// managed returns the tasks whose manager is the agent, oldest first,
+// done ones included: a task stays in its manager's Reads for good, so the
+// "Accepted by" agc posts when the owner accepts wakes the manager (the
+// reviewer merges then), and a later message in #<task> still reaches it.
 func (api *API) managed(ctx context.Context, record *agent.Agent) ([]taskmodels.Task, error) {
 	records := []taskmodels.Task{}
 

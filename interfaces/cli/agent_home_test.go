@@ -287,6 +287,25 @@ func TestHomeLoopTakesOneTurnPerThread(t *testing.T) {
 	}
 }
 
+func TestHomeLoopTurnsOnAgcPostsForTheManager(t *testing.T) {
+	loop := &homeLoop{name: "reviewer-1", me: &msgmodels.Participant{ID: "me", Name: "reviewer-1"}}
+
+	cases := map[string]bool{
+		"Delivered: added tests":   true,
+		"Accepted by franco.":      true,
+		"Accepted by reviewer-1.":  false,
+		"Rejected by franco: no":   true,
+		"Task fix-login created.":  false,
+		"Accepted by reviewer-10.": true,
+	}
+	for body, want := range cases {
+		got := loop.isTurn(fromAgcIn(1, "#fix-login", body), time.Time{})
+		if got != want {
+			t.Errorf("isTurn(%q) = %v, want %v", body, got, want)
+		}
+	}
+}
+
 func TestHomeLoopResumesKnownThreadsAfterAWake(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
