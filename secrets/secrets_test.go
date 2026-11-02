@@ -145,11 +145,14 @@ func TestNamesSorted(t *testing.T) {
 
 func TestParseRequestValid(t *testing.T) {
 	cases := map[string]Request{
-		"GITHUB_TOKEN":                   {Name: "GITHUB_TOKEN"},
-		" A1_B ":                         {Name: "A1_B"},
-		"STRIPE_KEY@api.stripe.com":      {Name: "STRIPE_KEY", Hosts: []string{"api.stripe.com"}},
-		"X@a.example.com, *.example.org": {Name: "X", Hosts: []string{"a.example.com", "*.example.org"}},
-		"LOCAL@localhost":                {Name: "LOCAL", Hosts: []string{"localhost"}},
+		"GITHUB_TOKEN":                              {Name: "GITHUB_TOKEN", Env: "GITHUB_TOKEN"},
+		" A1_B ":                                    {Name: "A1_B", Env: "A1_B"},
+		"STRIPE_KEY@api.stripe.com":                 {Name: "STRIPE_KEY", Env: "STRIPE_KEY", Hosts: []string{"api.stripe.com"}},
+		"X@a.example.com, *.example.org":            {Name: "X", Env: "X", Hosts: []string{"a.example.com", "*.example.org"}},
+		"LOCAL@localhost":                           {Name: "LOCAL", Env: "LOCAL", Hosts: []string{"localhost"}},
+		"ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN": {Name: "ANTHROPIC_WORK", Env: "CLAUDE_CODE_OAUTH_TOKEN"},
+		" OPENAI_PERSONAL  as  CODEX_API_KEY@api.openai.com ": {Name: "OPENAI_PERSONAL", Env: "CODEX_API_KEY", Hosts: []string{"api.openai.com"}},
+		"A as _PRIVATE_1@x.example.com,y.example.com":         {Name: "A", Env: "_PRIVATE_1", Hosts: []string{"x.example.com", "y.example.com"}},
 	}
 	for input, want := range cases {
 		got, err := ParseRequest(input)
@@ -177,6 +180,14 @@ func TestParseRequestInvalid(t *testing.T) {
 		"TOKEN@foo.*.com":         "foo.*.com",
 		"TOKEN@-bad.com":          "-bad.com",
 		"TOKEN@a.com@b.com":       "a.com@b.com",
+		"WORK as claude_token":    `"WORK as claude_token"`,
+		"WORK as 1TOKEN":          `"WORK as 1TOKEN"`,
+		"WORK as TOKEN-X@a.com":   `"WORK as TOKEN-X@a.com"`,
+		"WORK as":                 `"WORK as"`,
+		"WORK AS TOKEN":           `"WORK AS TOKEN"`,
+		"WORK as A B":             `"WORK as A B"`,
+		"work as TOKEN":           "work",
+		"WORK as TOKEN@HOST.COM":  "HOST.COM",
 	}
 	for input, badPart := range cases {
 		_, err := ParseRequest(input)
@@ -214,8 +225,8 @@ func TestResolve(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []Binding{
-		{Name: "GITHUB_TOKEN", Value: secretValue, Hosts: []string{"api.github.com", "github.com"}},
-		{Name: "CUSTOM", Value: secretValue, Hosts: []string{"api.custom.dev"}},
+		{Name: "GITHUB_TOKEN", Env: "GITHUB_TOKEN", Value: secretValue, Hosts: []string{"api.github.com", "github.com"}},
+		{Name: "CUSTOM", Env: "CUSTOM", Value: secretValue, Hosts: []string{"api.custom.dev"}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Resolve() = %+v, want %+v", got, want)
@@ -295,5 +306,70 @@ func TestResolveCombinesProblems(t *testing.T) {
 	}
 	if strings.Contains(msg, secretValue) {
 		t.Fatalf("message %q leaks the secret value", msg)
+	}
+}
+
+func TestResolveAccount(t *testing.T) {
+	path := writeSecrets(t, "ANTHROPIC_WORK="+secretValue+"\nGITHUB_BOT="+secretValue+"\nCUSTOM="+secretValue+"\n", 0o600)
+	store, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	requests := []Request{}
+	for _, entry := range []string{
+		"ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN",
+		"GITHUB_BOT as GITHUB_TOKEN@ghe.example.com",
+		"CUSTOM as GITHUB_TOKEN",
+	} {
+		request, err := ParseRequest(entry)
+		if err != nil {
+			t.Fatal(err)
+		}
+		requests = append(requests, request)
+	}
+
+	got, err := store.Resolve(requests)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Binding{
+		{Name: "ANTHROPIC_WORK", Env: "CLAUDE_CODE_OAUTH_TOKEN", Value: secretValue, Hosts: []string{"api.anthropic.com"}},
+		{Name: "GITHUB_BOT", Env: "GITHUB_TOKEN", Value: secretValue, Hosts: []string{"ghe.example.com"}},
+		{Name: "CUSTOM", Env: "GITHUB_TOKEN", Value: secretValue, Hosts: []string{"api.github.com", "github.com"}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Resolve() = %+v, want %+v", got, want)
+	}
+}
+
+func TestResolveAccountHostsFallBackToName(t *testing.T) {
+	path := writeSecrets(t, "GITHUB_TOKEN="+secretValue+"\n", 0o600)
+	store, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := store.Resolve([]Request{{Name: "GITHUB_TOKEN", Env: "GH_TOKEN"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0].Env != "GH_TOKEN" || !reflect.DeepEqual(got[0].Hosts, []string{"api.github.com", "github.com"}) {
+		t.Fatalf("Resolve() = %+v, want GH_TOKEN bound to the GITHUB_TOKEN hosts", got[0])
+	}
+}
+
+func TestResolveAccountWithoutHosts(t *testing.T) {
+	store, _ := loadStore(t)
+
+	_, err := store.Resolve([]Request{{Name: "CUSTOM", Env: "MY_VAR"}})
+	if ez.ErrorCode(err) != ez.EINVALID {
+		t.Fatalf("code = %q, want %q", ez.ErrorCode(err), ez.EINVALID)
+	}
+	if !strings.Contains(err.Error(), "CUSTOM as MY_VAR@host") {
+		t.Fatalf("message %q should tell the user to write CUSTOM as MY_VAR@host", err.Error())
+	}
+	if strings.Contains(err.Error(), secretValue) {
+		t.Fatalf("message %q leaks the secret value", err.Error())
 	}
 }

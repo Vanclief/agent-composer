@@ -62,6 +62,10 @@ func validateBody(every string, poll *schedulemodels.Poll) error {
 			return ez.New(ez.EINVALID, "poll.secrets: "+ez.ErrorMessage(err), err)
 		}
 
+		if request.Env != request.Name {
+			return ez.New(ez.EINVALID, fmt.Sprintf("poll.secrets: %q renames the secret, but a poll command reads it by its own name: write %s", name, request.Name), nil)
+		}
+
 		if len(request.Hosts) > 0 {
 			return ez.New(ez.EINVALID, fmt.Sprintf("poll.secrets: %s names hosts, but a poll command runs on the host and gets the value itself: write %s", name, request.Name), nil)
 		}

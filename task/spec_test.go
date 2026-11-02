@@ -272,6 +272,10 @@ func TestValidateRejects(t *testing.T) {
 	}{
 		{Spec{Secrets: []string{"lower"}}, "lower"},
 		{Spec{Secrets: []string{"API_KEY@Bad.Host"}}, "Bad.Host"},
+		{Spec{Secrets: []string{"ANTHROPIC_WORK as claude-token"}}, `"ANTHROPIC_WORK as claude-token"`},
+		{Spec{Secrets: []string{"ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_HOME as CLAUDE_CODE_OAUTH_TOKEN"}}, `"ANTHROPIC_HOME as CLAUDE_CODE_OAUTH_TOKEN"`},
+		{Spec{Secrets: []string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN"}}, `"ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN"`},
+		{Spec{Secrets: []string{"GITHUB_TOKEN", "GITHUB_TOKEN@ghe.example.com"}}, `"GITHUB_TOKEN@ghe.example.com"`},
 		{Spec{Env: map[string]string{"AGC_TASK": "x"}}, "AGC_TASK"},
 		{Spec{Env: map[string]string{"A-B": "x"}}, "A-B"},
 		{Spec{Volumes: []string{"cache"}}, "cache"},
@@ -353,5 +357,51 @@ func TestDiskMiB(t *testing.T) {
 		if err != nil || got != want {
 			t.Fatalf("disk %q: got %d, %v, want %d", disk, got, err, want)
 		}
+	}
+}
+
+// An account: a named secret handed to the sandbox under the variable the
+// harness reads (ADR 0004 "Accounts"), from validation to the sandbox spec.
+func TestSandboxSpecAccount(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "secrets.env")
+	err := os.WriteFile(path, []byte("ANTHROPIC_WORK=work-account-value\nGITHUB_TOKEN=github-value\n"), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := secrets.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	spec := Spec{Image: "agc-agent", Secrets: []string{"ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN", "GITHUB_TOKEN"}}
+	err = spec.Validate()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	requests, err := spec.SecretRequests()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bindings, err := store.Resolve(requests)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := spec.SandboxSpec("work", "work-1", bindings, "/tmp/work-1.sock", 5100)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []sandbox.Secret{
+		{Name: "CLAUDE_CODE_OAUTH_TOKEN", Value: "work-account-value", Hosts: []string{"api.anthropic.com"}},
+		{Name: "GITHUB_TOKEN", Value: "github-value", Hosts: []string{"api.github.com", "github.com"}},
+	}
+	if !reflect.DeepEqual(got.Secrets, want) {
+		t.Fatalf("secrets = %+v, want %+v", got.Secrets, want)
+	}
+	_, set := got.Env["ANTHROPIC_WORK"]
+	if set {
+		t.Fatal("the account name leaked into the plain env")
 	}
 }
