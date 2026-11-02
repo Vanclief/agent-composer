@@ -8,6 +8,8 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/vanclief/ez"
 
+	"github.com/vanclief/agent-composer/core/events"
+	"github.com/vanclief/agent-composer/messaging"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 )
@@ -34,12 +36,76 @@ func (api *API) Done(ctx context.Context, requester interface{}, request *DoneRe
 		return nil, ez.Wrap(err)
 	}
 
-	err = record.MarkDone(ctx, api.db)
+	err = api.markDone(ctx, record)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
 	return api.view(ctx, record)
+}
+
+// markDone sets done_at, the one place that does, and publishes task.done
+// when the task was not done before.
+func (api *API) markDone(ctx context.Context, record *taskmodels.Task) error {
+	wasDone := record.DoneAt != nil
+
+	err := record.MarkDone(ctx, api.db)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	if wasDone || api.events == nil {
+		return nil
+	}
+
+	view, err := api.view(ctx, record)
+	if err != nil {
+		log.Warn().Err(err).Str("task", record.Name).Msg("cannot read the task for task.done")
+		return nil
+	}
+
+	summary, err := api.Summary(ctx, record.Name)
+	if err != nil {
+		log.Warn().Err(err).Str("task", record.Name).Msg("cannot read the summary for task.done")
+	}
+
+	api.events.Publish(events.Event{Type: events.TaskDone, Data: DoneEvent{Task: view, Summary: summary}})
+
+	return nil
+}
+
+// summaryLength caps the summary in task.done, in characters.
+const summaryLength = 500
+
+// Summary is the body of the last message in #<task> from neither a human
+// nor agc, the agent's closing words, cut to 500 characters, or "" when there
+// is none. A bare /done is a command, not a summary, and is skipped.
+func (api *API) Summary(ctx context.Context, name string) (string, error) {
+	var messages []msgmodels.Message
+
+	err := api.db.NewSelect().
+		Model(&messages).
+		Where("channel = ?", messaging.TaskChannel(name)).
+		Where("human = ?", false).
+		Where(`"from" != ?`, msgmodels.SystemName).
+		Where("TRIM(body) != ?", DoneCommand).
+		Order("id DESC").
+		Limit(1).
+		Scan(ctx)
+	if err != nil {
+		return "", ez.Wrap(err)
+	}
+
+	if len(messages) == 0 {
+		return "", nil
+	}
+
+	body := []rune(messages[0].Body)
+	if len(body) > summaryLength {
+		body = body[:summaryLength]
+	}
+
+	return string(body), nil
 }
 
 // DoneCommand closes a task when its manager or owner posts it in the
@@ -72,7 +138,7 @@ func (api *API) closeOnDone(ctx context.Context, m *msgmodels.Message) {
 		return
 	}
 
-	err = record.MarkDone(ctx, api.db)
+	err = api.markDone(ctx, record)
 	if err != nil {
 		log.Warn().Err(err).Str("task", record.Name).Msg("cannot mark the task done on /done")
 	}

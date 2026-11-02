@@ -43,7 +43,11 @@ type Task struct {
 	// Owner is the human the task answers to. Empty when none is set.
 	Owner string `bun:"owner,notnull,default:''" json:"owner"`
 	// For is the id of the knowledge action or decision the Task serves.
-	For       string     `bun:"for_id,notnull,default:''" json:"for"`
+	For string `bun:"for_id,notnull,default:''" json:"for"`
+	// Notify asks the panel for a toast and a chime when the task starts
+	// and when it is done. No default tag: bun would insert DEFAULT for
+	// false. Existing rows got true from the migration.
+	Notify    bool       `bun:"notify,notnull" json:"notify"`
 	DoneAt    *time.Time `bun:"done_at" json:"done_at"`
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`

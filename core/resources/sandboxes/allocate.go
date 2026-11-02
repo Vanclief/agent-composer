@@ -109,6 +109,8 @@ func (api *API) AllocateFor(ctx context.Context, owner *taskmodels.Task, request
 		return nil, ez.Wrap(err)
 	}
 
+	api.publish(view)
+
 	bootCtx, cancel := context.WithTimeout(api.rootCtx, bootTimeout)
 	done := make(chan struct{})
 
@@ -193,6 +195,7 @@ func (api *API) cancelBoot(name string) {
 func (api *API) boot(ctx context.Context, record *taskmodels.Sandbox, owner *taskmodels.Task, spec task.Spec, bindings []secrets.Binding) {
 	err := api.bootSandbox(ctx, record, owner, spec, bindings)
 	if err == nil {
+		api.publishCurrent(context.WithoutCancel(ctx), record, owner)
 		return
 	}
 
@@ -203,6 +206,8 @@ func (api *API) boot(ctx context.Context, record *taskmodels.Sandbox, owner *tas
 	if err != nil {
 		log.Error().Err(err).Str("sandbox", record.Name).Str("boot_error", msg).Msg("cannot record sandbox boot error")
 	}
+
+	api.publishCurrent(context.WithoutCancel(ctx), record, owner)
 }
 
 func (api *API) bootSandbox(ctx context.Context, record *taskmodels.Sandbox, owner *taskmodels.Task, spec task.Spec, bindings []secrets.Binding) error {

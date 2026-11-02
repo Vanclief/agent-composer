@@ -76,15 +76,17 @@ func (s Sandbox) Validate() error {
 // File is a parsed task.yaml (ADR 0008 item 7). Sandbox is nil when the
 // file has no sandbox: block.
 type File struct {
-	Name     string   `yaml:"name"`
-	Title    string   `yaml:"title"`
-	Brief    string   `yaml:"brief"`
-	Assignee string   `yaml:"assignee"`
-	Model    string   `yaml:"model"`
-	Manager  string   `yaml:"manager"`
-	Owner    string   `yaml:"owner"`
-	For      string   `yaml:"for"`
-	Sandbox  *Sandbox `yaml:"sandbox"`
+	Name     string `yaml:"name"`
+	Title    string `yaml:"title"`
+	Brief    string `yaml:"brief"`
+	Assignee string `yaml:"assignee"`
+	Model    string `yaml:"model"`
+	Manager  string `yaml:"manager"`
+	Owner    string `yaml:"owner"`
+	For      string `yaml:"for"`
+	// Notify is nil when the file does not say, and the task then notifies.
+	Notify  *bool    `yaml:"notify"`
+	Sandbox *Sandbox `yaml:"sandbox"`
 }
 
 // LoadFile reads a task.yaml.

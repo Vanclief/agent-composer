@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"github.com/vanclief/ez"
 
 	taskmodels "github.com/vanclief/agent-composer/models/task"
@@ -86,5 +87,29 @@ func (api *API) Remove(ctx context.Context, record *taskmodels.Sandbox) error {
 		return ez.Wrap(err)
 	}
 
+	api.publishDeleted(ctx, record)
+
 	return nil
+}
+
+// publishDeleted sends the sandbox's last view with status deleted.
+func (api *API) publishDeleted(ctx context.Context, record *taskmodels.Sandbox) {
+	if api.events == nil {
+		return
+	}
+
+	owner, err := taskmodels.GetTaskByID(ctx, api.db, record.TaskID)
+	if err != nil {
+		log.Warn().Err(err).Str("sandbox", record.Name).Msg("cannot read the task for sandbox.status deleted")
+		return
+	}
+
+	view, err := baseView(record, owner)
+	if err != nil {
+		log.Warn().Err(err).Str("sandbox", record.Name).Msg("cannot build the view for sandbox.status deleted")
+		return
+	}
+
+	view.Status = StatusDeleted
+	api.publish(view)
 }

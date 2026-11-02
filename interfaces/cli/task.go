@@ -237,6 +237,7 @@ func taskCreate(c *cli.Context) error {
 			Manager:  parsed.Manager,
 			Owner:    parsed.Owner,
 			For:      parsed.For,
+			Notify:   parsed.Notify,
 			Sandbox:  parsed.Sandbox,
 		}
 

@@ -18,6 +18,7 @@ import (
 	"github.com/vanclief/ez"
 
 	"github.com/vanclief/agent-composer/core/controller"
+	"github.com/vanclief/agent-composer/core/events"
 	"github.com/vanclief/agent-composer/executor"
 	"github.com/vanclief/agent-composer/executor/sandbox"
 	"github.com/vanclief/agent-composer/messaging"
@@ -41,6 +42,9 @@ const (
 	StatusRunning  = "running"
 	StatusStopped  = "stopped"
 	StatusUnknown  = "unknown"
+	// StatusDeleted is only ever sent in sandbox.status, for a sandbox
+	// that is gone.
+	StatusDeleted = "deleted"
 )
 
 // Sandbox is a live handle on a VM. Detach releases it and leaves the VM
@@ -78,6 +82,45 @@ type API struct {
 	naming sync.Mutex
 	// boots counts allocations still booting.
 	boots sync.WaitGroup
+
+	// events gets sandbox.status on every status change, nil drops them.
+	events *events.Bus
+}
+
+// StatusEvent is the data of sandbox.status.
+type StatusEvent struct {
+	Sandbox SandboxView `json:"sandbox"`
+}
+
+// SetEvents publishes sandbox.status on bus from now on. Call it before
+// the API is used.
+func (api *API) SetEvents(bus *events.Bus) {
+	api.events = bus
+}
+
+// publish sends view as a sandbox.status event.
+func (api *API) publish(view *SandboxView) {
+	if view == nil {
+		return
+	}
+
+	api.events.Publish(events.Event{Type: events.SandboxStatus, Data: StatusEvent{Sandbox: *view}})
+}
+
+// publishCurrent reads the sandbox's view and sends it, for status changes
+// that happen outside a request (a boot finishing or failing).
+func (api *API) publishCurrent(ctx context.Context, record *taskmodels.Sandbox, owner *taskmodels.Task) {
+	if api.events == nil {
+		return
+	}
+
+	view, err := api.view(ctx, record, owner)
+	if err != nil {
+		log.Warn().Err(err).Str("sandbox", record.Name).Msg("cannot read the sandbox for sandbox.status")
+		return
+	}
+
+	api.publish(view)
 }
 
 // listener is one sandbox's messaging server and the socket it serves.
@@ -192,10 +235,8 @@ func decodeSpec(record *taskmodels.Sandbox) (task.Spec, error) {
 	return spec, nil
 }
 
-// view reads the status. A running sandbox gets its messaging listener if
-// no agc process serves it yet, which covers sandboxes booted or started by
-// a CLI process that has since exited.
-func (api *API) view(ctx context.Context, record *taskmodels.Sandbox, owner *taskmodels.Task) (*SandboxView, error) {
+// baseView is the sandbox's row as a view, without a status.
+func baseView(record *taskmodels.Sandbox, owner *taskmodels.Task) (*SandboxView, error) {
 	spec, err := decodeSpec(record)
 	if err != nil {
 		return nil, ez.Wrap(err)
@@ -213,6 +254,19 @@ func (api *API) view(ctx context.Context, record *taskmodels.Sandbox, owner *tas
 		StoppedAt:    record.StoppedAt,
 		CreatedAt:    record.CreatedAt,
 	}
+
+	return view, nil
+}
+
+// view reads the status. A running sandbox gets its messaging listener if
+// no agc process serves it yet, which covers sandboxes booted or started by
+// a CLI process that has since exited.
+func (api *API) view(ctx context.Context, record *taskmodels.Sandbox, owner *taskmodels.Task) (*SandboxView, error) {
+	view, err := baseView(record, owner)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+	spec := view.Spec
 
 	if record.BootError != nil {
 		view.Status = StatusFailed
@@ -232,6 +286,7 @@ func (api *API) view(ctx context.Context, record *taskmodels.Sandbox, owner *tas
 
 		view.Status = StatusFailed
 		view.StatusError = msg
+		api.publish(view)
 		return view, nil
 	}
 
