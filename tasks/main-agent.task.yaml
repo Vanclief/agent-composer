@@ -1,0 +1,112 @@
+# agc task create -f tasks/main-agent.task.yaml
+# The main agent's behaviour: the persistent agent with role `main` (ADR
+# 0016) reads every channel, talks and dispatches tasks, never does the
+# work itself, and every act beyond talking passes through a gate (ADR
+# 0007); with no gate it asks Franco first. Franco decided 2026-11-02.
+# Launched 2026-11-02 on feat/tasks-microsandbox at 6a17219, where ADR 0016
+# (agents-core and agents-loop) is merged.
+name: main-agent
+title: The main agent routes, dispatches under gates and never does the work
+assignee: claude_code
+manager: franco
+owner: franco
+for: proposals-pass-through-human-gates
+accept:
+  - The main agent's turn is built from the messages 0016 hands it since its last turn, inline-and-spill, id, channel, sender, kind and the first 300 characters each, and the harness reads the rest with agc msg read; messages written by main are never a turn; a batch that needs nothing ends with no post
+  - The main agent cannot edit files or run anything but agc subcommands; a test on the harness arguments proves it
+  - task is a proposal kind so a gate may say proposes task; with no gate or tier decide, creating, accepting or rejecting a task posts a question in #<owner> with the exact task yaml or reason and acts only on a human yes; observe acts and posts what it did; delegated acts quietly; tests cover decide and observe
+  - Its standing policies are judged rules in rules/main.yaml trusting main, read each turn with agc rules show, and the Go prompt holds only who it is, its tools, those rules, the gates and the batch
+  - proposals/main-agent.yaml proposes the gates Franco should add and one code proposal with change agc/main-agent; docs/decisions/0015-main-agent.md, decisions/main-agent.yaml, actions/main-agent.yaml written
+  - go build/vet/test pass; gofmt lists only the three known files; branch agc/main-agent pushed; nothing merged
+brief: |
+  Build the main agent's behaviour on top of persistent agents (ADR
+  0016, merged on this branch: core/resources/agents, agents/main.yaml,
+  the runner `agc agent run --agent <name>` in interfaces/cli, the home
+  socket routes GET /agent, POST /agent/sleep, POST /tasks, GET
+  /tasks/{name}, POST /tasks/{name}/accept|reject). Read AGENTS.md, ADR
+  0005, 0006, 0007, 0008, 0009, 0010 and 0016, interfaces/cli/agent*.go
+  and core/resources/agents/, then `agc rules show`. Write the whole
+  thing; do not stop at a plan.
+
+  What 0016 gives you, do not rebuild it: the agent record with role
+  `main`, its home sandbox and kept volume (the transcript on that
+  volume is the trace; GET /api/agents/{name}/turns serves it), wake on
+  demand when a message lands in a channel it reads, one long harness
+  session for `main`, the hook that hands the runner "new messages since
+  the last turn", and the authorize clause letting role `main` read,
+  wait on and post in every channel.
+
+  Yours:
+  - The batch. Turn the messages the hook hands you into one prompt
+    section, inline-and-spill: per message its id, channel, sender, kind
+    and the first 300 characters; the harness reads the rest with
+    `agc msg read`. Messages written by `main` itself are never a turn.
+    Idle is normal: a batch that needs nothing ends with no post.
+  - Never works, only talks and dispatches. Run the harness in an empty
+    working directory with its tool allow list limited to agc
+    subcommands (`agc msg *`, `agc task *`, `agc beliefs|decisions|rules|
+    actions|proposals|gates show|why`) and every file, shell and web
+    tool disallowed. Prove it with a test on the arguments.
+  - Gating its acts (ADR 0007). Add `task` to the proposal kinds in
+    knowledge/knowledge.go, validate.go and gate.go so a gate may say
+    `proposes: task` (knowledge/gate_test.go has the patterns). Each
+    turn the main agent reads `agc gates show --ids`. For create, accept
+    and reject of a task: tier decide, or no gate, means it posts a
+    question (kind question, models/messaging) in `#<owner>` with the
+    exact task yaml or the reason, and acts only on a yes from a human;
+    observe means it acts and posts what it did in `#<owner>`; delegated
+    means it acts quietly. Agents never edit gates/ (rule
+    agents-never-edit-gates): propose the gates Franco should add in
+    proposals/main-agent.yaml as `proposes: gate` entries. Until he adds
+    them everything is decide, which is correct.
+  - Policies are rules, not prompt text. Write rules/main.yaml with
+    judged rules trusting `main` (judge: { trusted: [main], ask: ... }):
+    stay quiet unless a message asks for something or a trigger
+    concerns an open task; one task per piece of work, none without a
+    brief and accept criteria; never answer for Franco; escalate in
+    `#<owner>`. Add `main` wherever harness ids are accepted for
+    `trusted`. The prompt assembled in Go is only: who it is, its tools,
+    the rules it is trusted with (from `agc rules show`), the gates, and
+    the batch.
+  - Triggers (ADR 0014) already land as agc messages in `#<task>` or
+    `#main`; the main agent reads them like any message. Direct messages
+    `@<human>/<task>` (ADR 0011) are channels it reads too if merged;
+    do not depend on them.
+  - If 0016's runner cannot host the batch builder or the tool
+    restriction without a change, make the smallest change there and
+    say so in the ADR. No panel UI: 0016 owns the agent page.
+
+  Record it: docs/decisions/0015-main-agent.md in the style of the
+  others. Knowledge entries in their own files: decisions/main-agent.yaml
+  (decided: { who: franco, when: 2026-11-02 }), actions/main-agent.yaml
+  for what is left open (at least: the watchdog covering the main agent
+  itself, memory beyond the harness session), proposals/main-agent.yaml
+  with the gate proposals and one `proposes: code` proposal (`change:
+  agc/main-agent`, by: claude_code). Cite existing belief ids in
+  `because` (beliefs/repo.yaml has authority-without-legibility-is-ritual
+  and unread-digests-remove-the-human); write no evidence.
+
+  If you add a migration, pick a timestamp later than 20261102213000 and
+  unused by any file in models/migrations, even on sibling branches: bun
+  tracks applied migrations by timestamp, and two sharing one broke the
+  rig once.
+
+  Never print, echo, grep or read environment variables or secret values
+  (no env, printenv, gh auth status, cat of credential files): the
+  secrets in your environment are placeholders bound to hosts, and once
+  one appears in your context the secret policy blocks your own model
+  calls and your session is dead.
+
+  Verify: go build ./... && go vet ./... && go test ./...; gofmt -l .
+  lists only the three known files. The panel is untouched, so skip
+  panel-check. Commit on branch agc/main-agent, push it, never merge.
+  Post progress in #main-agent. When done, answer DONE: with what
+  changed, how Franco starts the main agent on the rig, and what you
+  left out and why.
+sandbox:
+  image: agc-agent
+  cpus: 2
+  memory: 4096
+  repo: https://github.com/vanclief/agent-composer
+  ref: feat/tasks-microsandbox
+  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
