@@ -45,7 +45,7 @@ for (const path of ['/panel/tasks', '/panel/think/beliefs', '/panel/messages']) 
       'Actions',
       'Evidence',
     ])
-    await expect(group(page, 'Work').getByRole('link')).toHaveText([/^Tasks(\d+)?$/, 'Compute', 'Agents'])
+    await expect(group(page, 'Work').getByRole('link')).toHaveText([/^Tasks(\d+)?$/, 'Compute', 'Agents', 'Accounts'])
     await expect(group(page, 'Talk').getByRole('link', { name: 'Channels', exact: true })).toBeVisible()
   })
 }
@@ -59,7 +59,7 @@ test('the route highlights its page without hiding the other groups', async ({ p
   await group(page, 'Think').getByRole('link', { name: 'Rules' }).click()
   await expect(page).toHaveURL(/\/panel\/think\/rules$/)
   await expect(page.getByTestId('page-area')).toHaveText('Think /')
-  await expect(group(page, 'Work').getByRole('link')).toHaveText([/^Tasks(\d+)?$/, 'Compute', 'Agents'])
+  await expect(group(page, 'Work').getByRole('link')).toHaveText([/^Tasks(\d+)?$/, 'Compute', 'Agents', 'Accounts'])
 })
 
 test('collapsing Work hides its pages, keeps the header, and survives a reload', async ({ page }) => {
@@ -69,7 +69,7 @@ test('collapsing Work hides its pages, keeps the header, and survives a reload',
   await work.click()
   await expect(work).toHaveAttribute('aria-expanded', 'false')
   await expect(work).toBeVisible()
-  for (const name of ['Tasks', 'Compute', 'Agents']) {
+  for (const name of ['Tasks', 'Compute', 'Agents', 'Accounts']) {
     await expect(group(page, 'Work').getByRole('link', { name })).toHaveCount(0)
   }
   await expect(group(page, 'Think').getByRole('link', { name: 'Beliefs' })).toBeVisible()
@@ -79,7 +79,7 @@ test('collapsing Work hides its pages, keeps the header, and survives a reload',
   await expect(group(page, 'Work').getByRole('link')).toHaveCount(0)
 
   await header(page, 'work').click()
-  await expect(group(page, 'Work').getByRole('link')).toHaveText([/^Tasks(\d+)?$/, 'Compute', 'Agents'])
+  await expect(group(page, 'Work').getByRole('link')).toHaveText([/^Tasks(\d+)?$/, 'Compute', 'Agents', 'Accounts'])
 })
 
 test('navigating to a channel opens Talk when it was collapsed, and leaves the others', async ({ page }) => {

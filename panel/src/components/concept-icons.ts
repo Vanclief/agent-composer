@@ -26,6 +26,7 @@ import { Bot } from 'lucide-react'
 import { Bell } from 'lucide-react'
 import { Inbox, ListChecks, PackageCheck } from 'lucide-react'
 import { MessageCircleQuestionMark, MessageSquareReply } from 'lucide-react'
+import { Gauge, IdCard } from 'lucide-react'
 
 export const conceptIcons = {
   // A Task: a VM agents work in.
@@ -83,6 +84,10 @@ export const conceptIcons = {
   question: MessageCircleQuestionMark,
   // A message's replies (reply_to), read in the thread pane.
   thread: MessageSquareReply,
+  // A provider account (a credential in secrets.env), the default a sandbox
+  // gets for its harness, and its usage windows.
+  account: IdCard,
+  usage: Gauge,
 } satisfies Record<string, LucideIcon>
 
 export type Concept = keyof typeof conceptIcons
@@ -278,4 +283,7 @@ export const conceptColors = {
   inbox: pink,
   question: pink,
   thread: pink,
+  // Neutral: in the Eva look yellow means waiting on a human.
+  account: zinc,
+  usage: zinc,
 } satisfies Record<Concept, ConceptColor>

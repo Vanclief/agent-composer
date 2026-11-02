@@ -7,6 +7,7 @@
 @import './styles/eva-talk.css';
 @import './styles/eva-think.css';
 @import './styles/eva-task.css';
+@import './styles/eva-accounts.css';
 
 /* Dark only: index.html puts the `dark` class on <html> for good. */
 @custom-variant dark (&:is(.dark *));
