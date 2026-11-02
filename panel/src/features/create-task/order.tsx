@@ -69,7 +69,7 @@ export function OrderCard({
   return (
     <Card name="order" concept="task" label="Order" tip="What needs doing, in words">
       <div className="flex flex-col gap-1.5">
-        <div className="relative min-w-0">
+        <div data-field="title" className="relative min-w-0">
           <Tip tip="Title">
             <TaskIcon
               aria-hidden
@@ -125,7 +125,7 @@ export function OrderCard({
           ) : null}
         </div>
       </div>
-      <div className="relative">
+      <div data-field="brief" className="relative">
         <Tip tip="Brief: what to do, and what done looks like (markdown)">
           <BriefIcon aria-hidden className={cn('absolute top-2.5 left-2.5 size-4', conceptColors.brief.text)} />
         </Tip>
@@ -173,7 +173,7 @@ export function acceptLines(text: string) {
 function AcceptField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const Icon = conceptIcons.criteria
   return (
-    <div className="relative">
+    <div data-field="accepted when" className="relative">
       <Tip tip="Accepted when: one criterion per line; the manager or owner checks them, agc does not">
         <Icon aria-hidden className={cn('absolute top-2.5 left-2.5 size-4', conceptColors.criteria.text)} />
       </Tip>
@@ -285,7 +285,9 @@ function ForPicker({
     <div className="flex flex-col gap-1.5">
       <div className="flex min-w-0 items-center gap-2">
         <Tip tip="The knowledge action or decision this task serves (optional)">
-          <span className="w-8 shrink-0 text-xs text-muted-foreground">for</span>
+          <span data-field-label className="w-8 shrink-0 text-xs text-muted-foreground">
+            for
+          </span>
         </Tip>
         {chip}
       </div>

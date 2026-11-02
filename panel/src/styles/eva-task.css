@@ -1,2 +1,1006 @@
 /* Eva look, task area (docs/design/panel.md). Rules keyed on the markup's attributes;
-   unlayered so they win over Tailwind utilities. Filled by task panel-eva-task. */
+   unlayered so they win over Tailwind utilities. Filled by task panel-eva-task.
+
+   The task page (/tasks/:name): the rail's top is the header plate, its
+   status a vertical tab fused into the plate's left edge, the title in the
+   condensed face, the facts as labeled monospace readouts, the acts filled
+   at the far right; the rail's sections are plates with a filled tab and a
+   ruler. The box is a plate with a ruled header strip; Compute lists the
+   sandboxes as indexed plates. Then the New task dialog.
+
+   TaskRail.tsx is not touched (another task edits it): everything on the
+   rail is reached through its own attributes (data-testid, aria-label,
+   title) and a grid on the aside. */
+
+/* ---------- The rail: the header plate ---------- */
+
+/* The aside is a grid: the status tab in the first column, the header's
+   lines in the second, rows 1 to 6 (acts, title, name, waiting, who,
+   delivery), row 7 the plate's bottom margin; everything after spans both
+   columns under the plate. */
+.dark aside[data-testid='task-header'] {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto auto auto 14px;
+  align-content: start;
+  column-gap: 14px;
+  row-gap: 0;
+  position: relative;
+  isolation: isolate;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+/* The plate: the frame color under a fill one pixel inside, both cut. */
+.dark aside[data-testid='task-header']::before,
+.dark aside[data-testid='task-header']::after {
+  content: '';
+  grid-column: 1 / -1;
+  grid-row: 1 / 8;
+  z-index: -1;
+}
+.dark aside[data-testid='task-header']::before {
+  background: var(--eva-dim);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    var(--cut) 100%,
+    0 calc(100% - var(--cut))
+  );
+}
+.dark aside[data-testid='task-header']::after {
+  margin: 1px;
+  background: var(--card);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut) + 1px) 0,
+    100% calc(var(--cut) - 1px),
+    100% 100%,
+    calc(var(--cut) - 1px) 100%,
+    0 calc(100% - var(--cut) + 1px)
+  );
+}
+/* The shell paints every aside > div black (index.css); not on the plate. */
+.dark aside[data-testid='task-header'] > div {
+  background-color: transparent;
+}
+/* The status and title block and its first line dissolve into the grid. */
+.dark aside[data-testid='task-header'] > div:nth-child(2),
+.dark aside[data-testid='task-header'] > div:nth-child(2) > div:first-child {
+  display: contents;
+}
+/* Row 1, the acts: at the far right of the header. */
+.dark aside[data-testid='task-header'] > div:first-child {
+  grid-column: 2;
+  grid-row: 1;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 12px 18px 0 0;
+}
+/* Row 2, the title: the one large thing, condensed uppercase. */
+.dark aside[data-testid='task-header'] h2 {
+  grid-column: 2;
+  grid-row: 2;
+  margin: 12px 14px 8px 0;
+  font-family: var(--font-sans);
+  font-size: 1.5rem;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--foreground);
+}
+/* Row 3, the name; rows 5 and 6, who and the delivery. */
+.dark aside[data-testid='task-header'] > div:nth-child(2) > p[title='Name and channel'] {
+  grid-column: 2;
+  grid-row: 3;
+}
+.dark aside[data-testid='task-header'] [data-testid='waiting-on'] {
+  grid-column: 2;
+  grid-row: 4;
+  margin: 8px 14px 2px 0;
+}
+.dark aside[data-testid='task-header'] > ul[aria-label='Who'] {
+  grid-column: 2;
+  grid-row: 5;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 3px;
+  margin-top: 3px;
+  padding-right: 14px;
+}
+.dark aside[data-testid='task-header'] > ul[aria-label='Delivery and acceptance'] {
+  grid-column: 2;
+  grid-row: 6;
+  margin-top: 8px;
+  padding-right: 14px;
+}
+/* Everything else (an error, the narrow Details toggle, the sections) runs
+   under the plate, full width. */
+.dark aside[data-testid='task-header'] > :not(:first-child):not(:nth-child(2)):not(ul) {
+  grid-column: 1 / -1;
+  margin-top: 16px;
+}
+
+/* The status tab: the plate's left edge, top to bottom, the word running
+   up the edge; filled in its color for alive and dead, dim otherwise. */
+.dark aside[data-testid='task-header'] span[data-status][data-tier] {
+  grid-column: 1;
+  grid-row: 1 / 8;
+  align-self: stretch;
+  margin: 1px 0 1px 1px;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  border: 0;
+  border-left: 1px solid var(--eva-dim);
+  font-size: 0.8rem;
+  letter-spacing: 0.2em;
+  color: var(--muted-foreground);
+  background: var(--eva-faint);
+  /* Rotated half a turn: the cut at the top right lands at the bottom left. */
+  clip-path: polygon(0 0, calc(100% - var(--cut) + 1px) 0, 100% calc(var(--cut) - 1px), 100% 100%, 0 100%);
+}
+.dark aside[data-testid='task-header'] span[data-status][data-tier='lit'],
+.dark aside[data-testid='task-header'] span[data-status][data-tier='attention'] {
+  color: var(--eva-ink);
+  font-weight: 700;
+  border-left-color: transparent;
+}
+.dark aside[data-testid='task-header'] span[data-status='running'][data-tier='lit'] {
+  background: var(--eva-green);
+}
+.dark aside[data-testid='task-header'] span[data-status='review'][data-tier='lit'] {
+  background: var(--eva-yellow);
+}
+.dark
+  aside[data-testid='task-header']
+  span[data-status][data-tier='lit']:not([data-status='running']):not([data-status='review']) {
+  background: oklch(0.78 0.12 220);
+}
+.dark aside[data-testid='task-header'] span[data-status][data-tier='attention'] {
+  background: var(--eva-red);
+}
+.dark aside[data-testid='task-header'] span[data-status][data-tier='lit'] [aria-hidden] > span,
+.dark aside[data-testid='task-header'] span[data-status][data-tier='attention'] [aria-hidden] > span {
+  box-shadow: 0 0 0 1px oklch(0.1 0 0 / 60%);
+}
+
+/* Readouts: a condensed uppercase label in orange, then the value in
+   lowercase monospace, every value starting on the same column. The label
+   column is 4.75rem, then a 16px column for an avatar. */
+.dark aside[data-testid='task-header'] > div:nth-child(2) > p[title='Name and channel'],
+.dark aside[data-testid='task-header'] > ul[aria-label='Who'] > li {
+  display: grid;
+  grid-template-columns: 4.75rem 16px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+  min-height: 20px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--foreground);
+}
+.dark aside[data-testid='task-header'] > div:nth-child(2) > p[title='Name and channel'] {
+  grid-template-columns: calc(4.75rem + 22px) minmax(0, 1fr);
+}
+.dark aside[data-testid='task-header'] > div:nth-child(2) > p[title='Name and channel']::before,
+.dark aside[data-testid='task-header'] > ul[aria-label='Who'] > li::before {
+  font-family: var(--font-sans);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--eva);
+}
+.dark aside[data-testid='task-header'] > div:nth-child(2) > p[title='Name and channel']::before {
+  content: 'name';
+}
+.dark aside[data-testid='task-header'] > ul[aria-label='Who'] > li:has([data-testid='assignee'])::before {
+  content: 'agent';
+}
+.dark
+  aside[data-testid='task-header']
+  > ul[aria-label='Who']
+  > li:has([data-testid='assignee'][data-kind='human'])::before,
+.dark
+  aside[data-testid='task-header']
+  > ul[aria-label='Who']
+  > li:has([data-testid='assignee']:not([data-kind]))::before {
+  content: 'assignee';
+}
+.dark aside[data-testid='task-header'] > ul[aria-label='Who'] > li:has([data-testid='manager'])::before {
+  content: 'manager';
+}
+.dark aside[data-testid='task-header'] > ul[aria-label='Who'] > li:has([data-testid='owner'])::before {
+  content: 'owner';
+}
+.dark aside[data-testid='task-header'] > ul[aria-label='Who'] > li:has([data-testid='notify-chip'])::before {
+  content: 'alerts';
+}
+.dark aside[data-testid='task-header'] > ul[aria-label='Who'] > li:not([title])::before {
+  content: 'for';
+}
+.dark aside[data-testid='task-header'] > ul[aria-label='Who'] > li:not([title]) {
+  padding-top: 0;
+}
+/* The value always in the third column; the small icons go, the label says
+   it; the avatars stay in their own column. */
+.dark aside[data-testid='task-header'] > ul[aria-label='Who'] > li > :not([data-avatar]):not(svg) {
+  grid-column: 3;
+  justify-self: start;
+  max-width: 100%;
+}
+.dark aside[data-testid='task-header'] > ul[aria-label='Who'] > li > svg {
+  display: none;
+}
+.dark aside[data-testid='task-header'] > ul[aria-label='Who'] > li > span > span:not([data-testid]) {
+  display: none;
+}
+.dark aside[data-testid='task-header'] > ul[aria-label='Who'] [data-testid] {
+  color: var(--foreground);
+}
+/* Waiting on: the system speaking, orange, condensed; a square mark. */
+.dark aside[data-testid='task-header'] [data-testid='waiting-on'] {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.dark aside[data-testid='task-header'] [data-testid='waiting-on'][data-attention='me'] {
+  color: var(--eva);
+}
+.dark aside[data-testid='task-header'] [data-testid='waiting-on'] > span[aria-hidden] {
+  border-radius: 0;
+  background: var(--eva);
+  box-shadow: none;
+}
+/* Delivered (a state: review, yellow) and accepted (settled, muted). */
+.dark aside[data-testid='task-header'] [data-testid='delivered-chip'],
+.dark aside[data-testid='task-header'] [data-testid='accepted'] {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+.dark aside[data-testid='task-header'] [data-testid='delivered-chip'] {
+  color: var(--eva-yellow);
+}
+
+/* The acts: Accept and Reject filled orange blocks, cut at the top right;
+   Delete, destructive, outlined red. */
+.dark aside[data-testid='task-header'] > div:first-child > button {
+  height: 28px;
+  margin: 0;
+  gap: 6px;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0 12px 0 8px;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+}
+.dark aside[data-testid='task-header'] > div:first-child > button:not(:last-child) {
+  border: 0;
+  background: var(--eva);
+  color: var(--eva-ink);
+}
+.dark aside[data-testid='task-header'] > div:first-child > button:not(:last-child) svg {
+  color: var(--eva-ink);
+}
+.dark aside[data-testid='task-header'] > div:first-child > button:not(:last-child):hover {
+  background: oklch(0.85 0.17 55);
+}
+.dark aside[data-testid='task-header'] > div:first-child > button:last-child {
+  border: 1px solid oklch(0.62 0.25 27 / 60%);
+  background: transparent;
+  color: var(--eva-red);
+}
+.dark aside[data-testid='task-header'] > div:first-child > button:last-child:hover {
+  background: var(--eva-red);
+  color: var(--eva-ink);
+}
+
+/* ---------- The rail: sections as plates ---------- */
+
+/* Accepted when, Brief, What the agent received, Summary: each a plate whose
+   heading is a filled tab at its top left over a fine ruler. */
+.dark aside[data-testid='task-header'] section[aria-label] {
+  position: relative;
+  isolation: isolate;
+  gap: 12px;
+  padding: 0 14px 14px;
+  border: 0;
+  background: var(--eva-dim);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    var(--cut) 100%,
+    0 calc(100% - var(--cut))
+  );
+}
+.dark aside[data-testid='task-header'] section[aria-label]::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  background: var(--card);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut) + 1px) 0,
+    100% calc(var(--cut) - 1px),
+    100% 100%,
+    calc(var(--cut) - 1px) 100%,
+    0 calc(100% - var(--cut) + 1px)
+  );
+}
+.dark aside[data-testid='task-header'] section[aria-label] > header {
+  position: relative;
+  min-height: 24px;
+  margin: 0 -14px 4px;
+  padding: 0 16px 0 0;
+  letter-spacing: 0;
+}
+.dark aside[data-testid='task-header'] section[aria-label] > header::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: -6px;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, var(--eva-dim) 0 1px, transparent 1px 12px);
+}
+.dark aside[data-testid='task-header'] section[aria-label] > header > h3 {
+  order: -1;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding: 0 18px 0 12px;
+  background: var(--eva);
+  color: var(--eva-ink);
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+}
+.dark aside[data-testid='task-header'] section[aria-label] > header > svg {
+  color: var(--eva-dim);
+}
+/* The criteria: numbered, the box an empty one-pixel square. */
+.dark aside[data-testid='task-header'] [data-testid='criteria'] {
+  counter-reset: criterion;
+  gap: 6px;
+}
+.dark aside[data-testid='task-header'] [data-testid='criterion'] {
+  counter-increment: criterion;
+  display: grid;
+  grid-template-columns: 1.25rem 14px minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: start;
+}
+.dark aside[data-testid='task-header'] [data-testid='criterion']::before {
+  content: counter(criterion, decimal-leading-zero);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  line-height: 1.4rem;
+  color: var(--eva);
+}
+.dark aside[data-testid='task-header'] [data-testid='criterion'] > input[type='checkbox'] {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  border: 1px solid var(--eva-dim);
+  border-radius: 0;
+  background: transparent;
+}
+.dark aside[data-testid='task-header'] [data-testid='criteria'] + p {
+  font-size: 0.7rem;
+}
+.dark aside[data-testid='task-header'] [data-testid='instructions'] {
+  border: 1px solid var(--eva-dim);
+  border-radius: 0;
+  background: var(--background);
+}
+.dark aside[data-testid='task-header'] section[aria-label] button {
+  border-radius: 0;
+}
+
+/* ---------- The box ---------- */
+
+/* The work box: a plate, cut like the others. */
+.dark section[aria-label='Task work'] {
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--eva-dim);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    var(--cut) 100%,
+    0 calc(100% - var(--cut))
+  );
+}
+.dark section[aria-label='Task work']::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  background: var(--card);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut) + 1px) 0,
+    100% calc(var(--cut) - 1px),
+    100% 100%,
+    calc(var(--cut) - 1px) 100%,
+    0 calc(100% - var(--cut) + 1px)
+  );
+}
+/* Its header strip ends in a ruler. */
+.dark section[aria-label='Task work'] > div:first-child {
+  position: relative;
+  border-bottom-color: var(--eva-dim);
+  padding-bottom: 10px;
+}
+.dark section[aria-label='Task work'] > div:first-child::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, var(--eva-dim) 0 1px, transparent 1px 12px);
+}
+/* Compute | Messages: outlined blocks, the view you are on cyan. */
+.dark nav[aria-label='Task view'] {
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.dark nav[aria-label='Task view'] > a {
+  border: 1px solid var(--eva-dim);
+  border-left-width: 3px;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.dark nav[aria-label='Task view'] > a:hover {
+  color: var(--foreground);
+  background: var(--accent);
+}
+.dark nav[aria-label='Task view'] > a[aria-current='page'] {
+  border-color: oklch(0.8 0.14 200 / 50%);
+  border-left-color: var(--eva-cyan);
+  color: var(--eva-cyan);
+  background: oklch(0.8 0.14 200 / 10%);
+}
+.dark nav[aria-label='Task view'] > a svg {
+  color: inherit;
+}
+.dark nav[aria-label='Task view'] > a > span[title] {
+  font-family: var(--font-mono);
+  color: inherit;
+}
+
+/* ---------- Compute: the sandboxes as indexed plates ---------- */
+
+.dark section[aria-label='Task work'] div:has(> ul[aria-label='Sandboxes']) {
+  border-bottom-color: var(--eva-dim);
+}
+/* Allocate: an act, a filled orange block (over the shared outlined +). */
+.dark button[data-allocate]:has(> svg.lucide-plus) {
+  height: 28px;
+  border: 0;
+  background: var(--eva);
+  color: var(--eva-ink);
+  font-weight: 700;
+  font-size: 0.75rem;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+}
+.dark button[data-allocate]:has(> svg.lucide-plus) svg {
+  color: var(--eva-ink);
+}
+.dark button[data-allocate]:has(> svg.lucide-plus):hover {
+  background: oklch(0.85 0.17 55);
+}
+/* Done: not an act any more; outlined and dim, the label says why. */
+.dark button[data-allocate]:has(> svg.lucide-plus):disabled {
+  background: transparent;
+  color: var(--muted-foreground);
+  box-shadow: inset 0 0 0 1px var(--eva-dim);
+}
+.dark button[data-allocate]:has(> svg.lucide-plus):disabled svg {
+  color: var(--muted-foreground);
+}
+.dark ul[aria-label='Sandboxes'] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 12px 12px;
+  border: 0;
+  counter-reset: sandbox;
+}
+.dark ul[aria-label='Sandboxes'] > li {
+  counter-increment: sandbox;
+  isolation: isolate;
+  min-height: 40px;
+  padding: 8px 12px 8px calc(7rem + 14px);
+  border: 0;
+  background: var(--eva-dim);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    var(--cut) 100%,
+    0 calc(100% - var(--cut))
+  );
+}
+.dark ul[aria-label='Sandboxes'] > li + li {
+  border-top: 0;
+}
+.dark ul[aria-label='Sandboxes'] > li::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  background: var(--card);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut) + 1px) 0,
+    100% calc(var(--cut) - 1px),
+    100% 100%,
+    calc(var(--cut) - 1px) 100%,
+    0 calc(100% - var(--cut) + 1px)
+  );
+}
+.dark ul[aria-label='Sandboxes'] > li:hover::after {
+  background: var(--secondary);
+}
+.dark ul[aria-label='Sandboxes'] > li:has([data-status-tab] [data-tier='off']) {
+  background: oklch(0.74 0.19 48 / 22%);
+}
+/* The selected one is you: a cyan frame. */
+.dark ul[aria-label='Sandboxes'] > li[aria-current='true'] {
+  background: var(--eva-cyan);
+}
+.dark ul[aria-label='Sandboxes'] > li[aria-current='true']::after {
+  background: oklch(0.2 0.03 220);
+}
+/* The index, small, at the top right inside the cut. */
+.dark ul[aria-label='Sandboxes'] > li::before {
+  content: counter(sandbox, decimal-leading-zero);
+  position: absolute;
+  right: 16px;
+  top: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  color: var(--eva-dim);
+}
+.dark ul[aria-label='Sandboxes'] > li > button[data-testid='sandbox-name'] {
+  color: var(--foreground);
+  font-size: 0.85rem;
+}
+.dark ul[aria-label='Sandboxes'] > li > span[title] {
+  font-family: var(--font-mono);
+  color: var(--muted-foreground);
+}
+/* The status tab, as on the Tasks list. */
+.dark ul[aria-label='Sandboxes'] [data-status-tab] {
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  bottom: 1px;
+  width: 7rem;
+  z-index: 1;
+  border-right: 1px solid var(--eva-dim);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, calc(var(--cut) - 1px) 100%, 0 calc(100% - var(--cut) + 1px));
+}
+.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status][data-tier] {
+  flex: 1;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  padding: 0 8px 0 12px;
+  color: var(--muted-foreground);
+  background: var(--eva-faint);
+}
+.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status][data-tier='lit'],
+.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status][data-tier='attention'] {
+  color: var(--eva-ink);
+  font-weight: 700;
+}
+.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status='running'][data-tier='lit'] {
+  background: var(--eva-green);
+}
+.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status][data-tier='lit']:not([data-status='running']) {
+  background: oklch(0.78 0.12 220);
+}
+.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status][data-tier='attention'] {
+  background: var(--eva-red);
+}
+.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status][data-tier='lit'] [aria-hidden] > span,
+.dark ul[aria-label='Sandboxes'] [data-status-tab] span[data-status][data-tier='attention'] [aria-hidden] > span {
+  box-shadow: 0 0 0 1px oklch(0.1 0 0 / 60%);
+}
+/* The selected sandbox's parts: Stop is an act, a filled orange block. */
+.dark [data-testid='sandbox-parts'] button:has(> svg.lucide-square) {
+  border: 0;
+  border-radius: 0;
+  background: var(--eva);
+  color: var(--eva-ink);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+}
+.dark [data-testid='sandbox-parts'] button:has(> svg.lucide-square):hover {
+  background: oklch(0.85 0.17 55);
+}
+.dark [data-testid='sandbox-parts'] [data-testid='work'] {
+  border-radius: 0;
+}
+
+/* ---------- The New task dialog ---------- */
+
+/* The dialog: a chamfered plate (frame color under a fill), wider cut. */
+.dark [role='dialog']:has(> form[data-create-form]) {
+  --plate-cut: 18px;
+  isolation: isolate;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--eva);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--plate-cut)) 0,
+    100% var(--plate-cut),
+    100% 100%,
+    var(--plate-cut) 100%,
+    0 calc(100% - var(--plate-cut))
+  );
+}
+.dark [role='dialog']:has(> form[data-create-form])::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  background: var(--card);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--plate-cut) + 1px) 0,
+    100% calc(var(--plate-cut) - 1px),
+    100% 100%,
+    calc(var(--plate-cut) - 1px) 100%,
+    0 calc(100% - var(--plate-cut) + 1px)
+  );
+}
+/* The header: the title as a filled tab in the frame's top left, then a
+   ruler. */
+.dark form[data-create-form] > div:first-child {
+  position: relative;
+  padding: 0 24px 10px 0;
+  border-bottom: 0;
+}
+.dark form[data-create-form] > div:first-child::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 0;
+  height: 5px;
+  background: repeating-linear-gradient(90deg, var(--eva-dim) 0 1px, transparent 1px 24px);
+}
+.dark form[data-create-form] > div:first-child > svg:first-child {
+  display: none;
+}
+.dark form[data-create-form] > div:first-child > h2 {
+  align-self: stretch;
+  padding: 8px 26px 7px 18px;
+  background: var(--eva);
+  color: var(--eva-ink);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+}
+.dark form[data-create-form] > div:first-child button[aria-label='Close'] {
+  margin-top: 8px;
+  border-radius: 0;
+  color: var(--eva);
+}
+/* The footer: a one-pixel line, the summary a mono readout. */
+.dark form[data-create-form] > div:last-child,
+.dark form[data-create-form] > div:has(> [role='alert']) {
+  border-top-color: var(--eva-dim);
+}
+.dark form[data-create-form] > div:last-child {
+  padding-bottom: 18px;
+  padding-right: 28px;
+}
+/* Cards: plates. The big three (order, agent, compute) carry their label
+   as a filled tab over a ruler; the six spec cards inside compute are
+   smaller plates with an outlined label. Concept colors stay on the icons
+   only as the frame's dim orange: a color is a state, a frame or you. */
+.dark form[data-create-form] section[data-card] {
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--eva-dim);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    var(--cut) 100%,
+    0 calc(100% - var(--cut))
+  );
+}
+.dark form[data-create-form] section[data-card]::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: -2;
+  background: var(--card);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut) + 1px) 0,
+    100% calc(var(--cut) - 1px),
+    100% 100%,
+    calc(var(--cut) - 1px) 100%,
+    0 calc(100% - var(--cut) + 1px)
+  );
+}
+.dark form[data-create-form] section[data-card] section[data-card] {
+  background: oklch(0.74 0.19 48 / 28%);
+}
+.dark form[data-create-form] section[data-card] section[data-card]::after {
+  background: var(--background);
+}
+/* The card's label row. */
+.dark form[data-create-form] section[data-card] > div:first-child {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--eva);
+}
+.dark form[data-create-form] section[data-card] > div:first-child > svg {
+  color: var(--eva);
+}
+/* Top-level cards: the label is a filled tab fused into the top left. */
+.dark form[data-create-form] > div > section[data-card] {
+  padding-top: 0;
+}
+.dark form[data-create-form] > div > section[data-card] > div:first-child {
+  position: relative;
+  min-height: 30px;
+  margin: 0 -16px 6px;
+  padding: 0 16px 0 0;
+}
+.dark form[data-create-form] > div > section[data-card] > div:first-child::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: -6px;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, var(--eva-dim) 0 1px, transparent 1px 12px);
+}
+.dark form[data-create-form] > div > section[data-card] > div:first-child::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--tab-width, 9.5rem);
+  background: var(--eva);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+}
+.dark form[data-create-form] > div > section[data-card] > div:first-child,
+.dark form[data-create-form] > div > section[data-card] > div:first-child > svg {
+  color: var(--eva-ink);
+}
+.dark form[data-create-form] > div > section[data-card] > div:first-child > svg {
+  margin-left: 14px;
+}
+.dark form[data-create-form] > div > section[data-card] > div:first-child > div {
+  color: var(--foreground);
+}
+.dark form[data-create-form] > div > section[data-card][data-card='order'] {
+  --tab-width: 7.25rem;
+}
+.dark form[data-create-form] > div > section[data-card][data-card='agent'] {
+  --tab-width: 7.5rem;
+}
+.dark form[data-create-form] > div > section[data-card][data-card='compute'] {
+  --tab-width: 8.75rem;
+}
+.dark form[data-create-form] section[data-card] [data-count] {
+  border-radius: 0;
+  background: var(--eva-faint);
+  color: var(--foreground);
+}
+/* Fields: one-pixel frames, square; the field you are in is cyan. */
+.dark form[data-create-form] input:not([type='checkbox']):not([type='radio']):not([data-name]),
+.dark form[data-create-form] textarea,
+.dark form[data-create-form] [cmdk-root] {
+  border: 1px solid var(--eva-dim);
+  border-radius: 0;
+  background: var(--background);
+  box-shadow: none;
+}
+.dark form[data-create-form] input:not([data-name]):focus-visible,
+.dark form[data-create-form] textarea:focus-visible {
+  border-color: var(--eva-cyan);
+  box-shadow: 0 0 0 1px var(--eva-cyan);
+}
+.dark form[data-create-form] [data-field] {
+  display: flex;
+  flex-direction: column;
+}
+/* A field with no label of its own gets one above its frame. */
+.dark form[data-create-form] [data-field]::before {
+  content: attr(data-field);
+  margin-bottom: 4px;
+  font-family: var(--font-sans);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--eva);
+}
+/* The field's icon sits inside the frame, below the label. */
+.dark form[data-create-form] [data-field] > svg {
+  top: calc(0.65rem * 1.5 + 4px + 10px);
+  color: var(--eva-dim);
+}
+.dark form[data-create-form] [data-field='title'] > svg {
+  top: calc(0.65rem * 1.5 + 4px + 18px);
+}
+.dark form[data-create-form] [data-field-label],
+.dark form[data-create-form] label {
+  font-family: var(--font-sans);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--eva);
+}
+.dark form[data-create-form] [data-field-label] {
+  width: 4.75rem;
+}
+.dark form[data-create-form] [data-start-from] > span {
+  font-family: var(--font-sans);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--eva);
+}
+/* The name: data, lowercase mono, in a dashed frame until it has a value. */
+.dark form[data-create-form] label:has(> input[data-name]) {
+  border-radius: 0;
+  border-color: var(--eva-dim);
+  background: transparent;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.dark form[data-create-form] label:has(> input[data-name]) svg {
+  color: var(--eva);
+}
+/* Icons in fields and chips: the frame's orange, not a concept color. */
+.dark form[data-create-form] section[data-card] svg {
+  color: inherit;
+}
+.dark form[data-create-form] div.relative > svg,
+.dark form[data-create-form] div.relative > [data-slot='tooltip-trigger'] {
+  color: var(--eva);
+}
+/* Chips, tiles and toggles: square outlined blocks; what is picked is you,
+   cyan. */
+.dark form[data-create-form] [data-tile],
+.dark form[data-create-form] div:has(> [data-tile]):not([data-start-from]),
+.dark form[data-create-form] [data-assignee],
+.dark form[data-create-form] [data-raw-toggle],
+.dark form[data-create-form] button[data-state],
+.dark form[data-create-form] [data-for] {
+  border-radius: 0;
+  box-shadow: none;
+}
+.dark form[data-create-form] [data-state='on'],
+.dark form[data-create-form] [aria-pressed='true'] {
+  border-color: var(--eva-cyan);
+  background: oklch(0.8 0.14 200 / 12%);
+  color: var(--eva-cyan);
+}
+.dark form[data-create-form] div:has(> [data-tile][aria-pressed='true']) {
+  border-color: var(--eva-cyan);
+  background: oklch(0.8 0.14 200 / 12%);
+  color: var(--eva-cyan);
+}
+.dark form[data-create-form] div:has(> [data-tile][aria-pressed='true']) > [data-tile] {
+  background: transparent;
+  border: 0;
+}
+/* Switches: square; on is orange (the system's voice), the thumb ink. */
+.dark form[data-create-form] button[role='switch'] {
+  border-radius: 0;
+}
+.dark form[data-create-form] button[role='switch'] > span {
+  border-radius: 0;
+}
+.dark form[data-create-form] button[role='switch'][data-state='checked'] {
+  border-color: transparent;
+  background: var(--eva);
+  color: inherit;
+}
+.dark form[data-create-form] button[role='switch'][data-state='checked'] > span {
+  background: var(--eva-ink);
+}
+/* Create: the act, a filled orange block; disabled, outlined and dim with
+   its label saying why. Cancel: outlined. */
+.dark form[data-create-form] button[data-create] {
+  height: 36px;
+  border: 0;
+  border-radius: 0;
+  background: var(--eva);
+  color: var(--eva-ink);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+}
+.dark form[data-create-form] button[data-create]:hover {
+  background: oklch(0.85 0.17 55);
+}
+.dark form[data-create-form] button[data-create]:disabled {
+  opacity: 1;
+  background: transparent;
+  color: var(--muted-foreground);
+  box-shadow: inset 0 0 0 1px var(--eva-dim);
+}
+.dark form[data-create-form] > div:last-child button:not([data-create]) {
+  height: 36px;
+  border-radius: 0;
+  border-color: var(--eva-dim);
+  background: transparent;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
