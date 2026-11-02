@@ -1,0 +1,151 @@
+/* Eva look, accounts area (docs/design/panel.md).
+
+   /accounts: each provider a chamfered plate (cut 12px at the top right and
+   the bottom left, a one-pixel orange-dim frame that follows the cut), its
+   header a strip with the provider in the condensed uppercase label and a
+   ruler under it. The provider mark is a square tab outlined in orange dim.
+   Usage meters are square readouts: an orange-dim frame with a tick every
+   10%, filled with the system's orange (a measurement, never a status, so no
+   green, yellow or red). Data (percentages, resets, emails, harnesses) stays
+   lowercase monospace; the empty slot is a dashed frame with the same cut. */
+
+/* ---- Plates: the element's background is the frame; a pseudo-element one
+   pixel inside is the fill; both cut at the top right and the bottom left. */
+.dark [data-accounts-page] section[data-card] {
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--eva-dim);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    var(--cut) 100%,
+    0 calc(100% - var(--cut))
+  );
+}
+.dark [data-accounts-page] section[data-card]::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  background: var(--card);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut) + 1px) 0,
+    100% calc(var(--cut) - 1px),
+    100% 100%,
+    calc(var(--cut) - 1px) 100%,
+    0 calc(100% - var(--cut) + 1px)
+  );
+}
+.dark [data-accounts-page] section[data-card] > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- The header strip: the provider in condensed uppercase orange, a fine
+   ruler under it (a tick every 12px). */
+.dark [data-accounts-page] section[data-card] > header {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--eva-dim);
+}
+.dark [data-accounts-page] section[data-card] > header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, var(--eva-dim) 0 1px, transparent 1px 12px);
+}
+.dark [data-accounts-page] section[data-card] > header > h3 {
+  font-family: var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--eva);
+}
+.dark [data-accounts-page] [data-testid='usage-updated'] {
+  font-family: var(--font-mono);
+}
+.dark [data-accounts-page] [data-testid='provider-mark'] {
+  border: 1px solid var(--eva-dim);
+  border-radius: 0;
+  background: var(--eva-faint);
+  color: var(--eva);
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
+/* ---- Labels: the window names and "<Provider> Account", condensed. */
+.dark [data-accounts-page] :is([data-testid='window-label'], [data-testid='account-heading']) {
+  font-family: var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  font-size: 0.72rem;
+  color: var(--muted-foreground);
+}
+.dark [data-accounts-page] [data-window] svg {
+  color: var(--eva-dim);
+}
+
+/* ---- Meters: square, framed, ticked every 10%, filled orange. */
+.dark [data-accounts-page] [data-testid='meter'] {
+  border: 1px solid var(--eva-dim);
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), var(--eva-dim) calc(10% - 1px) 10%),
+    var(--eva-plate);
+}
+.dark [data-accounts-page] [data-testid='meter-fill'] {
+  border-radius: 0;
+  background: var(--eva);
+}
+
+/* ---- The active account: data, so lowercase monospace inside the button. */
+.dark [data-accounts-page] [data-testid='active-label'] {
+  font-family: var(--font-mono);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ---- The empty slot: a dashed frame, cut at the top right. */
+.dark [data-accounts-page] [data-testid='accounts-empty'] {
+  border: 1px dashed var(--eva-dim);
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+}
+.dark [data-accounts-page] [data-testid='accounts-empty']:hover {
+  border-color: var(--eva);
+  color: var(--eva);
+}
+.dark [data-accounts-page] [data-testid='accounts-empty']:focus-visible {
+  outline: 1px solid var(--eva-cyan);
+}
+
+/* ---- The footer: a frame line above the acts. */
+.dark [data-accounts-page] section[data-card] > footer {
+  border-top: 1px solid var(--eva-dim);
+}
+
+/* ---- The switcher's menu (portaled out of the page): an account's kind,
+   "Active" and "Sign in" are labels, condensed. */
+.dark [data-switch] :is([data-kind-label], .ml-auto) {
+  font-family: var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.65rem;
+}

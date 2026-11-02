@@ -283,7 +283,7 @@ export const conceptColors = {
   inbox: pink,
   question: pink,
   thread: pink,
-  // A credential, like secret.
-  account: yellow,
+  // Neutral: in the Eva look yellow means waiting on a human.
+  account: zinc,
   usage: zinc,
 } satisfies Record<Concept, ConceptColor>

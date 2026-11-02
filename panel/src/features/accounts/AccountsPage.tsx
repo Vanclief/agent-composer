@@ -29,7 +29,7 @@ export function AccountsPage() {
   }
   const { accounts, providers } = query.data
   return (
-    <div className="flex flex-col gap-4 p-6">
+    <div data-accounts-page className="flex flex-col gap-4 p-6">
       <ErrorText error={query.error} />
       <div className="grid grid-cols-[repeat(auto-fill,minmax(22rem,1fr))] items-start gap-3">
         {providers.map((p) => (

@@ -5,7 +5,7 @@ import { Loader2, Plus, Star, Trash2 } from 'lucide-react'
 
 import type { AccountKind, AccountView, ProviderView } from '@/api/accounts'
 import { useClearDefaultAccount, useCreateAccount, useMakeDefaultAccount, useRemoveAccount } from '@/api/hooks'
-import { conceptColors, conceptIcons } from '@/components/concept-icons'
+import { conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
 import {
@@ -31,14 +31,11 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { cn } from '@/lib/utils'
 
 import { ACCOUNT_NAME_RE, KIND_LABELS, kindHint, providerName } from './format'
 
-const color = conceptColors.account
-
 const chipBase =
-  'h-7 rounded-md border border-border bg-transparent px-2 text-xs font-normal text-muted-foreground shadow-none hover:bg-accent hover:text-accent-foreground'
+  'h-7 border border-border bg-transparent px-2 text-xs font-normal text-muted-foreground shadow-none hover:bg-accent hover:text-accent-foreground'
 
 // The kinds a provider offers: oauth only where it has an oauth variable.
 function kindsOf(provider: ProviderView): AccountKind[] {
@@ -150,7 +147,7 @@ export function AddAccountDialog({ provider, open, onOpenChange, prefill }: AddA
                   data-kind={k}
                   size="sm"
                   disabled={Boolean(replace) && k !== kind}
-                  className={cn(chipBase, color.on)}
+                  className={chipBase}
                 >
                   {KIND_LABELS[k]}
                 </ToggleGroupItem>
@@ -188,7 +185,7 @@ export function AddAccountDialog({ provider, open, onOpenChange, prefill }: AddA
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={Boolean(why) || pending} className={color.solid}>
+            <Button type="submit" disabled={Boolean(why) || pending}>
               {pending ? <Loader2 className="animate-spin" /> : <Plus />}
               {why ? `${verb}: ${why}` : verb}
             </Button>
@@ -254,9 +251,9 @@ function ManageRow({ account }: { account: AccountView }) {
   return (
     <li data-account={account.name} className="flex flex-col gap-1.5 py-2">
       <div className="flex items-center gap-2">
-        <Icon aria-hidden className={cn('size-4 shrink-0', color.text)} />
-        <span className="font-mono text-sm">{account.name}</span>
-        <span className="truncate text-xs text-muted-foreground">
+        <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+        <span className="shrink-0 font-mono text-sm whitespace-nowrap">{account.name}</span>
+        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
           {[account.email, KIND_LABELS[account.kind]].filter(Boolean).join(' · ')}
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -268,7 +265,6 @@ function ManageRow({ account }: { account: AccountView }) {
               disabled={clearDefault.isPending}
               onClick={() => clearDefault.mutate(account.name)}
               title="Back to System default"
-              className={color.text}
             >
               <Star className="fill-current" /> Default
             </Button>

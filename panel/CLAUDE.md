@@ -330,7 +330,10 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   Remove with a confirm, refusals verbatim). Sign in opens Add pre-filled
   and replaces the account (DELETE, then POST, then the default back if it
   had it); the device-flow sign-in is a follow-up. The value field is a
-  password field cleared when the request goes, success or failure.
+  password field cleared when the request goes, success or failure. The Eva look
+  for the page is `src/styles/eva-accounts.css` (keyed on `data-accounts-page`):
+  each card a cut plate with a ruled header strip, meters square and ticked,
+  filled with the system orange (a readout, not a status).
 
 ## Task page (`/tasks/:name`)
 

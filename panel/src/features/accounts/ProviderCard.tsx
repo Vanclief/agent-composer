@@ -7,7 +7,7 @@ import { Check, ChevronDown, LogIn, Plus, Settings2 } from 'lucide-react'
 
 import type { AccountView, ProviderView, UsageView } from '@/api/accounts'
 import { useClearDefaultAccount, useMakeDefaultAccount } from '@/api/hooks'
-import { conceptColors, conceptIcons } from '@/components/concept-icons'
+import { conceptIcons } from '@/components/concept-icons'
 import { ErrorText } from '@/components/error-text'
 import { Button } from '@/components/ui/button'
 import {
@@ -22,8 +22,6 @@ import { cn } from '@/lib/utils'
 
 import { AddAccountDialog, ManageAccountsDialog, type AddPrefill } from './AccountDialogs'
 import { accountLabel, ago, KIND_LABELS, percent, providerName, tokenRejected, until, useNow } from './format'
-
-const color = conceptColors.account
 
 export function ProviderCard({ provider, accounts }: { provider: ProviderView; accounts: AccountView[] }) {
   const now = useNow()
@@ -46,17 +44,10 @@ export function ProviderCard({ provider, accounts }: { provider: ProviderView; a
   }
 
   return (
-    <section
-      aria-label={`${display} accounts`}
-      data-card={provider.id}
-      className={cn(
-        'flex flex-col gap-3 rounded-xl border border-border bg-white p-4 shadow-sm dark:bg-zinc-900/60',
-        color.edge,
-      )}
-    >
-      <header className="flex items-center gap-2">
+    <section aria-label={`${display} accounts`} data-card={provider.id} className="flex flex-col gap-3 p-4">
+      <header data-slot="card-head" className="flex items-center gap-2">
         <ProviderMark name={display} />
-        <h3 className="text-sm font-semibold">{display}</h3>
+        <h3>{display}</h3>
         <span className="font-mono text-xs text-muted-foreground" title="Harnesses this provider serves">
           {provider.harnesses.join(', ')}
         </span>
@@ -76,7 +67,7 @@ export function ProviderCard({ provider, accounts }: { provider: ProviderView; a
           type="button"
           data-testid="accounts-empty"
           onClick={() => openAdd()}
-          className="flex min-h-16 items-center justify-center gap-1.5 rounded-md border border-dashed border-zinc-300 px-3 text-sm text-zinc-500 transition-colors hover:border-zinc-400 hover:text-zinc-900 dark:border-zinc-700 dark:hover:border-zinc-500 dark:hover:text-zinc-100"
+          className="flex min-h-16 items-center justify-center gap-1.5 px-3"
         >
           <Plus className="size-4" />
           No {display} account yet. Add one.
@@ -88,7 +79,7 @@ export function ProviderCard({ provider, accounts }: { provider: ProviderView; a
         </>
       )}
 
-      <footer className="flex items-center gap-2 border-t border-border pt-3">
+      <footer className="flex items-center gap-2 pt-3">
         <Button size="sm" variant="outline" data-act="add-account" onClick={() => openAdd()}>
           <Plus /> Add account
         </Button>
@@ -125,15 +116,7 @@ export function ProviderCard({ provider, accounts }: { provider: ProviderView; a
 // The provider's initial on a tinted tile; no brand artwork.
 function ProviderMark({ name }: { name: string }) {
   return (
-    <span
-      aria-hidden
-      className={cn(
-        'flex size-6 items-center justify-center rounded-md border text-xs font-semibold',
-        color.bg,
-        color.border,
-        color.text,
-      )}
-    >
+    <span aria-hidden data-testid="provider-mark" className="flex size-6 items-center justify-center">
       {name.slice(0, 1)}
     </span>
   )
@@ -188,7 +171,7 @@ function UsageBars({
       {usage.windows.map((w) => (
         <div key={w.id} data-window={w.id} className="flex flex-col gap-1">
           <div className="flex items-center gap-1.5 text-sm">
-            <Icon aria-hidden className={cn('size-3.5', conceptColors.usage.text)} />
+            <Icon aria-hidden className="size-3.5" />
             <span data-testid="window-label">{w.label}</span>
           </div>
           <div
@@ -197,11 +180,12 @@ function UsageBars({
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(w.used * 100)}
-            className="h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800"
+            data-testid="meter"
+            className="h-2 overflow-hidden"
           >
-            <div className="h-full rounded-full bg-yellow-500/80" style={{ width: percent(w.used) }} />
+            <div data-testid="meter-fill" className="h-full" style={{ width: percent(w.used) }} />
           </div>
-          <div className="flex justify-between text-xs text-muted-foreground tabular-nums">
+          <div className="flex justify-between font-mono text-xs text-muted-foreground tabular-nums">
             <span data-testid="window-used">{percent(w.used)} used</span>
             <span data-testid="window-resets" title={new Date(w.resets_at).toLocaleString()}>
               Resets in {until(w.resets_at, now)}
@@ -254,14 +238,16 @@ function Switcher({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs text-muted-foreground">{display} Account</span>
+      <span data-testid="account-heading" className="text-xs text-muted-foreground">
+        {display} Account
+      </span>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             variant="outline"
             data-testid="active-account"
             disabled={pending}
-            className="w-full justify-between font-normal"
+            className="w-full justify-between font-mono normal-case"
           >
             <span data-testid="active-label" className="truncate">
               {accountLabel(active)}
@@ -270,9 +256,7 @@ function Switcher({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-64">
-          <DropdownMenuLabel className="text-[11px] tracking-wide text-muted-foreground uppercase">
-            Switch to
-          </DropdownMenuLabel>
+          <DropdownMenuLabel>Switch to</DropdownMenuLabel>
           <DropdownMenuItem data-switch="system" disabled={!active} onSelect={system}>
             System default
             {!active && <ActiveMark />}
@@ -290,8 +274,12 @@ function Switcher({
                 className="flex-col items-start gap-0.5"
               >
                 <span className="flex w-full items-center gap-2">
-                  <span className={cn('truncate', rejected && 'text-muted-foreground')}>{a.email || a.name}</span>
-                  <span className="text-xs text-muted-foreground">{KIND_LABELS[a.kind]}</span>
+                  <span className={cn('truncate font-mono', rejected && 'text-muted-foreground')}>
+                    {a.email || a.name}
+                  </span>
+                  <span data-kind-label className="text-xs text-muted-foreground">
+                    {KIND_LABELS[a.kind]}
+                  </span>
                   {isActive && <ActiveMark />}
                   {rejected && !isActive && (
                     <span className="ml-auto flex items-center gap-1 text-xs">
