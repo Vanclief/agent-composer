@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,5 +71,55 @@ func TestPollerMapsInferenceOnly(t *testing.T) {
 	}
 	if p.PollAccount(context.Background(), "work") != "" {
 		t.Fatal("an email from nowhere")
+	}
+}
+
+// For an account with no login the profile status decides: 403 is
+// inference-only whatever usage said, 401 a rejected token, 5xx the
+// status text. The token never shows in the reading.
+func TestPollerTellsInferenceOnlyFromRejected(t *testing.T) {
+	cases := []struct {
+		name    string
+		usage   func(w http.ResponseWriter)
+		profile func(w http.ResponseWriter)
+		want    string
+		windows int
+	}{
+		{"usage 401, profile 403", status(http.StatusUnauthorized), status(http.StatusForbidden), ErrInferenceOnly, 0},
+		{"usage 401, profile 401", status(http.StatusUnauthorized), status(http.StatusUnauthorized), ErrTokenRejected, 0},
+		{"usage 200, profile 403", body(usageResponse), status(http.StatusForbidden), ErrInferenceOnly, 4},
+		{"usage 429, profile 403", status(http.StatusTooManyRequests), status(http.StatusForbidden), ErrInferenceOnly, 0},
+		{"usage 429, profile 503", status(http.StatusTooManyRequests), status(http.StatusServiceUnavailable), "usage: HTTP 429, profile: HTTP 503", 0},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			srv, _ := newServer(t, c.usage, c.profile)
+
+			lister := &fakeLister{}
+			lister.set([]Account{{Name: "work", Provider: "anthropic", Kind: "oauth", Secret: "ACCOUNT_WORK"}})
+
+			p := NewPoller(lister, "")
+			fetcher := Fetcher{BaseURL: srv.URL}
+			p.Fetch = func(ctx context.Context, token string) (Result, error) {
+				return fetcher.Fetch(ctx, srv.Client(), token)
+			}
+			p.LoadTokens = func() (Tokens, error) {
+				return fakeTokens{"ACCOUNT_WORK": fakeToken}, nil
+			}
+
+			p.Poll(context.Background())
+			reading := p.Usage("work")
+			if reading.Error != c.want {
+				t.Fatalf("error %q, want %q", reading.Error, c.want)
+			}
+			if len(reading.Windows) != c.windows {
+				t.Fatalf("windows %+v, want %d", reading.Windows, c.windows)
+			}
+			if strings.Contains(reading.Error, fakeToken) {
+				t.Fatal("token leaked into the error")
+			}
+			assertNoToken(t, Result{Usage: *reading, Email: p.Email("work")}, nil)
+		})
 	}
 }

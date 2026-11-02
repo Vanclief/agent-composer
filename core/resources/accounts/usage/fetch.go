@@ -53,6 +53,18 @@
 // field of the same slug). used is the percent as a fraction clamped to
 // 0..1; resets_at is RFC 3339 UTC, "" when the API gives none.
 //
+// # Inference-only or rejected
+//
+// A token from `claude setup-token` has only user:inference, and a revoked
+// one has nothing; usage alone cannot tell them apart (both may answer
+// 401), profile can. Observed on 2026-11-02 with a setup-token: usage 429,
+// profile 403. The pairs, for an account with no login (the poller maps
+// them, a signed-in account keeps the plain why):
+//
+//	profile 403, usage anything → ErrInferenceOnly (windows kept when usage read)
+//	profile 401, usage anything → ErrTokenRejected
+//	profile 5xx or unreachable  → the status text, e.g. "usage: HTTP 429, profile: HTTP 503"
+//
 // An endpoint that fails or changes shape yields UsageView.Error with a
 // short why and the windows that could be read. The token is never put in
 // an error, a log line or a result.
@@ -83,11 +95,12 @@ const (
 	OAuthBeta = "oauth-2025-04-20"
 	// DefaultUserAgent identifies agc to the API.
 	DefaultUserAgent = "agc"
-	// ErrTokenRejected is UsageView.Error when the API answers 401.
+	// ErrTokenRejected is UsageView.Error when the API answers 401 (for
+	// an account with no login, when profile does).
 	ErrTokenRejected = "token rejected: sign in again"
 	// ErrInferenceOnly is UsageView.Error for an account with no login
-	// whose token the API refuses for usage or profile: a token from
-	// `claude setup-token` is inference-only (ADR 0018 "Sign-in").
+	// whose profile answers 403: a token from `claude setup-token` is
+	// inference-only (ADR 0018 "Sign-in").
 	ErrInferenceOnly = "inference-only token: sign in for usage"
 	// ErrSignInExpired is UsageView.Error when the login's refresh token
 	// is refused or gone.

@@ -94,9 +94,11 @@ client id, scopes `user:profile user:inference`.
   endpoints with the login's access token, refreshing it when missing or
   within 5 minutes of expiry; a refresh refused with 400 or 401 reads
   `sign-in expired: sign in again` and changes nothing else. An account
-  with no login is read with its own token as before, and a 403 on profile
-  or a 401, 403 or 429 on usage reads `inference-only token: sign in for
-  usage`. Sandboxes keep getting the account's own token: an access token
+  with no login is read with its own token as before, and its profile
+  status decides: 403 reads `inference-only token: sign in for usage`
+  whatever usage said, 401 reads `token rejected: sign in again` (a
+  revoked token, which usage alone also answers with 401), anything else
+  the status text. Sandboxes keep getting the account's own token: an access token
   expires in hours and a sandbox's environment is fixed at boot, so
   running inference on the login is a later ADR.
 - **Endpoints.** `POST /api/accounts/{name}/signin` → `{ url, expires_at }`
