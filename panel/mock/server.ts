@@ -2488,6 +2488,8 @@ type MockAccount = {
     windows: { id: string; label: string; used: number; resets_at: string }[]
     error: string
   } | null
+  // Account sign-in (contract of accounts-signin); absent reads as null.
+  signed_in_at?: string | null
 }
 
 const ACCOUNT_NAME_RE = /^[a-z0-9-]{1,32}$/
@@ -2563,6 +2565,21 @@ function accountsSeed(): MockAccount[] {
         windows: [],
         error: 'token rejected: 401 invalid authentication credentials',
       },
+    },
+    {
+      name: 'plain-max',
+      provider: 'anthropic',
+      kind: 'oauth',
+      secret: accountSecret('plain-max'),
+      email: 'plain@example.com',
+      default: false,
+      created_at: iso(now - 2 * day),
+      usage: {
+        updated_at: iso(now - 2 * min),
+        windows: [],
+        error: 'inference-only token: sign in for usage',
+      },
+      signed_in_at: null,
     },
   ]
 }
@@ -2646,6 +2663,87 @@ async function accountsAPI(state: State, method: string, rest: string[], req: In
     }
     list.splice(list.indexOf(account), 1)
     return NO_CONTENT
+  }
+  if (rest[1] === 'signin') {
+    return accountSigninAPI(state, method, rest, req, account)
+  }
+  throw apiError(404, 'no such endpoint')
+}
+
+// ---------- account sign-in (ahead of accounts-signin) ----------
+//
+// POST /api/accounts/:name/signin → { url, expires_at } (10 minutes, a new
+// state each time); POST …/signin/complete { code } takes `code#state` (the
+// state must match) or a bare code while one sign-in is pending: the code
+// `made-up-bad` fails as the exchange would (400 EBADREQUEST "token
+// exchange failed: HTTP 400"), anything else signs in (signed_in_at now,
+// usage error cleared). DELETE …/signin clears signed_in_at. The code is
+// never stored or echoed.
+
+type MockSignin = { state: string; expires: number }
+
+function signinsOf(state: State): Map<string, MockSignin> {
+  const holder = state as State & { signinsMock?: Map<string, MockSignin> }
+  if (!holder.signinsMock) {
+    holder.signinsMock = new Map()
+  }
+  return holder.signinsMock
+}
+
+async function accountSigninAPI(
+  state: State,
+  method: string,
+  rest: string[],
+  req: IncomingMessage,
+  account: MockAccount,
+) {
+  const pending = signinsOf(state)
+  if (rest.length === 2 && method === 'POST') {
+    const signin = { state: hex(16), expires: Date.now() + 10 * 60_000 }
+    pending.set(account.name, signin)
+    const url =
+      'https://claude.ai/oauth/authorize?code=true&client_id=made-up-client&response_type=code' +
+      '&redirect_uri=' +
+      encodeURIComponent('https://platform.claude.com/oauth/code/callback') +
+      '&scope=' +
+      encodeURIComponent('user:profile user:inference') +
+      '&code_challenge=made-up-challenge&code_challenge_method=S256&state=' +
+      signin.state
+    return { url, expires_at: iso(signin.expires) }
+  }
+  if (rest.length === 3 && rest[2] === 'complete' && method === 'POST') {
+    const body = await readJSON(req, apiError)
+    const pasted = str(body.code).trim()
+    const signin = pending.get(account.name)
+    if (!signin || signin.expires < Date.now()) {
+      pending.delete(account.name)
+      throw apiError(400, 'no sign-in pending for this account; start again')
+    }
+    const hash = pasted.indexOf('#')
+    const code = hash < 0 ? pasted : pasted.slice(0, hash)
+    if (hash >= 0 && pasted.slice(hash + 1) !== signin.state) {
+      throw apiError(400, 'state does not match the pending sign-in; start again')
+    }
+    if (!code) {
+      throw apiError(400, 'code is required')
+    }
+    pending.delete(account.name)
+    if (code === 'made-up-bad') {
+      throw new HttpError(400, {
+        error: { code: 'EBADREQUEST', message: 'token exchange failed: HTTP 400', request_id: 'mock-' + hex(4) },
+      })
+    }
+    account.signed_in_at = iso()
+    if (account.usage) {
+      account.usage.error = ''
+      account.usage.updated_at = iso()
+    }
+    return account
+  }
+  if (rest.length === 2 && method === 'DELETE') {
+    pending.delete(account.name)
+    account.signed_in_at = null
+    return account
   }
   throw apiError(404, 'no such endpoint')
 }

@@ -22,6 +22,8 @@ import { cn } from '@/lib/utils'
 
 import { AddAccountDialog, ManageAccountsDialog, type AddPrefill } from './AccountDialogs'
 import { accountLabel, ago, KIND_LABELS, percent, providerName, tokenRejected, until, useNow } from './format'
+import { SignInDialog } from './SignInDialog'
+import { SIGNIN_LINES, signedInAt, signinNeed } from './signin'
 
 export function ProviderCard({ provider, accounts }: { provider: ProviderView; accounts: AccountView[] }) {
   const now = useNow()
@@ -31,6 +33,8 @@ export function ProviderCard({ provider, accounts }: { provider: ProviderView; a
   // the prefill every time.
   const [adding, setAdding] = useState<{ prefill?: AddPrefill } | null>(null)
   const [managing, setManaging] = useState(false)
+  // The account whose sign-in dialog is open (mounted only while set).
+  const [signingIn, setSigningIn] = useState<AccountView | null>(null)
 
   function openAdd(prefill?: AddPrefill) {
     setAdding({ prefill })
@@ -74,7 +78,7 @@ export function ProviderCard({ provider, accounts }: { provider: ProviderView; a
         </button>
       ) : (
         <>
-          <Usage account={active} now={now} onSignIn={signIn} />
+          <Usage account={active} now={now} onSignIn={signIn} onLogin={setSigningIn} />
           <Switcher display={display} accounts={accounts} active={active} onSignIn={signIn} />
         </>
       )}
@@ -108,7 +112,12 @@ export function ProviderCard({ provider, accounts }: { provider: ProviderView; a
         open={managing}
         onOpenChange={setManaging}
         onAdd={() => openAdd()}
+        onSignIn={(account) => {
+          setManaging(false)
+          setSigningIn(account)
+        }}
       />
+      {signingIn && <SignInDialog account={signingIn} onOpenChange={(open) => !open && setSigningIn(null)} />}
     </section>
   )
 }
@@ -126,10 +135,12 @@ function Usage({
   account,
   now,
   onSignIn,
+  onLogin,
 }: {
   account: AccountView | undefined
   now: number
   onSignIn: (account: AccountView) => void
+  onLogin: (account: AccountView) => void
 }) {
   if (!account) {
     return (
@@ -145,7 +156,29 @@ function Usage({
       </p>
     )
   }
-  return <UsageBars usage={account.usage} now={now} account={account} onSignIn={onSignIn} />
+  return (
+    <>
+      <UsageBars usage={account.usage} now={now} account={account} onSignIn={onSignIn} onLogin={onLogin} />
+      <SignedInLine account={account} now={now} />
+    </>
+  )
+}
+
+// "Signed in 3 min ago" under the bars while the account has a login.
+function SignedInLine({ account, now }: { account: AccountView; now: number }) {
+  const at = signedInAt(account)
+  if (!at) {
+    return null
+  }
+  return (
+    <p
+      data-testid="signed-in"
+      className="font-mono text-xs text-muted-foreground"
+      title={new Date(at).toLocaleString()}
+    >
+      Signed in {ago(at, now)}
+    </p>
+  )
 }
 
 function UsageBars({
@@ -153,16 +186,40 @@ function UsageBars({
   now,
   account,
   onSignIn,
+  onLogin,
 }: {
   usage: UsageView
   now: number
   account: AccountView
   onSignIn: (account: AccountView) => void
+  onLogin: (account: AccountView) => void
 }) {
   const Icon = conceptIcons.usage
+  // Inference-only token or an expired login: a sign-in fixes it, so the
+  // line says that in place of the raw error. Every other error verbatim.
+  const need = signinNeed(account)
   return (
     <div className="flex flex-col gap-3">
-      {usage.error && (
+      {need && (
+        <div
+          data-testid="sign-in-line"
+          data-need={need}
+          className="flex items-center gap-2 text-xs text-muted-foreground"
+          title={usage.error}
+        >
+          {SIGNIN_LINES[need]}
+          <Button
+            size="sm"
+            variant="outline"
+            data-act="sign-in"
+            className="ml-auto h-6 px-2 text-xs"
+            onClick={() => onLogin(account)}
+          >
+            <LogIn /> Sign in
+          </Button>
+        </div>
+      )}
+      {usage.error && !need && (
         <div className="flex flex-col gap-1.5">
           <ErrorText error={new Error(usage.error)} className="text-xs" />
           {tokenRejected(account) && <SignInLine account={account} onSignIn={onSignIn} />}
