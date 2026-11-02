@@ -283,7 +283,7 @@ export interface paths {
         put?: never;
         /**
          * Deliver a task for review
-         * @description Sets `delivered_at` and `summary` and posts "Delivered: <summary>" in #<task> as agc (ADR 0010 item 2). The sandboxes are left as they are; the agent keeps waiting for review. A task can be delivered more than once; the last summary wins. Inside a sandbox `agc task deliver` reaches the same call over the sandbox's messaging socket. 409 when the task is done.
+         * @description Sets `delivered_at`, `summary` and `report` and posts "Delivered: <summary>" in #<task> as agc, followed by the report rendered as markdown when there is one (ADR 0010 item 2, "Delivery report"). The sandboxes are left as they are; the agent keeps waiting for review. A task can be delivered more than once; the last summary and report win, and a delivery without a report stores null. Inside a sandbox `agc task deliver` reaches the same call over the sandbox's messaging socket, which passes `report` through unchanged. 400 when the report breaks a rule, including a `criteria` count that does not match the task's `accept`; 409 when the task is done.
          */
         post: operations["deliverTask"];
         delete?: never;
@@ -1350,6 +1350,8 @@ export interface components {
             delivered_at: string | null;
             /** @description The last delivery's summary, kept after a rejection. */
             summary: string;
+            /** @description The last delivery's report, null when it sent none; kept after a rejection (ADR 0010, "Delivery report"). */
+            report: components["schemas"]["DeliveryReport"] | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1383,8 +1385,42 @@ export interface components {
             sandbox?: components["schemas"]["SandboxRequest"];
         };
         DeliverTaskRequest: {
-            /** @description What was done and where the work is; required, non-empty after trimming. */
+            /** @description One or two sentences: what was done and where the work is; required, non-empty after trimming. The reviewer reads it first. */
             summary: string;
+            /** @description Optional. In a request any list and `changes` may be left out; they read as empty and absent. 400 when it breaks a rule of ADR 0010 "Delivery report". */
+            report?: components["schemas"]["DeliveryReport"];
+        };
+        /** @description What a delivery says against the task's criteria, what the reviewer judges (ADR 0010, "Delivery report"). Strings are trimmed; every list holds at most 50 entries. On a task the lists are always arrays. */
+        DeliveryReport: {
+            /** @description Exactly one entry per line of the task's `accept`, in the same order; empty when the task has none. */
+            criteria: components["schemas"]["DeliveryCriterion"][];
+            /** @description Where the work is; optional. */
+            changes: components["schemas"]["DeliveryChanges"] | null;
+            checks: components["schemas"]["DeliveryCheck"][];
+            left_out: components["schemas"]["DeliveryLeftOut"][];
+            /** @description What the agent needs the reviewer to decide; non-empty strings. */
+            needs: string[];
+        };
+        DeliveryCriterion: {
+            /** @enum {string} */
+            met: "yes" | "no" | "partly";
+            /** @description How the agent knows; may be empty. */
+            note: string;
+        };
+        DeliveryChanges: {
+            branch: string;
+            sha: string;
+            /** @description How many files changed; null when not given. */
+            files: number | null;
+        };
+        DeliveryCheck: {
+            name: string;
+            passed: boolean;
+            note: string;
+        };
+        DeliveryLeftOut: {
+            what: string;
+            why: string;
         };
         AcceptTaskRequest: {
             /** @description Messaging name of who accepts. Defaults to the task's owner; 400 when it has none. */

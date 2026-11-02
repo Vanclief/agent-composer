@@ -40,7 +40,7 @@ export function Layout() {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-white dark:bg-zinc-900/60">
+      <aside data-testid="sidebar" className="flex w-56 shrink-0 flex-col border-r border-border bg-white dark:bg-zinc-900/60">
         <div className="flex h-[54px] items-center gap-2 border-b border-border px-4 font-semibold tracking-tight">
           <span className="grid size-6 place-items-center rounded bg-zinc-900 text-white dark:bg-white dark:text-zinc-900">
             <Hexagon className="size-4" />

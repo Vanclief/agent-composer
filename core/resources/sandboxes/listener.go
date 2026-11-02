@@ -2,6 +2,7 @@ package sandboxes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"net"
@@ -128,10 +129,11 @@ func (api *API) startListener(name string, caller func(*http.Request) (messaging
 	return nil
 }
 
-// DeliverFunc delivers the task called taskName with summary, for agc task
-// deliver inside one of its sandboxes (ADR 0010 item 2), and returns the
-// task's view.
-type DeliverFunc func(ctx context.Context, taskName string, summary string) (any, error)
+// DeliverFunc delivers the task called taskName with summary and report,
+// the request's report JSON as sent (nil when absent), for agc task
+// deliver inside one of its sandboxes (ADR 0010 item 2, "Delivery
+// report"), and returns the task's view.
+type DeliverFunc func(ctx context.Context, taskName string, summary string, report json.RawMessage) (any, error)
 
 // OnDeliver sets what agc task deliver calls on every sandbox's socket.
 // The socket speaks for its own task only, so a sandbox delivers no other.
@@ -160,7 +162,7 @@ func (api *API) serveDeliver(taskName string) http.HandlerFunc {
 			return
 		}
 
-		view, err := deliver(r.Context(), taskName, req.Summary)
+		view, err := deliver(r.Context(), taskName, req.Summary, req.Report)
 		if err != nil {
 			httpapi.WriteError(w, err)
 			return

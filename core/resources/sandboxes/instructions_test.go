@@ -51,10 +51,37 @@ func TestInstructions(t *testing.T) {
 				"  `#franco` (their inbox) with `agc msg ask '#franco' <question>` so it\n" +
 				"  shows up as waiting on them, and say so in `#fix-login`; do not wait idle.\n" +
 				"- Do not modify files outside the repository, and never print secret values.\n" +
-				"- When the work is finished, end by running `agc task deliver \"<summary>\"`\n" +
-				"  (or start your answer with `DONE:` followed by the summary). The task\n" +
-				"  is done only when your manager or franco accepts it; a rejection comes back in\n" +
-				"  `#fix-login` with the reason.\n",
+				"- When the work is finished, deliver it as \"Delivering\" below says. The\n" +
+				"  task is done only when your manager or franco accepts it; a rejection comes\n" +
+				"  back in `#fix-login` with the reason.\n" +
+				"\n" +
+				"## Delivering\n" +
+				"\n" +
+				"Write `report.json` (do not commit it) with exactly these fields:\n" +
+				"\n" +
+				"```json\n" +
+				"{\n" +
+				"  \"criteria\": [ { \"met\": \"yes\", \"note\": \"how you know\" } ],\n" +
+				"  \"changes\":  { \"branch\": \"agc/fix-login\", \"sha\": \"<pushed commit>\", \"files\": 12 },\n" +
+				"  \"checks\":   [ { \"name\": \"go test ./...\", \"passed\": true, \"note\": \"\" } ],\n" +
+				"  \"left_out\": [ { \"what\": \"what you did not do\", \"why\": \"why\" } ],\n" +
+				"  \"needs\":    [ \"what only the reviewer can decide\" ]\n" +
+				"}\n" +
+				"```\n" +
+				"\n" +
+				"- `criteria`: exactly 2 entries, one per \"Accepted when\" line, in order; `met` is `yes`,\n" +
+				"  `no` or `partly`, `note` at most 500 characters.\n" +
+				"- `changes`: the branch you pushed and its commit (7 to 40 hex characters).\n" +
+				"- `checks`: what you ran and whether it passed.\n" +
+				"- `left_out`: what you did not do and why; `needs`: what you need the\n" +
+				"  reviewer to decide. `[]` when there is nothing.\n" +
+				"\n" +
+				"Then run `agc task deliver \"<one or two sentences>\" --report report.json`.\n" +
+				"The summary is what the reviewer reads first; the report is what they\n" +
+				"judge. A report that breaks these rules is refused with the reason: fix it\n" +
+				"and deliver again. Only when the report cannot be written, start your\n" +
+				"answer with `DONE:` followed by the summary instead; that delivers the\n" +
+				"summary alone.\n",
 		},
 		{
 			name: "person without repo",
@@ -84,10 +111,37 @@ func TestInstructions(t *testing.T) {
 				"  `#franco` (their inbox) with `agc msg ask '#franco' <question>` so it\n" +
 				"  shows up as waiting on them, and say so in `#call-the-bank`; do not wait idle.\n" +
 				"- Do not modify files outside the repository, and never print secret values.\n" +
-				"- When the work is finished, end by running `agc task deliver \"<summary>\"`\n" +
-				"  (or start your answer with `DONE:` followed by the summary). The task\n" +
-				"  is done only when your manager accepts it; a rejection comes back in\n" +
-				"  `#call-the-bank` with the reason.\n",
+				"- When the work is finished, deliver it as \"Delivering\" below says. The\n" +
+				"  task is done only when your manager accepts it; a rejection comes\n" +
+				"  back in `#call-the-bank` with the reason.\n" +
+				"\n" +
+				"## Delivering\n" +
+				"\n" +
+				"Write `report.json` (do not commit it) with exactly these fields:\n" +
+				"\n" +
+				"```json\n" +
+				"{\n" +
+				"  \"criteria\": [ { \"met\": \"yes\", \"note\": \"how you know\" } ],\n" +
+				"  \"changes\":  { \"branch\": \"agc/call-the-bank\", \"sha\": \"<pushed commit>\", \"files\": 12 },\n" +
+				"  \"checks\":   [ { \"name\": \"go test ./...\", \"passed\": true, \"note\": \"\" } ],\n" +
+				"  \"left_out\": [ { \"what\": \"what you did not do\", \"why\": \"why\" } ],\n" +
+				"  \"needs\":    [ \"what only the reviewer can decide\" ]\n" +
+				"}\n" +
+				"```\n" +
+				"\n" +
+				"- `criteria`: `[]`, as this task has no \"Accepted when\" lines; `met` is `yes`,\n" +
+				"  `no` or `partly`, `note` at most 500 characters.\n" +
+				"- `changes`: the branch you pushed and its commit (7 to 40 hex characters).\n" +
+				"- `checks`: what you ran and whether it passed.\n" +
+				"- `left_out`: what you did not do and why; `needs`: what you need the\n" +
+				"  reviewer to decide. `[]` when there is nothing.\n" +
+				"\n" +
+				"Then run `agc task deliver \"<one or two sentences>\" --report report.json`.\n" +
+				"The summary is what the reviewer reads first; the report is what they\n" +
+				"judge. A report that breaks these rules is refused with the reason: fix it\n" +
+				"and deliver again. Only when the report cannot be written, start your\n" +
+				"answer with `DONE:` followed by the summary instead; that delivers the\n" +
+				"summary alone.\n",
 		},
 		{
 			name: "no owner",
@@ -115,10 +169,37 @@ func TestInstructions(t *testing.T) {
 				"  `QUESTION:`) so the question shows up as waiting on them, then keep\n" +
 				"  working on what does not depend on the answer.\n" +
 				"- Do not modify files outside the repository, and never print secret values.\n" +
-				"- When the work is finished, end by running `agc task deliver \"<summary>\"`\n" +
-				"  (or start your answer with `DONE:` followed by the summary). The task\n" +
-				"  is done only when your manager accepts it; a rejection comes back in\n" +
-				"  `#bump-deps` with the reason.\n",
+				"- When the work is finished, deliver it as \"Delivering\" below says. The\n" +
+				"  task is done only when your manager accepts it; a rejection comes\n" +
+				"  back in `#bump-deps` with the reason.\n" +
+				"\n" +
+				"## Delivering\n" +
+				"\n" +
+				"Write `report.json` (do not commit it) with exactly these fields:\n" +
+				"\n" +
+				"```json\n" +
+				"{\n" +
+				"  \"criteria\": [ { \"met\": \"yes\", \"note\": \"how you know\" } ],\n" +
+				"  \"changes\":  { \"branch\": \"agc/bump-deps\", \"sha\": \"<pushed commit>\", \"files\": 12 },\n" +
+				"  \"checks\":   [ { \"name\": \"go test ./...\", \"passed\": true, \"note\": \"\" } ],\n" +
+				"  \"left_out\": [ { \"what\": \"what you did not do\", \"why\": \"why\" } ],\n" +
+				"  \"needs\":    [ \"what only the reviewer can decide\" ]\n" +
+				"}\n" +
+				"```\n" +
+				"\n" +
+				"- `criteria`: `[]`, as this task has no \"Accepted when\" lines; `met` is `yes`,\n" +
+				"  `no` or `partly`, `note` at most 500 characters.\n" +
+				"- `changes`: the branch you pushed and its commit (7 to 40 hex characters).\n" +
+				"- `checks`: what you ran and whether it passed.\n" +
+				"- `left_out`: what you did not do and why; `needs`: what you need the\n" +
+				"  reviewer to decide. `[]` when there is nothing.\n" +
+				"\n" +
+				"Then run `agc task deliver \"<one or two sentences>\" --report report.json`.\n" +
+				"The summary is what the reviewer reads first; the report is what they\n" +
+				"judge. A report that breaks these rules is refused with the reason: fix it\n" +
+				"and deliver again. Only when the report cannot be written, start your\n" +
+				"answer with `DONE:` followed by the summary instead; that delivers the\n" +
+				"summary alone.\n",
 		},
 	}
 

@@ -936,7 +936,7 @@ func TestHomeSocketServesTheAgent(t *testing.T) {
 		t.Fatalf("accepted = %+v", accepted)
 	}
 
-	err = client.Deliver(ctx, "done", &tasks.TaskView{})
+	err = client.Deliver(ctx, "done", nil, &tasks.TaskView{})
 	if ez.ErrorCode(err) != ez.EINVALID {
 		t.Fatalf("deliver from a home: %v, want EINVALID", err)
 	}

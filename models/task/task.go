@@ -56,6 +56,10 @@ type Task struct {
 	DeliveredAt *time.Time `bun:"delivered_at" json:"delivered_at"`
 	// Summary is the last delivery's summary, kept after a rejection.
 	Summary string `bun:"summary,notnull,default:''" json:"summary"`
+	// Report is the last delivery's structured report, nil when it sent
+	// none; kept after a rejection like Summary (ADR 0010, "Delivery
+	// report").
+	Report *Report `bun:"report,type:jsonb" json:"report"`
 	// AcceptedBy names who accepted the task, set with DoneAt.
 	AcceptedBy string     `bun:"accepted_by,notnull,default:''" json:"accepted_by"`
 	DoneAt     *time.Time `bun:"done_at" json:"done_at"`
@@ -207,15 +211,28 @@ func (t *Task) MarkAccepted(ctx context.Context, db bun.IDB, by string) (bool, e
 	return false, nil
 }
 
-// MarkDelivered sets DeliveredAt to now and Summary to summary; the last
-// delivery wins (ADR 0010 item 3).
-func (t *Task) MarkDelivered(ctx context.Context, db bun.IDB, summary string) error {
+// MarkDelivered sets DeliveredAt to now, Summary to summary and Report to
+// report, normalized, or nil when there is none; the last delivery wins
+// (ADR 0010 item 3). A report must match the task's Accept.
+func (t *Task) MarkDelivered(ctx context.Context, db bun.IDB, summary string, report *Report) error {
+	var stored *Report
+	if report != nil {
+		err := report.ValidateFor(t.Accept)
+		if err != nil {
+			return ez.Wrap(err)
+		}
+
+		normalized := report.Normalized()
+		stored = &normalized
+	}
+
 	at := now()
 	t.DeliveredAt = &at
 	t.Summary = summary
+	t.Report = stored
 	t.UpdatedAt = at
 
-	_, err := db.NewUpdate().Model(t).Column("delivered_at", "summary", "updated_at").WherePK().Exec(ctx)
+	_, err := db.NewUpdate().Model(t).Column("delivered_at", "summary", "report", "updated_at").WherePK().Exec(ctx)
 	if err != nil {
 		return ez.Wrap(err)
 	}
@@ -223,7 +240,8 @@ func (t *Task) MarkDelivered(ctx context.Context, db bun.IDB, summary string) er
 	return nil
 }
 
-// MarkRejected clears DeliveredAt and keeps Summary (ADR 0010 item 5).
+// MarkRejected clears DeliveredAt and keeps Summary and Report (ADR 0010
+// item 5).
 func (t *Task) MarkRejected(ctx context.Context, db bun.IDB) error {
 	t.DeliveredAt = nil
 	t.UpdatedAt = now()

@@ -153,3 +153,18 @@ export function TasksBadge({ count, testid = 'tasks-badge' }: { count: number; t
     </span>
   )
 }
+
+// The lit amber mark at a row's left edge: this waits on me. The row needs
+// relative positioning.
+export function AttentionMark({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden
+      data-testid="attention-mark"
+      className={cn(
+        'absolute inset-y-1 left-0 w-0.5 rounded-full bg-amber-500 shadow-[0_0_6px_1px] shadow-amber-500/60',
+        className,
+      )}
+    />
+  )
+}

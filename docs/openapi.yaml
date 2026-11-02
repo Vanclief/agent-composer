@@ -652,11 +652,14 @@ paths:
       operationId: deliverTask
       summary: Deliver a task for review
       description: >
-        Sets `delivered_at` and `summary` and posts "Delivered: <summary>" in #<task> as agc
-        (ADR 0010 item 2). The sandboxes are left as they are; the agent keeps waiting for
-        review. A task can be delivered more than once; the last summary wins. Inside a sandbox
-        `agc task deliver` reaches the same call over the sandbox's messaging socket. 409 when the
-        task is done.
+        Sets `delivered_at`, `summary` and `report` and posts "Delivered: <summary>" in #<task>
+        as agc, followed by the report rendered as markdown when there is one (ADR 0010 item 2,
+        "Delivery report"). The sandboxes are left as they are; the agent keeps waiting for
+        review. A task can be delivered more than once; the last summary and report win, and a
+        delivery without a report stores null. Inside a sandbox `agc task deliver` reaches the
+        same call over the sandbox's messaging socket, which passes `report` through unchanged.
+        400 when the report breaks a rule, including a `criteria` count that does not match the
+        task's `accept`; 409 when the task is done.
       parameters:
         - $ref: '#/components/parameters/TaskIdParam'
       requestBody:
@@ -2646,6 +2649,13 @@ components:
         summary:
           type: string
           description: The last delivery's summary, kept after a rejection.
+        report:
+          allOf:
+            - $ref: '#/components/schemas/DeliveryReport'
+          nullable: true
+          description: >
+            The last delivery's report, null when it sent none; kept after a rejection (ADR 0010,
+            "Delivery report").
         created_at:
           type: string
           format: date-time
@@ -2674,6 +2684,7 @@ components:
         - accepted_by
         - delivered_at
         - summary
+        - report
         - created_at
         - updated_at
         - sandboxes
@@ -2733,9 +2744,118 @@ components:
       properties:
         summary:
           type: string
-          description: What was done and where the work is; required, non-empty after trimming.
+          description: >
+            One or two sentences: what was done and where the work is; required, non-empty
+            after trimming. The reviewer reads it first.
+        report:
+          allOf:
+            - $ref: '#/components/schemas/DeliveryReport'
+          description: >
+            Optional. In a request any list and `changes` may be left out; they read as empty
+            and absent. 400 when it breaks a rule of ADR 0010 "Delivery report".
       required:
         - summary
+    DeliveryReport:
+      type: object
+      description: >
+        What a delivery says against the task's criteria, what the reviewer judges (ADR 0010,
+        "Delivery report"). Strings are trimmed; every list holds at most 50 entries. On a task
+        the lists are always arrays.
+      properties:
+        criteria:
+          type: array
+          maxItems: 50
+          description: >
+            Exactly one entry per line of the task's `accept`, in the same order; empty when the
+            task has none.
+          items:
+            $ref: '#/components/schemas/DeliveryCriterion'
+        changes:
+          allOf:
+            - $ref: '#/components/schemas/DeliveryChanges'
+          nullable: true
+          description: Where the work is; optional.
+        checks:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/DeliveryCheck'
+        left_out:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/DeliveryLeftOut'
+        needs:
+          type: array
+          maxItems: 50
+          description: What the agent needs the reviewer to decide; non-empty strings.
+          items:
+            type: string
+            minLength: 1
+      required:
+        - criteria
+        - changes
+        - checks
+        - left_out
+        - needs
+    DeliveryCriterion:
+      type: object
+      properties:
+        met:
+          type: string
+          enum: ['yes', 'no', 'partly']
+        note:
+          type: string
+          maxLength: 500
+          description: How the agent knows; may be empty.
+      required:
+        - met
+        - note
+    DeliveryChanges:
+      type: object
+      properties:
+        branch:
+          type: string
+          minLength: 1
+        sha:
+          type: string
+          pattern: '^[0-9a-fA-F]{7,40}$'
+        files:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: How many files changed; null when not given.
+      required:
+        - branch
+        - sha
+        - files
+    DeliveryCheck:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        passed:
+          type: boolean
+        note:
+          type: string
+          maxLength: 500
+      required:
+        - name
+        - passed
+        - note
+    DeliveryLeftOut:
+      type: object
+      properties:
+        what:
+          type: string
+          minLength: 1
+        why:
+          type: string
+          minLength: 1
+      required:
+        - what
+        - why
     AcceptTaskRequest:
       type: object
       properties:

@@ -384,12 +384,51 @@ func Instructions(owner *taskmodels.Task, spec task.Spec) string {
 		acceptors = "your manager or " + owner.Owner
 	}
 
-	b.WriteString("- When the work is finished, end by running `agc task deliver \"<summary>\"`\n")
-	b.WriteString("  (or start your answer with `DONE:` followed by the summary). The task\n")
-	b.WriteString("  is done only when " + acceptors + " accepts it; a rejection comes back in\n")
-	b.WriteString("  `#" + name + "` with the reason.\n")
+	b.WriteString("- When the work is finished, deliver it as \"Delivering\" below says. The\n")
+	b.WriteString("  task is done only when " + acceptors + " accepts it; a rejection comes\n")
+	b.WriteString("  back in `#" + name + "` with the reason.\n\n")
+
+	writeDelivering(&b, owner)
 
 	return b.String()
+}
+
+// writeDelivering is TASK.md's "Delivering" section: write report.json
+// with the fields of ADR 0010's "Delivery report", one criterion per
+// "Accepted when" line, and deliver it with the summary; DONE: is the
+// fallback, summary only.
+func writeDelivering(b *strings.Builder, owner *taskmodels.Task) {
+	criteria := "`criteria`: `[]`, as this task has no \"Accepted when\" lines"
+	if len(owner.Accept) == 1 {
+		criteria = "`criteria`: exactly one entry, for the \"Accepted when\" line"
+	}
+	if len(owner.Accept) > 1 {
+		criteria = fmt.Sprintf("`criteria`: exactly %d entries, one per \"Accepted when\" line, in order", len(owner.Accept))
+	}
+
+	b.WriteString("## Delivering\n\n")
+	b.WriteString("Write `report.json` (do not commit it) with exactly these fields:\n\n")
+	b.WriteString("```json\n")
+	b.WriteString("{\n")
+	b.WriteString("  \"criteria\": [ { \"met\": \"yes\", \"note\": \"how you know\" } ],\n")
+	b.WriteString("  \"changes\":  { \"branch\": \"agc/" + owner.Name + "\", \"sha\": \"<pushed commit>\", \"files\": 12 },\n")
+	b.WriteString("  \"checks\":   [ { \"name\": \"go test ./...\", \"passed\": true, \"note\": \"\" } ],\n")
+	b.WriteString("  \"left_out\": [ { \"what\": \"what you did not do\", \"why\": \"why\" } ],\n")
+	b.WriteString("  \"needs\":    [ \"what only the reviewer can decide\" ]\n")
+	b.WriteString("}\n")
+	b.WriteString("```\n\n")
+	b.WriteString("- " + criteria + "; `met` is `yes`,\n")
+	b.WriteString("  `no` or `partly`, `note` at most 500 characters.\n")
+	b.WriteString("- `changes`: the branch you pushed and its commit (7 to 40 hex characters).\n")
+	b.WriteString("- `checks`: what you ran and whether it passed.\n")
+	b.WriteString("- `left_out`: what you did not do and why; `needs`: what you need the\n")
+	b.WriteString("  reviewer to decide. `[]` when there is nothing.\n\n")
+	b.WriteString("Then run `agc task deliver \"<one or two sentences>\" --report report.json`.\n")
+	b.WriteString("The summary is what the reviewer reads first; the report is what they\n")
+	b.WriteString("judge. A report that breaks these rules is refused with the reason: fix it\n")
+	b.WriteString("and deliver again. Only when the report cannot be written, start your\n")
+	b.WriteString("answer with `DONE:` followed by the summary instead; that delivers the\n")
+	b.WriteString("summary alone.\n")
 }
 
 // GuestAgc is the agc binary in the agent image (images/agc-agent).

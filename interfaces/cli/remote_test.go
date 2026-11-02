@@ -82,7 +82,7 @@ func TestTaskCreateAgainstAServerReturnsAtOnce(t *testing.T) {
 	defer server.Close()
 
 	file := filepath.Join(t.TempDir(), "task.yaml")
-	err := os.WriteFile(file, []byte("title: Fix login\nbrief: Make 2FA work.\nassignee: claude_code\nmanager: orchestrator\nsandbox:\n  repo: github.com/o/n\n  command: claude\n"), 0o600)
+	err := os.WriteFile(file, []byte("title: Fix login\nbrief: Make 2FA work.\naccept:\n  - 2FA works\n  - tests pass\nassignee: claude_code\nmanager: orchestrator\nsandbox:\n  repo: github.com/o/n\n  command: claude\n"), 0o600)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,6 +94,10 @@ func TestTaskCreateAgainstAServerReturnsAtOnce(t *testing.T) {
 
 	if fake.created.Title != "Fix login" || fake.created.Sandbox == nil || fake.created.Sandbox.Repo != "github.com/o/n" || fake.created.Sandbox.Command != "claude" {
 		t.Fatalf("created %+v", fake.created)
+	}
+	// The file's accept list must reach the server (ADR 0010): it was dropped once.
+	if len(fake.created.Accept) != 2 || fake.created.Accept[0] != "2FA works" || fake.created.Accept[1] != "tests pass" {
+		t.Fatalf("created accept %v, want the two lines from the file", fake.created.Accept)
 	}
 	if len(fake.requests) != 1 {
 		t.Fatalf("requests %v: create must not poll without --wait", fake.requests)
