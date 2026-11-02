@@ -34,7 +34,8 @@ a task like any other and is out of scope here.
    over the item's fields (`Review {{.url}}`) and creates the task through
    the tasks API exactly as `POST /api/tasks` does; the item is recorded
    with the task. A task without a template name is
-   `<schedule>-<8 hex of sha256(key)>`. A failing command or bad output sets
+   `<schedule>-<8 hex of sha256(key)>`; one without a template title takes
+   the item's `title`, so the list reads as the PR, not the hash. A failing command or bad output sets
    `last_error` and creates nothing; a task that cannot be created is left
    unrecorded, so the next tick tries it again. Secret values are redacted
    from `last_error`.

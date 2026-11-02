@@ -25,6 +25,8 @@ import (
 const (
 	// keyField is the item field that identifies it across ticks.
 	keyField = "key"
+	// titleField is the item field a template without a title falls back to.
+	titleField = "title"
 	// maxOutputShown caps how much of a failing command's stderr goes in
 	// last_error.
 	maxOutputShown = 2000
@@ -176,6 +178,13 @@ func (api *API) createTask(ctx context.Context, record *schedulemodels.Schedule,
 	rendered, err := renderTemplate(record.Task, data)
 	if err != nil {
 		return nil, err
+	}
+
+	// A template without a title takes the item's title, so the task list
+	// reads "<PR title>", not the hashed name.
+	title, ok := data[titleField].(string)
+	if strings.TrimSpace(rendered.Title) == "" && ok && strings.TrimSpace(title) != "" {
+		rendered.Title = strings.TrimSpace(title)
 	}
 
 	return api.tasks.Create(ctx, nil, createRequest(rendered, fallbackName))

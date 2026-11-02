@@ -1517,7 +1517,7 @@ export interface components {
             kind: "belief" | "evidence";
             text: string;
         };
-        /** @description The task a schedule creates: the fields of CreateTaskRequest. title, name, brief and each accept entry are Go text/templates over the item's fields (.key, .url, ...) and .Now, the tick's time; a field the item lacks is an error. Without name the task is <schedule>-<yyyymmdd-hhmm> (UTC) without a poll, <schedule>-<first 8 hex of the key's SHA-256> with one. manager is required. */
+        /** @description The task a schedule creates: the fields of CreateTaskRequest. title, name, brief and each accept entry are Go text/templates over the item's fields (.key, .url, ...) and .Now, the tick's time; a field the item lacks is an error. Without name the task is <schedule>-<yyyymmdd-hhmm> (UTC) without a poll, <schedule>-<first 8 hex of the key's SHA-256> with one. Without title, a poll item's `title` field is the task title. manager is required. */
         ScheduleTemplate: {
             title?: string;
             name?: string;

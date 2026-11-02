@@ -16,6 +16,7 @@ poll:
 # The task: block is a task.yaml. title, name, brief and each accept entry
 # are Go templates over the item's fields ({{.url}}, {{.title}}, {{.key}})
 # and {{.Now}}. Without name: the task is pr-reviews-<8 hex of the key>.
+# Without title: the item's title field is the task title.
 task:
   title: Review {{.title}}
   brief: |

@@ -607,3 +607,30 @@ func TestDocsExample(t *testing.T) {
 		t.Fatalf("view = %+v", view)
 	}
 }
+
+// A template without a title gets the item's title; the name stays hashed.
+func TestItemTitleWhenTheTemplateHasNone(t *testing.T) {
+	env := newTestEnv(t)
+
+	command := env.script(t, "poll.sh", `echo '{"key":"pr-1@aaa","url":"https://x/1","title":"Fix the icon"}'
+echo '{"key":"pr-2@bbb","url":"https://x/2"}'`)
+	template := reviewTemplate()
+	template.Title = ""
+	env.create(t, &CreateRequest{Name: "pr-reviews", Every: "2m", Task: template, Poll: &schedulemodels.Poll{Command: command}})
+
+	response := env.run(t, "pr-reviews")
+	if response.Error != "" || len(response.Created) != 2 {
+		t.Fatalf("response = %+v", response)
+	}
+
+	titled := response.Created[0]
+	if titled.Title != "Fix the icon" || titled.Name != "pr-reviews-"+keySuffix("pr-1@aaa") {
+		t.Fatalf("titled task = %+v", titled)
+	}
+
+	// No title anywhere: the title is the name, as on POST /api/tasks.
+	untitled := response.Created[1]
+	if untitled.Title != untitled.Name {
+		t.Fatalf("untitled task = %+v", untitled)
+	}
+}
