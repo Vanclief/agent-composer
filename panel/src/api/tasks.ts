@@ -74,7 +74,7 @@ export type CreateTaskRequest = {
   // manager is the creator's messaging name; the panel sends the person's.
   assignee: string
   model?: string
-  manager: string
+  manager?: string
   owner?: string
   for: string
   // Allocates a sandbox right after the task is written.
