@@ -80,7 +80,7 @@ Each page sets the top bar title with `usePageTitle('…')` from
   bright as a running one; a dead thing never looks like a done one. A word
   the pill doesn't know is `idle`, or `attention` when it has a `detail`.
   `statusTier`/`tierRank` from `@/components/status-pill` give a status's
-  tier; the Tasks and Compute lists sort attention, lit, idle, off (cards
+  tier; the Tasks and Compute lists sort attention, lit, idle, off (rows
   carry `data-tier`; off ones are muted), and their top row has
   `<StatusLegend />` (four dots, the tier word on hover).
 - **Lists are rows, not cards:** a list item is a flat row with a hairline
@@ -90,7 +90,11 @@ Each page sets the top bar title with `usePageTitle('…')` from
   only for things you click or things lit (a live count, a warning); a
   model name or a person is plain muted text. Franco on the task list of
   2026-11-01: equal violet cards with six chips each were "harder than it
-  should" be to read.
+  should" be to read. `TaskRow` (`src/features/tasks/TaskRow.tsx`) and
+  `SandboxRow` (`ComputePage`) are the two lists built this way: hover
+  tints the row, keyboard focus rings it violet, the age sits right in
+  muted mono, and on Compute the Stop/Start/Delete are small ghost buttons
+  (`SandboxActions quiet`).
 - **Empty states say why in place:** use `<EmptySlot onAdd={…} label="Add …" />`
   for a fillable slot, or `<EmptySlot reason="Sandbox stopped" />` when it can't
   be filled. A disabled control says why in its own label ("Create: needs a
