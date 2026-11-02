@@ -3,6 +3,7 @@ package sandboxes
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/vanclief/ez"
@@ -15,6 +16,10 @@ import (
 // StatusCrashed is msb's word for a VM that died without being stopped,
 // what every running VM reports after the host reboots (ADR 0017).
 const StatusCrashed = "crashed"
+
+// jobClockSlack allows for msb's job clock running behind agc's when
+// Restart tells a job started by the runtime from one left from before.
+const jobClockSlack = time.Minute
 
 // Recoverable reports whether a sandbox the runtime reports as status
 // should be started again on its own (ADR 0017): it booted, agc never
@@ -65,6 +70,8 @@ func (api *API) Restart(ctx context.Context, record *taskmodels.Sandbox, owner *
 		return ez.Wrap(err)
 	}
 
+	startedAt := time.Now()
+
 	err = api.rt.Start(ctx, record.Name, task.SandboxSecrets(bindings))
 	if err != nil {
 		return ez.Wrap(err)
@@ -79,7 +86,7 @@ func (api *API) Restart(ctx context.Context, record *taskmodels.Sandbox, owner *
 		}
 	}
 
-	err = api.startAgentJob(ctx, record, spec)
+	err = api.startAgentJob(ctx, record, spec, startedAt)
 	if err != nil {
 		return ez.Wrap(err)
 	}
@@ -90,8 +97,9 @@ func (api *API) Restart(ctx context.Context, record *taskmodels.Sandbox, owner *
 }
 
 // startAgentJob starts the sandbox's command in a terminal, as its boot
-// did, unless the runtime already runs a job with that command.
-func (api *API) startAgentJob(ctx context.Context, record *taskmodels.Sandbox, spec task.Spec) error {
+// did, unless the runtime runs a job with that command started since
+// startedAt: a job from before the crash may still be listed as running.
+func (api *API) startAgentJob(ctx context.Context, record *taskmodels.Sandbox, spec task.Spec, startedAt time.Time) error {
 	fields := strings.Fields(record.Command)
 	if len(fields) == 0 {
 		return nil
@@ -116,7 +124,7 @@ func (api *API) startAgentJob(ctx context.Context, record *taskmodels.Sandbox, s
 		}
 
 		job := newestWithCommand(jobs, fields)
-		if job != nil && job.Running {
+		if job != nil && job.Running && job.CreatedAt.After(startedAt.Add(-jobClockSlack)) {
 			return nil
 		}
 	}

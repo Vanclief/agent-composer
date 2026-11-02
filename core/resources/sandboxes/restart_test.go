@@ -127,7 +127,7 @@ func TestResumePostsAFailedRestartOnce(t *testing.T) {
 	}
 }
 
-func TestRestartKeepsARunningAgentJob(t *testing.T) {
+func TestRestartKeepsTheAgentJobItFinds(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
 	owner := insertTask(t, e.db, "x")
@@ -135,9 +135,10 @@ func TestRestartKeepsARunningAgentJob(t *testing.T) {
 	record.Command = "agc agent run --task x"
 	e.rt.statuses["x"] = StatusCrashed
 
+	command := []string{"agc", "agent", "run", "--task", "x"}
 	rt := &jobRuntime{
 		fakeRuntime: e.rt,
-		jobs:        []executor.Job{{ID: "agent", Command: []string{"agc", "agent", "run", "--task", "x"}, Running: true}},
+		jobs:        []executor.Job{{ID: "agent", Command: command, Running: true, CreatedAt: time.Now()}},
 	}
 	e.api.rt = rt
 
@@ -147,6 +148,21 @@ func TestRestartKeepsARunningAgentJob(t *testing.T) {
 	}
 
 	want := []string{"start x", "detach"}
+	if !reflect.DeepEqual(e.rt.Calls(), want) {
+		t.Fatalf("calls = %v, want %v", e.rt.Calls(), want)
+	}
+
+	// A job msb still lists as running from before the crash is not the
+	// agent: it starts again.
+	rt.jobs = []executor.Job{{ID: "stale", Command: command, Running: true, CreatedAt: time.Now().Add(-3 * time.Hour)}}
+	e.rt.statuses["x"] = StatusCrashed
+
+	err = e.api.Restart(ctx, record, owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want = append(want, "start x", "terminal agc agent run --task x in /home/agent", "detach")
 	if !reflect.DeepEqual(e.rt.Calls(), want) {
 		t.Fatalf("calls = %v, want %v", e.rt.Calls(), want)
 	}
