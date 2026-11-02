@@ -47,8 +47,10 @@ export type TaskView = {
   assignee: string
   // ADR 0009: the harness model when the assignee is a harness, else empty.
   model: string
-  // ADR 0009: the messaging name agc addresses when the task opens.
+  // ADR 0009: who created the task and runs it day to day (an agent or a
+  // person), and the human it answers to; agc addresses both when it opens.
   manager: string
+  owner: string
   // Id of the knowledge action or decision the task serves, or empty.
   for: string
   status: TaskStatus
@@ -68,10 +70,12 @@ export type CreateTaskRequest = {
   name?: string
   brief: string
   // Empty fields take the server's configured defaults (ADR 0009):
-  // assignee claude_code, model claude-opus-5-5, manager from config.
+  // assignee claude_code, model claude-opus-5-5, owner from config.
+  // manager is the creator's messaging name; the panel sends the person's.
   assignee: string
   model?: string
   manager?: string
+  owner?: string
   for: string
   // Allocates a sandbox right after the task is written.
   sandbox?: SandboxRequest
