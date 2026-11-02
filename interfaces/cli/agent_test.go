@@ -42,6 +42,9 @@ type fakeMessenger struct {
 	taken  map[string]bool
 	joined []string
 	posts  []string
+	// asked records questions; askErr fails them.
+	asked  []string
+	askErr error
 	// delivered records deliveries; deliverErr fails them.
 	delivered  []string
 	deliverErr error
@@ -71,6 +74,17 @@ func (m *fakeMessenger) Post(ctx context.Context, participantID, channel, body s
 	m.posts = append(m.posts, channel+" "+participantID+": "+body)
 
 	return &msgmodels.Message{ID: m.nextID, Channel: channel, ParticipantID: participantID, Body: body}, nil
+}
+
+func (m *fakeMessenger) Ask(ctx context.Context, participantID, channel, body string) (*msgmodels.Message, error) {
+	if m.askErr != nil {
+		return nil, m.askErr
+	}
+
+	m.nextID++
+	m.asked = append(m.asked, channel+" "+participantID+": "+body)
+
+	return &msgmodels.Message{ID: m.nextID, Channel: channel, ParticipantID: participantID, Body: body, Kind: msgmodels.KindQuestion}, nil
 }
 
 func (m *fakeMessenger) Deliver(ctx context.Context, summary string, out any) error {
@@ -251,4 +265,59 @@ type failingHarness struct{}
 
 func (failingHarness) Run(ctx context.Context, prompt string, session string) (string, string, error) {
 	return "", "", ez.New(ez.EINTERNAL, "claude failed: not logged in", nil)
+}
+
+func TestAgentLoopAsksAQuestion(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	msg := &fakeMessenger{
+		cancel: cancel,
+		nextID: 2,
+		script: [][]msgmodels.Message{
+			{message(3, "fix-login", "me", "Square or round?"), message(4, "orchestrator", "p-orch", "Square.")},
+		},
+	}
+	harness := &fakeHarness{answers: map[int]string{1: "QUESTION: Square or round?\nThe brief says both."}}
+	loop := &agentLoop{harness: harness, msg: msg, task: "fix-login", name: "fix-login", brief: "# Fix login\n"}
+
+	err := loop.run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The question is asked without its prefix, not posted, and the loop
+	// keeps waiting: the answer is its next turn.
+	if !reflect.DeepEqual(msg.asked, []string{"#fix-login me: Square or round?\nThe brief says both."}) {
+		t.Fatalf("asked = %q", msg.asked)
+	}
+	if !reflect.DeepEqual(msg.posts, []string{"#fix-login me: answer 2"}) {
+		t.Fatalf("posts = %q", msg.posts)
+	}
+	if len(harness.turns) != 2 || harness.turns[1] != "s1|@orchestrator in #fix-login:\n\nSquare." {
+		t.Fatalf("turns = %q", harness.turns)
+	}
+}
+
+func TestAgentLoopPostsAQuestionThatFails(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	msg := &fakeMessenger{cancel: cancel, askErr: ez.New(ez.EINVALID, "kind is invalid", nil)}
+	loop := &agentLoop{
+		harness: &fakeHarness{answers: map[int]string{1: "QUESTION: which?"}},
+		msg:     msg,
+		task:    "fix-login",
+		name:    "fix-login",
+		brief:   "# Fix login\n",
+	}
+
+	err := loop.run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(msg.posts) != 1 || msg.posts[0] != "#fix-login me: QUESTION: which?" {
+		t.Fatalf("posts = %q", msg.posts)
+	}
 }

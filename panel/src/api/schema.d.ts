@@ -602,6 +602,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/msg/post": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post a message or a question
+         * @description Appends a message to a channel as the given participant, which must belong to the caller; agc fills in `from`, `task` and `human`. `kind` is `message` (the default) or `question`; anything else is 400. A reply (`reply_to`) to a question from someone other than its asker answers it. Inside a sandbox `agc msg post` and `agc msg ask` reach the same call over the sandbox's socket, limited to the task's channels.
+         */
+        post: operations["postMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/msg/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List questions and whether they are answered
+         * @description Messages of kind `question`, newest first, at most 500. Each carries its answer, the first reply to it from someone other than the asker (by participant and by name), computed on every request and never stored; `answer_id`, `answered_by` and `answered_at` are null while it is open. A sandbox sees only its task's channels.
+         */
+        get: operations["listQuestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1298,6 +1338,61 @@ export interface components {
         JSONValue: ({
             [key: string]: unknown;
         } | unknown[] | string | number | boolean) | null;
+        MsgErrorResponse: {
+            error: string;
+        };
+        /**
+         * @description A question waits on the channel's readers until someone else replies to it.
+         * @enum {string}
+         */
+        MsgKind: "message" | "question";
+        MsgPostRequest: {
+            /** @description The id join returned; it must belong to the caller. */
+            participant_id: string;
+            /** @description `#` followed by 1-64 lowercase letters, digits, _ or -. */
+            channel: string;
+            /** @description Plain text, at most 64 KiB. */
+            body: string;
+            /**
+             * Format: int64
+             * @description Id of a message in the same channel this replies to.
+             */
+            reply_to?: number;
+            kind?: components["schemas"]["MsgKind"];
+        };
+        MsgMessage: {
+            /**
+             * Format: int64
+             * @description Also the read cursor; ids are totally ordered per channel.
+             */
+            id: number;
+            channel: string;
+            /** @description The sender's name, filled in by agc. */
+            from: string;
+            participant_id: string;
+            /** @description The sender's task, empty for humans and for agc. */
+            task: string;
+            human: boolean;
+            /** Format: int64 */
+            reply_to?: number;
+            body: string;
+            kind: components["schemas"]["MsgKind"];
+            /** Format: date-time */
+            created_at: string;
+        };
+        MsgQuestion: components["schemas"]["MsgMessage"] & {
+            /**
+             * Format: int64
+             * @description The first reply from someone other than the asker.
+             */
+            answer_id: number | null;
+            answered_by: string | null;
+            /** Format: date-time */
+            answered_at: string | null;
+        };
+        MsgQuestionsResponse: {
+            questions: components["schemas"]["MsgQuestion"][];
+        };
     };
     responses: {
         /** @description Error response with machine-readable code and request identifier. */
@@ -1307,6 +1402,15 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Messaging error. */
+        MsgError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MsgErrorResponse"];
             };
         };
     };
@@ -2541,6 +2645,64 @@ export interface operations {
             };
             400: components["responses"]["Error"];
             500: components["responses"]["Error"];
+        };
+    };
+    postMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MsgPostRequest"];
+            };
+        };
+        responses: {
+            /** @description The stored message. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MsgMessage"];
+                };
+            };
+            400: components["responses"]["MsgError"];
+            401: components["responses"]["MsgError"];
+            404: components["responses"]["MsgError"];
+            500: components["responses"]["MsgError"];
+        };
+    };
+    listQuestions: {
+        parameters: {
+            query?: {
+                /** @description Only questions in this channel, e.g. `#fix-login`. */
+                channel?: string;
+                /** @description `1` keeps only unanswered questions; `0` or absent keeps all. */
+                open?: "0" | "1" | "true" | "false";
+                /** @description Only questions in the channels this person reads: their inbox `#<name>` and `#<task>` for every task they manage or own. */
+                for?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The questions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MsgQuestionsResponse"];
+                };
+            };
+            400: components["responses"]["MsgError"];
+            401: components["responses"]["MsgError"];
+            500: components["responses"]["MsgError"];
         };
     };
 }

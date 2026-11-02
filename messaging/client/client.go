@@ -47,8 +47,17 @@ func (c *Client) Leave(ctx context.Context, participantID string) (*httpapi.Leav
 }
 
 func (c *Client) Post(ctx context.Context, participantID, channel, body string, replyTo *int64) (*msgmodels.Message, error) {
+	return c.post(ctx, httpapi.PostRequest{ParticipantID: participantID, Channel: channel, Body: body, ReplyTo: replyTo})
+}
+
+// Ask posts body in channel as a question, which waits on whoever reads
+// the channel until someone else replies to it.
+func (c *Client) Ask(ctx context.Context, participantID, channel, body string) (*msgmodels.Message, error) {
+	return c.post(ctx, httpapi.PostRequest{ParticipantID: participantID, Channel: channel, Body: body, Kind: msgmodels.KindQuestion})
+}
+
+func (c *Client) post(ctx context.Context, req httpapi.PostRequest) (*msgmodels.Message, error) {
 	m := &msgmodels.Message{}
-	req := httpapi.PostRequest{ParticipantID: participantID, Channel: channel, Body: body, ReplyTo: replyTo}
 
 	err := c.do(ctx, http.MethodPost, "/post", nil, req, m)
 	if err != nil {
@@ -94,6 +103,30 @@ func (c *Client) Channels(ctx context.Context) (*httpapi.ChannelsResponse, error
 	res := &httpapi.ChannelsResponse{}
 
 	err := c.do(ctx, http.MethodGet, "/channels", nil, nil, res)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return res, nil
+}
+
+// Questions lists questions newest first with their answers. channel and
+// forName may be empty; open keeps the unanswered ones.
+func (c *Client) Questions(ctx context.Context, channel string, open bool, forName string) (*httpapi.QuestionsResponse, error) {
+	query := url.Values{}
+	if channel != "" {
+		query.Set("channel", channel)
+	}
+	if open {
+		query.Set("open", "1")
+	}
+	if forName != "" {
+		query.Set("for", forName)
+	}
+
+	res := &httpapi.QuestionsResponse{}
+
+	err := c.do(ctx, http.MethodGet, "/questions", query, nil, res)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}

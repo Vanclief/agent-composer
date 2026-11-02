@@ -20,6 +20,19 @@ import (
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
+	task := func(*http.Request) (messaging.Caller, error) {
+		return messaging.Caller{Task: "review-42"}, nil
+	}
+
+	server, _ := newServerAs(t, task)
+
+	return server
+}
+
+// newServerAs serves a fresh service with caller resolving every request.
+func newServerAs(t *testing.T, caller func(*http.Request) (messaging.Caller, error)) (*httptest.Server, *messaging.Service) {
+	t.Helper()
+
 	sqldb, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -41,14 +54,11 @@ func newTestServer(t *testing.T) *httptest.Server {
 		}
 	}
 
-	task := func(*http.Request) (messaging.Caller, error) {
-		return messaging.Caller{Task: "review-42"}, nil
-	}
-
-	server := httptest.NewServer(New(messaging.NewService(db), task))
+	svc := messaging.NewService(db)
+	server := httptest.NewServer(New(svc, caller))
 	t.Cleanup(server.Close)
 
-	return server
+	return server, svc
 }
 
 func call(t *testing.T, method, url, body string, out any) int {

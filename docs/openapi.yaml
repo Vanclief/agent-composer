@@ -33,6 +33,12 @@ tags:
     description: >
       Evidence, beliefs, decisions and rules (ADR 0006), read only. Labels are computed on every
       request and never stored; checks are never run.
+  - name: Messaging
+    description: >
+      Channels, participants and messages (ADR 0005), served by the same handler on agc's REST API
+      for humans and on each sandbox's socket for its task. Only the routes below are documented
+      here; join, leave, read, wait, channels and participants are in messaging/httpapi. Errors
+      are `{"error": "<message>"}`.
 paths:
   /agents/specs:
     get:
@@ -1170,6 +1176,80 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
+  /msg/post:
+    post:
+      tags: [Messaging]
+      operationId: postMessage
+      summary: Post a message or a question
+      description: >
+        Appends a message to a channel as the given participant, which must belong to the caller;
+        agc fills in `from`, `task` and `human`. `kind` is `message` (the default) or `question`;
+        anything else is 400. A reply (`reply_to`) to a question from someone other than its
+        asker answers it. Inside a sandbox `agc msg post` and `agc msg ask` reach the same call
+        over the sandbox's socket, limited to the task's channels.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MsgPostRequest'
+      responses:
+        '200':
+          description: The stored message.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsgMessage'
+        '400':
+          $ref: '#/components/responses/MsgError'
+        '401':
+          $ref: '#/components/responses/MsgError'
+        '404':
+          $ref: '#/components/responses/MsgError'
+        '500':
+          $ref: '#/components/responses/MsgError'
+  /msg/questions:
+    get:
+      tags: [Messaging]
+      operationId: listQuestions
+      summary: List questions and whether they are answered
+      description: >
+        Messages of kind `question`, newest first, at most 500. Each carries its answer, the first
+        reply to it from someone other than the asker (by participant and by name), computed on
+        every request and never stored; `answer_id`, `answered_by` and `answered_at` are null
+        while it is open. A sandbox sees only its task's channels.
+      parameters:
+        - name: channel
+          in: query
+          description: Only questions in this channel, e.g. `#fix-login`.
+          schema:
+            type: string
+        - name: open
+          in: query
+          description: '`1` keeps only unanswered questions; `0` or absent keeps all.'
+          schema:
+            type: string
+            enum: ['0', '1', 'true', 'false']
+        - name: for
+          in: query
+          description: >
+            Only questions in the channels this person reads: their inbox `#<name>` and `#<task>`
+            for every task they manage or own.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The questions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsgQuestionsResponse'
+        '400':
+          $ref: '#/components/responses/MsgError'
+        '401':
+          $ref: '#/components/responses/MsgError'
+        '500':
+          $ref: '#/components/responses/MsgError'
 components:
   parameters:
     LimitParam:
@@ -1256,6 +1336,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    MsgError:
+      description: Messaging error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MsgErrorResponse'
   schemas:
     ErrorResponse:
       type: object
@@ -2941,3 +3027,105 @@ components:
         - type: number
         - type: integer
         - type: boolean
+    MsgErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+    MsgKind:
+      type: string
+      enum: [message, question]
+      description: A question waits on the channel's readers until someone else replies to it.
+    MsgPostRequest:
+      type: object
+      properties:
+        participant_id:
+          type: string
+          description: The id join returned; it must belong to the caller.
+        channel:
+          type: string
+          description: '`#` followed by 1-64 lowercase letters, digits, _ or -.'
+        body:
+          type: string
+          description: Plain text, at most 64 KiB.
+        reply_to:
+          type: integer
+          format: int64
+          description: Id of a message in the same channel this replies to.
+        kind:
+          $ref: '#/components/schemas/MsgKind'
+      required:
+        - participant_id
+        - channel
+        - body
+    MsgMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Also the read cursor; ids are totally ordered per channel.
+        channel:
+          type: string
+        from:
+          type: string
+          description: The sender's name, filled in by agc.
+        participant_id:
+          type: string
+        task:
+          type: string
+          description: The sender's task, empty for humans and for agc.
+        human:
+          type: boolean
+        reply_to:
+          type: integer
+          format: int64
+        body:
+          type: string
+        kind:
+          $ref: '#/components/schemas/MsgKind'
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - channel
+        - from
+        - participant_id
+        - task
+        - human
+        - body
+        - kind
+        - created_at
+    MsgQuestion:
+      allOf:
+        - $ref: '#/components/schemas/MsgMessage'
+        - type: object
+          properties:
+            answer_id:
+              type: integer
+              format: int64
+              nullable: true
+              description: The first reply from someone other than the asker.
+            answered_by:
+              type: string
+              nullable: true
+            answered_at:
+              type: string
+              format: date-time
+              nullable: true
+          required:
+            - answer_id
+            - answered_by
+            - answered_at
+    MsgQuestionsResponse:
+      type: object
+      properties:
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/MsgQuestion'
+      required:
+        - questions

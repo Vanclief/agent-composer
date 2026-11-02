@@ -67,6 +67,7 @@ func New(db bun.IDB, sandboxesAPI *sandboxes.API, msg *messaging.Service, defaul
 	}
 
 	msg.OnPost(api.onCommand)
+	msg.SetChannelsFor(api.channelsFor)
 	sandboxesAPI.OnDeliver(api.deliverFromSandbox)
 
 	return api
