@@ -226,7 +226,7 @@ func sandboxDelete(c *cli.Context) error {
 func sandboxGC(c *cli.Context) error {
 	err := noArgs(c)
 	if err != nil {
-		return err
+		return ez.Wrap(err)
 	}
 
 	request := &sandboxes.GCRequest{DryRun: c.Bool("dry-run"), Keep: c.String("keep")}
@@ -234,14 +234,14 @@ func sandboxGC(c *cli.Context) error {
 	return withService(c, func(ctx context.Context, svc taskService) error {
 		collected, err := svc.GCSandboxes(ctx, request)
 		if err != nil {
-			return err
+			return ez.Wrap(err)
 		}
 
 		err = output(c, collected, func(w io.Writer) {
 			writeGC(w, collected)
 		})
 		if err != nil {
-			return err
+			return ez.Wrap(err)
 		}
 
 		for _, item := range collected.Sandboxes {

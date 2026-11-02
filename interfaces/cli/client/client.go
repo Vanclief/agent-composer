@@ -181,7 +181,7 @@ func (c *Client) GCSandboxes(ctx context.Context, request *sandboxes.GCRequest) 
 	out := &sandboxes.GCResponse{}
 	err := c.do(ctx, http.MethodPost, "/api/sandboxes/gc", request, out)
 	if err != nil {
-		return nil, err
+		return nil, ez.Wrap(err)
 	}
 
 	return out, nil
