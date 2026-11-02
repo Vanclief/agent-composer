@@ -409,6 +409,12 @@ func runServer(ctx context.Context, project string) error {
 		return nil
 	})
 
+	// So does the sandbox collector (ADR 0008 "Garbage collection").
+	group.Go(func() error {
+		stack.TasksAPI.Sandboxes.StartGC(gctx)
+		return nil
+	})
+
 	group.Go(func() error {
 		return rest.Start(gctx, app, log.Logger)
 	})
