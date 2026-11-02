@@ -11,6 +11,7 @@ import (
 	"github.com/vanclief/ez"
 
 	"github.com/vanclief/agent-composer/core"
+	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	"github.com/vanclief/agent-composer/task"
 )
@@ -159,12 +160,24 @@ func taskCreate(c *cli.Context) error {
 			Name:     firstNonEmpty(c.String("name"), parsed.Name),
 			Brief:    firstNonEmpty(c.String("brief"), parsed.Brief),
 			Assignee: parsed.Assignee,
+			Model:    parsed.Model,
+			Manager:  parsed.Manager,
+			Owner:    parsed.Owner,
 			For:      parsed.For,
 			Sandbox:  parsed.Sandbox,
 		}
 
 		if request.Title == "" && request.Name == "" {
 			return nil, ez.New(ez.EINVALID, "the task needs a title: pass --title or set title: in the file", nil)
+		}
+
+		applied, err := fillTaskDefaults(request, api.Defaults())
+		if err != nil {
+			return nil, err
+		}
+
+		if len(applied) > 0 {
+			fmt.Fprintf(os.Stderr, "Defaults applied: %s\n", strings.Join(applied, ", "))
 		}
 
 		created, err := api.Create(ctx, nil, request)
@@ -181,6 +194,53 @@ func taskCreate(c *cli.Context) error {
 
 		return api.Get(ctx, nil, &tasks.GetRequest{ID: created.ID})
 	})
+}
+
+// fillTaskDefaults fills in what the file leaves empty and says what it
+// filled: the manager is the caller's messaging name (agc msg join), else
+// the configured owner; assignee, model and owner come from the defaults
+// (ADR 0009 item 1).
+func fillTaskDefaults(request *tasks.CreateRequest, defaults controller.DefaultsSettings) ([]string, error) {
+	applied := []string{}
+
+	if strings.TrimSpace(request.Manager) == "" {
+		state, err := loadMsgState()
+		if err == nil && state.Name != "" {
+			request.Manager = state.Name
+			applied = append(applied, "manager "+state.Name+" (your messaging name)")
+		} else if defaults.Owner != "" {
+			request.Manager = defaults.Owner
+			applied = append(applied, "manager "+defaults.Owner+" (the configured owner)")
+		} else {
+			msg := "the task needs a manager: set manager: in the file, run agc msg join <name>, or configure defaults.owner"
+			return nil, ez.New(ez.EINVALID, msg, nil)
+		}
+	}
+
+	filled, err := tasks.ApplyDefaults(request, defaults)
+	if err != nil {
+		return nil, err
+	}
+
+	if strings.TrimSpace(request.Assignee) == "" {
+		applied = append(applied, "assignee "+filled.Assignee)
+	}
+	if strings.TrimSpace(request.Model) == "" && filled.Model != "" {
+		applied = append(applied, "model "+filled.Model)
+	}
+	if strings.TrimSpace(request.Owner) == "" {
+		owner := filled.Owner
+		if owner == "" {
+			owner = "none (no owner is configured)"
+		}
+		applied = append(applied, "owner "+owner)
+	}
+
+	request.Assignee = filled.Assignee
+	request.Model = filled.Model
+	request.Owner = filled.Owner
+
+	return applied, nil
 }
 
 func firstNonEmpty(values ...string) string {

@@ -84,6 +84,7 @@ func Run(ctx context.Context, args []string) error {
 		Commands: []*cli.Command{
 			workflowCommand(),
 			msgCommand(),
+			agentCommand(),
 			taskCommand(),
 			sandboxCommand(),
 			rulesCommand(),

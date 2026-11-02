@@ -109,7 +109,7 @@ func TestAgentCommand(t *testing.T) {
 		owner taskmodels.Task
 		want  string
 	}{
-		{taskmodels.Task{Name: "fix-login", Assignee: "claude_code", Model: "claude-opus-5-5"}, "/usr/local/bin/agc agent run --harness claude_code --model claude-opus-5-5 --task fix-login --brief /home/agent/TASK.md"},
+		{taskmodels.Task{Name: "fix-login", Assignee: "claude_code", Model: "claude-opus-5-5", Manager: "orchestrator", Owner: "franco"}, "/usr/local/bin/agc agent run --harness claude_code --model claude-opus-5-5 --task fix-login --manager orchestrator --owner franco --brief /home/agent/TASK.md"},
 		{taskmodels.Task{Name: "bump", Assignee: "codex_cli"}, "/usr/local/bin/agc agent run --harness codex_cli --task bump --brief /home/agent/TASK.md"},
 		{taskmodels.Task{Name: "call", Assignee: "franco"}, ""},
 	}
@@ -154,7 +154,7 @@ func TestAllocateStoresInstructionsAndRunsTheAgent(t *testing.T) {
 	}
 
 	calls := env.rt.Calls()
-	wantCall := "terminal /usr/local/bin/agc agent run --harness claude_code --model claude-opus-5-5 --task fix-login --brief /home/agent/TASK.md in /home/agent/n"
+	wantCall := "terminal /usr/local/bin/agc agent run --harness claude_code --model claude-opus-5-5 --task fix-login --manager orchestrator --owner franco --brief /home/agent/TASK.md in /home/agent/n"
 	if !slices.Contains(calls, wantCall) {
 		t.Fatalf("calls = %q", calls)
 	}

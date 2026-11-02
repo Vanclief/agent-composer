@@ -346,7 +346,15 @@ func AgentCommand(owner *taskmodels.Task) string {
 	if owner.Model != "" {
 		fields = append(fields, "--model", owner.Model)
 	}
-	fields = append(fields, "--task", owner.Name, "--brief", BriefPath)
+	fields = append(fields, "--task", owner.Name)
+	// The loop closes on /done only from these two.
+	if owner.Manager != "" {
+		fields = append(fields, "--manager", owner.Manager)
+	}
+	if owner.Owner != "" {
+		fields = append(fields, "--owner", owner.Owner)
+	}
+	fields = append(fields, "--brief", BriefPath)
 
 	return strings.Join(fields, " ")
 }

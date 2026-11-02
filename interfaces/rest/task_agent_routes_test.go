@@ -38,7 +38,7 @@ func TestTaskAgentRoutes(t *testing.T) {
 	}
 
 	created := view.Sandboxes[0]
-	if created.Command != "/usr/local/bin/agc agent run --harness claude_code --model claude-opus-5-5 --task fix-login --brief /home/agent/TASK.md" {
+	if created.Command != "/usr/local/bin/agc agent run --harness claude_code --model claude-opus-5-5 --task fix-login --manager orchestrator --owner franco --brief /home/agent/TASK.md" {
 		t.Fatalf("command = %q", created.Command)
 	}
 
