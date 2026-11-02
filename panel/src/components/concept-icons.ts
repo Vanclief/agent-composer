@@ -24,7 +24,7 @@ import { Brain, Eye, FileText, Hammer, Library, Lightbulb, Scale, Signpost } fro
 import { ListTodo } from 'lucide-react'
 import { Bot } from 'lucide-react'
 import { Bell } from 'lucide-react'
-import { ListChecks, PackageCheck } from 'lucide-react'
+import { Inbox, ListChecks, PackageCheck } from 'lucide-react'
 
 export const conceptIcons = {
   // A Task: a VM agents work in.
@@ -75,6 +75,9 @@ export const conceptIcons = {
   // agent's delivery of the work for review.
   criteria: ListChecks,
   delivery: PackageCheck,
+  // ADR 0009 item 5: a person's own channel, #<name>, where agents and
+  // tasks escalate.
+  inbox: Inbox,
 } satisfies Record<string, LucideIcon>
 
 export type Concept = keyof typeof conceptIcons
@@ -267,4 +270,5 @@ export const conceptColors = {
   notify: zinc,
   criteria: zinc,
   delivery: zinc,
+  inbox: pink,
 } satisfies Record<Concept, ConceptColor>

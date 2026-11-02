@@ -15,7 +15,7 @@ the panel stays conflict-free.
 | `src/features/create-task/` (`CreateTaskDialog`) + `tests/create-task.spec.ts`                                                                                   | create-task feature |
 | `src/features/compute/` (`ComputePage`, `SandboxPage`)                                                                                                           | compute feature     |
 | `src/features/terminals/` (`TerminalsTab`, `TerminalPane`, mounted by `SandboxPage`) + `tests/terminals.spec.ts`                                                 | terminals feature   |
-| `src/features/messages/` (`MessagesTab`, `MessagesPage`) + `tests/messages.spec.ts`                                                                              | messages feature    |
+| `src/features/messages/` (`MessagesTab`, `MessagesPage`, `ChannelRows`, unread, message toasts) + `tests/messages.spec.ts`, `tests/talk.spec.ts`                 | messages feature    |
 | everything else: `src/api/`, `src/components/`, `src/shell/`, `src/App.tsx`, `src/main.tsx`, `mock/`, `scripts/`, `tests/shell.spec.ts`, configs, `package.json` | foundation (shared) |
 
 - The files in `src/features/` are placeholders. Replace them freely, but keep
@@ -58,7 +58,8 @@ Each page sets the top bar title with `usePageTitle('…')` from
 - Follow `/Users/vanclief/.claude/skills/rtsdesign/SKILL.md`: icons, slots,
   chips and numbers instead of sentences; explanations go in tooltips.
 - Modes are a vertical list in the sidebar; adding a mode is one entry in `MODES`.
-  In Talk mode the sidebar lists every channel under Channels (`ChannelRows` in `src/shell/layout.tsx`), linking to `/messages/<name>`.
+  In Talk mode the sidebar lists every channel under Channels (`ChannelRows` in `src/features/messages/ChannelRows.tsx`, mounted by the shell), linking to `/messages/<name>`; see Talk mode below.
+  `ModeSwitch` takes an optional `badges` slot per mode (Talk: the unread total).
 - **One icon per concept:** import from `@/components/concept-icons`
   (`conceptIcons.task`, `.sandbox`, `.brief`, `.cpu`, `.memory`, `.image`,
   `.repo`, `.ref`, `.setup`, `.secret`, `.env`, `.volume`, `.channel`,
@@ -173,6 +174,37 @@ replay: after a drop it refetches tasks, sandboxes and channels.
   no asset); before the page's first click or key press the browser keeps
   audio suspended, so the chime waits for it.
 
+## Talk mode: inbox, unread, notifications
+
+- **Me:** the signed-in name is `useMyName()` (`src/features/messages/identity.ts`,
+  localStorage `agc.panel.human`, default `franco`); it follows "Join as…".
+  My inbox is the channel `#<me>` (ADR 0009 item 5).
+- **Sidebar** (`ChannelRows`): a pinned first row "Inbox" (inbox icon,
+  `data-testid="inbox-row"`) for `#<me>`, shown even before it has a message;
+  then the group "Tasks" (channels named after a task from `useTasks`), then
+  "Other" (`role="group"`, `aria-label` the group name). Each row has an
+  `UnreadBadge` (`data-testid="unread-badge"`, `data-mention`) and is bold
+  while unread (`data-unread`); the badge is pink when an unread message
+  mentions `@<me>` (whole word). The Talk row in the mode switch shows the
+  total, pink when any unread message mentions me.
+- **Read state** (`src/features/messages/unread.ts`, `useUnread()`,
+  `markRead`): localStorage `agc.panel.read` maps `#channel` → last read
+  message id. `ChannelView` (Talk page and a task's Messages tab) marks every
+  message it shows read. A channel whose `last_id` is past its cursor is read
+  from the cursor (`queryKeys.unread`) to count messages not from me, so
+  `message.posted` (which refreshes channels) bumps counts without a reload.
+  A never-opened channel counts all its messages.
+- **Notifications** (`src/features/messages/notifications.tsx`, wired next
+  to the task ones in the shell): a top-right toast "Inbox" or "Mentioned
+  you" (`data-testid="toast-message"`, `data-id`, `data-channel`) with the
+  sender, channel and the body's first 160 characters, an "Open" action to
+  `/messages/<channel>`, and the chime (speaker toggle applies). Only for
+  messages in `#<me>` or mentioning `@<me>`; never for my own messages or
+  for the channel I am looking at. Everything else only bumps badges.
+- **Inbox page:** `/messages/<me>` is the ordinary channel view titled
+  "Inbox #<me>", with the line "Your inbox: agents and tasks escalate here"
+  (`data-testid="inbox-header"`) and, when empty, an empty slot saying so.
+
 ## Commands (run in `panel/`)
 
 First time: `npm ci && npx playwright install chromium`.
@@ -223,7 +255,10 @@ Tasks (each with a brief and assignee):
 Saved spec `backend-review`. Secrets
 `CLAUDE_CODE_OAUTH_TOKEN`, `GITHUB_TOKEN` (with hosts) and `CUSTOM` (no
 hosts). Messages in `#review-42` (from @reviewer, @tester and human @franco,
-who has left so you can join as franco) and `#releases`. Creating a task
+who has left so you can join as franco), `#releases`, and franco's inbox
+`#franco`: agc's two opening messages for `review-42` (the first mentions
+`@franco`) and an escalation from the review-42 agent @reviewer asking a
+decision. Creating a task
 returns at once. An allocated sandbox (`POST /api/tasks/{id}/sandboxes`, or
 `sandbox` on create) answers 201 `starting` for 2s, then `running`, and
 starts its `command` as the job `agent`. `POST /api/tasks/{id}/deliver
