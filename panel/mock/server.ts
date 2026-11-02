@@ -661,6 +661,14 @@ function createState() {
     for (const [i, minutes] of [30, 28, 25, 12].entries()) {
       ago(reviewChannel[i], minutes)
     }
+    // Direct-message channels @<human>/<task> (ahead of the backend): an
+    // unread agent message in @franco/yc-pitch, and @franco/review-42,
+    // read: franco answered last, and a message of mine reads everything
+    // before it (src/features/messages/unread.ts).
+    const pitcher = join('pitcher', 'yc-pitch', false)
+    post('@franco/review-42', reviewer, 'PR 42 is ready for your eyes when you have a minute.')
+    post('@franco/review-42', franco, 'Thanks, looking after lunch.')
+    post('@franco/yc-pitch', pitcher, 'Draft 3 of the YC pitch is up: should the demo lead or close?')
     // The seeded human has left, so the panel can join as @franco.
     franco.left_at = iso()
   }
@@ -1034,7 +1042,7 @@ async function specsAPI(state: State, method: string, rest: string[], req: Incom
 }
 
 function checkChannel(channel: string) {
-  if (!CHANNEL_RE.test(channel)) {
+  if (!CHANNEL_RE.test(channel) && !DM_RE.test(channel)) {
     throw msgError(400, `channel "${channel}" is invalid: use # followed by 1-64 lowercase letters, digits, _ or -`)
   }
 }
@@ -1050,7 +1058,8 @@ function presenceOf(state: State, p: Participant) {
   } else if (p.human) {
     online = p.name === 'franco' || [...state.participants.values()].some((q) => q.name === p.name && !q.left_at)
   } else {
-    const task = state.findTask(p.task)
+    // A DM's agent may belong to a task the mock does not have (yc-pitch).
+    const task = state.tasks.get(p.task) ?? [...state.tasks.values()].find((t) => t.id === p.task)
     online = task !== undefined && state.sandboxesOf(task).some((b) => b.status === 'running')
   }
   const last = state.messages.filter((m) => m.participant_id === p.id).at(-1)
@@ -2381,3 +2390,6 @@ async function agentsAPI(state: State, method: string, rest: string[], req: Inco
   }
   throw apiError(404, 'no such endpoint')
 }
+
+// Direct-message channels, @<human>/<task> (another task adds them to agc).
+const DM_RE = /^@[a-z0-9][a-z0-9_-]{0,63}\/[a-z0-9][a-z0-9_-]{0,63}$/

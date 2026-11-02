@@ -92,6 +92,13 @@ test('/ opens Talk when it was the last mode', async ({ page }) => {
 })
 
 test('the Talk sidebar lists channels with their unread counts', async ({ page }) => {
+  // Only followed channels are in the sidebar (follow.ts).
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      'agc.panel.follow',
+      JSON.stringify({ '#releases': { on: true, at: 0 }, '#review-42': { on: true, at: 0 } }),
+    ),
+  )
   await page.goto('/panel/messages')
   const nav = page.getByRole('navigation', { name: 'Main' })
   for (const name of ['#review-42', '#releases']) {
@@ -103,6 +110,13 @@ test('the Talk sidebar lists channels with their unread counts', async ({ page }
 })
 
 test('clicking a channel in the sidebar opens and highlights it', async ({ page }) => {
+  // Only followed channels are in the sidebar (follow.ts).
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      'agc.panel.follow',
+      JSON.stringify({ '#releases': { on: true, at: 0 }, '#review-42': { on: true, at: 0 } }),
+    ),
+  )
   await page.goto('/panel/messages/review-42')
   const nav = page.getByRole('navigation', { name: 'Main' })
   const releases = nav.getByRole('link', { name: /^#releases\b/ })

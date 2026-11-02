@@ -1,7 +1,9 @@
-// Message toasts for me only: a message in my inbox (#<me>) or one that
-// mentions @<me> toasts top-right with the chime, showing sender, channel
+// Message toasts for me only: a message in my inbox (#<me>), in a DM of
+// mine (@<me>/<task>) or one that mentions @<me>, in any channel, followed
+// or not, toasts top-right with the chime, showing sender, channel
 // and the first 160 characters, with Open to /messages/<channel>. Every
-// other message only bumps its badge. My own messages never notify, and
+// other message only bumps its badge, and only when its channel is
+// followed (follow.ts). My own messages never notify, and
 // neither does a message in the channel I am looking at.
 import { useCallback, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
@@ -15,7 +17,8 @@ import { cn } from '@/lib/utils'
 import { playChime } from '@/shell/sound'
 
 import { useMyName } from './identity'
-import { mentions } from './unread'
+import { channelPath } from './follow'
+import { isDMOf, mentions } from './unread'
 
 export const MESSAGE_PREVIEW = 160
 const MESSAGE_MS = 10_000
@@ -68,15 +71,17 @@ export function useMessageNotifications() {
       if (message.from === me) {
         return
       }
-      if (message.channel !== `#${me}` && !mentions(message.body, me)) {
+      const inbox = message.channel === `#${me}`
+      const dm = isDMOf(message.channel, me)
+      if (!inbox && !dm && !mentions(message.body, me)) {
         return
       }
-      const path = `/messages/${encodeURIComponent(message.channel.replace(/^#/, ''))}`
-      if (open.current === path) {
+      const path = channelPath(message.channel)
+      if (open.current === path || decodeURIComponent(open.current) === decodeURIComponent(path)) {
         return
       }
-      const Icon = message.channel === `#${me}` ? conceptIcons.inbox : conceptIcons.message
-      toast(message.channel === `#${me}` ? 'Inbox' : 'Mentioned you', {
+      const Icon = inbox ? conceptIcons.inbox : dm ? conceptIcons.human : conceptIcons.message
+      toast(inbox ? 'Inbox' : dm ? 'Direct' : 'Mentioned you', {
         id: `message:${message.channel}:${message.id}`,
         position: 'top-right',
         icon: <Icon aria-hidden className={cn('size-4', conceptColors.message.text)} />,

@@ -98,9 +98,13 @@ test('a message to my inbox while on /tasks toasts and bumps the Talk badge', as
   await expect(page.getByTestId('message-list').getByText(body.slice(0, 30))).toBeVisible()
 })
 
-test('a message to another channel bumps only its badge, with no toast', async ({ page, request }) => {
-  await openLive(page, '/panel/messages/releases')
+test('a message to a followed channel bumps only its badge, with no toast', async ({ page, request }) => {
   const channel = `#talk-${suffix()}`
+  await page.addInitScript(
+    (c) => localStorage.setItem('agc.panel.follow', JSON.stringify({ [c]: { on: true, at: 0 } })),
+    channel,
+  )
+  await openLive(page, '/panel/messages/releases')
   const agent = await joinAgent(request)
   const message = await post(request, agent.id, channel, 'Nothing for franco here.')
 
@@ -146,7 +150,9 @@ test('a mention of me in another channel toasts; my own messages never do', asyn
 })
 
 test('the Tasks group lists task channels and Other the rest', async ({ page }) => {
-  await page.goto('/panel/messages')
+  // #review-42 is followed because agc's opening message mentions @franco;
+  // #releases once opened.
+  await page.goto('/panel/messages/releases')
   const tasks = page.getByRole('group', { name: 'Tasks' })
   const other = page.getByRole('group', { name: 'Other' })
   await expect(tasks.getByRole('link', { name: /^#review-42\b/ })).toBeVisible()

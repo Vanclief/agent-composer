@@ -79,6 +79,13 @@ test('a taken name shows the 409 verbatim and Join as… picks another', async (
 })
 
 test('messages page asks for a channel and opens one from the sidebar', async ({ page }) => {
+  // Only followed channels are in the sidebar (follow.ts).
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      'agc.panel.follow',
+      JSON.stringify({ '#releases': { on: true, at: 0 }, '#review-42': { on: true, at: 0 } }),
+    ),
+  )
   await actAs(page, uniqueName())
   await page.goto('/panel/messages')
   await expect(page.getByTestId('page-title')).toHaveText('Messages')

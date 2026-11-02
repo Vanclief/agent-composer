@@ -46,6 +46,8 @@ export const queryKeys = {
   unread: (channel: string, after: number, last: number) => ['msg', 'unread', channel, after, last] as const,
   agents: ['agents'] as const,
   agent: (name: string) => ['agents', name] as const,
+  // A channel's newest message, by its last id (Talk's Browse page).
+  lastMessage: (channel: string, last: number) => ['msg', 'last', channel, last] as const,
   // version changes whenever a message is posted anywhere (the sum of the
   // channels' last ids), so message.posted refreshes the questions too.
   questions: (params: QuestionsParams, version: number) => ['msg', 'questions', params, version] as const,

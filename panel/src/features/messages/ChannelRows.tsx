@@ -1,20 +1,22 @@
 // Talk mode's channel list under Channels, mounted by the shell
-// (src/shell/layout.tsx). Inbox (#<me>) is pinned first, even before it
-// has a message; then the Tasks group (channels named after a task), then
-// Other. Each row has its unread badge, the questions waiting for me
-// (QuestionBadge), and is bold while unread.
-import { Lock } from 'lucide-react'
+// (src/shell/layout.tsx). Only followed channels (follow.ts): Inbox (#<me>)
+// pinned first, even before it has a message; then Direct (my DMs,
+// @<me>/<task>), then Tasks (channels named after a task), then Other; last
+// "Browse channels…" to every channel. Each row has its unread badge, the
+// questions waiting for me (QuestionBadge), and is bold while unread.
+import { Compass, Lock } from 'lucide-react'
 import { NavLink } from 'react-router'
 
-import { useTasks } from '@/api/hooks'
+import { useParticipants, useTasks } from '@/api/hooks'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { ErrorText } from '@/components/error-text'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
+import { channelPath, dmTask, useFollow } from './follow'
 import { RowBadges } from './QuestionBadge'
 import { useOpenQuestions } from './questions'
-import { useUnread, type ChannelUnread } from './unread'
+import { type ChannelUnread } from './unread'
 
 function rowClass(isActive: boolean, unread: boolean) {
   return cn(
@@ -41,7 +43,7 @@ function ChannelRow({
   return (
     <li>
       <NavLink
-        to={`/messages/${encodeURIComponent(name)}`}
+        to={channelPath(channel)}
         title={readOnly ? 'Read only' : undefined}
         data-channel={channel}
         data-unread={unread.count > 0}
@@ -49,6 +51,42 @@ function ChannelRow({
       >
         {readOnly && <Lock aria-label="Read only" className="size-3.5 shrink-0" />}
         <span className="truncate font-mono">#{name}</span>
+        <RowBadges count={unread.count} mention={unread.mention} questions={questions} />
+      </NavLink>
+    </li>
+  )
+}
+
+// The other side of a DM: the newest participant who is not me, else the
+// task's name.
+function DMRow({
+  channel,
+  me,
+  unread,
+  questions,
+}: {
+  channel: string
+  me: string
+  unread: ChannelUnread
+  questions: number
+}) {
+  const participants = useParticipants(channel)
+  const task = dmTask(channel)
+  const other = (participants.data ?? []).filter((p) => p.name !== me && p.name !== 'agc').at(-1)?.name
+  const Icon = conceptIcons.human
+  return (
+    <li>
+      <NavLink
+        to={channelPath(channel)}
+        title={`Direct with ${other ? `@${other}` : `task ${task}`}, ${channel}`}
+        data-testid="dm-row"
+        data-channel={channel}
+        data-unread={unread.count > 0}
+        className={({ isActive }) => rowClass(isActive, unread.count > 0)}
+      >
+        <Icon aria-hidden className={cn('size-3.5 shrink-0', conceptColors.human.text)} />
+        <span className="shrink-0 font-mono">@{other ?? task}</span>
+        {other && <span className="min-w-0 truncate text-xs font-normal text-muted-foreground">{task}</span>}
         <RowBadges count={unread.count} mention={unread.mention} questions={questions} />
       </NavLink>
     </li>
@@ -65,17 +103,18 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
 }
 
 export function ChannelRows() {
-  const unread = useUnread()
+  const { unread, following } = useFollow()
   const questions = useOpenQuestions()
   const tasks = useTasks()
-  const { channelsQuery, inbox } = unread
+  const { channelsQuery, inbox, me } = unread
   const InboxIcon = conceptIcons.inbox
   const inboxUnread = unread.of(inbox)
 
   const taskNames = new Set((tasks.data ?? []).map((t) => `#${t.name}`))
-  const rest = unread.channels.filter((c) => c.channel !== inbox)
+  const rest = unread.channels.filter((c) => c.channel !== inbox && following(c.channel))
+  const direct = rest.filter((c) => c.channel.startsWith(`@${me}/`))
   const taskChannels = rest.filter((c) => taskNames.has(c.channel))
-  const other = rest.filter((c) => !taskNames.has(c.channel))
+  const other = rest.filter((c) => !taskNames.has(c.channel) && !c.channel.startsWith(`@${me}/`))
 
   return (
     <ul data-testid="channel-rows" className="mt-0.5 flex flex-col gap-0.5 pl-6">
@@ -104,6 +143,19 @@ export function ChannelRows() {
         </li>
       ) : (
         <>
+          {direct.length > 0 && (
+            <Group label="Direct">
+              {direct.map((c) => (
+                <DMRow
+                  key={c.channel}
+                  channel={c.channel}
+                  me={me}
+                  unread={unread.of(c.channel)}
+                  questions={questions.of(c.channel).length}
+                />
+              ))}
+            </Group>
+          )}
           {taskChannels.length > 0 && (
             <Group label="Tasks">
               {taskChannels.map((c) => (
@@ -132,6 +184,16 @@ export function ChannelRows() {
           )}
         </>
       )}
+      <li className="mt-2">
+        <NavLink
+          to="/messages/browse"
+          data-testid="browse-link"
+          className={({ isActive }) => cn(rowClass(isActive, false), !isActive && 'text-muted-foreground')}
+        >
+          <Compass aria-hidden className="size-3.5 shrink-0" />
+          <span className="truncate">Browse channels…</span>
+        </NavLink>
+      </li>
     </ul>
   )
 }

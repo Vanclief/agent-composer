@@ -3,8 +3,9 @@
 // channel (ChannelView) moves it to the newest message shown. A channel is
 // unread while its last_id (GET /api/msg/channels, refreshed by every
 // message.posted event) is past that id: the messages after it are read
-// once to count them, leaving out my own, and to see whether one mentions
-// @<me>. Never-opened channels count every message.
+// once to count them, leaving out my own and everything before my own last
+// message there (I answered, so I read it), and to see whether one mentions
+// @<me>. Never-opened channels count every message not before my last one.
 import { useSyncExternalStore } from 'react'
 import { useQueries } from '@tanstack/react-query'
 
@@ -87,6 +88,19 @@ export function mentions(body: string, name: string) {
   return new RegExp(`(^|[^\\w@.-])@${escape(name)}(?![\\w-])`).test(body)
 }
 
+// A DM of me: "@<me>/<task>" (the backend's direct-message channels).
+export function isDMOf(channel: string, me: string) {
+  return channel.startsWith(`@${me}/`)
+}
+
+// Whether a message follows its channel for me (follow.ts): mine, in my
+// inbox or a DM of mine, or mentioning @<me>.
+export function addressesMe(message: { channel: string; from: string; body: string }, me: string) {
+  return (
+    message.from === me || message.channel === `#${me}` || isDMOf(message.channel, me) || mentions(message.body, me)
+  )
+}
+
 export type ChannelUnread = { count: number; mention: boolean }
 
 const NONE: ChannelUnread = { count: 0, mention: false }
@@ -106,6 +120,9 @@ export type Unread = {
   total: number
   // Some unread message anywhere mentions @<me>.
   mention: boolean
+  // Per channel, the newest message read past the cursor that addresses me
+  // (addressesMe): the initial scan follow.ts follows channels from.
+  addressed: Map<string, number>
 }
 
 export function useUnread(): Unread {
@@ -128,6 +145,7 @@ export function useUnread(): Unread {
   })
 
   const byChannel = new Map<string, ChannelUnread>()
+  const addressed = new Map<string, number>()
   pending.forEach((c, i) => {
     const after = read[c.channel] ?? 0
     const data = results[i]?.data
@@ -138,7 +156,12 @@ export function useUnread(): Unread {
       }
       return
     }
-    const unread = data.messages.filter((m) => m.id > after && m.from !== me)
+    const mine = data.messages.filter((m) => m.from === me).at(-1)?.id ?? 0
+    const unread = data.messages.filter((m) => m.id > Math.max(after, mine) && m.from !== me)
+    const toMe = data.messages.filter((m) => m.id > after && addressesMe(m, me)).at(-1)
+    if (toMe) {
+      addressed.set(c.channel, toMe.id)
+    }
     const value = { count: unread.length, mention: unread.some((m) => mentions(m.body, me)) }
     previous.set(c.channel, { after, unread: value })
     if (value.count > 0) {
@@ -161,5 +184,6 @@ export function useUnread(): Unread {
     of: (channel) => byChannel.get(channel) ?? NONE,
     total,
     mention,
+    addressed,
   }
 }
