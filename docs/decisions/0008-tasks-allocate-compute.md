@@ -133,6 +133,37 @@ did, were lost with the sandbox.
   helper is in `/etc/gitconfig`, and the boot seeds `/etc/skel` and hands
   the disk to the sandbox user (as root) before cloning.
 
+## Garbage collection
+
+Added 2026-11-02 (task `sandbox-gc`). That day the rig's disk filled up:
+178G of stopped sandbox disks, 52 of them belonging to done tasks. Every
+running VM then hit I/O errors on its own disk, three tasks lost their work
+and the image rebuild failed. Once a task is done its stopped sandbox is
+worth little: the work is on its branch and the transcripts on the kept
+volume.
+
+- What is collected: a sandbox that is `stopped` (the runtime's word),
+  belongs to a task whose `done_at` is older than `keep_done`, and is not an
+  agent's home. Never a home, a running, starting or failed sandbox, or a
+  sandbox of a task that is not done.
+- How: through `Remove`, the same path as `DELETE /api/sandboxes/{id}`: the
+  VM and its disk go, `sandbox.status` `deleted` is published. The volume
+  `agc-<sandbox>` (transcripts) and the task's channel are kept.
+- When: only `agc rest` runs the collector (`sandboxes.API.StartGC`, next to
+  the schedules' scheduler), at start and then every 10 minutes, one run at
+  a time; it logs a line per deletion (name, task, how long done, disk).
+- The setting: `sandboxes: { keep_done: 24h }` in the config file, env
+  `AGC_SANDBOX_KEEP_DONE` overriding it, a Go duration, default 24h; `0`
+  turns the collector off.
+- By hand: `agc sandbox gc [--dry-run] [--keep <duration>]`, through
+  `POST /api/sandboxes/gc` (`{ dry_run, keep }`) with `--server` or
+  `AGC_SERVER`, else in process. It answers the sandboxes it deleted (or
+  would) and `freed`, the count deleted, with `freed_disk`. Without `--keep`
+  it uses `keep_done`, or 24h when the collector is off.
+- To see what the disks add up to, `GET /api/sandboxes` carries `disk` (the
+  spec's, default 20G) and `disk_mib` per sandbox, and `agc sandbox list`
+  prints a DISK column and the total.
+
 ## Rationale
 
 - Creating a task is now a row insert, which ends the create timeout without
