@@ -9,7 +9,7 @@ import type { SandboxView } from '@/api/tasks'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
-import { StatusLegend, StatusPill, statusTier, tierRank } from '@/components/status-pill'
+import { StatusPill, statusTier, tierRank } from '@/components/status-pill'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/shell/page-title'
@@ -56,7 +56,6 @@ export function ComputePage() {
           <conceptIcons.sandbox className={cn('size-4', color.text)} />
           {sandboxes.data?.length ?? '–'}
         </span>
-        <StatusLegend />
         <StatusCounts groups={groups} />
       </div>
       <ErrorText error={sandboxes.error} />

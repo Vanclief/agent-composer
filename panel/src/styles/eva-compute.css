@@ -136,8 +136,13 @@
   color: var(--eva-dim);
 }
 
-/* The status tab: the plate's left edge, top to bottom; alive and dead
-   words filled in their color with ink text, the rest outlined and dim. */
+/* The status tab: the plate's left edge, top to bottom. The word is the
+   light (docs/design/panel.md "Lights", no LED): running filled green and a
+   machine in transition (starting) filled blue, both steady; not running a
+   green outline, not filled (stopped full, unknown and any other word dim);
+   failed a steady red outline. Only what needs a hand blinks, the whole tab:
+   crashed red (and review yellow, were a sandbox ever to say it). Hard blink
+   once a second, never a fade. */
 .dark [data-testid='sandbox-status'] {
   position: absolute;
   left: 1px;
@@ -156,27 +161,53 @@
   border-radius: 0;
   font-size: 0.8rem;
   letter-spacing: 0.12em;
-  padding: 0 8px 0 14px;
+  padding: 0 8px;
   color: var(--muted-foreground);
-  background: var(--eva-faint);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px oklch(0.8 0.2 150 / 45%);
 }
-.dark [data-testid='sandbox-status'] span[data-status][data-tier='lit'],
-.dark [data-testid='sandbox-status'] span[data-status][data-tier='attention'] {
+.dark [data-testid='sandbox-status'] span[data-status][data-tier='off'] {
+  color: var(--eva-green);
+  box-shadow: inset 0 0 0 1px var(--eva-green);
+}
+.dark [data-testid='sandbox-status'] span[data-status][data-tier='lit'] {
   color: var(--eva-ink);
   font-weight: 700;
+  box-shadow: none;
+  background: oklch(0.78 0.12 220);
 }
 .dark [data-testid='sandbox-status'] span[data-status='running'][data-tier='lit'] {
   background: var(--eva-green);
 }
-.dark [data-testid='sandbox-status'] span[data-status][data-tier='lit']:not([data-status='running']) {
-  background: oklch(0.78 0.12 220);
+.dark [data-testid='sandbox-status'] span[data-status='review'][data-tier='lit'] {
+  --compute-tab: var(--eva-yellow);
+  background: transparent;
+  animation: compute-tab-blink 1s steps(1, end) infinite;
 }
 .dark [data-testid='sandbox-status'] span[data-status][data-tier='attention'] {
-  background: var(--eva-red);
+  --compute-tab: var(--eva-red);
+  color: var(--compute-tab);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px var(--compute-tab);
 }
-.dark [data-testid='sandbox-status'] span[data-status][data-tier='lit'] [aria-hidden] > span,
-.dark [data-testid='sandbox-status'] span[data-status][data-tier='attention'] [aria-hidden] > span {
-  box-shadow: 0 0 0 1px oklch(0.1 0 0 / 60%);
+.dark
+  [data-testid='sandbox-status']
+  span[data-status][data-tier='attention']:not([data-status='failed']):not([data-status='error']) {
+  animation: compute-tab-blink 1s steps(1, end) infinite;
+}
+@keyframes compute-tab-blink {
+  0%,
+  49% {
+    background: var(--compute-tab);
+    color: var(--eva-ink);
+    box-shadow: none;
+  }
+  50%,
+  100% {
+    background: transparent;
+    color: var(--compute-tab);
+    box-shadow: inset 0 0 0 1px var(--compute-tab);
+  }
 }
 
 /* Name (the title of the plate), command, readouts, age. */
