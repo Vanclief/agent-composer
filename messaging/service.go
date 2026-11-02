@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -382,6 +383,11 @@ func (s *Service) Post(ctx context.Context, caller Caller, participantID, channe
 		return nil, ez.Wrap(err)
 	}
 
+	err = s.inboxPost(ctx, caller, channel, replyTo, kind)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
 	p, err := s.participant(ctx, participantID)
 	if err != nil {
 		return nil, ez.Wrap(err)
@@ -407,6 +413,48 @@ func (s *Service) Post(ctx context.Context, caller Caller, participantID, channe
 	}
 
 	return s.insert(ctx, p, channel, body, replyTo, kind)
+}
+
+// inboxPost is the inbox rule (ADR 0005 "Inbox"): in a person's inbox
+// #<name>, a channel named after a human participant, a caller other than
+// a person may post only a question or a reply in a thread. Notes go in
+// #<task>, so the inbox holds only what needs the person. A person's posts
+// and agc's (PostAsSystem) never come here.
+func (s *Service) inboxPost(ctx context.Context, caller Caller, channel string, replyTo *int64, kind string) error {
+	if caller.Human {
+		return nil
+	}
+
+	if kind == msgmodels.KindQuestion || replyTo != nil {
+		return nil
+	}
+
+	inbox, err := s.isInbox(ctx, channel)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	if !inbox {
+		return nil
+	}
+
+	return ez.New(ez.ENOTAUTHORIZED, "only questions and answers go in a person's inbox; post notes in #<task>", nil)
+}
+
+// isInbox reports whether channel is #<name> for a human participant,
+// present or departed.
+func (s *Service) isInbox(ctx context.Context, channel string) (bool, error) {
+	name, found := strings.CutPrefix(channel, "#")
+	if !found {
+		return false, nil
+	}
+
+	exists, err := s.db.NewSelect().Model((*msgmodels.Participant)(nil)).Where("name = ?", name).Where("human = ?", true).Exists(ctx)
+	if err != nil {
+		return false, ez.Wrap(err)
+	}
+
+	return exists, nil
 }
 
 // insert stores a message from p, wakes the waiters and runs the hooks.
