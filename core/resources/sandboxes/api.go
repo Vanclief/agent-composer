@@ -66,6 +66,9 @@ type API struct {
 	rt          Runtime
 	secretsPath string
 	socketDir   string
+	// volumeRoot is where msb keeps named volumes on this host
+	// (VolumeRoot), read for transcripts.
+	volumeRoot string
 	// rootCtx is what boots derive from, so they outlive the request that
 	// allocated them and end with the process.
 	rootCtx context.Context
@@ -120,6 +123,7 @@ func New(rootCtx context.Context, db bun.IDB, msg *messaging.Service, rt Runtime
 		rt:          rt,
 		secretsPath: secretsPath,
 		socketDir:   socketDir,
+		volumeRoot:  VolumeRoot(),
 		rootCtx:     rootCtx,
 		listeners:   map[string]*listener{},
 		booting:     map[string]*boot{},
@@ -137,12 +141,16 @@ type SandboxView struct {
 	Spec    task.Spec `json:"spec"`
 	Command string    `json:"command"`
 	// Instructions is the TASK.md written into the sandbox, verbatim.
-	Instructions string     `json:"instructions"`
-	Status       string     `json:"status"`
-	StatusError  string     `json:"status_error,omitempty"`
-	BootedAt     *time.Time `json:"booted_at"`
-	StoppedAt    *time.Time `json:"stopped_at"`
-	CreatedAt    time.Time  `json:"created_at"`
+	Instructions string `json:"instructions"`
+	// Volume is the named volume holding the harness homes and their
+	// transcripts, kept after the sandbox is deleted. Empty for sandboxes
+	// booted before volumes.
+	Volume      string     `json:"volume"`
+	Status      string     `json:"status"`
+	StatusError string     `json:"status_error,omitempty"`
+	BootedAt    *time.Time `json:"booted_at"`
+	StoppedAt   *time.Time `json:"stopped_at"`
+	CreatedAt   time.Time  `json:"created_at"`
 	// Work is the clone's unpushed work, set only by Get and by List with
 	// Work, when the sandbox is running and has a repo; null otherwise
 	// and when the check fails.
@@ -214,6 +222,7 @@ func (api *API) view(ctx context.Context, record *taskmodels.Sandbox, owner *tas
 		Spec:         spec,
 		Command:      record.Command,
 		Instructions: record.Instructions,
+		Volume:       record.Volume,
 		BootedAt:     record.BootedAt,
 		StoppedAt:    record.StoppedAt,
 		CreatedAt:    record.CreatedAt,

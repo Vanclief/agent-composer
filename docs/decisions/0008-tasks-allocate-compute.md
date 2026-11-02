@@ -96,6 +96,40 @@ is allocated, compute to get done. The VM is not the task.
    `tasks.spec` is dropped afterwards. Running sandboxes are unaffected
    because names do not change.
 
+## Disk and transcripts
+
+Added 2026-11-02 (task `sandbox-disk`). Agents ran out of space in the
+image's small rootfs (Go build cache, Playwright browsers in /home/agent),
+and the harness transcripts, the only record of why an agent did what it
+did, were lost with the sandbox.
+
+- The spec gains `disk` (task.yaml `disk:`, the REST `sandbox` block): a
+  size such as `10G`, default 20G, minimum 2G. `/home/agent` is a private
+  ext4 disk of that size (`--mount-owned /home/agent:kind=disk,size=<disk>`):
+  a real bound, kept across stop and start, removed with the sandbox.
+- The harness homes live on a named volume `agc-<sandbox>` mounted at
+  `/home/agent/.harness` (`quota=4G`); `~/.claude` and `~/.codex` link into
+  it. msb keeps named volumes when a sandbox is removed, so the transcripts
+  survive. The row records the volume (`volume`, empty for older sandboxes)
+  and a name stays taken while its volume is on the host, so a new sandbox
+  never inherits another's transcripts.
+- Why not one named volume with `quota=<disk>` for all of `/home/agent`:
+  msb 0.7.13 enforces a named directory volume's quota in its virtiofs
+  server as a budget on growth since the first guest write of each boot.
+  It does not bound the volume's size on the host: every stop and start
+  grants another quota, and deleted sandboxes would leave unbounded
+  directories behind.
+- `GET /api/sandboxes/{id}/transcripts` lists `.claude/projects/**/*.jsonl`
+  and `.codex/sessions/**/*.jsonl` on the volume; `.../transcripts/{path}`
+  streams one. Both read the host side of the volume
+  (`$AGC_MSB_VOLUMES_DIR`, else `$MSB_HOME/volumes`, else
+  `~/.microsandbox/volumes`), never the VM, so they work for stopped
+  sandboxes and, by name, for deleted ones. Paths are confined to the
+  transcript directories; `..` and links are refused.
+- The fresh disk hides the image's `/home/agent`, so the git credential
+  helper is in `/etc/gitconfig`, and the boot seeds `/etc/skel` and hands
+  the disk to the sandbox user (as root) before cloning.
+
 ## Rationale
 
 - Creating a task is now a row insert, which ends the create timeout without

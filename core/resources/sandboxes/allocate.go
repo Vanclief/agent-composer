@@ -138,7 +138,10 @@ func (api *API) AllocateFor(ctx context.Context, owner *taskmodels.Task, request
 }
 
 // insert names the sandbox and inserts it. The first sandbox of a task is
-// named after it, later ones <task>-2, <task>-3: the first free name.
+// named after it, later ones <task>-2, <task>-3: the first free name. A
+// name is taken while a sandbox has it or while a deleted sandbox's volume
+// (task.VolumeName) is still on the host, so a new sandbox never inherits
+// another's transcripts.
 func (api *API) insert(ctx context.Context, owner *taskmodels.Task, encodedSpec []byte, command string, instructions string) (*taskmodels.Sandbox, error) {
 	api.naming.Lock()
 	defer api.naming.Unlock()
@@ -156,11 +159,18 @@ func (api *API) insert(ctx context.Context, owner *taskmodels.Task, encodedSpec 
 		}
 
 		if !taken {
+			taken, err = api.volumeExists(task.VolumeName(candidate))
+			if err != nil {
+				return nil, ez.Wrap(err)
+			}
+		}
+
+		if !taken {
 			name = candidate
 		}
 	}
 
-	record := &taskmodels.Sandbox{TaskID: owner.ID, Name: name, Spec: encodedSpec, Command: command, Instructions: instructions}
+	record := &taskmodels.Sandbox{TaskID: owner.ID, Name: name, Spec: encodedSpec, Command: command, Instructions: instructions, Volume: task.VolumeName(name)}
 
 	err := record.Insert(ctx, api.db)
 	if err != nil {
@@ -398,11 +408,22 @@ func AgentCommand(owner *taskmodels.Task) string {
 	return strings.Join(fields, " ")
 }
 
-// prepare clones the repo, writes the agent config and TASK.md (the
-// instructions), and runs the setup script, as the sandbox user. Setup
-// runs in the repo, or in the home directory when there is no repo, and
-// can still change the agent config.
+// prepare gives the sandbox user the home disk (a fresh ext4 disk belongs
+// to root), lays out the home (homeScript), clones the repo, writes the
+// agent config and TASK.md (the instructions), and runs the setup script,
+// as the sandbox user. Setup runs in the repo, or in the home directory
+// when there is no repo, and can still change the agent config.
 func prepare(ctx context.Context, sb Sandbox, spec task.Spec, instructions string) error {
+	err := run(ctx, sb, executor.Command{Name: "chown", Args: []string{guestUser + ":" + guestUser, task.HomeDir}, User: "root"}, "chown "+task.HomeDir)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	err = run(ctx, sb, executor.Command{Name: "bash", Args: []string{"-c", homeScript}}, "home setup")
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
 	dir := ""
 
 	if spec.Repo != "" {
@@ -456,6 +477,32 @@ func prepare(ctx context.Context, sb Sandbox, spec task.Spec, instructions strin
 
 	return nil
 }
+
+// guestUser is the sandbox user (sandbox.Spec's default).
+const guestUser = "agent"
+
+// homeScript lays out a fresh home disk, which hides the image's
+// /home/agent: the shell dotfiles from /etc/skel, and ~/.claude and
+// ~/.codex as links into the harness volume (task.HarnessDir), so the
+// harness transcripts outlive the sandbox. A real directory already in
+// their place is moved into the volume first. It runs again harmlessly.
+const homeScript = `set -eu
+cd "$HOME"
+if [ ! -e .profile ]
+then
+  cp -r /etc/skel/. .
+fi
+for d in .claude .codex
+do
+  mkdir -p "` + task.HarnessDir + `/$d"
+  if [ -d "$d" ] && [ ! -L "$d" ]
+  then
+    cp -r "$d/." "` + task.HarnessDir + `/$d/"
+    rm -rf "$d"
+  fi
+  ln -sfn "` + task.HarnessDir + `/$d" "$d"
+done
+`
 
 // agentConfigTemplate merges first-run answers into the sandbox user's
 // Claude Code and Codex config, keeping whatever is already there (a

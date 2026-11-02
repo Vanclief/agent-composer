@@ -24,6 +24,10 @@ func New() *Executor {
 // Run runs cmd to completion. When it returns an error, the output captured
 // so far is returned with it.
 func (e *Executor) Run(ctx context.Context, cmd executor.Command) (*executor.Result, error) {
+	if cmd.User != "" {
+		return nil, ez.New(ez.EINVALID, "the host executor runs as agc's own user, not "+cmd.User, nil)
+	}
+
 	command := exec.CommandContext(ctx, cmd.Name, cmd.Args...)
 	command.Dir = cmd.Dir
 

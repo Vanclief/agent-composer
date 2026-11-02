@@ -196,6 +196,8 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.SandboxesAPI.ListTerminals(request.GetContext(), nil, body)
 	case *sandboxes.StartTerminalRequest:
 		return s.SandboxesAPI.StartTerminal(request.GetContext(), nil, body)
+	case *sandboxes.ListTranscriptsRequest:
+		return s.SandboxesAPI.ListTranscripts(request.GetContext(), nil, body)
 	case *tasks.ListSpecsRequest:
 		return s.TasksAPI.ListSpecs(request.GetContext(), nil, body)
 	case *tasks.GetSpecRequest:

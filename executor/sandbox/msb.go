@@ -43,11 +43,21 @@ func createArgs(spec Spec) []string {
 		if v.HostPath {
 			flag = "--mount-dir"
 		}
-		mount := v.Source + ":" + v.Dest
+		options := []string{}
 		if !v.ReadWrite {
-			mount += ":ro"
+			options = append(options, "ro")
+		}
+		if v.QuotaMiB != 0 {
+			options = append(options, "quota="+FormatSize(v.QuotaMiB))
+		}
+		mount := v.Source + ":" + v.Dest
+		if len(options) > 0 {
+			mount += ":" + strings.Join(options, ",")
 		}
 		args = append(args, flag, mount)
+	}
+	if spec.DiskDest != "" {
+		args = append(args, "--mount-owned", spec.DiskDest+":kind=disk,size="+FormatSize(spec.DiskMiB))
 	}
 	if spec.VsockPath != "" {
 		args = append(args, "--vsock", fmt.Sprintf("%s:%d", spec.VsockPath, spec.VsockPort))

@@ -34,6 +34,8 @@ type taskRoutes struct {
 	e      *echo.Echo
 	db     *bun.DB
 	server *restserver.Server
+	// volumes stands in for msb's named volume directory.
+	volumes string
 }
 
 // newTaskRoutes serves the API routes over an in-memory database, with rt as
@@ -45,6 +47,8 @@ func newTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *task
 	t.Setenv("AGC_DEFAULT_HARNESS", "")
 	t.Setenv("AGC_DEFAULT_MODEL", "")
 	t.Setenv("AGC_DEFAULT_OWNER", "franco")
+	volumes := t.TempDir()
+	t.Setenv(sandboxes.EnvVolumeRoot, volumes)
 
 	sqldb, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
@@ -95,7 +99,7 @@ func newTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *task
 	e := echo.New()
 	addAPIRoutes(e, handler.NewHandler(server))
 
-	return &taskRoutes{e: e, db: db, server: server}
+	return &taskRoutes{e: e, db: db, server: server, volumes: volumes}
 }
 
 // do serves one request and returns its status and body.

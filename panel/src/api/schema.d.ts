@@ -368,7 +368,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a sandbox
-         * @description Cancels a boot in progress, stops the VM if needed and removes it with its disk and uncommitted work. Volumes and the task's channel history are kept.
+         * @description Cancels a boot in progress, stops the VM if needed and removes it with its disk (including /home/agent) and uncommitted work. Volumes, among them the sandbox's own volume with the harness transcripts, and the task's channel history are kept.
          */
         delete: operations["deleteSandbox"];
         options?: never;
@@ -452,6 +452,46 @@ export interface paths {
          * @description Upgrades to a WebSocket. Binary frames carry terminal bytes both ways; a text frame {"type":"resize","rows":N,"cols":N} resizes. Recent output is replayed first. The socket closes normally with reason "job completed" when the program exits; closing it detaches and the job keeps running.
          */
         get: operations["attachTerminal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/{id}/transcripts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a sandbox's harness transcripts
+         * @description The Claude Code and Codex session files (.claude/projects/**\/*.jsonl, .codex/sessions/**\/*.jsonl) on the sandbox's volume, newest first. Read on the host side of the volume, never through the VM, so it works for stopped sandboxes and, by name, for deleted ones whose volume is left. Links are not listed.
+         */
+        get: operations["listTranscripts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/{id}/transcripts/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream one harness transcript
+         * @description Streams one transcript as JSON Lines from the host side of the sandbox's volume (Range requests supported). path is a listed path, relative to the volume and under .claude/projects/ or .codex/sessions/; its slashes are path separators. A path with "..", "." or empty segments is refused (400), and so is anything but a regular file.
+         */
+        get: operations["getTranscript"];
         put?: never;
         post?: never;
         delete?: never;
@@ -820,6 +860,8 @@ export interface components {
             cpus?: number;
             /** @description MiB. */
             memory?: number;
+            /** @description Size of /home/agent, a private ext4 disk removed with the sandbox: a whole number followed by M, G or T, such as 10G. Default 20G, minimum 2G. */
+            disk?: string;
             /** @description host/owner/name or an https URL, cloned to /home/agent/<name>. */
             repo?: string;
             /** @description Branch, tag or commit checked out after the clone. */
@@ -935,6 +977,8 @@ export interface components {
             command: string;
             /** @description The TASK.md written into the sandbox at /home/agent/TASK.md, byte for byte (ADR 0009). */
             instructions: string;
+            /** @description The named volume agc-<name> holding the harness homes (~/.claude, ~/.codex) and their transcripts, mounted at /home/agent/.harness and kept after the sandbox is deleted. Empty for sandboxes booted before volumes. */
+            volume: string;
             /** @description starting until booted, failed when the boot failed (status_error says why), otherwise the runtime's word verbatim (running, stopped), or unknown when the runtime cannot be asked (status_error says why). */
             status: string;
             /** @description Why the status is failed or unknown. */
@@ -947,6 +991,22 @@ export interface components {
             created_at: string;
             /** @description What stopping or deleting the sandbox would lose (ADR 0008 item 6), read live from its clone. Set by GET /sandboxes/{id} and by the list with work=1 when the sandbox is running and has a repo; null otherwise, and null when the check failed. */
             work: components["schemas"]["SandboxWork"] | null;
+        };
+        TranscriptList: {
+            /** @description The volume read. */
+            volume: string;
+            transcripts: components["schemas"]["Transcript"][];
+        };
+        Transcript: {
+            /** @description Relative to the volume, which the guest sees at /home/agent/.harness. */
+            path: string;
+            /**
+             * Format: int64
+             * @description Bytes.
+             */
+            size: number;
+            /** Format: date-time */
+            modified_at: string;
         };
         SandboxWork: {
             /** @description The clone has uncommitted changes (git status --porcelain printed a line). */
@@ -2307,6 +2367,60 @@ export interface operations {
                 };
                 content?: never;
             };
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    listTranscripts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox UUID or sandbox name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["SandboxIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Transcripts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscriptList"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    getTranscript: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox UUID or sandbox name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["SandboxIdParam"];
+                /** @description Transcript path relative to the volume, as listed. */
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The transcript. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": string;
+                };
+            };
+            400: components["responses"]["Error"];
             404: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };
