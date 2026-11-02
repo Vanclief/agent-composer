@@ -2,7 +2,7 @@
 # binary embeds from panel/dist, so every target that builds agc builds the
 # panel first. Without it agc still compiles and /panel/ answers 503.
 
-.PHONY: panel types panel-check build install test rig-deploy
+.PHONY: panel types panel-check build install test rig-deploy rig-deploy-test
 
 # Panel production build into panel/dist.
 panel: panel/node_modules
@@ -39,3 +39,7 @@ test:
 
 rig-deploy:
 	scripts/rig-deploy.sh
+
+# The deploy script's user units and restart path, against stub commands.
+rig-deploy-test:
+	scripts/rig-deploy_test.sh
