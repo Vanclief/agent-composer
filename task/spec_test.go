@@ -275,7 +275,7 @@ func TestValidateRejects(t *testing.T) {
 		{Spec{Secrets: []string{"ANTHROPIC_WORK as claude-token"}}, `"ANTHROPIC_WORK as claude-token"`},
 		{Spec{Secrets: []string{"ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_HOME as CLAUDE_CODE_OAUTH_TOKEN"}}, `"ANTHROPIC_HOME as CLAUDE_CODE_OAUTH_TOKEN"`},
 		{Spec{Secrets: []string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN"}}, `"ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN"`},
-		{Spec{Secrets: []string{"GITHUB_TOKEN", "GITHUB_TOKEN@ghe.example.com"}}, `"GITHUB_TOKEN@ghe.example.com"`},
+		{Spec{Secrets: []string{"ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"}}, `"CLAUDE_CODE_OAUTH_TOKEN"`},
 		{Spec{Env: map[string]string{"AGC_TASK": "x"}}, "AGC_TASK"},
 		{Spec{Env: map[string]string{"A-B": "x"}}, "A-B"},
 		{Spec{Volumes: []string{"cache"}}, "cache"},
@@ -403,5 +403,15 @@ func TestSandboxSpecAccount(t *testing.T) {
 	_, set := got.Env["ANTHROPIC_WORK"]
 	if set {
 		t.Fatal("the account name leaked into the plain env")
+	}
+}
+
+// Before accounts a plain NAME could be listed twice; that still validates,
+// so specs written then are not broken.
+func TestValidateKeepsPlainDuplicates(t *testing.T) {
+	spec := Spec{Secrets: []string{"GITHUB_TOKEN", "GITHUB_TOKEN@ghe.example.com"}}
+	err := spec.Validate()
+	if err != nil {
+		t.Fatalf("plain duplicate rejected: %v", err)
 	}
 }

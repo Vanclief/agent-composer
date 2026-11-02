@@ -1298,7 +1298,7 @@ export interface components {
             ref?: string;
             /** @description Bash script run once after the clone, in the repo. Before it runs, agc marks the Claude Code and Codex first-run prompts (onboarding, theme, folder trust, bypass permissions) as answered. */
             setup?: string;
-            /** @description NAME, NAME@host1,host2, or an account, NAME as ENV[@host1,host2]: NAME is the entry in secrets.env and ENV ([A-Z_][A-Z0-9_]*) the guest variable it is handed to, such as ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN. Without as, ENV is NAME. Hosts come from the entry, else the hosts agc knows for ENV, else those for NAME. Two entries may not share an ENV. The guest holds a placeholder, never the value (ADR 0004). */
+            /** @description NAME, NAME@host1,host2, or an account, NAME as ENV[@host1,host2]: NAME is the entry in secrets.env and ENV ([A-Z_][A-Z0-9_]*) the guest variable it is handed to, such as ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN. Without as, ENV is NAME. Hosts come from the entry, else the hosts agc knows for ENV, else those for NAME. An account may not share its ENV with another entry. The guest holds a placeholder, never the value (ADR 0004). */
             secrets?: string[];
             env?: {
                 [key: string]: string;

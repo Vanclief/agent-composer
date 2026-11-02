@@ -100,9 +100,11 @@ secrets:
 - **Syntax.** `NAME as ENV[@host1,host2]`. `NAME` is the entry in
   `secrets.env`, `ENV` the guest variable. Without `as`, `ENV` is `NAME`, as
   before, so `NAME` and `NAME@hosts` mean what they meant. `ENV` must look
-  like an environment variable name (`[A-Z_][A-Z0-9_]*`), and two entries of
-  one spec may not share an `ENV`; both are spec validation errors that quote
-  the entry.
+  like an environment variable name (`[A-Z_][A-Z0-9_]*`), and an account
+  may not share its `ENV` with another entry of the spec; both are spec
+  validation errors that quote the entry. A plain `NAME` listed twice is
+  left as it was before accounts, so no spec that validated stops
+  validating.
 - **Hosts.** From the entry when it names them, else the table above for
   `ENV`, else the table for `NAME`, else creation fails asking for
   `NAME as ENV@host`. So `ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN` is bound

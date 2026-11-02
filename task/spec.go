@@ -209,19 +209,29 @@ func (s Spec) Validate() error {
 		return ez.New(ez.EINVALID, fmt.Sprintf("ref %q must not start with -", s.Ref), nil)
 	}
 
-	envEntries := map[string]string{}
+	// Two entries may not hand the guest the same variable when either is an
+	// account (NAME as ENV, ADR 0004 "Accounts"). A plain NAME listed twice
+	// is left as it was before accounts, so existing specs keep validating.
+	type envEntry struct {
+		entry   string
+		renamed bool
+	}
+	envEntries := map[string]envEntry{}
 	for _, entry := range s.Secrets {
 		request, err := secrets.ParseRequest(entry)
 		if err != nil {
 			return ez.Wrap(err)
 		}
 
+		renamed := request.Env != request.Name
 		previous, taken := envEntries[request.Env]
-		if taken {
-			msg := fmt.Sprintf("secret %q: variable %s is already set by %q", strings.TrimSpace(entry), request.Env, previous)
+		if taken && (renamed || previous.renamed) {
+			msg := fmt.Sprintf("secret %q: variable %s is already set by %q", strings.TrimSpace(entry), request.Env, previous.entry)
 			return ez.New(ez.EINVALID, msg, nil)
 		}
-		envEntries[request.Env] = strings.TrimSpace(entry)
+		if !taken {
+			envEntries[request.Env] = envEntry{entry: strings.TrimSpace(entry), renamed: renamed}
+		}
 	}
 
 	for name := range s.Env {
