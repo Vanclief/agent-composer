@@ -278,6 +278,7 @@ test('Create sends the spec and opens the new task', async ({ page }) => {
       manager: 'franco',
       owner: 'franco',
       for: 'release-builds-with-cgo',
+      notify: true,
       sandbox: { ...spec, command: 'bash -l' },
     }),
   )

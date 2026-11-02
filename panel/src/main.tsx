@@ -38,7 +38,9 @@ createRoot(document.getElementById('root') as HTMLElement).render(
           <BrowserRouter basename="/panel">
             <App />
           </BrowserRouter>
-          <Toaster />
+          {/* Below the 54px top bar, so live notifications (top-right) leave
+              its live dot and speaker toggle visible. */}
+          <Toaster offset={{ top: 62, right: 16, bottom: 24, left: 24 }} />
         </TooltipProvider>
       </QueryClientProvider>
     </ThemeProvider>

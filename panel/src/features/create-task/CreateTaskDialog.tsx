@@ -214,6 +214,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
       manager: agent.manager.trim(),
       owner: agent.owner.trim(),
       for: order.for,
+      notify: order.notify,
     }
     if (compute && current) {
       request.sandbox = formToSpec(current)

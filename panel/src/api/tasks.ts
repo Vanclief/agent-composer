@@ -53,6 +53,9 @@ export type TaskView = {
   owner: string
   // Id of the knowledge action or decision the task serves, or empty.
   for: string
+  // Whether the panel notifies (toast and sound) when the task starts and
+  // when it is done.
+  notify: boolean
   status: TaskStatus
   done_at: string | null
   created_at: string
@@ -77,6 +80,8 @@ export type CreateTaskRequest = {
   manager?: string
   owner?: string
   for: string
+  // Toast and sound when the task starts and is done; default true.
+  notify?: boolean
   // Allocates a sandbox right after the task is written.
   sandbox?: SandboxRequest
 }

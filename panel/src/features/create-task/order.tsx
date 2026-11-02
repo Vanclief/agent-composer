@@ -9,6 +9,7 @@ import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { ErrorText } from '@/components/error-text'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 
@@ -20,10 +21,12 @@ export type OrderForm = {
   name: string | null
   brief: string
   for: string
+  // Toast and sound when the task starts and when it is done.
+  notify: boolean
 }
 
 export function blankOrder(): OrderForm {
-  return { title: '', name: null, brief: '', for: '' }
+  return { title: '', name: null, brief: '', for: '', notify: true }
 }
 
 type ForOption = { id: string; kind: 'action' | 'decision'; text: string; done: boolean }
@@ -135,7 +138,23 @@ export function OrderCard({
         />
       </div>
       <ForPicker value={order.for} onChange={(id) => update({ for: id })} open={pickingFor} onOpen={onPickingFor} />
+      <NotifySwitch checked={order.notify} onChange={(notify) => update({ notify })} />
     </Card>
+  )
+}
+
+// Sent as the task's notify: a toast and a chime when it starts and when
+// it is done.
+function NotifySwitch({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+  const BellIcon = conceptIcons.notify
+  return (
+    <Tip tip="Toast and sound when the task starts and when it is done">
+      <label className="flex items-center gap-2 self-start text-xs">
+        <Switch data-notify checked={checked} onCheckedChange={onChange} />
+        <BellIcon aria-hidden className={cn('size-3.5', conceptColors.notify.text)} />
+        Notify me
+      </label>
+    </Tip>
   )
 }
 

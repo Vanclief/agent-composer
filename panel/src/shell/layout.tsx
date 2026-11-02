@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Hexagon, Lock } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router'
 
+import { useLiveEvents } from '@/api/events'
 import { useChannels } from '@/api/hooks'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { ErrorText } from '@/components/error-text'
@@ -12,10 +13,13 @@ import { cn } from '@/lib/utils'
 import { MODES, ModeSwitch, useMode } from './mode'
 import { PageTitleContext } from './page-title'
 import { ThemeToggle } from './theme-toggle'
+import { LiveDot, SoundToggle } from './top-bar'
+import { useTaskNotifications } from './notifications'
 
 export function Layout() {
   const [title, setTitle] = useState('')
   const mode = useMode()
+  useLiveEvents(useTaskNotifications())
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -65,6 +69,10 @@ export function Layout() {
           <h1 data-testid="page-title" className="truncate">
             {title}
           </h1>
+          <div className="ml-auto flex shrink-0 items-center gap-1 pl-4">
+            <LiveDot />
+            <SoundToggle />
+          </div>
         </header>
         <div className="min-h-0 flex-1 overflow-auto">
           <PageTitleContext.Provider value={setTitle}>
