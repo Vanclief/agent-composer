@@ -18,6 +18,14 @@ func main() {
 	defer stop()
 
 	err := appcli.Run(rootCtx, os.Args)
+
+	// A task or sandbox command against a server has printed the
+	// server's message already.
+	var printed *appcli.PrintedError
+	if errors.As(err, &printed) {
+		os.Exit(1)
+	}
+
 	if err != nil && !errors.Is(err, context.Canceled) {
 		// Lead with the human-readable message ("Workflow x was not
 		// found") — the raw chain ends in driver noise like

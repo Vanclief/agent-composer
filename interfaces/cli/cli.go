@@ -63,7 +63,12 @@ type deleteResult struct {
 
 // Run starts the CLI entrypoint.
 func Run(ctx context.Context, args []string) error {
-	app := &cli.App{
+	return newApp().RunContext(ctx, args)
+}
+
+// newApp builds the command tree.
+func newApp() *cli.App {
+	return &cli.App{
 		Name:    "agc",
 		Usage:   "Agent Composer interfaces",
 		Version: version,
@@ -76,6 +81,10 @@ func Run(ctx context.Context, args []string) error {
 			&cli.BoolFlag{
 				Name:  "verbose",
 				Usage: "Show info-level logs that one-shot commands normally suppress",
+			},
+			&cli.StringFlag{
+				Name:  "server",
+				Usage: "agc server the task and sandbox commands call instead of the local database and runtime (default $" + serverEnv + ")",
 			},
 		},
 		Action: func(c *cli.Context) error {
@@ -139,8 +148,6 @@ func Run(ctx context.Context, args []string) error {
 			},
 		},
 	}
-
-	return app.RunContext(ctx, args)
 }
 
 // quietLogs drops info-level logging for one-shot commands — their

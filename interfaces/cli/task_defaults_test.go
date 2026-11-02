@@ -16,7 +16,7 @@ func TestFillTaskDefaults(t *testing.T) {
 	// Not joined: the configured owner manages.
 	request := &tasks.CreateRequest{Title: "Fix login"}
 
-	applied, err := fillTaskDefaults(request, defaults)
+	applied, err := fillTaskDefaults(request, defaults, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestFillTaskDefaults(t *testing.T) {
 
 	request = &tasks.CreateRequest{Title: "Call the bank", Assignee: "ana", Owner: "ana"}
 
-	applied, err = fillTaskDefaults(request, defaults)
+	applied, err = fillTaskDefaults(request, defaults, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,8 +48,33 @@ func TestFillTaskDefaults(t *testing.T) {
 	// No owner configured and none joined: the manager is missing.
 	t.Setenv("AGC_MSG_STATE", filepath.Join(t.TempDir(), "none.json"))
 
-	_, err = fillTaskDefaults(&tasks.CreateRequest{Title: "x"}, controller.DefaultsSettings{Harness: "claude_code"})
+	_, err = fillTaskDefaults(&tasks.CreateRequest{Title: "x"}, controller.DefaultsSettings{Harness: "claude_code"}, true)
 	if err == nil {
 		t.Fatal("expected an error without a manager")
+	}
+}
+
+func TestFillTaskDefaultsAgainstServer(t *testing.T) {
+	t.Setenv("AGC_MSG_STATE", filepath.Join(t.TempDir(), "msg.json"))
+
+	// Against a server the defaults are unknown here: only the manager is
+	// filled, from the configured owner when this machine is not joined, and
+	// the rest is left empty for the server to fill.
+	request := &tasks.CreateRequest{Title: "Fix login", Manager: "orchestrator"}
+
+	applied, err := fillTaskDefaults(request, controller.DefaultsSettings{}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(applied) != 0 {
+		t.Fatalf("applied = %q", applied)
+	}
+	if request.Assignee != "" || request.Model != "" || request.Owner != "" || request.Manager != "orchestrator" {
+		t.Fatalf("request = %+v", request)
+	}
+
+	_, err = fillTaskDefaults(&tasks.CreateRequest{Title: "x"}, controller.DefaultsSettings{}, false)
+	if err == nil {
+		t.Fatal("expected an error: no manager and no way to fill one")
 	}
 }
