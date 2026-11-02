@@ -31,3 +31,9 @@ actions:
     action: "Add a step running scripts/rig-deploy_test.sh to the go job in .github/workflows/ci.yml."
     because: [agc-recovers-after-a-restart]
     opened: { who: franco, when: 2026-11-02 }
+
+  # ADR 0017 item 5: the task loop keeps no cursor across a restart.
+  - id: task-loop-reads-what-was-posted-while-down
+    action: "Give the task loop a cursor on the volume, as the persistent agents' agc-cursor.json, so messages posted in #<task> while its sandbox was down are its next turns and a task in review is not prompted again."
+    because: [agc-recovers-after-a-restart]
+    opened: { who: franco, when: 2026-11-02 }

@@ -90,19 +90,20 @@ zero, although its harness session was still on the volume.
    startup pass of item 3 is a try of its own. The silence check of ADR
    0013 still covers an agent that is up but stuck.
 
-5. **The agent continues its session.** `agc agent run` saves its harness
-   session id after every turn in `~/.harness/agc-agent.json`
-   (`--state`, `task.HarnessDir`, on the volume next to `~/.claude` and
-   `~/.codex`), with the harness, the task, the last message it handled in
-   `#<task>` and whether it delivered. When it starts and the file holds a
-   session for the same harness and task, it resumes it (`claude --resume
-   <id>`, `codex exec resume <id>`, as it already does between turns) with
-   one line as its turn: "agc restarted your sandbox; continue where you
-   were; the repo clone may need a fresh pull." It then reads `#<task>`
-   from its saved cursor, so a message posted while it was down is its next
-   turn; its own earlier posts are not. If it had delivered, it takes no
-   turn and waits for review. If the harness cannot resume the session, it
-   starts over on TASK.md. Only without the file does it run on TASK.md.
+5. **The agent continues its session.** `agc agent run` keeps its harness
+   session id in the sandbox's shared sessions file,
+   `~/.harness/agc-sessions.json` (`task.HarnessDir`, on the volume next to
+   `~/.claude` and `~/.codex`), under the key `task:<task>`. The file and
+   its store (`interfaces/cli/sessions.go`) are the ones the persistent
+   agents of ADR 0016 (`agc/agents-loop`) use for their own keys; there is
+   no second file. Every session id the harness reports is saved. When the
+   loop starts and the key is there, it resumes that session (`claude
+   --resume <id>`, `codex exec resume <id>`, as it already does between
+   turns) with one line as its turn instead of TASK.md: "agc restarted your
+   sandbox; continue where you were; the repo clone may need a fresh
+   pull." If the harness cannot resume it, the loop starts over on
+   TASK.md. Only the startup changed: after the first turn the loop runs as
+   before.
 
 6. **Configuration.** `recovery: { restarts: 3 }` in the config file, read
    like `defaults:` (ADR 0009 item 1): `AGC_RECOVERY_RESTARTS` overrides it,
@@ -146,16 +147,22 @@ zero, although its harness session was still on the volume.
   takes `restart`. `watchdog.Probe` reads `Status` instead of `Running`
   and gains `Restart`; `watchdog.Settings` gains `Restarts`.
 - `controller.Config` gains `recovery`; `Stack` gains `Sandboxes`.
-- `agc agent run` gains `--state`. Sandboxes run the agc of their image:
-  rebuild `images/agc-agent` for running agents to save and resume.
+- The task loop shares `agc-sessions.json` with `agc/agents-loop`. This
+  branch carries that branch's `sessions.go` and its test byte for byte,
+  plus `sessions_write.go` and `sessions_write_test.go` with the two helpers
+  that branch keeps in `agent_home.go` and `agent_home_test.go`: whoever
+  merges second deletes those two files. Sandboxes run the agc of their
+  image: rebuild `images/agc-agent` for running agents to save and resume.
 - `scripts/rig-deploy_test.sh` (`make rig-deploy-test`) checks the units
   and the restart path against stub commands; CI does not run it yet,
   since adding a workflow step needs a token with `workflow` scope.
 - A crash during an agent's very first turn leaves no session id (the
   harness reports it only when the turn ends), so that agent starts over
   on TASK.md.
-- A message the agent was answering when it crashed is answered again
-  after the resume line.
+- The loop keeps no cursor: messages posted in `#<task>` while the
+  sandbox was down are not turns, and a task in review still gets the
+  resume line as a turn. The persistent agents' cursor file
+  (`agc-cursor.json`, ADR 0016) is the place to add it.
 - Not tested on the rig: a reboot with lingering on, whether `msb server
   start` stays in the foreground, and whether VMs survive `systemctl
   --user restart agc-rest` with `KillMode=process`.
