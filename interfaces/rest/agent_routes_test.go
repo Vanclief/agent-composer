@@ -15,12 +15,15 @@ import (
 )
 
 // homeRuntime is fakeRuntime with a status per sandbox: running once
-// created or started, stopped once stopped, gone once removed.
+// created or started, stopped once stopped, gone once removed. A non-nil
+// gate holds every Create until it is closed, so a test sees a home
+// still booting.
 type homeRuntime struct {
 	fakeRuntime
 
 	mu       sync.Mutex
 	statuses map[string]string
+	gate     chan struct{}
 }
 
 func (f *homeRuntime) set(name string, status string) {
@@ -30,6 +33,9 @@ func (f *homeRuntime) set(name string, status string) {
 }
 
 func (f *homeRuntime) Create(ctx context.Context, spec sandbox.Spec) (sandboxes.Sandbox, error) {
+	if f.gate != nil {
+		<-f.gate
+	}
 	f.set(spec.Name, "running")
 	return f.sb, nil
 }
@@ -69,8 +75,19 @@ func TestAgentRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rt := &homeRuntime{fakeRuntime: fakeRuntime{sb: &fakeSandbox{}}, statuses: map[string]string{}}
+	// The gate holds the home's boot until the wake has answered
+	// "waking".
+	rt := &homeRuntime{fakeRuntime: fakeRuntime{sb: &fakeSandbox{}}, statuses: map[string]string{}, gate: make(chan struct{})}
 	routes := newTaskRoutes(t, rt, secretsPath)
+	var release sync.Once
+	openGate := func() {
+		release.Do(func() {
+			close(rt.gate)
+		})
+	}
+	// Registered after the routes' cleanup, so it runs first and a
+	// failed check never leaves that cleanup waiting on a held boot.
+	t.Cleanup(openGate)
 
 	routes.check(t, []routeCase{
 		{http.MethodGet, "/api/agents", "", http.StatusOK, `{"agents":[]}`},
@@ -93,6 +110,7 @@ func TestAgentRoutes(t *testing.T) {
 		{http.MethodPost, "/api/agents/ada/wake", "", http.StatusOK, `"state":"waking","home":"ada"`},
 	})
 
+	openGate()
 	routes.server.SandboxesAPI.Wait()
 
 	routes.check(t, []routeCase{

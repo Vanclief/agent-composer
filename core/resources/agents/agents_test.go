@@ -856,7 +856,11 @@ func TestWakeHookWakesOnlyMatchingAsleepAgents(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// The wake allocates the manager's first home, whose runtime
+		// create runs in the sandbox boot: wait for the hook's wakes,
+		// then for the boots they started.
 		env.api.Wait()
+		env.sbx.Wait()
 
 		woken := env.woken("reviewer-1", "reviewer-2")
 		if !reflect.DeepEqual(woken, []string{"reviewer-2"}) {
@@ -877,6 +881,7 @@ func TestWakeHookWakesOnlyMatchingAsleepAgents(t *testing.T) {
 			t.Fatal(err)
 		}
 		env.api.Wait()
+		env.sbx.Wait()
 
 		calls := env.rt.Calls()[before:]
 		if !slices.Contains(calls, "start reviewer-2") || slices.Contains(calls, "create reviewer-1") {
