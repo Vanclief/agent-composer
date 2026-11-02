@@ -28,6 +28,10 @@ const (
 	// deliverPrefix starts an answer that delivers the task (ADR 0010
 	// item 2); the rest of the answer is the summary.
 	deliverPrefix = "DONE:"
+	// questionPrefix starts an answer that is a question for the manager
+	// or the owner: the rest is posted as a question, which shows as
+	// waiting on them until someone answers it.
+	questionPrefix = "QUESTION:"
 	// agc posts these in #<task> when the task is accepted or rejected
 	// (core/resources/tasks).
 	acceptedPrefix = "Accepted by "
@@ -45,6 +49,7 @@ type agentMessenger interface {
 	Join(ctx context.Context, name string) (*msgmodels.Participant, error)
 	Leave(ctx context.Context, participantID string) (*httpapi.LeaveResponse, error)
 	Post(ctx context.Context, participantID, channel, body string, replyTo *int64) (*msgmodels.Message, error)
+	Ask(ctx context.Context, participantID, channel, body string) (*msgmodels.Message, error)
 	Wait(ctx context.Context, channel string, after int64, timeout time.Duration) (*httpapi.MessagesResponse, error)
 	Channels(ctx context.Context) (*httpapi.ChannelsResponse, error)
 	// Deliver is agc task deliver on the sandbox's socket.
@@ -54,8 +59,8 @@ type agentMessenger interface {
 // agentLoop is `agc agent run` (ADR 0009 item 2, ADR 0010): it joins
 // #<task>, runs the harness on the brief, posts the answer, then answers
 // every message from someone else on the same session. An answer starting
-// with DONE: delivers the task instead of being posted, and the loop keeps
-// waiting for review: a rejection is its next turn, an acceptance ends it
+// with QUESTION: is posted as a question; one starting with DONE: delivers
+// the task instead of being posted, and the loop keeps waiting for review: a rejection is its next turn, an acceptance ends it
 // (the sandbox is being stopped).
 type agentLoop struct {
 	harness agentHarness
@@ -291,8 +296,9 @@ func (l *agentLoop) lastID(ctx context.Context) (int64, error) {
 }
 
 // turn runs the harness once and posts the answer, or the failure, in the
-// channel; an answer starting with DONE: delivers instead, and is posted
-// only when the delivery fails. It returns the session to continue, which
+// channel; an answer starting with QUESTION: is posted as a question
+// without the prefix; one starting with DONE: delivers instead, and is
+// posted only when the delivery fails. It returns the session to continue, which
 // stays the old one when the harness gave none.
 func (l *agentLoop) turn(ctx context.Context, p *msgmodels.Participant, prompt string, session string) string {
 	answer, next, err := l.harness.Run(ctx, prompt, session)
@@ -322,6 +328,17 @@ func (l *agentLoop) turn(ctx context.Context, p *msgmodels.Participant, prompt s
 		}
 
 		l.logf("cannot deliver, posting the answer: %s", ez.ErrorMessage(err))
+	}
+
+	question := strings.TrimSpace(strings.TrimPrefix(body, questionPrefix))
+	if err == nil && strings.HasPrefix(body, questionPrefix) && question != "" {
+		_, err = l.msg.Ask(ctx, p.ID, l.channel(), question)
+		if err == nil {
+			l.logf("asked, waiting for the answer")
+			return next
+		}
+
+		l.logf("cannot ask, posting the answer: %s", ez.ErrorMessage(err))
 	}
 
 	_, err = l.msg.Post(ctx, p.ID, l.channel(), body, nil)

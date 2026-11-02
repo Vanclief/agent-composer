@@ -347,12 +347,15 @@ func Instructions(owner *taskmodels.Task, spec task.Spec) string {
 	b.WriteString("- Commit on a branch named `agc/" + name + "` and push it.\n")
 	b.WriteString("- Post what you changed and what you verified in `#" + name + "` with\n")
 	b.WriteString("  `agc msg post '#" + name + "' <text>`; your manager reads that channel and\n")
-	b.WriteString("  answers there. Ask your manager there too, then keep working on what\n")
-	b.WriteString("  does not depend on the answer.\n")
+	b.WriteString("  answers there. Ask your manager there too, with\n")
+	b.WriteString("  `agc msg ask '#" + name + "' <question>` (or start your answer with\n")
+	b.WriteString("  `QUESTION:`) so the question shows up as waiting on them, then keep\n")
+	b.WriteString("  working on what does not depend on the answer.\n")
 
 	if owner.Owner != "" {
-		b.WriteString("- If something needs a decision only " + owner.Owner + " can make, post it in\n")
-		b.WriteString("  `#" + owner.Owner + "` (their inbox) and say so in `#" + name + "`; do not wait idle.\n")
+		b.WriteString("- If something needs a decision only " + owner.Owner + " can make, ask it in\n")
+		b.WriteString("  `#" + owner.Owner + "` (their inbox) with `agc msg ask '#" + owner.Owner + "' <question>` so it\n")
+		b.WriteString("  shows up as waiting on them, and say so in `#" + name + "`; do not wait idle.\n")
 	}
 
 	b.WriteString("- Do not modify files outside the repository, and never print secret values.\n")

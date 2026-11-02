@@ -227,7 +227,7 @@ func TestEventsSandboxStatusAndTaskDone(t *testing.T) {
 		t.Fatal(err)
 	}
 	closing := strings.Repeat("é", 600)
-	_, err = msg.Post(ctx, agentCaller, agent.ID, "#fix-login", closing, nil)
+	_, err = msg.Post(ctx, agentCaller, agent.ID, "#fix-login", closing, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +236,7 @@ func TestEventsSandboxStatusAndTaskDone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = msg.Post(ctx, humanCaller, franco.ID, "#fix-login", "thanks", nil)
+	_, err = msg.Post(ctx, humanCaller, franco.ID, "#fix-login", "thanks", nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +295,7 @@ func TestEventsAcceptSummaryEmptyWithoutAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = routes.server.Messaging.Post(ctx, managerCaller, manager.ID, "#fix-login", "/accept", nil)
+	_, err = routes.server.Messaging.Post(ctx, managerCaller, manager.ID, "#fix-login", "/accept", nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,7 +369,7 @@ func TestEventsAcceptPublishesDeliveredSummaryAndStop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = routes.server.Messaging.Post(ctx, agentCaller, agent.ID, "#stop-icon", "waiting for review", nil)
+	_, err = routes.server.Messaging.Post(ctx, agentCaller, agent.ID, "#stop-icon", "waiting for review", nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}

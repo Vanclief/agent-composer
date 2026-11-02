@@ -57,6 +57,9 @@ type Service struct {
 	posted chan struct{}
 	hooks  []PostHook
 
+	// channelsFor names the channels a person reads besides their inbox.
+	channelsFor ChannelsFor
+
 	// system serializes taking the reserved name agc.
 	system sync.Mutex
 
@@ -216,10 +219,19 @@ func (s *Service) Leave(ctx context.Context, caller Caller, participantID string
 	return nil
 }
 
-// Post appends a message. Sender fields come from the participant row,
-// never from the input.
-func (s *Service) Post(ctx context.Context, caller Caller, participantID, channel, body string, replyTo *int64) (*msgmodels.Message, error) {
+// Post appends a message of kind, message or question; empty is message.
+// Sender fields come from the participant row, never from the input.
+func (s *Service) Post(ctx context.Context, caller Caller, participantID, channel, body string, replyTo *int64, kind string) (*msgmodels.Message, error) {
 	err := checkCaller(caller)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	if kind == "" {
+		kind = msgmodels.KindMessage
+	}
+
+	err = msgmodels.ValidateKind(kind)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -258,11 +270,11 @@ func (s *Service) Post(ctx context.Context, caller Caller, participantID, channe
 		}
 	}
 
-	return s.insert(ctx, p, channel, body, replyTo)
+	return s.insert(ctx, p, channel, body, replyTo, kind)
 }
 
 // insert stores a message from p, wakes the waiters and runs the hooks.
-func (s *Service) insert(ctx context.Context, p *msgmodels.Participant, channel, body string, replyTo *int64) (*msgmodels.Message, error) {
+func (s *Service) insert(ctx context.Context, p *msgmodels.Participant, channel, body string, replyTo *int64, kind string) (*msgmodels.Message, error) {
 	m := &msgmodels.Message{
 		Channel:       channel,
 		From:          p.Name,
@@ -271,6 +283,7 @@ func (s *Service) insert(ctx context.Context, p *msgmodels.Participant, channel,
 		Human:         p.Human,
 		ReplyTo:       replyTo,
 		Body:          body,
+		Kind:          kind,
 	}
 
 	err := m.Insert(ctx, s.db)
@@ -321,7 +334,7 @@ func (s *Service) PostAsSystem(ctx context.Context, channel, body string) (*msgm
 		return nil, ez.Wrap(err)
 	}
 
-	return s.insert(ctx, p, channel, body, nil)
+	return s.insert(ctx, p, channel, body, nil, msgmodels.KindMessage)
 }
 
 // systemParticipant returns agc's active participant, joining it the first
