@@ -58,7 +58,7 @@ not.
    | Name | Allowed hosts |
    |---|---|
    | `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` | `api.anthropic.com` |
-   | `OPENAI_API_KEY` | `api.openai.com` |
+   | `OPENAI_API_KEY`, `CODEX_API_KEY` | `api.openai.com` |
    | `GITHUB_TOKEN` | `api.github.com`, `github.com` |
 
    Any other name must declare hosts in the spec, `NAME@host1,host2`, or
@@ -81,6 +81,47 @@ not.
 
 6. **Git uses HTTPS with the credential helper baked into the base image**,
    reading `GITHUB_TOKEN`. SSH remotes are not supported inside Tasks.
+
+## Accounts
+
+Added 2026-11-02, on Franco's ask for several accounts per provider. Each
+harness reads one fixed variable (Claude Code `CLAUDE_CODE_OAUTH_TOKEN`, then
+`ANTHROPIC_API_KEY`; Codex in `codex exec` `CODEX_API_KEY`), so with one name
+per variable a rig could hold one account per provider. An account is a named
+secret a sandbox receives under the variable the harness reads:
+
+```yaml
+secrets:
+  - ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN
+  - OPENAI_PERSONAL as CODEX_API_KEY@api.openai.com
+  - GITHUB_TOKEN
+```
+
+- **Syntax.** `NAME as ENV[@host1,host2]`. `NAME` is the entry in
+  `secrets.env`, `ENV` the guest variable. Without `as`, `ENV` is `NAME`, as
+  before, so `NAME` and `NAME@hosts` mean what they meant. `ENV` must look
+  like an environment variable name (`[A-Z_][A-Z0-9_]*`), and two entries of
+  one spec may not share an `ENV`; both are spec validation errors that quote
+  the entry.
+- **Hosts.** From the entry when it names them, else the table above for
+  `ENV`, else the table for `NAME`, else creation fails asking for
+  `NAME as ENV@host`. So `ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN` is bound
+  to `api.anthropic.com` with no hosts written. `CODEX_API_KEY` is in the
+  table, bound to `api.openai.com`.
+- **Which variable.** `GET /api/secrets` returns, besides the names,
+  `harnesses: [{ id, reads }]`: each harness in the catalog
+  (`runtime/harnesses/catalog.go`) with the variables it takes its
+  credentials from, in order of preference, so a client can offer "use this
+  secret as the variable claude_code reads".
+- **Persistent agents.** A role's template (`agents/<role>.yaml`,
+  `sandbox.secrets`, ADR 0016) takes the same entries, so a role runs on a
+  given account. A per-agent override at `agc agent create` is not offered
+  yet; the template decides.
+- **Still never readable.** Nothing else changes: the guest variable `ENV`
+  holds a placeholder, and the proxy swaps in the value of `NAME` only in
+  requests to the bound hosts. No request returns the value.
+- A schedule's poll command reads its secrets on the host by their own
+  names, so `as` is refused there.
 
 ## Rationale
 
