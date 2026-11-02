@@ -14,6 +14,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	"github.com/vanclief/agent-composer/interfaces/cli/client"
+	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/task"
 )
 
@@ -30,7 +31,7 @@ type taskService interface {
 	CreateTask(ctx context.Context, request *tasks.CreateRequest) (*tasks.TaskView, error)
 	ListTasks(ctx context.Context) (*tasks.ListResponse, error)
 	GetTask(ctx context.Context, ref string) (*tasks.TaskView, error)
-	DeliverTask(ctx context.Context, ref string, summary string) (*tasks.TaskView, error)
+	DeliverTask(ctx context.Context, ref string, summary string, report *taskmodels.Report) (*tasks.TaskView, error)
 	AcceptTask(ctx context.Context, ref string, by string) (*tasks.TaskView, error)
 	RejectTask(ctx context.Context, ref string, by string, why string) (*tasks.TaskView, error)
 	DeleteTask(ctx context.Context, ref string) (*tasks.DeleteResponse, error)
@@ -168,8 +169,8 @@ func (s localService) GetTask(ctx context.Context, ref string) (*tasks.TaskView,
 	return s.api.Get(ctx, nil, &tasks.GetRequest{Name: ref})
 }
 
-func (s localService) DeliverTask(ctx context.Context, ref string, summary string) (*tasks.TaskView, error) {
-	return s.api.Deliver(ctx, nil, &tasks.DeliverRequest{Name: ref, Summary: summary})
+func (s localService) DeliverTask(ctx context.Context, ref string, summary string, report *taskmodels.Report) (*tasks.TaskView, error) {
+	return s.api.Deliver(ctx, nil, &tasks.DeliverRequest{Name: ref, Summary: summary, Report: report})
 }
 
 func (s localService) AcceptTask(ctx context.Context, ref string, by string) (*tasks.TaskView, error) {

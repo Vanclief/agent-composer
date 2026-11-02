@@ -90,9 +90,12 @@ type RejectBody struct {
 	Why string `json:"why"`
 }
 
-// DeliverRequest is the body of a delivery: what the agent says it did.
+// DeliverRequest is the body of a delivery: what the agent says it did,
+// and optionally its report (ADR 0010, "Delivery report"), carried as
+// sent for the tasks API to read.
 type DeliverRequest struct {
-	Summary string `json:"summary"`
+	Summary string          `json:"summary"`
+	Report  json.RawMessage `json:"report,omitempty"`
 }
 
 type ErrorResponse struct {

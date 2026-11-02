@@ -75,12 +75,6 @@
 }
 
 @theme inline {
-  /* An LED blinking: hard on and off, once a second. */
-  --animate-led-blink: led-blink 1s steps(1, end) infinite;
-  @keyframes led-blink {
-    0%, 49% { opacity: 1; }
-    50%, 100% { opacity: 0.2; }
-  }
   --font-sans: 'Avenir Next Condensed', 'Helvetica Neue', 'Arial Narrow', 'Roboto Condensed', ui-sans-serif, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --radius-sm: calc(var(--radius) - 4px);
@@ -157,7 +151,7 @@
 .dark h1[data-testid='page-title'],
 .dark nav[aria-label='Main'] button[data-testid^='area-header-'],
 .dark nav[aria-label='Main'] a,
-.dark aside > div:first-child,
+.dark aside[data-testid='sidebar'] > div:first-child,
 .dark ul[aria-label='Tasks'] > li > div > a[href^='/panel/tasks/']:not([data-testid]),
 .dark button:has(> svg.lucide-plus) {
   text-transform: uppercase;
@@ -165,16 +159,16 @@
   font-weight: 600;
 }
 /* Shell: black panels, orange one-pixel frames. */
-.dark aside,
-.dark aside > div,
+.dark aside[data-testid='sidebar'],
+.dark aside[data-testid='sidebar'] > div,
 .dark main > header {
   border-color: var(--eva-dim);
   background-color: var(--sidebar);
 }
-.dark aside > div:first-child {
+.dark aside[data-testid='sidebar'] > div:first-child {
   letter-spacing: 0.2em;
 }
-.dark aside > div:first-child > span {
+.dark aside[data-testid='sidebar'] > div:first-child > span {
   background: var(--eva);
   color: var(--eva-ink);
   border-radius: 0;
@@ -382,6 +376,11 @@
   border-right: 1px solid var(--eva-dim);
   clip-path: polygon(0 0, 100% 0, 100% 100%, calc(var(--cut) - 1px) 100%, 0 calc(100% - var(--cut) + 1px));
 }
+/* The word is the light (Franco, 2026-11-02): no LED. Running filled green,
+   steady; a machine in transition filled blue, steady. Not running is a
+   green outline, not filled: done full, open and unknown dim. Only what
+   needs a hand blinks, the whole tab: review yellow, crashed red. Failed
+   is a steady red outline. Hard blink, once a second, never a fade. */
 .dark [data-testid='task-status'] span[data-status][data-tier] {
   flex: 1;
   justify-content: center;
@@ -389,30 +388,40 @@
   border-radius: 0;
   font-size: 0.8rem;
   letter-spacing: 0.12em;
-  padding: 0 8px 0 14px;
+  padding: 0 8px;
   color: var(--muted-foreground);
-  background: var(--eva-faint);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px oklch(0.8 0.2 150 / 45%);
 }
-.dark [data-testid='task-status'] span[data-status][data-tier='lit'],
-.dark [data-testid='task-status'] span[data-status][data-tier='attention'] {
+.dark [data-testid='task-status'] span[data-status][data-tier='off'] {
+  color: var(--eva-green);
+  box-shadow: inset 0 0 0 1px var(--eva-green);
+}
+.dark [data-testid='task-status'] span[data-status][data-tier='lit'] {
   color: var(--eva-ink);
   font-weight: 700;
+  box-shadow: none;
+  background: oklch(0.78 0.12 220);
 }
 .dark [data-testid='task-status'] span[data-status='running'][data-tier='lit'] {
   background: var(--eva-green);
 }
 .dark [data-testid='task-status'] span[data-status='review'][data-tier='lit'] {
-  background: var(--eva-yellow);
-}
-.dark [data-testid='task-status'] span[data-status][data-tier='lit']:not([data-status='running']):not([data-status='review']) {
-  background: oklch(0.78 0.12 220);
+  --tab: var(--eva-yellow);
+  animation: tab-blink 1s steps(1, end) infinite;
 }
 .dark [data-testid='task-status'] span[data-status][data-tier='attention'] {
-  background: var(--eva-red);
+  --tab: var(--eva-red);
+  color: var(--tab);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px var(--tab);
 }
-.dark [data-testid='task-status'] span[data-status][data-tier='lit'] [aria-hidden] > span,
-.dark [data-testid='task-status'] span[data-status][data-tier='attention'] [aria-hidden] > span {
-  box-shadow: 0 0 0 1px oklch(0.1 0 0 / 60%);
+.dark [data-testid='task-status'] span[data-status][data-tier='attention']:not([data-status='failed']):not([data-status='error']) {
+  animation: tab-blink 1s steps(1, end) infinite;
+}
+@keyframes tab-blink {
+  0%, 49% { background: var(--tab); color: var(--eva-ink); box-shadow: none; }
+  50%, 100% { background: transparent; color: var(--tab); box-shadow: inset 0 0 0 1px var(--tab); }
 }
 .dark ul[aria-label='Tasks'] > li > [data-testid='attention-mark'] {
   position: absolute;

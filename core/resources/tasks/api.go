@@ -109,21 +109,24 @@ type TaskView struct {
 	Name  string    `json:"name"`
 	Brief string    `json:"brief"`
 	// Accept is the task's criteria, always an array (ADR 0010 item 1).
-	Accept      []string                `json:"accept"`
-	Assignee    string                  `json:"assignee"`
-	Model       string                  `json:"model"`
-	Manager     string                  `json:"manager"`
-	Owner       string                  `json:"owner"`
-	For         string                  `json:"for"`
-	Notify      bool                    `json:"notify"`
-	Status      string                  `json:"status"`
-	DoneAt      *time.Time              `json:"done_at"`
-	AcceptedBy  string                  `json:"accepted_by"`
-	DeliveredAt *time.Time              `json:"delivered_at"`
-	Summary     string                  `json:"summary"`
-	CreatedAt   time.Time               `json:"created_at"`
-	UpdatedAt   time.Time               `json:"updated_at"`
-	Sandboxes   []sandboxes.SandboxView `json:"sandboxes"`
+	Accept      []string   `json:"accept"`
+	Assignee    string     `json:"assignee"`
+	Model       string     `json:"model"`
+	Manager     string     `json:"manager"`
+	Owner       string     `json:"owner"`
+	For         string     `json:"for"`
+	Notify      bool       `json:"notify"`
+	Status      string     `json:"status"`
+	DoneAt      *time.Time `json:"done_at"`
+	AcceptedBy  string     `json:"accepted_by"`
+	DeliveredAt *time.Time `json:"delivered_at"`
+	Summary     string     `json:"summary"`
+	// Report is the last delivery's report, null when it sent none (ADR
+	// 0010, "Delivery report").
+	Report    *taskmodels.Report      `json:"report"`
+	CreatedAt time.Time               `json:"created_at"`
+	UpdatedAt time.Time               `json:"updated_at"`
+	Sandboxes []sandboxes.SandboxView `json:"sandboxes"`
 }
 
 // validateRef checks a request names a task by exactly one of id or name.
@@ -195,6 +198,7 @@ func newView(record *taskmodels.Task, views []sandboxes.SandboxView) *TaskView {
 		Accept:      accept,
 		DeliveredAt: record.DeliveredAt,
 		Summary:     record.Summary,
+		Report:      record.Report,
 		AcceptedBy:  record.AcceptedBy,
 		DoneAt:      record.DoneAt,
 		CreatedAt:   record.CreatedAt,

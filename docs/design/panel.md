@@ -71,14 +71,22 @@ outlined and dim. Every text color meets AA on its ground.
 
 ## Lights
 
-The status pill is an LED, Franco's spec verbatim: "Running: green led
-blinking. Review: yellow led blinking. Open: green led off. Done: green led
-on. Crashed: red dot blinking. Canceled: red dot." Canceled is not a backend
-status yet; failed is the steady red until it is. Blinking means doing
-something or waiting on someone; steady means settled. Blink is hard, once
-a second (`--animate-led-blink`), never a fade. In a plate's status tab the
-alive and dead words sit on their color as filled blocks with ink text;
-open, done and stopped stay dim.
+No LED: the status word is the light. Franco's spec, 2026-11-02 (the second
+round, replacing the LED spec of the same day): "Only things that need my
+attention should be blinking. Get rid of the led; it's the whole REVIEW
+that would blink. If it's not running just make the green outline but not
+filled." Color is the kind of thing (rtsdesign rule 6: green work, yellow a
+person's turn, blue a machine in transition, red broken). So, in a plate's
+status tab: running filled green, steady; starting, stopping and creating
+filled blue, steady; review yellow, the whole tab blinking between filled
+and outlined; crashed the same in red; failed a steady red outline; done a
+green outline, not filled; open and any unknown word a dim green outline
+with muted text. Canceled is not a backend status yet; failed is the
+steady red until it is. Nothing else on the screen blinks: not the counts
+in the header, not the pill in a rail, not a machine in transition. Blink
+is hard, once a second (`tab-blink`), never a fade. The four `data-tier`
+values (lit, off, attention, idle) stay for sorting. Facts that are not a
+status (a criterion met, a check passed) keep a small steady light (`Led`).
 
 ## Motion
 

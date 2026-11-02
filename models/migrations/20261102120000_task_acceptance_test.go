@@ -42,6 +42,12 @@ done_at TIMESTAMP, created_at TIMESTAMP NOT NULL, updated_at TIMESTAMP NOT NULL)
 		}
 	}
 
+	// The later report column, so the current model can read the row.
+	err = taskReport(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	record, err := task.GetTaskByName(ctx, db, "stop-icon")
 	if err != nil {
 		t.Fatal(err)

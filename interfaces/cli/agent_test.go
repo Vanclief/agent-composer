@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -87,7 +88,7 @@ func (m *fakeMessenger) Ask(ctx context.Context, participantID, channel, body st
 	return &msgmodels.Message{ID: m.nextID, Channel: channel, ParticipantID: participantID, Body: body, Kind: msgmodels.KindQuestion}, nil
 }
 
-func (m *fakeMessenger) Deliver(ctx context.Context, summary string, out any) error {
+func (m *fakeMessenger) Deliver(ctx context.Context, summary string, report json.RawMessage, out any) error {
 	if m.deliverErr != nil {
 		return m.deliverErr
 	}

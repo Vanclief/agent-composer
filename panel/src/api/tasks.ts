@@ -53,6 +53,21 @@ export type SandboxWork = {
   checked_at: string
 }
 
+// The agent's answer to a criterion.
+export type Met = 'yes' | 'no' | 'partly'
+
+// What the agent says it delivered, read against the task's accept lines.
+export type Report = {
+  // One per task.accept line, same order.
+  criteria: { met: Met; note: string }[]
+  // The branch and commit the work is on; absent when there is no repo work.
+  changes?: { branch: string; sha: string; files?: number }
+  checks: { name: string; passed: boolean; note: string }[]
+  left_out: { what: string; why: string }[]
+  // What waits on the reviewer.
+  needs: string[]
+}
+
 export type TaskView = {
   id: string
   title: string
@@ -84,6 +99,9 @@ export type TaskView = {
   delivered_at: string | null
   // The last delivery's summary; kept after a reject.
   summary: string
+  // The last delivery's structured report (agc task deliver --report);
+  // null when the agent delivered a summary alone or has not delivered.
+  report: Report | null
   // Who accepted the task; empty until done.
   accepted_by: string
   created_at: string
