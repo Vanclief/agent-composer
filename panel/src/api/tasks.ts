@@ -25,6 +25,8 @@ export type SandboxView = {
   // The program the sandbox runs as its first terminal (job "agent"); empty
   // when none.
   command: string
+  // ADR 0009: the exact TASK.md the agent received, verbatim.
+  instructions: string
   status: SandboxStatus
   // Why the status is what it is, e.g. the boot error of a failed sandbox.
   status_error?: string
@@ -43,6 +45,10 @@ export type TaskView = {
   // A harness id such as claude_code or codex_cli, or a person's name;
   // empty means unassigned.
   assignee: string
+  // ADR 0009: the harness model when the assignee is a harness, else empty.
+  model: string
+  // ADR 0009: the messaging name agc addresses when the task opens.
+  manager: string
   // Id of the knowledge action or decision the task serves, or empty.
   for: string
   status: TaskStatus
@@ -61,7 +67,11 @@ export type CreateTaskRequest = {
   // Defaults to the slug of the title.
   name?: string
   brief: string
+  // Empty fields take the server's configured defaults (ADR 0009):
+  // assignee claude_code, model claude-opus-5-5, manager from config.
   assignee: string
+  model?: string
+  manager?: string
   for: string
   // Allocates a sandbox right after the task is written.
   sandbox?: SandboxRequest

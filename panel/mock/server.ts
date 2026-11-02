@@ -37,6 +37,10 @@ type Task = {
   name: string
   brief: string
   assignee: string
+  // ADR 0009: the harness model when the assignee is a harness, and the
+  // messaging name agc addresses when the task opens.
+  model: string
+  manager: string
   for: string
   done_at: string | null
   created_at: string
@@ -51,6 +55,8 @@ type Sandbox = {
   name: string
   spec: TaskSpec
   command: string
+  // ADR 0009: the exact TASK.md text written into the sandbox.
+  instructions: string
   boot_error: string | null
   booted_at: string | null
   stopped_at: string | null
@@ -202,6 +208,8 @@ function createState() {
       name,
       brief: '',
       assignee: '',
+      model: '',
+      manager: '',
       for: '',
       done_at: null,
       created_at: at,
@@ -210,6 +218,25 @@ function createState() {
     }
     tasks.set(name, task)
     return task
+  }
+
+  // ADR 0009 item 3: the TASK.md an agent receives, byte for byte.
+  function instructionsFor(task: Task, sandboxName: string, spec: TaskSpec) {
+    const repo = spec.repo
+      ? `The repository is cloned at /home/agent/${spec.repo.split('/').pop()}.`
+      : 'There is no repository.'
+    const agent = task.model ? `${task.assignee} (${task.model})` : task.assignee
+    return (
+      `# ${task.title}\n\n${task.brief}\n\n## How this task works\n\n` +
+      `You are ${agent} working for the task \`${task.name}\` inside a sandbox (\`${sandboxName}\`).\n` +
+      `Your manager is ${task.manager}. ${repo} Work counts only once it leaves this sandbox:\n\n` +
+      `- Commit on a branch named \`agc/${task.name}\` and push it.\n` +
+      `- Post what you changed and what you verified in \`#${task.name}\` with\n` +
+      `  \`agc msg post '#${task.name}' <text>\`; your manager reads that channel and\n` +
+      `  answers there. Ask questions there too, then keep working on what does\n` +
+      `  not depend on the answer.\n` +
+      `- Do not modify files outside the repository, and never print secret values.\n`
+    )
   }
 
   // The first sandbox of a task is named after it, later ones <task>-2, -3.
@@ -233,6 +260,7 @@ function createState() {
       name,
       spec,
       command,
+      instructions: instructionsFor(task, name, spec),
       boot_error: null,
       booted_at: at,
       stopped_at: null,
@@ -399,6 +427,8 @@ function createState() {
           '- Post findings in #review-42.\n\n' +
           'Done when every finding is posted and the PR is approved or has changes requested.',
         assignee: 'claude_code',
+        model: 'claude-opus-5-5',
+        manager: 'franco',
         for: 'attach-rulesets-to-task-specs',
       },
       40 * 60_000,
@@ -417,7 +447,7 @@ function createState() {
     addTask(
       'Flaky CI',
       'flaky-ci',
-      { brief: 'Find why CI fails one run in five and fix it.', assignee: 'franco' },
+      { brief: 'Find why CI fails one run in five and fix it.', assignee: 'franco', manager: 'franco' },
       3 * 3600_000,
     )
 
@@ -427,6 +457,8 @@ function createState() {
       {
         brief: 'Bring docs/ up to date with the REST API.',
         assignee: 'codex_cli',
+        model: 'gpt-6.1-sol',
+        manager: 'franco',
         done_at: iso(Date.now() - 86_400_000),
       },
       2 * 86_400_000,
@@ -438,7 +470,7 @@ function createState() {
     const fail = addTask(
       'Boot fail',
       'boot-fail',
-      { brief: 'Review the private repo.', assignee: 'claude_code' },
+      { brief: 'Review the private repo.', assignee: 'claude_code', model: 'claude-opus-5-5', manager: 'franco' },
       20 * 60_000,
     )
     const failBox = addSandbox(
@@ -592,6 +624,25 @@ function sandboxRequest(body: Record<string, unknown>) {
   return { spec: spec as TaskSpec, command: str(command).trim() }
 }
 
+// ADR 0009 item 1: the server fills in the configured defaults (harness
+// claude_code, model claude-opus-5-5, manager franco) when a field is empty.
+const HARNESSES = ['claude_code', 'codex_cli', 'pi']
+function taskFields(body: Record<string, unknown>) {
+  const assignee = str(body.assignee).trim() || 'claude_code'
+  const isHarness = HARNESSES.includes(assignee)
+  let model = str(body.model).trim()
+  if (model === '' && isHarness) {
+    model = 'claude-opus-5-5'
+  }
+  return {
+    brief: str(body.brief),
+    assignee,
+    model,
+    manager: str(body.manager).trim() || 'franco',
+    for: str(body.for),
+  }
+}
+
 // Writes the row and returns at once; a sandbox in the request is
 // allocated after the insert and comes back as starting.
 function createTask(state: State, body: Record<string, unknown>) {
@@ -611,12 +662,7 @@ function createTask(state: State, body: Record<string, unknown>) {
     throw apiError(400, 'sandbox must be an object')
   }
   const request = sandbox ? sandboxRequest(sandbox as Record<string, unknown>) : undefined
-  const task = state.addTask(
-    title || name,
-    name,
-    { brief: str(body.brief), assignee: str(body.assignee), for: str(body.for) },
-    0,
-  )
+  const task = state.addTask(title || name, name, taskFields(body), 0)
   if (request) {
     state.allocate(task, request.spec, request.command)
   }
