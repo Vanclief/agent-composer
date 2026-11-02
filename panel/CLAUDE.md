@@ -37,25 +37,27 @@ the panel stays conflict-free.
 
 Basename `/panel`. Defined in `src/App.tsx` (foundation).
 
-| Route                                                    | Component                                                                                                                                                             |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/`                                                      | redirects to the first page of the last used of the three modes (Think → `/think/beliefs`, Work → `/tasks`, Talk → `/messages`; `src/shell/mode.tsx`)                 |
-| `/think`                                                 | redirects to `/think/beliefs`                                                                                                                                         |
-| `/think/{beliefs,decisions,rules,actions,evidence}/:id?` | Think mode pages (`src/features/think/`), read-only, `:id` opens the detail pane; `?without=<id>` shows every label as if that belief or evidence were gone (what-if) |
-| `/tasks`                                                 | `TasksPage`; "New task" opens `CreateTaskDialog`                                                                                                                      |
-| `/tasks/:name`                                           | `TaskPage`: the facts rail and the center box, showing `MessagesTab` (see Task page below)                                                                            |
-| `/tasks/:name/brief`                                     | redirects to `/tasks/:name` (the old Brief tab; the brief is in the rail)                                                                                             |
-| `/tasks/:name/compute`                                   | `ComputeTab` in the box: the task's sandboxes as rows, the selected one's parts (`?sandbox=<name>`, default the newest) and "Allocate compute"                        |
-| `/tasks/:name/messages`                                  | `MessagesTab` in the box (channel `#<name>`)                                                                                                                          |
-| `/compute`                                               | `ComputePage`: every sandbox with its task (Work mode)                                                                                                                |
-| `/compute/:name`                                         | `SandboxPage`: one sandbox (`:name` is the sandbox) with its terminals                                                                                                |
-| `/agents`                                                | `AgentsPage`: every persistent agent (Work mode); "New agent" makes a numbered one                                                                                    |
-| `/agents/:name`                                          | `AgentPage`: one agent, its home sandbox, tasks, conversations and identity                                                                                           |
-| `/messages`, `/messages/:channel`                        | Talk mode: `MessagesPage`; `:channel` has no `#` (`/messages/review-42` is `#review-42`); a DM keeps its `@`, encoded (`/messages/%40franco%2Fyc-pitch`)              |
-| `/messages/browse`                                       | `BrowsePage`: every channel, with Follow / Following (so a channel named `#browse` has no URL)                                                                        |
+| Route                                                    | Component                                                                                                                                                        |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                                                      | redirects to the last page visited (localStorage `agc.panel.last`, kept on every route change), default `/tasks`; `src/shell/areas.tsx`                          |
+| `/think`                                                 | redirects to `/think/beliefs`                                                                                                                                    |
+| `/think/{beliefs,decisions,rules,actions,evidence}/:id?` | Think pages (`src/features/think/`), read-only, `:id` opens the detail pane; `?without=<id>` shows every label as if that belief or evidence were gone (what-if) |
+| `/tasks`                                                 | `TasksPage`; "New task" opens `CreateTaskDialog`                                                                                                                 |
+| `/tasks/:name`                                           | `TaskPage`: the facts rail and the center box, showing `MessagesTab` (see Task page below)                                                                       |
+| `/tasks/:name/brief`                                     | redirects to `/tasks/:name` (the old Brief tab; the brief is in the rail)                                                                                        |
+| `/tasks/:name/compute`                                   | `ComputeTab` in the box: the task's sandboxes as rows, the selected one's parts (`?sandbox=<name>`, default the newest) and "Allocate compute"                   |
+| `/tasks/:name/messages`                                  | `MessagesTab` in the box (channel `#<name>`)                                                                                                                     |
+| `/compute`                                               | `ComputePage`: every sandbox with its task (Work)                                                                                                                |
+| `/compute/:name`                                         | `SandboxPage`: one sandbox (`:name` is the sandbox) with its terminals                                                                                           |
+| `/agents`                                                | `AgentsPage`: every persistent agent (Work); "New agent" makes a numbered one                                                                                    |
+| `/agents/:name`                                          | `AgentPage`: one agent, its home sandbox, tasks, conversations and identity                                                                                      |
+| `/messages`, `/messages/:channel`                        | Talk: `MessagesPage`; `:channel` has no `#` (`/messages/review-42` is `#review-42`); a DM keeps its `@`, encoded (`/messages/%40franco%2Fyc-pitch`)              |
+| `/messages/browse`                                       | `BrowsePage`: every channel, with Follow / Following (so a channel named `#browse` has no URL)                                                                   |
 
 Each page sets the top bar title with `usePageTitle('…')` from
-`@/shell/page-title`.
+`@/shell/page-title`; the shell puts the page's area before it as a dim
+prefix (`Work / Tasks`, `data-testid="page-area"`), so a title never names
+its area.
 
 ## Design rules
 
@@ -68,11 +70,21 @@ Each page sets the top bar title with `usePageTitle('…')` from
   localStorage. The route highlights the active page and opens its group;
   it never hides the others. A collapsed group still shows its header and
   badge. Franco (2026-11-02): "they should always be present and their
-  contents just be collapsable". Adding an area is one entry in `MODES`.
+  contents just be collapsable". Adding an area is one entry in `AREAS`
+  (`src/shell/areas.tsx`, rendered by `src/shell/sidebar.tsx`), in the
+  fixed order Think, Work, Talk. Header: a button (`area-header-<area>`,
+  `aria-expanded`, chevron), the badge slot `area-badge-<area>`; each group
+  is `role="group"` named by its label. State: localStorage
+  `agc.panel.group.<think|work|talk>` `open`/`closed`, default open. A
+  route belongs to the area whose page shares its first path segment;
+  navigating opens that group (and stores it open), leaves the others. A
+  collapsed current group tints its header as the active row. The sidebar
+  scrolls as one column; headers do not stick.
   In the Talk group the followed channels are listed under Channels
   (`ChannelRows` in `src/features/messages/ChannelRows.tsx`, mounted by the
   shell), linking to `/messages/<name>`; see Talk below. Each group header
-  takes an optional badge (Talk: the unread total; Work: rows waiting on me).
+  takes an optional badge (Talk: the unread total; Work: rows waiting on me,
+  not wired yet).
 - **One icon per concept:** import from `@/components/concept-icons`
   (`conceptIcons.task`, `.sandbox`, `.brief`, `.cpu`, `.memory`, `.image`,
   `.repo`, `.ref`, `.setup`, `.secret`, `.env`, `.volume`, `.channel`,
@@ -115,7 +127,7 @@ Each page sets the top bar title with `usePageTitle('…')` from
   Accept in view; `answer` → `/messages/<task>?thread=<question>`; `restart`
   → `/tasks/<task>/compute?sandbox=<broken>`), and sorts into the
   `attention` group (the row's `data-tier` is `attention`). The Tasks nav
-  link and the Work mode row show the count of such rows as a lit amber
+  link and the Work group header show the count of such rows as a lit amber
   badge (`tasks-badge`, `work-badge`); the Talk row keeps counting questions
   for me. When it waits on someone else, the pill is followed by dim text
   naming them (`· @agent-composer-da`, `waits-on`, `data-attention="other"`),
@@ -317,7 +329,7 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
 - Below 1200px the rail is a card above the box: who wraps on one line, and
   criteria, brief, received and summary fold behind "Details".
 
-## Talk mode: inbox, unread, notifications
+## Talk: inbox, unread, notifications
 
 - **Me:** the signed-in name is `useMyName()` (`src/features/messages/identity.ts`,
   localStorage `agc.panel.human`; with none stored, the server's owner from
@@ -342,8 +354,9 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   `/messages/browse`. Each row has an
   `UnreadBadge` (`data-testid="unread-badge"`, `data-mention`) and is bold
   while unread (`data-unread`); the badge is pink when an unread message
-  mentions `@<me>` (whole word). The Talk row in the mode switch shows the
-  total, pink when any unread message mentions me.
+  mentions `@<me>` (whole word). The Talk group header shows the total
+  (`area-badge-talk`), pink when any unread message mentions me, also
+  while Talk is collapsed.
 - **DMs:** a channel named `@<me>/<task>` is a direct message of mine (the
   backend's DM channels, `isDMOf` in `unread.ts`). Its page is titled
   "Direct @<me>/<task>". The mock seeds `@franco/yc-pitch` (one unread
@@ -396,7 +409,7 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   "Inbox #<me>", with the line "Your inbox: agents and tasks escalate here"
   (`data-testid="inbox-header"`) and, when empty, an empty slot saying so.
 
-## Talk mode: messages, threads, questions
+## Talk: messages, threads, questions
 
 All in `src/features/messages/`; `ChannelView` (Talk page and a task's
 Messages tab) provides the channel context (`context.ts`) every piece reads.
@@ -440,23 +453,23 @@ Messages tab) provides the channel context (`context.ts`) every piece reads.
   (`waiting-strip`) at the top of their channel that scrolls to the next one,
   and add a pink outlined question marker (`question-badge`,
   `QuestionBadge.tsx`) beside the unread badge on the channel row and the
-  Talk mode row. Unread counting is unchanged. The questions query key
+  Talk group header. Unread counting is unchanged. The questions query key
   includes the channels' last ids, so `message.posted` refreshes it.
 
 ## Commands (run in `panel/`)
 
 First time: `npm ci && npx playwright install chromium`.
 
-| Command                  | What it does                                                                                                                                                                                                     |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run mock`           | Mock API on http://127.0.0.1:8790 (`-- --port N`)                                                                                                                                                                |
-| `npm run dev`            | Vite dev server at http://localhost:5173/panel/, `/api` proxied to `VITE_API_TARGET` (default the mock on 8790; a real agc is `http://127.0.0.1:1202`)                                                           |
-| `npm run shot -- /tasks` | Screenshot a route at 1440x900 against its own fresh mock and dev server, writes and prints `/tmp/agc-panel/<route>.png`. Flags: `--theme light`, `--out <path>`, `--wait <ms>`, `--width <px>`, `--height <px>` |
-| `npm run check`          | Types drift, `tsc -b`, eslint, Playwright. Must be green before you finish                                                                                                                                       |
-| `npm run test`           | Playwright only                                                                                                                                                                                                  |
-| `npm run types`          | Regenerate `src/api/schema.d.ts` from `../docs/openapi.yaml`                                                                                                                                                     |
-| `npm run build`          | Typecheck and build `dist/` (what agc embeds)                                                                                                                                                                    |
-| `npm run format`         | Prettier (no semicolons, single quotes, width 120)                                                                                                                                                               |
+| Command                  | What it does                                                                                                                                                                                                                                                               |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run mock`           | Mock API on http://127.0.0.1:8790 (`-- --port N`)                                                                                                                                                                                                                          |
+| `npm run dev`            | Vite dev server at http://localhost:5173/panel/, `/api` proxied to `VITE_API_TARGET` (default the mock on 8790; a real agc is `http://127.0.0.1:1202`)                                                                                                                     |
+| `npm run shot -- /tasks` | Screenshot a route at 1440x900 against its own fresh mock and dev server, writes and prints `/tmp/agc-panel/<route>.png`. Flags: `--theme light`, `--out <path>`, `--wait <ms>`, `--width <px>`, `--height <px>`, `--storage key=value` (repeatable), `--click <selector>` |
+| `npm run check`          | Types drift, `tsc -b`, eslint, Playwright. Must be green before you finish                                                                                                                                                                                                 |
+| `npm run test`           | Playwright only                                                                                                                                                                                                                                                            |
+| `npm run types`          | Regenerate `src/api/schema.d.ts` from `../docs/openapi.yaml`                                                                                                                                                                                                               |
+| `npm run build`          | Typecheck and build `dist/` (what agc embeds)                                                                                                                                                                                                                              |
+| `npm run format`         | Prettier (no semicolons, single quotes, width 120)                                                                                                                                                                                                                         |
 
 Look at your screen with `npm run shot` and read the PNG before you report.
 

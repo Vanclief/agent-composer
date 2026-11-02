@@ -28,7 +28,7 @@ function row(page: Page, channel: string) {
 }
 
 function talkBadge(page: Page) {
-  return page.getByRole('navigation', { name: 'Mode' }).getByTestId('unread-badge')
+  return page.getByTestId('area-badge-talk').getByTestId('unread-badge')
 }
 
 // A name of its own, so no other test mentions it or posts in its inbox.
@@ -100,7 +100,7 @@ test('a mention in an unfollowed channel follows it and toasts', async ({ page, 
   const message = await post(request, agent.id, channel, `@${me} take a look`)
   await expect(page.locator(`[data-testid="toast-message"][data-id="${message.id}"]`)).toBeVisible()
   await expect(talkBadge(page)).toHaveText('1')
-  await page.getByRole('navigation', { name: 'Mode' }).getByRole('link', { name: /Talk/ }).click()
+  await page.getByRole('link', { name: 'Channels', exact: true }).click()
   await expect(row(page, channel).getByTestId('unread-badge')).toHaveAttribute('data-mention', 'true')
 
   // Unfollowing drops it until the next mention.

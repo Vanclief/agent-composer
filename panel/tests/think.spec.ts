@@ -7,33 +7,19 @@ function card(page: Page, id: string) {
   return page.locator(`[data-testid="think-card"][data-id="${id}"]`)
 }
 
-test('/ opens the last used mode', async ({ page }) => {
+test('/ opens the last Think page visited and /think goes to beliefs', async ({ page }) => {
   await page.goto('/panel/think/rules')
-  await expect(page.getByTestId('page-title')).toHaveText('Think · Rules')
+  await expect(page.getByTestId('page-title')).toHaveText('Rules')
+  await expect(page.getByTestId('page-area')).toHaveText('Think /')
   await page.goto('/panel/')
-  await expect(page).toHaveURL(/\/panel\/think\/beliefs$/)
-
-  await page.goto('/panel/messages')
-  await page.goto('/panel/')
-  await expect(page).toHaveURL(/\/panel\/messages$/)
-})
-
-test('/ honors a stored think mode and /think goes to beliefs', async ({ page }) => {
-  await page.addInitScript(() => {
-    if (!sessionStorage.getItem('seeded')) {
-      localStorage.setItem('agc.panel.mode', 'think')
-      sessionStorage.setItem('seeded', '1')
-    }
-  })
-  await page.goto('/panel/')
-  await expect(page).toHaveURL(/\/panel\/think\/beliefs$/)
+  await expect(page).toHaveURL(/\/panel\/think\/rules$/)
   await page.goto('/panel/think')
   await expect(page).toHaveURL(/\/panel\/think\/beliefs$/)
 })
 
 test('beliefs page lists the seeded beliefs with their marks', async ({ page }) => {
   await page.goto('/panel/think/beliefs')
-  await expect(page.getByTestId('page-title')).toHaveText('Think · Beliefs')
+  await expect(page.getByTestId('page-title')).toHaveText('Beliefs')
   await expect(page.getByTestId('think-card')).toHaveCount(16)
 
   await expect(card(page, 'go-has-one-formatting').locator('[data-label="grounded"]')).toHaveText('grounded')
@@ -116,7 +102,7 @@ test('decisions show what they rest on and say when nothing rests on them', asyn
 
 test('evidence page strikes through the retracted piece', async ({ page }) => {
   await page.goto('/panel/think/evidence')
-  await expect(page.getByTestId('page-title')).toHaveText('Think · Evidence')
+  await expect(page.getByTestId('page-title')).toHaveText('Evidence')
   await expect(page.getByTestId('think-card')).toHaveCount(11)
   await expect(card(page, 'rig-lacks-kvm').getByTestId('card-text')).toHaveText(
     'ana saw that the rig has no KVM on 2026-11-02, written up by codex-cli.',
@@ -192,8 +178,8 @@ test('an unknown id says so in the pane', async ({ page }) => {
 
 test('actions page lists open actions first, then done ones, with checkbox marks', async ({ page }) => {
   await page.goto('/panel/think/actions')
-  await expect(page.getByTestId('page-title')).toHaveText('Think · Actions')
-  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link')).toHaveText([
+  await expect(page.getByTestId('page-title')).toHaveText('Actions')
+  await expect(page.getByRole('group', { name: 'Think', exact: true }).getByRole('link')).toHaveText([
     'Beliefs',
     'Decisions',
     'Rules',
@@ -291,7 +277,7 @@ test('what-if relabels the page without the item, then restores it', async ({ pa
   await toggle.click()
   await expect(page).toHaveURL(/\?without=go-has-one-formatting$/)
   await expect(page.getByTestId('what-if-banner')).toHaveText('Showing labels without go-has-one-formatting')
-  await expect(page.getByTestId('page-title')).toHaveText('Think · Beliefs · without go-has-one-formatting')
+  await expect(page.getByTestId('page-title')).toHaveText('Beliefs · without go-has-one-formatting')
   await expect(agents.locator('[data-label="in_doubt"]')).toBeVisible()
   await expect(agents.getByTestId('card-text')).toHaveText(
     'I would doubt that Go is better than Rust in general for writing code with agents, without go-has-one-formatting.',
@@ -305,7 +291,7 @@ test('what-if relabels the page without the item, then restores it', async ({ pa
   await toggle.click()
   await expect(page).toHaveURL(/\/panel\/think\/beliefs\/go-has-one-formatting$/)
   await expect(page.getByTestId('what-if-banner')).toHaveCount(0)
-  await expect(page.getByTestId('page-title')).toHaveText('Think · Beliefs')
+  await expect(page.getByTestId('page-title')).toHaveText('Beliefs')
   await expect(agents.locator('[data-label="grounded"]')).toBeVisible()
 })
 

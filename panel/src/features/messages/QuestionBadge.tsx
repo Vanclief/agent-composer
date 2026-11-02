@@ -43,7 +43,7 @@ export function RowBadges({ count, mention, questions }: { count: number; mentio
   )
 }
 
-// The Talk mode row: every unread message and every question waiting.
+// The Talk group header: every unread message and every question waiting.
 export function TalkBadges({ count, mention }: { count: number; mention: boolean }) {
   const questions = useOpenQuestions()
   return <RowBadges count={count} mention={mention} questions={questions.total} />

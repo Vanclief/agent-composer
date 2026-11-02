@@ -136,7 +136,7 @@ export type Follow = {
   unread: Unread
   following: (channel: string) => boolean
   // Unread across followed channels plus my inbox, my DMs and anything
-  // mentioning me: the Talk mode badge.
+  // mentioning me: the Talk group badge.
   total: number
   mention: boolean
 }

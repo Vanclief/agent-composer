@@ -76,7 +76,7 @@ function ThinkPage({ kind }: { kind: Kind }) {
   )
   const without = view?.without ?? []
   const { title, icon: Icon } = KINDS[kind]
-  usePageTitle(`Think · ${title}${without.length > 0 ? ` · without ${without.join(', ')}` : ''}`)
+  usePageTitle(`${title}${without.length > 0 ? ` · without ${without.join(', ')}` : ''}`)
 
   return (
     <div className="flex h-full min-h-0">

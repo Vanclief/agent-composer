@@ -5,10 +5,14 @@
 //   npm run shot -- /tasks/review-42/messages --theme light
 //   npm run shot -- /messages --out /tmp/messages.png --wait 2000
 //   npm run shot -- /tasks/review-42 --width 1000
+//   npm run shot -- /think/beliefs --storage agc.panel.group.work=closed
+//   npm run shot -- /tasks --click '[data-testid=area-header-work]'
 //
 // Starts its own mock and Vite dev server on free ports (no build, nothing
 // shared with other checkouts), writes /tmp/agc-panel/<route>.png unless
-// --out is given, and prints the path.
+// --out is given, and prints the path. --storage key=value (repeatable)
+// seeds localStorage before the page loads; --click <selector> clicks it
+// once the page has settled.
 import { mkdirSync } from 'node:fs'
 import type { AddressInfo } from 'node:net'
 import { dirname } from 'node:path'
@@ -26,7 +30,7 @@ function flag(name: string) {
   return process.argv[i + 1]
 }
 
-const flagsWithValues = new Set(['--out', '--theme', '--wait', '--width', '--height'])
+const flagsWithValues = new Set(['--out', '--theme', '--wait', '--width', '--height', '--storage', '--click'])
 const positional = process.argv
   .slice(2)
   .filter((arg, i, all) => !arg.startsWith('--') && !flagsWithValues.has(all[i - 1]))
@@ -36,6 +40,9 @@ const settleMs = Number(flag('--wait') ?? 1000)
 const width = Number(flag('--width') ?? 1440)
 const height = Number(flag('--height') ?? 900)
 const slug = route.replace(/^\/+|\/+$/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-') || 'root'
+const storage = process.argv
+  .flatMap((arg, i, all) => (arg === '--storage' && all[i + 1] ? [all[i + 1]] : []))
+  .map((pair) => [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)])
 const out = flag('--out') ?? `/tmp/agc-panel/${slug}.png`
 
 const mock = await startMock(0)
@@ -51,11 +58,17 @@ const browser = await chromium.launch()
 try {
   const context = await browser.newContext({ viewport: { width, height } })
   await context.addInitScript((value) => localStorage.setItem('agc.panel.theme', value), theme)
+  await context.addInitScript((pairs) => pairs.forEach(([key, value]) => localStorage.setItem(key, value)), storage)
   const page = await context.newPage()
   page.on('pageerror', (error) => console.error('page error:', error.message))
   // Not networkidle: the tasks poll and the messaging long poll never idle.
   await page.goto(`http://127.0.0.1:${port}/panel${route}`, { waitUntil: 'load' })
   await page.waitForTimeout(settleMs)
+  const click = flag('--click')
+  if (click) {
+    await page.click(click)
+    await page.waitForTimeout(200)
+  }
   mkdirSync(dirname(out), { recursive: true })
   await page.screenshot({ path: out })
   console.log(out)
