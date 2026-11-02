@@ -314,7 +314,8 @@ func TestListSecretsRoute(t *testing.T) {
 		t.Fatalf("status %d, body %s", status, body)
 	}
 
-	want := `{"secrets":[{"name":"CUSTOM","hosts":[]},{"name":"GITHUB_TOKEN","hosts":["api.github.com","github.com"]}]}`
+	want := `{"secrets":[{"name":"CUSTOM","hosts":[]},{"name":"GITHUB_TOKEN","hosts":["api.github.com","github.com"]}],` +
+		`"harnesses":[{"id":"codex_cli","reads":["CODEX_API_KEY"]},{"id":"claude_code","reads":["CLAUDE_CODE_OAUTH_TOKEN","ANTHROPIC_API_KEY"]},{"id":"pi","reads":[]}]}`
 	body = strings.TrimSpace(body)
 	if body != want {
 		t.Fatalf("body %s, want %s", body, want)

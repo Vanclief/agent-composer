@@ -857,7 +857,7 @@ export interface paths {
         };
         /**
          * List secret names
-         * @description Names in ~/.agent_composer/config/secrets.env, sorted, each with the hosts it is bound to by default (empty for names agc does not know, which a spec must bind as NAME@host). Values are never returned (ADR 0004). A missing file lists nothing; a file readable by anyone but its owner is refused.
+         * @description Names in ~/.agent_composer/config/secrets.env, sorted, each with the hosts it is bound to by default (empty for names agc does not know, which a spec must bind as NAME@host). Values are never returned (ADR 0004). A missing file lists nothing; a file readable by anyone but its owner is refused. harnesses lists the variables each harness reads, the ENV side of a NAME as ENV account entry.
          */
         get: operations["listSecrets"];
         put?: never;
@@ -1298,7 +1298,7 @@ export interface components {
             ref?: string;
             /** @description Bash script run once after the clone, in the repo. Before it runs, agc marks the Claude Code and Codex first-run prompts (onboarding, theme, folder trust, bypass permissions) as answered. */
             setup?: string;
-            /** @description NAME or NAME@host1,host2. */
+            /** @description NAME, NAME@host1,host2, or an account, NAME as ENV[@host1,host2]: NAME is the entry in secrets.env and ENV ([A-Z_][A-Z0-9_]*) the guest variable it is handed to, such as ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN. Without as, ENV is NAME. Hosts come from the entry, else the hosts agc knows for ENV, else those for NAME. Two entries may not share an ENV. The guest holds a placeholder, never the value (ADR 0004). */
             secrets?: string[];
             env?: {
                 [key: string]: string;
@@ -1629,6 +1629,12 @@ export interface components {
             name: string;
             /** @description The sandbox spec YAML, verbatim. */
             yaml: string;
+        };
+        HarnessReads: {
+            /** @description Harness id, as in runtime/harnesses/catalog.go (codex_cli, claude_code, pi). */
+            id: string;
+            /** @description Variables the harness takes its credentials from, in order of preference; empty when none is fixed. */
+            reads: string[];
         };
         Secret: {
             name: string;
@@ -3900,6 +3906,8 @@ export interface operations {
                 content: {
                     "application/json": {
                         secrets: components["schemas"]["Secret"][];
+                        /** @description Every harness in the catalog with the environment variables it takes its credentials from, in order of preference, so a client can offer "use this secret as the variable claude_code reads" (a NAME as ENV entry, ADR 0004 "Accounts"). */
+                        harnesses: components["schemas"]["HarnessReads"][];
                     };
                 };
             };
