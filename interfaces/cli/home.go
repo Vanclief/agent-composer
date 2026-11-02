@@ -85,7 +85,7 @@ func (homeService) GetTask(ctx context.Context, ref string) (*tasks.TaskView, er
 	return out, nil
 }
 
-func (homeService) DeliverTask(ctx context.Context, ref string, summary string, report *taskmodels.Report) (*tasks.TaskView, error) {
+func (homeService) DeliverTask(ctx context.Context, ref string, summary string, report *taskmodels.Report, files map[string][]byte) (*tasks.TaskView, error) {
 	return nil, notInHome("task deliver")
 }
 

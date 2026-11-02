@@ -182,17 +182,17 @@ func TestDeliverFromSandboxDecodesTheReport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = env.api.deliverFromSandbox(ctx, "socket", "s", json.RawMessage(`{"criteria":[{"met":"maybe"}]}`))
+	_, err = env.api.deliverFromSandbox(ctx, "socket", "s", json.RawMessage(`{"criteria":[{"met":"maybe"}]}`), nil)
 	if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), `criteria[0].met is "maybe"`) {
 		t.Fatalf("got %v", err)
 	}
 
-	_, err = env.api.deliverFromSandbox(ctx, "socket", "s", json.RawMessage(`{"criteria":"yes"}`))
+	_, err = env.api.deliverFromSandbox(ctx, "socket", "s", json.RawMessage(`{"criteria":"yes"}`), nil)
 	if ez.ErrorCode(err) != ez.EINVALID {
 		t.Fatalf("got %v", err)
 	}
 
-	out, err := env.api.deliverFromSandbox(ctx, "socket", "s", json.RawMessage(`{"criteria":[{"met":"yes","note":"ran it"}]}`))
+	out, err := env.api.deliverFromSandbox(ctx, "socket", "s", json.RawMessage(`{"criteria":[{"met":"yes","note":"ran it"}]}`), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

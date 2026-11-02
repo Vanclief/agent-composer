@@ -89,10 +89,11 @@ func (c *Client) GetTask(ctx context.Context, ref string) (*tasks.TaskView, erro
 	return out, nil
 }
 
-// DeliverTask delivers the task with summary and report, nil for none
-// (ADR 0010 item 2, "Delivery report").
-func (c *Client) DeliverTask(ctx context.Context, ref string, summary string, report *taskmodels.Report) (*tasks.TaskView, error) {
-	return c.taskCall(ctx, ref, "/deliver", &tasks.DeliverRequest{Summary: summary, Report: report})
+// DeliverTask delivers the task with summary and report, nil for none,
+// and files, the PNGs of the report's shots under their labels (ADR 0010
+// item 2, "Delivery report").
+func (c *Client) DeliverTask(ctx context.Context, ref string, summary string, report *taskmodels.Report, files map[string][]byte) (*tasks.TaskView, error) {
+	return c.taskCall(ctx, ref, "/deliver", &tasks.DeliverRequest{Summary: summary, Report: report, Files: files})
 }
 
 // AcceptTask accepts the task as by, or as its owner when by is empty,

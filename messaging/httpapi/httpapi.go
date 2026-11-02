@@ -5,6 +5,8 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -96,7 +98,14 @@ type RejectBody struct {
 type DeliverRequest struct {
 	Summary string          `json:"summary"`
 	Report  json.RawMessage `json:"report,omitempty"`
+	// Files holds the PNG of each of the report's shots under its label,
+	// base64 in JSON.
+	Files map[string][]byte `json:"files,omitempty"`
 }
+
+// MaxDeliverBytes bounds a delivery's body: the report and up to eight
+// 2 MB shots, base64.
+const MaxDeliverBytes = 24 << 20
 
 type ErrorResponse struct {
 	Error string `json:"error"`
@@ -350,8 +359,18 @@ func (a *api) decode(w http.ResponseWriter, r *http.Request, dst any) (messaging
 
 // DecodeBody reads a JSON body of at most a megabyte into dst.
 func DecodeBody(w http.ResponseWriter, r *http.Request, dst any) error {
-	err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBytes)).Decode(dst)
+	return DecodeBodyLimit(w, r, dst, maxRequestBytes)
+}
+
+// DecodeBodyLimit is DecodeBody with a body of at most limit bytes.
+func DecodeBodyLimit(w http.ResponseWriter, r *http.Request, dst any, limit int64) error {
+	err := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit)).Decode(dst)
 	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			return ez.New(ez.EINVALID, fmt.Sprintf("request body is larger than %d bytes", limit), err)
+		}
+
 		return ez.New(ez.EINVALID, "request body must be a JSON object", err)
 	}
 

@@ -146,6 +146,28 @@ sections omitted. TASK.md's "Delivering" section tells the agent to write
 an answer starting `DONE:` still delivers the summary alone, the fallback
 when no report can be written.
 
+Shots, added 2026-11-02: the owner judges a UI change by looking at it, not
+by reading code. A report may carry `shots`, at most 8 of
+`{ label, file }`: `label` a slug unique in the report (`before` and
+`after` for a UI change), `file` the PNG's path where the agent took it.
+The PNG travels with the delivery in `files`, base64 under its label, in
+the same JSON body on `POST /api/tasks/{id}/deliver` and on the socket's
+`POST /task/deliver` (whose body cap is raised to 24 MB for it); `agc task
+deliver --report` reads each file and sends it. Each must be a PNG (by its
+signature) of at most 2 MB, one per shot and no other, else `EINVALID`.
+agc keeps them on the host under `<agc home>/shots/<task>/<label>.png`
+(files 0600, directories 0700), never reads them through the VM again,
+serves them at `GET /api/tasks/{name}/shots/{label}.png` (`image/png`, 404
+when absent), and stores the shot on the report with `file` set to
+`<label>.png` and `url` to that route, under `AGC_PUBLIC_URL` when set,
+else root-relative. No table holds them: the report names them. Each
+delivery replaces the task's shots (one without shots removes them); a
+reject or an accept keeps them. The Delivered message adds a
+`<Label>: <url>` line per shot after the checks. TASK.md's "Delivering"
+asks for `before` and `after` on a change a person sees; the reviewer adds
+`Before:` and `After:` lines to its question to the owner, which the panel
+renders as images, and rejects a UI change that has no shots.
+
 ## Who merges
 
 Added 2026-11-02. A delivery that carries a branch (`changes.branch` and

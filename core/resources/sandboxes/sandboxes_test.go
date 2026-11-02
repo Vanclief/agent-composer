@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -877,19 +878,19 @@ func TestListenerServesDeliverForItsOwnTask(t *testing.T) {
 	client := socketClient(env.api.socketPath("review-42"))
 
 	out := map[string]string{}
-	err = client.Deliver(ctx, "posted the findings", nil, &out)
+	err = client.Deliver(ctx, "posted the findings", nil, nil, &out)
 	if ez.ErrorCode(err) != ez.EUNAVAILABLE {
 		t.Fatalf("expected EUNAVAILABLE before OnDeliver, got %v", err)
 	}
 
-	env.api.OnDeliver(func(ctx context.Context, taskName string, summary string, report json.RawMessage) (any, error) {
+	env.api.OnDeliver(func(ctx context.Context, taskName string, summary string, report json.RawMessage, files map[string][]byte) (any, error) {
 		if summary == "" {
 			return nil, ez.New(ez.EINVALID, "summary is required", nil)
 		}
-		return map[string]string{"task": taskName, "summary": summary, "report": string(report)}, nil
+		return map[string]string{"task": taskName, "summary": summary, "report": string(report), "after": fmt.Sprint(len(files["after"]))}, nil
 	})
 
-	err = client.Deliver(ctx, "posted the findings", nil, &out)
+	err = client.Deliver(ctx, "posted the findings", nil, nil, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -899,7 +900,7 @@ func TestListenerServesDeliverForItsOwnTask(t *testing.T) {
 
 	// The report reaches the tasks API as it was sent.
 	report := `{"criteria":[{"met":"partly","note":"x"}],"extra":{"kept":true}}`
-	err = client.Deliver(ctx, "with a report", json.RawMessage(report), &out)
+	err = client.Deliver(ctx, "with a report", json.RawMessage(report), nil, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -907,7 +908,16 @@ func TestListenerServesDeliverForItsOwnTask(t *testing.T) {
 		t.Fatalf("report = %q, want %q", out["report"], report)
 	}
 
-	err = client.Deliver(ctx, "", nil, &out)
+	// Shots come with it, larger than a messaging body may be.
+	err = client.Deliver(ctx, "with shots", json.RawMessage(report), map[string][]byte{"after": make([]byte, 3<<20)}, &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out["after"] != fmt.Sprint(3<<20) {
+		t.Fatalf("after = %q bytes", out["after"])
+	}
+
+	err = client.Deliver(ctx, "", nil, nil, &out)
 	if ez.ErrorCode(err) != ez.EINVALID {
 		t.Fatalf("expected EINVALID, got %v", err)
 	}

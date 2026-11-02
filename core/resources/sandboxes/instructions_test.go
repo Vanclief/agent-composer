@@ -75,6 +75,11 @@ func TestInstructions(t *testing.T) {
 				"- `checks`: what you ran and whether it passed.\n" +
 				"- `left_out`: what you did not do and why; `needs`: what you need the\n" +
 				"  reviewer to decide. `[]` when there is nothing.\n" +
+				"- `shots`: add it when the change alters what a person sees: deliver `before`\n" +
+				"  and `after` PNGs of the affected screen, as\n" +
+				"  `[ { \"label\": \"before\", \"file\": \"/tmp/before.png\" }, { \"label\": \"after\", \"file\": \"/tmp/after.png\" } ]`\n" +
+				"  (Playwright can take them: `page.screenshot`, base branch vs yours, same\n" +
+				"  size, same route); each under 2 MB, at most 8.\n" +
 				"\n" +
 				"Then run `agc task deliver \"<one or two sentences>\" --report report.json`.\n" +
 				"The summary is what the reviewer reads first; the report is what they\n" +
@@ -135,6 +140,11 @@ func TestInstructions(t *testing.T) {
 				"- `checks`: what you ran and whether it passed.\n" +
 				"- `left_out`: what you did not do and why; `needs`: what you need the\n" +
 				"  reviewer to decide. `[]` when there is nothing.\n" +
+				"- `shots`: add it when the change alters what a person sees: deliver `before`\n" +
+				"  and `after` PNGs of the affected screen, as\n" +
+				"  `[ { \"label\": \"before\", \"file\": \"/tmp/before.png\" }, { \"label\": \"after\", \"file\": \"/tmp/after.png\" } ]`\n" +
+				"  (Playwright can take them: `page.screenshot`, base branch vs yours, same\n" +
+				"  size, same route); each under 2 MB, at most 8.\n" +
 				"\n" +
 				"Then run `agc task deliver \"<one or two sentences>\" --report report.json`.\n" +
 				"The summary is what the reviewer reads first; the report is what they\n" +
@@ -193,6 +203,11 @@ func TestInstructions(t *testing.T) {
 				"- `checks`: what you ran and whether it passed.\n" +
 				"- `left_out`: what you did not do and why; `needs`: what you need the\n" +
 				"  reviewer to decide. `[]` when there is nothing.\n" +
+				"- `shots`: add it when the change alters what a person sees: deliver `before`\n" +
+				"  and `after` PNGs of the affected screen, as\n" +
+				"  `[ { \"label\": \"before\", \"file\": \"/tmp/before.png\" }, { \"label\": \"after\", \"file\": \"/tmp/after.png\" } ]`\n" +
+				"  (Playwright can take them: `page.screenshot`, base branch vs yours, same\n" +
+				"  size, same route); each under 2 MB, at most 8.\n" +
 				"\n" +
 				"Then run `agc task deliver \"<one or two sentences>\" --report report.json`.\n" +
 				"The summary is what the reviewer reads first; the report is what they\n" +

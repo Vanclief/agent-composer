@@ -130,10 +130,11 @@ func (api *API) startListener(name string, caller func(*http.Request) (messaging
 }
 
 // DeliverFunc delivers the task called taskName with summary and report,
-// the request's report JSON as sent (nil when absent), for agc task
+// the request's report JSON as sent (nil when absent), and files, the
+// PNGs of the report's shots under their labels, for agc task
 // deliver inside one of its sandboxes (ADR 0010 item 2, "Delivery
 // report"), and returns the task's view.
-type DeliverFunc func(ctx context.Context, taskName string, summary string, report json.RawMessage) (any, error)
+type DeliverFunc func(ctx context.Context, taskName string, summary string, report json.RawMessage, files map[string][]byte) (any, error)
 
 // OnDeliver sets what agc task deliver calls on every sandbox's socket.
 // The socket speaks for its own task only, so a sandbox delivers no other.
@@ -156,13 +157,13 @@ func (api *API) serveDeliver(taskName string) http.HandlerFunc {
 
 		var req httpapi.DeliverRequest
 
-		err := httpapi.DecodeBody(w, r, &req)
+		err := httpapi.DecodeBodyLimit(w, r, &req, httpapi.MaxDeliverBytes)
 		if err != nil {
 			httpapi.WriteError(w, err)
 			return
 		}
 
-		view, err := deliver(r.Context(), taskName, req.Summary, req.Report)
+		view, err := deliver(r.Context(), taskName, req.Summary, req.Report, req.Files)
 		if err != nil {
 			httpapi.WriteError(w, err)
 			return

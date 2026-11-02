@@ -112,6 +112,8 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	sandboxesAPI := sandboxes.NewAPI(rootCtx, ctrl, msg, sandboxes.SandboxRuntime{}, secretsPath, filepath.Join(home, "tasks"))
 	tasksAPI := tasks.NewAPI(ctrl, sandboxesAPI, msg, secretsPath, specs)
 	tasksAPI.SetEvents(bus)
+	// Delivered screenshots, <home>/shots/<task>/<label>.png (ADR 0010).
+	tasksAPI.SetShotsDir(filepath.Join(home, "shots"))
 	schedulesAPI := schedules.NewAPI(ctrl, tasksAPI, secretsPath)
 	schedulesAPI.SetEvents(bus)
 
