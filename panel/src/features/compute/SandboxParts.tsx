@@ -1,6 +1,7 @@
 // Pieces shared by the Compute cards and the sandbox page: the task chip,
 // the spec chips, the time chip and the Stop/Start/Delete controls.
 import { Clock, Loader2, Play, Square, Trash2 } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 
 import { useDeleteSandbox, useStartSandbox, useStopSandbox } from '@/api/hooks'
@@ -111,12 +112,14 @@ type SandboxActionsProps = {
   // Small ghost buttons for a list row; Delete turns red on hover only.
   quiet?: boolean
   className?: string
+  // More of what Delete does, under what is lost.
+  deleteNote?: ReactNode
 }
 
 // Stop when running, Start when stopped or unknown, and Delete always,
 // behind a dialog. Stop and Delete ask first, saying what work the clone
 // would lose. A failed sandbox only gets Delete.
-export function SandboxActions({ sandbox, onDeleted, quiet = false, className }: SandboxActionsProps) {
+export function SandboxActions({ sandbox, onDeleted, quiet = false, className, deleteNote }: SandboxActionsProps) {
   const stop = useStopSandbox()
   const start = useStartSandbox()
   const remove = useDeleteSandbox()
@@ -179,7 +182,9 @@ export function SandboxActions({ sandbox, onDeleted, quiet = false, className }:
               Delete
             </Button>
           }
-        />
+        >
+          {deleteNote}
+        </ConfirmSandbox>
       </div>
       <ErrorText error={error} className="text-xs" />
     </div>

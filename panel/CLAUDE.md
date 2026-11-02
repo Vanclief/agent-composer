@@ -11,7 +11,7 @@ the panel stays conflict-free.
 
 | Path                                                                                                                                                                                           | Owner               |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| `src/features/tasks/` (`TasksPage`, `TaskPage`, `BriefTab`, `ComputeTab`) + `tests/tasks.spec.ts`                                                                                              | tasks feature       |
+| `src/features/tasks/` (`TasksPage`, `TaskPage`, `TaskRail`, `ComputeTab`) + `tests/tasks.spec.ts`                                                                                              | tasks feature       |
 | `src/features/create-task/` (`CreateTaskDialog`) + `tests/create-task.spec.ts`                                                                                                                 | create-task feature |
 | `src/features/compute/` (`ComputePage`, `SandboxPage`)                                                                                                                                         | compute feature     |
 | `src/features/terminals/` (`TerminalsTab`, `TerminalPane`, mounted by `SandboxPage`) + `tests/terminals.spec.ts`                                                                               | terminals feature   |
@@ -43,10 +43,10 @@ Basename `/panel`. Defined in `src/App.tsx` (foundation).
 | `/think`                                                 | redirects to `/think/beliefs`                                                                                                                                         |
 | `/think/{beliefs,decisions,rules,actions,evidence}/:id?` | Think mode pages (`src/features/think/`), read-only, `:id` opens the detail pane; `?without=<id>` shows every label as if that belief or evidence were gone (what-if) |
 | `/tasks`                                                 | `TasksPage`; "New task" opens `CreateTaskDialog`                                                                                                                      |
-| `/tasks/:name`                                           | `TaskPage`, redirects to `brief`                                                                                                                                      |
-| `/tasks/:name/brief`                                     | `BriefTab`: the task's brief                                                                                                                                          |
-| `/tasks/:name/compute`                                   | `ComputeTab`: the task's sandboxes and "Allocate compute"                                                                                                             |
-| `/tasks/:name/messages`                                  | `MessagesTab` (channel `#<name>`)                                                                                                                                     |
+| `/tasks/:name`                                           | `TaskPage`: the facts rail and the center box, showing `MessagesTab` (see Task page below)                                                                            |
+| `/tasks/:name/brief`                                     | redirects to `/tasks/:name` (the old Brief tab; the brief is in the rail)                                                                                             |
+| `/tasks/:name/compute`                                   | `ComputeTab` in the box: the task's sandboxes as rows, the selected one's parts (`?sandbox=<name>`, default the newest) and "Allocate compute"                        |
+| `/tasks/:name/messages`                                  | `MessagesTab` in the box (channel `#<name>`)                                                                                                                          |
 | `/compute`                                               | `ComputePage`: every sandbox with its task (Work mode)                                                                                                                |
 | `/compute/:name`                                         | `SandboxPage`: one sandbox (`:name` is the sandbox) with its terminals                                                                                                |
 | `/agents`                                                | `AgentsPage`: every persistent agent (Work mode); "New agent" makes a numbered one                                                                                    |
@@ -116,7 +116,7 @@ Each page sets the top bar title with `usePageTitle('…')` from
   `data-online`, `data-tier`) sits at its bottom-right: a filled emerald
   dot (tier `lit`) or a hollow grey ring (tier `off`). Used in the channel
   header, the Agents list and page (dot lit only when `awake`; the word
-  stays in its pill), the task header's manager and owner (xs) and the top
+  stays in its pill), the task rail's manager and owner (xs) and the top
   bar's `@me` (`data-testid="me"`).
 - Compact zinc look, dark by default (light via the sidebar toggle). Use the
   shadcn components in `@/components/ui` (button, card, badge, dialog,
@@ -139,16 +139,16 @@ Each page sets the top bar title with `usePageTitle('…')` from
   `notify` (boolean on `TaskView`; optional on `CreateTaskRequest`, default
   `true`) turns the "Task started" / "Task done" toasts and chime on for that
   task. The create dialog sends it from "Notify me" in the Order card; the task
-  header shows a bell chip when it is on.
+  rail shows a bell "notify" line when it is on.
 - Acceptance (ADR 0010): `TaskView` carries `accept` (the criteria, may be
   empty), `delivered_at` (set by the agent's delivery, cleared by a reject),
   `summary` (the last delivery's, kept after a reject) and `accepted_by`;
   `CreateTaskRequest` takes `accept`. `review` means delivered and waiting.
   The create dialog's Order card has "Accepted when" (one criterion per line,
-  empty lines dropped). The Brief tab shows the criteria as unchecked boxes
-  under "Accepted when" (hidden when empty) and a Summary card with
-  "Accepted by <name> <when>" once done. The header shows the amber `review`
-  pill, a "Delivered <when>" chip, and Accept (confirms "Accept and stop N
+  empty lines dropped). The task rail shows the criteria as unchecked boxes
+  under "Accepted when" (hidden when empty), the Summary once delivered, and
+  "Accepted by <name> <when>" once done. The rail shows the amber `review`
+  pill, a "Delivered <when>" line, and Accept (confirms "Accept and stop N
   running sandboxes", or "Accept" when none run) and Reject… (a required
   "Why") until done. `by` is the signed-in name (`humanName()` in
   `src/features/messages/identity.ts`). The list sorts `review` first among the lit tasks.
@@ -240,6 +240,37 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   cards Home (`/compute/<home>`, or "Not woken yet"), Tasks
   (`/tasks/<name>`, status verbatim), Conversations (`/messages/<channel>`,
   the DM `#<owner>` first) and Identity.
+
+## Task page (`/tasks/:name`)
+
+- Two columns from 1200px up. Center: one bordered box (`region` "Task
+  work") with a segmented control at its top (`nav` "Task view": Compute with
+  the sandbox count | Messages, `aria-current="page"` on the chosen one);
+  `TaskPage` renders the chosen view through `<Outlet/>`. The URL holds the
+  choice: `/compute`, `/messages`, and the bare `/tasks/:name` (Messages);
+  `/brief` redirects to the bare one. Right: the rail (`TaskRail`,
+  `data-testid="task-header"`), 360px, scrolling on its own while the box
+  fills the height.
+- Rail, top to bottom: the actions right-aligned (Accept, the one primary
+  button, green while `review`; Reject…; Delete), status pill and title
+  (h2), `name · #name` dim mono, who as plain muted lines with small icons
+  (`assignee` harness · model, `manager` and `owner` each after its xs
+  `Avatar`, `notify-chip`, and the
+  `for` link chip), `delivered-chip` / `accepted` lines, then hairline
+  sections: "Accepted when" (`criteria`), Brief (`brief`, clamped to six
+  lines with "Show more"), What the agent received (the newest sandbox's
+  TASK.md behind a toggle, `instructions`, Copy), Summary (`region`
+  "Delivery", `summary`).
+- Compute in the box: "Allocate compute" (outline, so Accept stays the one
+  primary), the sandboxes as flat rows (`data-sandbox`, status pill, name,
+  image, age, Open to `/compute/<name>`; the selected row is tinted with a
+  blue left edge), then the selected sandbox's parts (`sandbox-parts`,
+  `data-sandbox-parts`): spec chips, the clone's `work` (amber when
+  unpushed or dirty, "clean" otherwise), `SandboxActions` and its terminals
+  (`TerminalsTab sandbox=…`). Messages in the box: `ChannelView` with the
+  composer, filling the box.
+- Below 1200px the rail is a card above the box: who wraps on one line, and
+  criteria, brief, received and summary fold behind "Details".
 
 ## Talk mode: inbox, unread, notifications
 
@@ -361,16 +392,16 @@ Messages tab) provides the channel context (`context.ts`) every piece reads.
 
 First time: `npm ci && npx playwright install chromium`.
 
-| Command                  | What it does                                                                                                                                                                    |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run mock`           | Mock API on http://127.0.0.1:8790 (`-- --port N`)                                                                                                                               |
-| `npm run dev`            | Vite dev server at http://localhost:5173/panel/, `/api` proxied to `VITE_API_TARGET` (default the mock on 8790; a real agc is `http://127.0.0.1:1202`)                          |
-| `npm run shot -- /tasks` | Screenshot a route at 1440x900 against its own fresh mock and dev server, writes and prints `/tmp/agc-panel/<route>.png`. Flags: `--theme light`, `--out <path>`, `--wait <ms>` |
-| `npm run check`          | Types drift, `tsc -b`, eslint, Playwright. Must be green before you finish                                                                                                      |
-| `npm run test`           | Playwright only                                                                                                                                                                 |
-| `npm run types`          | Regenerate `src/api/schema.d.ts` from `../docs/openapi.yaml`                                                                                                                    |
-| `npm run build`          | Typecheck and build `dist/` (what agc embeds)                                                                                                                                   |
-| `npm run format`         | Prettier (no semicolons, single quotes, width 120)                                                                                                                              |
+| Command                  | What it does                                                                                                                                                                                                     |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run mock`           | Mock API on http://127.0.0.1:8790 (`-- --port N`)                                                                                                                                                                |
+| `npm run dev`            | Vite dev server at http://localhost:5173/panel/, `/api` proxied to `VITE_API_TARGET` (default the mock on 8790; a real agc is `http://127.0.0.1:1202`)                                                           |
+| `npm run shot -- /tasks` | Screenshot a route at 1440x900 against its own fresh mock and dev server, writes and prints `/tmp/agc-panel/<route>.png`. Flags: `--theme light`, `--out <path>`, `--wait <ms>`, `--width <px>`, `--height <px>` |
+| `npm run check`          | Types drift, `tsc -b`, eslint, Playwright. Must be green before you finish                                                                                                                                       |
+| `npm run test`           | Playwright only                                                                                                                                                                                                  |
+| `npm run types`          | Regenerate `src/api/schema.d.ts` from `../docs/openapi.yaml`                                                                                                                                                     |
+| `npm run build`          | Typecheck and build `dist/` (what agc embeds)                                                                                                                                                                    |
+| `npm run format`         | Prettier (no semicolons, single quotes, width 120)                                                                                                                                                               |
 
 Look at your screen with `npm run shot` and read the PNG before you report.
 

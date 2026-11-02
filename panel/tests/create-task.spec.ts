@@ -288,7 +288,7 @@ test('Create sends the spec and opens the new task', async ({ page }) => {
   expect(created.status).toBe('open')
   expect(created.sandboxes[0].status).toBe('starting')
 
-  await expect(page).toHaveURL(new RegExp(`/panel/tasks/${name}/brief$`))
+  await expect(page).toHaveURL(new RegExp(`/panel/tasks/${name}$`))
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.getByTestId('task-header').locator('[data-status]')).toHaveText('open')
   const task = await (await page.request.get(`/api/tasks/${name}`)).json()
@@ -317,7 +317,7 @@ test('a person task is created with no sandbox', async ({ page }) => {
   expect(body.owner).toBe('franco')
   expect(body.sandbox).toBeUndefined()
 
-  await expect(page).toHaveURL(new RegExp(`/panel/tasks/${name}/brief$`))
+  await expect(page).toHaveURL(new RegExp(`/panel/tasks/${name}$`))
   const task = await (await page.request.get(`/api/tasks/${name}`)).json()
   expect(task.assignee).toBe('alice')
   expect(task.status).toBe('open')
@@ -408,7 +408,7 @@ test('"Accepted when" sends one criterion per line, empty lines dropped', async 
   const body = JSON.parse((await posted).postData() ?? '{}')
   expect(body.accept).toEqual(['`npm run check` passes', 'the Stop icon is filled'])
 
-  await expect(page).toHaveURL(new RegExp(`/panel/tasks/${name}/brief$`))
+  await expect(page).toHaveURL(new RegExp(`/panel/tasks/${name}$`))
   await expect(page.getByRole('region', { name: 'Accepted when' }).getByTestId('criterion')).toHaveText([
     '`npm run check` passes',
     'the Stop icon is filled',

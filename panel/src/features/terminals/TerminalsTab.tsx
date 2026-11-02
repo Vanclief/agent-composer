@@ -29,8 +29,10 @@ const QUICK_START = ['claude', 'codex', 'bash']
 const HOME_DIR = '/home/agent'
 const color = conceptColors.terminal
 
-export function TerminalsTab() {
-  const { name = '' } = useParams()
+// sandbox overrides the route's :name (the task page passes the selected one).
+export function TerminalsTab({ sandbox }: { sandbox?: string } = {}) {
+  const { name: param = '' } = useParams()
+  const name = sandbox ?? param
   // A fresh view per sandbox, so panes never outlive their sandbox's route.
   return <TerminalsView key={name} name={name} />
 }

@@ -1,28 +1,34 @@
-// /tasks/:name/compute: "Allocate compute" on top, then the task's
-// sandboxes, newest first (ADR 0008). Each row carries its own Stop or
-// Start, Delete (both say what the clone would lose) and a link to the
-// sandbox's page with its terminals.
-import { useState } from 'react'
-import { ExternalLink, Loader2, Play, Plus, Power, PowerOff, Square, Trash2 } from 'lucide-react'
-import { Link, useParams } from 'react-router'
+// /tasks/:name/compute, inside the task page's box: the task's sandboxes as
+// rows, newest first (ADR 0008), and the selected one's parts below it:
+// spec, work status, Stop/Start/Delete and its terminals. ?sandbox=<name>
+// keeps the selection in the URL; without it the newest is selected.
+// "Allocate compute" sits in the toolbar.
+import { useEffect, useState } from 'react'
+import { ExternalLink, GitCommitHorizontal, Plus } from 'lucide-react'
+import { Link, useParams, useSearchParams } from 'react-router'
 
-import { useDeleteSandbox, useStartSandbox, useStopSandbox, useTask } from '@/api/hooks'
-import type { SandboxView, TaskView } from '@/api/tasks'
-import { conceptColors, conceptIcons } from '@/components/concept-icons'
+import { useSandbox, useTask } from '@/api/hooks'
+import type { SandboxView } from '@/api/tasks'
+import { conceptColors } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
 import { IconChip } from '@/components/icon-chip'
 import { StatusPill } from '@/components/status-pill'
 import { Button } from '@/components/ui/button'
-import { ConfirmSandbox } from '@/features/compute/LostWork'
+import { sandboxMoment } from '@/features/compute/format'
+import { CommandChip, SandboxActions, SpecChips, StatusError } from '@/features/compute/SandboxParts'
+import { TerminalsTab } from '@/features/terminals/TerminalsTab'
 import { cn } from '@/lib/utils'
 
 import { AllocateForm } from './AllocateForm'
-import { formatMemory, shortAge } from './format'
+import { shortAge } from './format'
+
+const BOOT_POLL_MS = 2000
 
 export function ComputeTab() {
   const { name = '' } = useParams()
   const task = useTask(name)
+  const [params, setParams] = useSearchParams()
   const [allocating, setAllocating] = useState(false)
   if (!task.data) {
     // TaskPage shows the loading state and the error.
@@ -30,151 +36,190 @@ export function ComputeTab() {
   }
   const data = task.data
   const done = data.status === 'done'
+  const wanted = params.get('sandbox')
+  const selected = data.sandboxes.find((b) => b.name === wanted) ?? data.sandboxes[0]
+
+  function select(sandbox: string) {
+    setParams({ sandbox }, { replace: true })
+  }
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="flex max-w-5xl flex-col gap-3 p-6">
-        <div className="flex items-center gap-3">
-          <span
-            title="Sandboxes"
-            className="inline-flex items-center gap-1.5 text-sm text-zinc-500 tabular-nums dark:text-zinc-400"
-          >
-            <conceptIcons.sandbox className={cn('size-4', conceptColors.sandbox.text)} />
-            {data.sandboxes.length}
-          </span>
-          {!allocating && (
-            <Button
-              disabled={done}
-              onClick={() => setAllocating(true)}
-              className={cn('ml-auto', !done && conceptColors.sandbox.solid)}
-            >
-              <Plus /> {done ? 'Allocate compute: task is done' : 'Allocate compute'}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex max-h-[45%] shrink-0 flex-col overflow-y-auto border-b border-border">
+        {allocating && !done ? (
+          <div className="p-3">
+            <AllocateForm task={data} onClose={() => setAllocating(false)} />
+          </div>
+        ) : (
+          <div className="flex items-center px-3 py-2">
+            {/* Outline: Accept in the rail is the page's one primary button. */}
+            <Button variant="outline" size="sm" disabled={done} onClick={() => setAllocating(true)} className="ml-auto">
+              <Plus className={conceptColors.sandbox.text} />{' '}
+              {done ? 'Allocate compute: task is done' : 'Allocate compute'}
             </Button>
-          )}
-        </div>
-        {allocating && !done && <AllocateForm task={data} onClose={() => setAllocating(false)} />}
-        {data.sandboxes.length === 0 && !allocating && <EmptySlot reason="No sandbox allocated yet" className="h-16" />}
+          </div>
+        )}
         {data.sandboxes.length > 0 && (
-          <ul aria-label="Sandboxes" className="flex flex-col gap-2">
+          <ul aria-label="Sandboxes" className="divide-y divide-border border-t border-border">
             {data.sandboxes.map((sandbox) => (
-              <SandboxRow key={sandbox.id} task={data} sandbox={sandbox} />
+              <SandboxRow
+                key={sandbox.id}
+                sandbox={sandbox}
+                selected={sandbox.name === selected?.name}
+                onSelect={() => select(sandbox.name)}
+              />
             ))}
           </ul>
         )}
       </div>
+      {selected ? (
+        <SandboxDetail key={selected.name} sandbox={selected} task={data.name} />
+      ) : (
+        !allocating && (
+          <div className="grid flex-1 place-items-center p-6">
+            <EmptySlot reason="No sandbox allocated yet" />
+          </div>
+        )
+      )}
     </div>
   )
 }
 
-function SandboxRow({ task, sandbox }: { task: TaskView; sandbox: SandboxView }) {
-  const stop = useStopSandbox()
-  const start = useStartSandbox()
-  const remove = useDeleteSandbox()
-  const { spec } = sandbox
-  const SandboxIcon = conceptIcons.sandbox
-  const canStop = sandbox.status === 'running'
-  const canStart = sandbox.status === 'stopped' || sandbox.status === 'unknown'
-
+// A flat row: status light, name, then image and age dim. The whole row
+// selects; Open goes to the sandbox's own page.
+function SandboxRow({
+  sandbox,
+  selected,
+  onSelect,
+}: {
+  sandbox: SandboxView
+  selected: boolean
+  onSelect: () => void
+}) {
+  const moment = sandboxMoment(sandbox)
   return (
     <li
       data-sandbox={sandbox.name}
+      aria-current={selected ? 'true' : undefined}
       className={cn(
-        'flex flex-col gap-2 rounded-xl border bg-white px-4 py-2.5 text-sm shadow-sm dark:bg-zinc-900/60',
-        conceptColors.sandbox.border,
+        'relative flex items-center gap-3 border-l-2 py-1.5 pr-2 pl-3 text-sm transition-colors',
+        selected
+          ? cn(conceptColors.sandbox.bg, 'border-l-blue-500')
+          : 'border-l-transparent hover:bg-zinc-50 dark:hover:bg-zinc-800/40',
       )}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex w-20 shrink-0">
-          <StatusPill status={sandbox.status} detail={sandbox.status_error} />
-        </div>
-        <SandboxIcon aria-hidden className={cn('size-4 shrink-0', conceptColors.sandbox.text)} />
-        <span data-testid="sandbox-name" className="font-mono font-medium">
-          {sandbox.name}
+      <div className="flex w-20 shrink-0">
+        <StatusPill status={sandbox.status} detail={sandbox.status_error} />
+      </div>
+      <button
+        type="button"
+        data-testid="sandbox-name"
+        onClick={onSelect}
+        className="truncate text-left font-mono after:absolute after:inset-0 after:content-['']"
+      >
+        {sandbox.name}
+      </button>
+      {sandbox.spec.image && (
+        <span title="Image" className="truncate font-mono text-xs text-muted-foreground">
+          {sandbox.spec.image}
         </span>
-        {spec.cpus !== undefined && (
-          <IconChip icon={conceptIcons.cpu} concept="cpu" title="CPUs">
-            {spec.cpus}
-          </IconChip>
-        )}
-        {spec.memory !== undefined && (
-          <IconChip icon={conceptIcons.memory} concept="memory" title="Memory">
-            {formatMemory(spec.memory)}
-          </IconChip>
-        )}
-        {spec.image && (
-          <IconChip icon={conceptIcons.image} concept="image" title="Image">
-            {spec.image}
-          </IconChip>
-        )}
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          {canStop && (
-            <ConfirmSandbox
-              sandbox={sandbox.name}
-              verb="Stop"
-              icon={Square}
-              onConfirm={() => stop.mutate(sandbox.name)}
-              trigger={
-                <Button variant="outline" size="sm" disabled={stop.isPending}>
-                  {stop.isPending ? <Loader2 className="animate-spin" /> : <Square />}
-                  Stop
-                </Button>
-              }
-            />
-          )}
-          {canStart && (
-            <Button variant="outline" size="sm" disabled={start.isPending} onClick={() => start.mutate(sandbox.name)}>
-              {start.isPending ? <Loader2 className="animate-spin" /> : <Play />}
-              Start
-            </Button>
-          )}
-          <Button variant="outline" size="sm" asChild>
-            <Link to={`/compute/${encodeURIComponent(sandbox.name)}`} title="The sandbox with its terminals">
-              <ExternalLink /> Open
-            </Link>
-          </Button>
-          <ConfirmSandbox
-            sandbox={sandbox.name}
-            verb="Delete"
-            icon={Trash2}
-            destructive
-            onConfirm={() => remove.mutate(sandbox.name)}
-            trigger={
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={remove.isPending}
-                className="ml-2 border-red-500/40 text-red-600 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400"
-              >
-                {remove.isPending ? <Loader2 className="animate-spin" /> : <Trash2 />}
-                Delete
-              </Button>
-            }
-          >
-            {`The task ${task.name} stays.`}
-          </ConfirmSandbox>
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-2 pl-[5.5rem]">
-        {sandbox.command && (
-          <IconChip icon={conceptIcons.terminal} concept="terminal" title="Command, run as the job agent">
-            {sandbox.command}
-          </IconChip>
-        )}
-        {sandbox.booted_at && (
-          <IconChip icon={Power} title={`Booted ${new Date(sandbox.booted_at).toLocaleString()}`}>
-            booted {shortAge(sandbox.booted_at)}
-          </IconChip>
-        )}
-        {sandbox.stopped_at && (
-          <IconChip icon={PowerOff} title={`Stopped ${new Date(sandbox.stopped_at).toLocaleString()}`}>
-            stopped {shortAge(sandbox.stopped_at)}
-          </IconChip>
-        )}
-      </div>
-      {sandbox.status_error && (
-        <p className="pl-[5.5rem] font-mono text-xs text-red-700 dark:text-red-400">{sandbox.status_error}</p>
       )}
-      <ErrorText error={stop.error ?? start.error ?? remove.error} />
+      <span
+        title={`${moment.label} ${new Date(moment.at).toLocaleString()}`}
+        className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums"
+      >
+        {shortAge(moment.at)}
+      </span>
+      <Button variant="ghost" size="xs" asChild className="relative z-10 text-muted-foreground">
+        <Link to={`/compute/${encodeURIComponent(sandbox.name)}`} title="The sandbox's own page">
+          <ExternalLink /> Open
+        </Link>
+      </Button>
     </li>
+  )
+}
+
+// The selected sandbox: its spec and work, its controls, then its
+// terminals (or why there are none).
+function SandboxDetail({ sandbox: row, task }: { sandbox: SandboxView; task: string }) {
+  // The task's embedded sandbox has no work; the sandbox read does.
+  const live = useSandbox(row.name)
+  const sandbox = live.data ?? row
+  const { refetch } = live
+  const status = sandbox.status
+
+  // useSandbox polls every 5s; a booting sandbox is watched closer.
+  useEffect(() => {
+    if (status !== 'starting') {
+      return
+    }
+    const timer = window.setInterval(() => void refetch(), BOOT_POLL_MS)
+    return () => window.clearInterval(timer)
+  }, [status, refetch])
+
+  return (
+    <section
+      data-testid="sandbox-parts"
+      data-sandbox-parts={sandbox.name}
+      aria-label={`Sandbox ${sandbox.name}`}
+      className="flex min-h-0 flex-1 flex-col"
+    >
+      <div className="flex shrink-0 flex-wrap items-start gap-2 px-4 pt-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+          <SpecChips sandbox={sandbox} full />
+          <CommandChip command={sandbox.command} />
+          <WorkChip sandbox={sandbox} />
+        </div>
+        <SandboxActions sandbox={sandbox} deleteNote={`The task ${task} stays.`} />
+      </div>
+      <ErrorText error={live.error} className="mx-4 mt-2" />
+      <div className="flex min-h-0 flex-1 flex-col">
+        {status === 'starting' && (
+          <div className="p-4">
+            <EmptySlot reason="Booting: terminals appear when the sandbox is running" />
+          </div>
+        )}
+        {status === 'failed' && (
+          <div className="p-4">
+            <StatusError
+              sandbox={sandbox}
+              className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm"
+            />
+          </div>
+        )}
+        {status !== 'starting' && status !== 'failed' && <TerminalsTab sandbox={sandbox.name} />}
+      </div>
+    </section>
+  )
+}
+
+// What stopping would lose, read live from the clone: lit amber when there
+// is unpushed or uncommitted work, dim "clean" otherwise. Hidden when agc
+// did not check (not running, no repo, or the check failed).
+function WorkChip({ sandbox }: { sandbox: SandboxView }) {
+  const work = sandbox.work
+  if (!work) {
+    return null
+  }
+  const parts = [work.unpushed > 0 ? `${work.unpushed} unpushed` : '', work.dirty ? 'uncommitted changes' : ''].filter(
+    Boolean,
+  )
+  const title = `Work in the clone, checked ${new Date(work.checked_at).toLocaleString()}`
+  if (parts.length === 0) {
+    return (
+      <span data-testid="work" title={title} className="inline-flex">
+        <IconChip icon={GitCommitHorizontal}>clean</IconChip>
+      </span>
+    )
+  }
+  return (
+    <span
+      data-testid="work"
+      title={title}
+      className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 font-mono text-xs text-amber-700 dark:text-amber-400"
+    >
+      <GitCommitHorizontal aria-hidden className="size-3.5 shrink-0" />
+      {parts.join(' · ')}
+    </span>
   )
 }
