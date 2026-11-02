@@ -644,8 +644,9 @@ paths:
       summary: Accept a task
       description: >
         Sets `done_at` and `accepted_by`, posts "Accepted by <name>." in #<task> as agc, then
-        stops every running or starting sandbox of the task as POST /sandboxes/{id}/stop does; a
-        sandbox that cannot be stopped is logged and does not fail the accept (ADR 0010 item 4).
+        stops every running sandbox of the task as POST /sandboxes/{id}/stop does, and every
+        starting one as soon as its boot finishes, keeping its disk; a sandbox that cannot be
+        stopped is logged and does not fail the accept (ADR 0010 item 4).
         Nothing is deleted, and a stopped sandbox can be started again. A task already done is
         returned as it is. The body is optional. `/accept` posted in #<task> by the manager or
         the owner, and `/accept <task>` posted by the owner in #<owner>, do the same.

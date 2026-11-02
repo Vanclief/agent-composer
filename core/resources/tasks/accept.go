@@ -5,10 +5,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/rs/zerolog/log"
 	"github.com/vanclief/ez"
 
-	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 )
 
@@ -30,8 +28,9 @@ func (r AcceptRequest) Validate() error {
 
 // Accept closes the task (ADR 0010 item 4): it sets done_at and
 // accepted_by, posts "Accepted by <name>." in #<task>, then stops every
-// running or starting sandbox of the task. A sandbox that cannot be
-// stopped is logged and does not fail the accept. Nothing is deleted. A
+// running sandbox of the task, and every starting one as soon as it has
+// booted. A sandbox that cannot be stopped is logged and does not fail
+// the accept. Nothing is deleted. A
 // task already done is returned as it is.
 func (api *API) Accept(ctx context.Context, requester interface{}, request *AcceptRequest) (*TaskView, error) {
 	err := request.Validate()
@@ -73,25 +72,11 @@ func (api *API) accept(ctx context.Context, record *taskmodels.Task, by string) 
 	return nil
 }
 
-// stopSandboxes stops every running or starting sandbox of the task the
-// way POST /api/sandboxes/{id}/stop does, logging the ones it cannot.
+// stopSandboxes stops the task's running sandboxes the way
+// POST /api/sandboxes/{id}/stop does; one still booting stops when its
+// boot finishes (sandboxes.StopTask).
 func (api *API) stopSandboxes(ctx context.Context, record *taskmodels.Task) {
-	views, err := api.Sandboxes.TaskSandboxes(ctx, record)
-	if err != nil {
-		log.Warn().Err(err).Str("task", record.Name).Msg("cannot list the accepted task's sandboxes to stop them")
-		return
-	}
-
-	for _, view := range views {
-		if view.Status != sandboxes.StatusRunning && view.Status != sandboxes.StatusStarting {
-			continue
-		}
-
-		_, err = api.Sandboxes.Stop(ctx, nil, &sandboxes.StopRequest{ID: view.ID})
-		if err != nil {
-			log.Warn().Err(err).Str("task", record.Name).Str("sandbox", view.Name).Msg("cannot stop the accepted task's sandbox")
-		}
-	}
+	api.Sandboxes.StopTask(ctx, record)
 }
 
 // validateBy checks a given by is a messaging name; empty is allowed.
