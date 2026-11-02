@@ -76,7 +76,9 @@ that mock a backend and settles what it left open.
    posts wake nobody, except two in `#<task>` that wake the task's manager:
    `Delivered:` (a delivery to review) and `Accepted by <someone else>.`
    (the owner accepted what the manager asked about, so the manager merges
-   it; the reviewer template). A match on
+   it; the reviewer template). The DM channel joins the list only when
+   messaging knows direct-message channels (ADR 0011); until then messaging
+   rejects `@` names and the list leaves it out. A match on
    an `asleep` agent starts the home (item 4); on an `awake` one it is picked
    up by the running loop. The loop is `agc agent run --agent <name>` inside
    the home, the job `agent` of ADR 0009, reading "messages since my last
