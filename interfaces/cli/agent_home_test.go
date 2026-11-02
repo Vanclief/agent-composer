@@ -591,3 +591,61 @@ func TestHomeLoopSkipsAnotherAgentsPlainPost(t *testing.T) {
 		t.Fatalf("cursor = %d", cursor.After)
 	}
 }
+
+func TestHomeLoopHearsTheAnswerToItsQuestionInAChannelItDoesNotRead(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// The reviewer asked franco in #franco (702), from an earlier run; it
+	// reads #b only. A task agent asked there too (703).
+	asked := homeMsg(702, "#franco", "reviewer-1", 0, "merge #fix-login?")
+	asked.ParticipantID = "p-old"
+	asked.Agent = "reviewer-1-home"
+	asked.Kind = msgmodels.KindQuestion
+	other := agentMsg(703, "#franco", "fix-ci", 0, "which runner?")
+	other.Kind = msgmodels.KindQuestion
+	own := homeMsg(709, "#franco", "reviewer-1", 702, "merging")
+	own.ParticipantID = "me"
+
+	msg := &fakeHomeMessenger{
+		cancel: cancel,
+		nextID: 800,
+		agent:  msgclient.AgentResponse{Agent: msgclient.AgentView{Name: "reviewer-1", Role: "reviewer"}, Channels: []string{"#b"}, Asked: []string{"#franco"}, Idle: "15m"},
+		stored: map[int64]msgmodels.Message{702: asked, 703: other},
+		script: [][]msgmodels.Message{
+			{
+				// franco's own post and his answer to someone else's
+				// question are not the reviewer's turns.
+				homeMsg(705, "#franco", "franco", 0, "note to self"),
+				homeMsg(706, "#franco", "franco", 703, "the big one"),
+				homeMsg(707, "#franco", "franco", 702, "Yes do it"),
+				own,
+				agentMsg(710, "#franco", "fix-ci", 0, "Noted."),
+			},
+		},
+	}
+	harness := &homeHarness{}
+	loop, _ := newHomeLoop(t, msg, harness)
+
+	err := loop.run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wantPrompts := []homeHarnessTurn{
+		{"", "# Reviewer\n\n\n---\n\n@franco in #franco [message] (707): Yes do it\n\nRead more with: agc msg read '#franco' --after 701\n"},
+	}
+	if !reflect.DeepEqual(harness.turns, wantPrompts) {
+		t.Fatalf("turns:\n%#v", harness.turns)
+	}
+
+	wantPosts := []homePost{{channel: "#franco", body: "answer 1", replyTo: 702}}
+	if !reflect.DeepEqual(msg.posts, wantPosts) {
+		t.Fatalf("posts = %+v", msg.posts)
+	}
+
+	wantWaits := []string{"#b,#franco after 0", "#b,#franco after 710"}
+	if !reflect.DeepEqual(msg.waits, wantWaits) {
+		t.Fatalf("waits = %q", msg.waits)
+	}
+}

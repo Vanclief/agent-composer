@@ -901,6 +901,69 @@ func TestWakeHookWakesOnlyMatchingAsleepAgents(t *testing.T) {
 		}
 	})
 
+	t.Run("a reply to an agent's question in a channel it does not read", func(t *testing.T) {
+		env := newTestEnv(t)
+		env.create(t, "reviewer")
+		env.create(t, "watcher")
+		env.wake(t, "reviewer-1")
+
+		// The reviewer asks franco in #franco, its owner's inbox, which
+		// is not in its Reads, then goes to sleep.
+		home := messaging.Caller{Agent: "reviewer-1", Grants: []messaging.Grant{{Channel: "#franco"}}}
+		me, err := env.msg.Join(ctx, home, "reviewer-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		question, err := env.msg.Post(ctx, home, me.ID, "#franco", "Merge it?", nil, msgmodels.KindQuestion)
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.api.Wait()
+
+		_, err = env.api.Sleep(ctx, nil, &SleepRequest{Name: "reviewer-1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.sbx.Wait()
+		before := len(env.rt.Calls())
+
+		franco, err := env.msg.Join(ctx, messaging.Caller{Human: true}, "franco")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// franco's own post in his inbox, and the agent's own reply in its
+		// thread, wake nobody.
+		_, err = env.msg.Post(ctx, messaging.Caller{Human: true}, franco.ID, "#franco", "note to self", nil, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = env.msg.Post(ctx, home, me.ID, "#franco", "Still there?", &question.ID, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.api.Wait()
+		env.sbx.Wait()
+
+		calls := env.rt.Calls()
+		if len(calls) != before {
+			t.Fatalf("calls = %q, want none past %d", calls, before)
+		}
+
+		// franco's answer in the thread wakes the asker, and only it.
+		_, err = env.msg.Post(ctx, messaging.Caller{Human: true}, franco.ID, "#franco", "Yes do it", &question.ID, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.api.Wait()
+		env.sbx.Wait()
+
+		calls = env.rt.Calls()[before:]
+		if !slices.Contains(calls, "start reviewer-1") || slices.Contains(calls, "create watcher-1") {
+			t.Fatalf("calls after the answer = %q, want reviewer-1 started only", calls)
+		}
+	})
+
 	t.Run("awake agents are left to their loop", func(t *testing.T) {
 		env := newTestEnv(t)
 		env.create(t, "main")
@@ -949,7 +1012,7 @@ func TestHomeSocketServesTheAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Agent.Name != "reviewer-1" || got.Idle != "20m" || !reflect.DeepEqual(got.Channels, []string{"#review-42"}) {
+	if got.Agent.Name != "reviewer-1" || got.Idle != "20m" || !reflect.DeepEqual(got.Channels, []string{"#review-42"}) || len(got.Asked) != 0 {
 		t.Fatalf("GET /agent = %+v", got)
 	}
 
@@ -982,6 +1045,16 @@ func TestHomeSocketServesTheAgent(t *testing.T) {
 	}
 	if asked.Kind != msgmodels.KindQuestion || asked.Agent != "reviewer-1" {
 		t.Fatalf("question in #franco = %+v", asked)
+	}
+
+	// Having started a thread there, it waits on #franco for the answer
+	// (ADR 0016 item 6), which it does not read.
+	got, err = client.Agent(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.Channels, []string{"#review-42"}) || !reflect.DeepEqual(got.Asked, []string{"#franco"}) {
+		t.Fatalf("GET /agent after asking = %+v, want #franco asked", got)
 	}
 
 	_, err = env.tasks.Create(ctx, nil, &tasks.CreateRequest{Title: "Not mine", Brief: "b", Manager: "franco"})

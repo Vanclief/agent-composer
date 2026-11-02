@@ -129,6 +129,13 @@ type homeLoop struct {
 	sessions *sessionStore
 	// parents maps a message id to the id it replies to, 0 for none.
 	parents map[int64]int64
+	// heads keeps who posted each message seen (its body dropped), to
+	// tell the threads the agent started.
+	heads map[int64]msgmodels.Message
+	// reading holds the channels the agent reads this cycle; in the
+	// others it waits on (GET /agent's asked) only replies in its own
+	// threads are turns.
+	reading map[string]bool
 	// dropped holds the channels already logged as left out of a wait.
 	dropped map[string]bool
 	// pending holds, per session key, other agents' plain posts that were
@@ -173,6 +180,7 @@ func (l *homeLoop) run(ctx context.Context) error {
 	}
 	l.sessions = sessions
 	l.parents = map[int64]int64{}
+	l.heads = map[int64]msgmodels.Message{}
 	l.dropped = map[string]bool{}
 
 	if l.prior != nil && l.prior.Name == l.name && l.prior.ParticipantID != "" {
@@ -216,6 +224,9 @@ func (l *homeLoop) run(ctx context.Context) error {
 	}
 
 	l.logf("joined as @%s (role %s), reading %s after %d", p.Name, l.role, strings.Join(info.Channels, ", "), cursor)
+	if len(info.Asked) > 0 {
+		l.logf("and the replies to its threads in %s", strings.Join(info.Asked, ", "))
+	}
 
 	lastTurn := l.clock()
 	lastFailure := ""
@@ -239,14 +250,15 @@ func (l *homeLoop) run(ctx context.Context) error {
 			return l.sleep(ctx, quiet)
 		}
 
-		if len(info.Channels) == 0 {
+		channels := l.waitChannels(info)
+		if len(channels) == 0 {
 			l.logf("the agent reads no channel")
 			return l.sleep(ctx, quiet)
 		}
 
 		timeout := min(agentWaitTimeout, idle-quiet)
 
-		res, err := l.wait(ctx, info.Channels, cursor, timeout)
+		res, err := l.wait(ctx, channels, cursor, timeout)
 		if ctx.Err() != nil {
 			return nil
 		}
@@ -308,6 +320,33 @@ func (l *homeLoop) leave() {
 	}
 }
 
+// waitChannels is the channels the agent reads, which it notes in
+// reading, then the ones where it only started threads (asked).
+func (l *homeLoop) waitChannels(info *msgclient.AgentResponse) []string {
+	l.reading = map[string]bool{}
+	channels := []string{}
+	for _, channel := range info.Channels {
+		l.reading[channel] = true
+		channels = append(channels, channel)
+	}
+
+	for _, channel := range info.Asked {
+		if l.reading[channel] {
+			continue
+		}
+
+		channels = append(channels, channel)
+	}
+
+	return channels
+}
+
+// reads reports whether the agent reads channel; before the first wait
+// (tests calling isTurn directly) it reads every channel.
+func (l *homeLoop) reads(channel string) bool {
+	return l.reading == nil || l.reading[channel]
+}
+
 // isTurn reports whether m is for the agent (msgmodels.TurnFor: a
 // person's post, another agent's question or post naming it, agc's
 // rejection, delivery, accept by someone else or question naming it,
@@ -317,7 +356,31 @@ func (l *homeLoop) isTurn(m msgmodels.Message, since time.Time) bool {
 		return false
 	}
 
-	return msgmodels.TurnFor(&m, l.me)
+	return l.reads(m.Channel) && msgmodels.TurnFor(&m, l.me)
+}
+
+// isAnswer reports whether m, not older than since, is a reply by
+// someone else in a thread the agent started, root being its first
+// message: a turn in any channel (msgmodels.AnswerFor).
+func (l *homeLoop) isAnswer(m msgmodels.Message, root int64, since time.Time) bool {
+	if !since.IsZero() && m.CreatedAt.Before(since) {
+		return false
+	}
+
+	head, ok := l.heads[root]
+	if !ok {
+		return false
+	}
+
+	return msgmodels.AnswerFor(&m, &head, l.me)
+}
+
+// remember keeps m's parent and who posted it.
+func (l *homeLoop) remember(m msgmodels.Message) {
+	l.parents[m.ID] = parentOf(m)
+
+	m.Body = ""
+	l.heads[m.ID] = m
 }
 
 // isContext reports whether m, not a turn, is another agent's plain post
@@ -331,16 +394,21 @@ func (l *homeLoop) isContext(m msgmodels.Message, since time.Time) bool {
 		return false
 	}
 
-	return msgmodels.FromAgent(&m)
+	return l.reads(m.Channel) && msgmodels.FromAgent(&m)
 }
 
 // plan groups the messages that are turns by thread: one turn per root,
 // in the order the roots first appear, or, for main, one turn for all.
 // Another agent's plain post is no turn (ADR 0016 item 6); it is kept as
-// context and shown with the next turn in its thread.
+// context and shown with the next turn in its thread. A reply in a thread
+// the agent started is a turn in any channel (isAnswer).
 func (l *homeLoop) plan(ctx context.Context, messages []msgmodels.Message, since time.Time) []homeTurn {
+	if l.heads == nil {
+		l.heads = map[int64]msgmodels.Message{}
+	}
+
 	for _, m := range messages {
-		l.parents[m.ID] = parentOf(m)
+		l.remember(m)
 	}
 
 	if l.pending == nil {
@@ -352,11 +420,18 @@ func (l *homeLoop) plan(ctx context.Context, messages []msgmodels.Message, since
 
 	for _, m := range messages {
 		turn := l.isTurn(m, since)
-		if !turn && !l.isContext(m, since) {
+		if !turn && !l.isContext(m, since) && m.ReplyTo == nil {
 			continue
 		}
 
 		root := l.root(ctx, m)
+		if !turn {
+			turn = l.isAnswer(m, root, since)
+		}
+		if !turn && !l.isContext(m, since) {
+			continue
+		}
+
 		key := threadSessionKey(m.Channel, root)
 		if l.role == mainRole {
 			key = mainSessionKey
@@ -424,7 +499,7 @@ func (l *homeLoop) fetchParent(ctx context.Context, channel string, id int64) (i
 	}
 
 	parent := parentOf(res.Messages[0])
-	l.parents[id] = parent
+	l.remember(res.Messages[0])
 
 	return parent, true
 }
@@ -474,7 +549,7 @@ func (l *homeLoop) take(ctx context.Context, t homeTurn) {
 	if err == nil && strings.HasPrefix(body, questionPrefix) && question != "" {
 		m, askErr := l.msg.AskReply(ctx, l.me.ID, t.channel, question, &root)
 		if askErr == nil {
-			l.parents[m.ID] = root
+			l.remember(*m)
 			return
 		}
 
@@ -487,7 +562,7 @@ func (l *homeLoop) take(ctx context.Context, t homeTurn) {
 		return
 	}
 
-	l.parents[m.ID] = root
+	l.remember(*m)
 }
 
 func parseIdle(value string) time.Duration {

@@ -60,14 +60,11 @@ func nameByte(c byte) bool {
 //     someone else, or a question naming @<me>. Callers narrow this: the
 //     wake hook wakes only the task's manager and only on a delivery or
 //     an accept, and the task loop takes only a rejection.
+//
+// It looks only at the message; a reply in a thread the agent started is
+// a turn in any channel, by AnswerFor.
 func TurnFor(m *Message, me *Participant) bool {
-	if m.ParticipantID != "" && m.ParticipantID == me.ID {
-		return false
-	}
-	if m.From == me.Name {
-		return false
-	}
-	if m.Agent != "" && m.Agent == me.Agent {
+	if Own(m, me) {
 		return false
 	}
 
@@ -88,4 +85,32 @@ func TurnFor(m *Message, me *Participant) bool {
 	}
 
 	return true
+}
+
+// Own reports whether me posted m: same participant, name or home.
+func Own(m *Message, me *Participant) bool {
+	if m.ParticipantID != "" && m.ParticipantID == me.ID {
+		return true
+	}
+	if m.From == me.Name {
+		return true
+	}
+
+	return m.Agent != "" && m.Agent == me.Agent
+}
+
+// AnswerFor reports whether m is a reply in a thread me started, root
+// being the thread's first message: a turn for me in any channel, read or
+// not (ADR 0016 item 6), so the asker always hears the answer. A person's
+// or another agent's reply is; its own replies and agc's are not.
+func AnswerFor(m *Message, root *Message, me *Participant) bool {
+	if m.ReplyTo == nil || root == nil || root.ID == m.ID {
+		return false
+	}
+
+	if Own(m, me) || FromSystem(m) {
+		return false
+	}
+
+	return Own(root, me)
 }

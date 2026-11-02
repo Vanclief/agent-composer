@@ -91,7 +91,14 @@ that mock a backend and settles what it left open.
    so two agents never answer each other's acknowledgements in a loop
    (seen on the rig in `#secret-accounts`, 2026-11-02); such a plain post
    still advances the cursor and is shown with the next turn in its
-   thread. agc's own posts wake nobody, except two in `#<task>` that wake
+   thread. A reply in a thread an agent started is a turn for that agent
+   in any channel, read or not, by a person or another agent, never its
+   own (`msgmodels.AnswerFor`): the asker always hears the answer, so the
+   wake hook wakes it and `GET /agent` lists those channels as `asked`
+   (where it started a thread outside its channels, in practice
+   `#<owner>`), which the home waits on, is granted, and takes only the
+   replies in its own threads from (seen 2026-11-02: franco's "Yes do it"
+   to the reviewer's question in `#franco` woke nobody). agc's own posts wake nobody, except two in `#<task>` that wake
    the task's manager: `Delivered:` (a delivery to review) and
    `Accepted by <someone else>.` (the owner accepted what the manager
    asked about, so the manager merges it; the reviewer template); an awake
