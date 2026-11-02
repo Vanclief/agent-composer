@@ -97,8 +97,7 @@ its area.
   2026-11-02, verbatim: "Running: green led blinking. Review: yellow led
   blinking. Open: green led off. Done: green led on. Crashed: red dot
   blinking. Canceled: red dot." (canceled is not a backend status yet;
-  failed is the steady red until it is). It overrides the older rtsdesign
-  tier text (open hollow blue, done green off). In the rtsdesign tiers
+  failed is the steady red until it is). It is also rtsdesign rule 6. In the rtsdesign tiers
   (`data-tier`): `lit` for alive (running: green blinking; review: yellow
   blinking; starting/stopping: blue pulsing), `off` for ended well (done:
   green on, steady; stopped: green off), `attention` for died or needs a
