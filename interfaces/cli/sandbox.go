@@ -63,6 +63,15 @@ func sandboxCommand() *cli.Command {
 				},
 				Action: sandboxDelete,
 			},
+			{
+				Name:  "gc",
+				Usage: "Delete the stopped sandboxes of tasks done longer than keep_done ago (default 24h); volumes and messages are kept",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{Name: "dry-run", Usage: "Only list what would be deleted"},
+					&cli.StringFlag{Name: "keep", Usage: "Grace period after the task is done, such as 48h (default keep_done)"},
+				},
+				Action: sandboxGC,
+			},
 		},
 	})
 }
@@ -210,5 +219,37 @@ func sandboxDelete(c *cli.Context) error {
 		return output(c, deleted, func(w io.Writer) {
 			fmt.Fprintf(w, "Deleted sandbox %s\n", deleted.Name)
 		})
+	})
+}
+
+// sandboxGC runs the collector by hand (ADR 0008 "Garbage collection").
+func sandboxGC(c *cli.Context) error {
+	err := noArgs(c)
+	if err != nil {
+		return err
+	}
+
+	request := &sandboxes.GCRequest{DryRun: c.Bool("dry-run"), Keep: c.String("keep")}
+
+	return withService(c, func(ctx context.Context, svc taskService) error {
+		collected, err := svc.GCSandboxes(ctx, request)
+		if err != nil {
+			return err
+		}
+
+		err = output(c, collected, func(w io.Writer) {
+			writeGC(w, collected)
+		})
+		if err != nil {
+			return err
+		}
+
+		for _, item := range collected.Sandboxes {
+			if item.Error != "" {
+				return ez.New(ez.EINTERNAL, "cannot delete sandbox "+item.Name+": "+item.Error, nil)
+			}
+		}
+
+		return nil
 	})
 }

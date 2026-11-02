@@ -132,6 +132,10 @@ func (homeService) DeleteSandbox(ctx context.Context, ref string) (*sandboxes.De
 	return nil, notInHome("sandbox delete")
 }
 
+func (homeService) GCSandboxes(ctx context.Context, request *sandboxes.GCRequest) (*sandboxes.GCResponse, error) {
+	return nil, notInHome("sandbox gc")
+}
+
 func (homeService) ListSpecs(ctx context.Context) (*tasks.ListSpecsResponse, error) {
 	return nil, notInHome("task spec ls")
 }
