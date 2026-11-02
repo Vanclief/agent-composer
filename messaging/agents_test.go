@@ -87,7 +87,7 @@ func TestAgentCallerOwnsItsParticipantsOnly(t *testing.T) {
 	}
 
 	// main sees every channel, as a human does.
-	channels, err := svc.Channels(ctx, main)
+	channels, err := svc.Channels(ctx, main, false)
 	if err != nil {
 		t.Fatal(err)
 	}

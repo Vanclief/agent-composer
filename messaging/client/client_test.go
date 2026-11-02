@@ -33,6 +33,7 @@ func TestClientRoundTrip(t *testing.T) {
 	tables := []interface{}{
 		(*msgmodels.Participant)(nil),
 		(*msgmodels.Message)(nil),
+		(*msgmodels.ChannelArchive)(nil),
 	}
 	for _, table := range tables {
 		_, err = db.NewCreateTable().Model(table).Exec(ctx)
@@ -80,7 +81,7 @@ func TestClientRoundTrip(t *testing.T) {
 		t.Fatalf("want empty wait, got %+v", waited)
 	}
 
-	channels, err := c.Channels(ctx)
+	channels, err := c.Channels(ctx, false)
 	if err != nil {
 		t.Fatal(err)
 	}

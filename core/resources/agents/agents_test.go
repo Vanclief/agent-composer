@@ -181,6 +181,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		(*accountmodels.Account)(nil),
 		(*msgmodels.Participant)(nil),
 		(*msgmodels.Message)(nil),
+		(*msgmodels.ChannelArchive)(nil),
 		(*agent.Agent)(nil),
 	}
 	for _, table := range tables {

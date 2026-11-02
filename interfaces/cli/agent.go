@@ -52,7 +52,7 @@ type agentMessenger interface {
 	Post(ctx context.Context, participantID, channel, body string, replyTo *int64) (*msgmodels.Message, error)
 	Ask(ctx context.Context, participantID, channel, body string) (*msgmodels.Message, error)
 	Wait(ctx context.Context, channel string, after int64, timeout time.Duration) (*httpapi.MessagesResponse, error)
-	Channels(ctx context.Context) (*httpapi.ChannelsResponse, error)
+	Channels(ctx context.Context, archived bool) (*httpapi.ChannelsResponse, error)
 	// Deliver is agc task deliver on the sandbox's socket.
 	Deliver(ctx context.Context, summary string, report json.RawMessage, files map[string][]byte, out any) error
 }
@@ -340,9 +340,10 @@ func (l *agentLoop) leave(p *msgmodels.Participant) {
 }
 
 // lastID is the newest message id in the task's channel, so the loop
-// answers only what is posted from now on.
+// answers only what is posted from now on. Archived channels count too, so
+// an archived #<task> never reads as empty.
 func (l *agentLoop) lastID(ctx context.Context) (int64, error) {
-	res, err := l.msg.Channels(ctx)
+	res, err := l.msg.Channels(ctx, true)
 	if err != nil {
 		return 0, err
 	}

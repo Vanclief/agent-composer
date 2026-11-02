@@ -220,9 +220,10 @@ func TestGCKeepOverridesTheGracePeriod(t *testing.T) {
 	}
 }
 
-func TestStartGCOffWhenKeepDoneIsZero(t *testing.T) {
+func TestStartGCOffWhenKeepDoneAndArchiveDoneAreZero(t *testing.T) {
 	env, _ := gcEnv(t)
 	env.api.keepDone = 0
+	env.api.archiveDone = 0
 
 	// Returns at once without a run.
 	env.api.StartGC(context.Background())

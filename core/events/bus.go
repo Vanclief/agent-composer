@@ -23,6 +23,9 @@ const (
 	// AgentState is published on every state change of a persistent
 	// agent's home, and on create, keep and delete (ADR 0016).
 	AgentState = "agent.state"
+	// ChannelArchived is published when agc rest archives a done task's
+	// channel (ADR 0005 "Archived channels").
+	ChannelArchived = "channel.archived"
 )
 
 // Buffer is how many events a subscriber may fall behind before it is

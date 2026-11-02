@@ -79,8 +79,11 @@ func msgCommand() *cli.Command {
 				Action: msgWait,
 			},
 			{
-				Name:   "channels",
-				Usage:  "List the channels you may read",
+				Name:  "channels",
+				Usage: "List the channels you may read; archived ones only with --archived",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{Name: "archived", Usage: "List archived channels too, with archived_at"},
+				},
 				Action: msgChannels,
 			},
 		},
@@ -212,7 +215,7 @@ func msgWait(c *cli.Context) error {
 }
 
 func msgChannels(c *cli.Context) error {
-	res, err := newMsgClient().Channels(c.Context)
+	res, err := newMsgClient().Channels(c.Context, c.Bool("archived"))
 	if err != nil {
 		return err
 	}

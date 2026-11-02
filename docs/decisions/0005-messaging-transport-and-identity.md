@@ -151,3 +151,26 @@ Any other post by an agent is refused with "only questions and answers go in a p
 Why: the inbox is what the person reads to find what waits on them, and notes ("merged", "never mind", "conflicts")
 drowned the questions there (22 unread, 12 of them notes). Notes go in `#<task>`, which the manager and the owner read anyway.
 The rule `inbox-holds-only-questions` covers what the server cannot see: whether a question really needs that person.
+
+## Archived channels
+
+Added 2026-11-02 (task `channel-archive`). Every task leaves `#<task>`
+behind for good, and the channel list grows with every task ever done.
+
+- When: `agc rest` archives `#<task>` once the task's `done_at` is older
+  than `archive_done`, in the same tick as the sandbox collector (ADR 0008
+  "Garbage collection": at start, then every 10 minutes). It logs a line per
+  channel and publishes `channel.archived` (`{ channel, archived_at }`) on
+  the event feed. The state is a row in `channel_archives` (`channel`
+  unique, `archived_at`), since channels have no rows of their own.
+- What changes: `GET /api/msg/channels` (and `agc msg channels`) leaves an
+  archived channel out unless asked with `?archived=1` (`--archived`), which
+  lists it with `archived_at`. Reading and waiting work unchanged. A post is
+  refused with "channel archived" (not authorized) for everyone but agc, so
+  `/accept` or `/reject` typed in an archived channel is refused too; accepting
+  or rejecting a task through the API never un-archives its channel.
+- The setting: `messaging: { archive_done: 168h }` in the config file, env
+  `AGC_MESSAGING_ARCHIVE_DONE` overriding it, a Go duration, default 7 days;
+  `0` turns archiving off.
+- Re-opening an archived channel is not possible yet; a route to un-archive
+  is a later change.

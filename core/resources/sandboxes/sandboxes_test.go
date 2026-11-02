@@ -187,6 +187,7 @@ func newTestDB(t *testing.T) *bun.DB {
 		(*taskmodels.Sandbox)(nil),
 		(*msgmodels.Participant)(nil),
 		(*msgmodels.Message)(nil),
+		(*msgmodels.ChannelArchive)(nil),
 		(*accountmodels.Account)(nil),
 		(*agentmodels.Agent)(nil),
 	}

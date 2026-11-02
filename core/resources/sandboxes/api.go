@@ -103,6 +103,9 @@ type API struct {
 	// keepDone is how long a done task's stopped sandbox is kept before
 	// the collector deletes it, 0 when the collector is off (ADR 0008).
 	keepDone time.Duration
+	// archiveDone is how long after its task is done #<task> is archived
+	// (ADR 0005 "Archived channels"); 0 turns archiving off.
+	archiveDone time.Duration
 	// collecting serializes collector runs.
 	collecting sync.Mutex
 	// now is the clock, replaced in tests.
@@ -184,6 +187,13 @@ func NewAPI(rootCtx context.Context, ctrl *controller.Controller, msg *messaging
 	}
 	api.keepDone = keep
 
+	archive, err := ctrl.ArchiveDone()
+	if err != nil {
+		log.Error().Err(err).Dur("archive_done", controller.BuiltinArchiveDone).Msg("messaging: bad archive_done, using the built-in one")
+		archive = controller.BuiltinArchiveDone
+	}
+	api.archiveDone = archive
+
 	return api
 }
 
@@ -210,6 +220,7 @@ func New(rootCtx context.Context, db bun.IDB, msg *messaging.Service, rt Runtime
 		listeners:   map[string]*listener{},
 		booting:     map[string]*boot{},
 		keepDone:    controller.BuiltinKeepDone,
+		archiveDone: controller.BuiltinArchiveDone,
 		now:         time.Now,
 	}
 }
