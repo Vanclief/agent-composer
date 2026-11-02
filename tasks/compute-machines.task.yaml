@@ -3,9 +3,8 @@
 # each VM we should see the status like we do for the tasks. Also each VM
 # should show in which machine is running. Machines should show their
 # current ram / CPU / available disk / GPU status."
-# Launch only once agc/peer-servers (ADR 0018: GET /api/servers, the
-# sandbox's server) and agc/panel-eva-compute (the Compute look) are merged
-# into feat/tasks-microsandbox.
+# Launch only once agc/peer-servers (ADR 0018, delivered at c8faabe) is
+# merged into feat/tasks-microsandbox; panel-eva-compute is in (d076039).
 name: compute-machines
 title: Compute shows the machines, each with its RAM, CPU, disk and GPU, and every VM under its machine
 assignee: claude_code
@@ -13,7 +12,7 @@ manager: franco
 owner: franco
 for: panel-reads-like-an-instrument
 accept:
-  - GET /api/servers (ADR 0018) answers for every server, local first, the host's cpus total and allocated to running sandboxes, memory total, used and available in MB, disk total and available in MB for the directory sandboxes live in, and gpu as null or {name, memory_total, memory_used, utilization} read from nvidia-smi when present; a peer answers for itself and the primary relays
+  - "GET /api/servers (ADR 0018, delivered on agc/peer-servers) keeps its shape {name, url, reachable, error, sandboxes, in_use {cpus, memory_mib}, free {cpus, memory_mib}, host {os, arch, cpus, memory_mib, free_memory_mib}} and host gains disk_mib and free_disk_mib for the directory sandboxes live in, and gpu as null or {name, memory_mib, used_memory_mib, utilization} read from nvidia-smi when present; a peer answers for itself and the primary relays"
   - Every SandboxView carries server, the name of the machine it runs on, and the panel's Compute page groups sandboxes under a plate per machine whose header shows the four readouts as mono gauges with the words RAM, CPU, DISK, GPU and used/total, dim when unknown, the server's name as the plate's title tab, unreachable servers as a red outlined tab with the word unreachable verbatim
   - Each sandbox row under its machine is the same plate as a task row, the status word as the left tab following docs/design/panel.md Lights (no LED, blink only for crashed), the acts at the far right, and the sandbox page states the machine with a link back to Compute
   - The mock serves two servers (local and one peer, the peer with a gpu and one sandbox) and tests in tests/compute.spec.ts cover the grouping, the readouts and the unreachable tab; make panel-check passes; go build/vet/test pass; gofmt lists only the three known files; docs/openapi.yaml and make types updated
@@ -27,25 +26,25 @@ brief: |
   look, already applied; you extend it, you do not redo it). Write the
   whole thing; do not stop at a plan.
 
-  Backend. Extend the server view of GET /api/servers with the host's
-  facts, read on each request: cpus (runtime.NumCPU and the sum of
-  `cpus` of the running sandboxes on that server), memory from
-  /proc/meminfo (MemTotal, MemAvailable; used is total minus available),
-  disk from statfs on the directory sandboxes live in
-  (AGC_MSB_VOLUMES_DIR's parent or the msb home), and gpu from
-  `nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu
-  --format=csv,noheader,nounits` when the binary exists, else null; a
-  failure to read any one of them leaves that field null and never
-  fails the request. A peer computes its own and the primary relays it
-  through the peer runtime ADR 0018 built. Every SandboxView carries
-  `server` (ADR 0018 records it on the row; `local` when unset). No
-  migration unless the row lacks the column.
+  Backend. ADR 0018 (agc/peer-servers, merged on this branch) already
+  gives GET /api/servers with in_use, free and host {os, arch, cpus,
+  memory_mib, free_memory_mib} per server (core/resources/peers/
+  servers.go, hostinfo.go) and `server` on every SandboxView. Keep those
+  names. Add to host: disk_mib and free_disk_mib from statfs on the
+  directory sandboxes live in (AGC_MSB_VOLUMES_DIR's parent or the msb
+  home), and gpu, null or {name, memory_mib, used_memory_mib,
+  utilization} from `nvidia-smi --query-gpu=name,memory.total,
+  memory.used,utilization.gpu --format=csv,noheader,nounits` when the
+  binary exists. A failure to read any one of them leaves that field
+  null or zero and never fails the request. A peer computes its own
+  host report and the primary relays it as today. No migration.
 
   Panel. Compute page: one plate per server, title tab the server name,
-  header strip with four readouts (RAM used/total GB, CPU allocated/total,
-  DISK available/total GB, GPU name and memory used/total or a dim
-  "none"), each a mono readout like the task meta line, dim when the
-  field is null; an unreachable server is a red outlined tab reading the
+  header strip with four readouts (RAM: host memory_mib minus
+  free_memory_mib over memory_mib in GB; CPU: in_use.cpus over
+  host.cpus; DISK: free_disk_mib over disk_mib in GB; GPU: name and
+  used_memory_mib over memory_mib, or a dim "none"), each a mono readout
+  like the task meta line, dim when host is null; an unreachable server is a red outlined tab reading the
   word the backend sends. Under it the sandboxes as rows in the Tasks
   plate shape: status tab on the left per the Lights section (the word
   is the light, no LED, only crashed blinks), name and image, then the
