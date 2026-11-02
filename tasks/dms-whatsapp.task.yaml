@@ -92,5 +92,6 @@ sandbox:
   setup: |
     cd /home/agent/agent-composer/panel && npm ci && npx playwright install chromium
     printf '%s\n' '#!/bin/sh' 'exec claude "$(cat /home/agent/TASK.md)"' > /home/agent/run.sh
-  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
+  # The Claude credential comes from the provider's default account (ADR 0018) unless the spec names one.
+  secrets: [GITHUB_TOKEN]
   command: bash /home/agent/run.sh
