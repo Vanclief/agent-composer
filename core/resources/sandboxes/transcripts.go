@@ -104,37 +104,10 @@ func (api *API) ListTranscripts(ctx context.Context, requester interface{}, requ
 	}
 	defer root.Close()
 
-	transcripts := []Transcript{}
-	for _, dir := range transcriptDirs {
-		// WalkDir does not follow links, and Root keeps every read inside
-		// the volume, so a link the guest planted leads nowhere.
-		err = fs.WalkDir(root.FS(), dir, func(name string, entry fs.DirEntry, err error) error {
-			if errors.Is(err, fs.ErrNotExist) && name == dir {
-				return fs.SkipDir
-			}
-			if err != nil {
-				return err
-			}
-			if !entry.Type().IsRegular() || !strings.HasSuffix(name, ".jsonl") {
-				return nil
-			}
-
-			info, err := entry.Info()
-			if err != nil {
-				return err
-			}
-
-			transcripts = append(transcripts, Transcript{Path: name, Size: info.Size(), ModifiedAt: info.ModTime().UTC()})
-			return nil
-		})
-		if err != nil {
-			return nil, ez.New(ez.EINTERNAL, "cannot list "+dir+" on volume "+volume, err)
-		}
+	transcripts, err := VolumeTranscripts(root)
+	if err != nil {
+		return nil, ez.New(ez.EINTERNAL, "cannot list transcripts on volume "+volume, err)
 	}
-
-	sort.SliceStable(transcripts, func(i, j int) bool {
-		return transcripts[i].ModifiedAt.After(transcripts[j].ModifiedAt)
-	})
 
 	return &ListTranscriptsResponse{Volume: volume, Transcripts: transcripts}, nil
 }
@@ -215,6 +188,67 @@ func (api *API) OpenTranscript(ctx context.Context, requester interface{}, reque
 	}
 
 	return &TranscriptFile{ReadSeekCloser: file, Name: path.Base(request.Path), Size: info.Size(), ModifiedAt: info.ModTime().UTC()}, nil
+}
+
+// VolumeTranscripts lists the harness session files under root, a volume
+// opened with os.OpenRoot, newest first. Links are left out: WalkDir does
+// not follow them and only regular files are listed, and the Root keeps
+// every read inside the volume, so a link the guest planted leads nowhere.
+func VolumeTranscripts(root *os.Root) ([]Transcript, error) {
+	transcripts := []Transcript{}
+	for _, dir := range transcriptDirs {
+		err := fs.WalkDir(root.FS(), dir, func(name string, entry fs.DirEntry, err error) error {
+			if errors.Is(err, fs.ErrNotExist) && name == dir {
+				return fs.SkipDir
+			}
+			if err != nil {
+				return err
+			}
+			if !entry.Type().IsRegular() || !strings.HasSuffix(name, ".jsonl") {
+				return nil
+			}
+
+			info, err := entry.Info()
+			if err != nil {
+				return err
+			}
+
+			transcripts = append(transcripts, Transcript{Path: name, Size: info.Size(), ModifiedAt: info.ModTime().UTC()})
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	sort.SliceStable(transcripts, func(i, j int) bool {
+		return transcripts[i].ModifiedAt.After(transcripts[j].ModifiedAt)
+	})
+
+	return transcripts, nil
+}
+
+// VolumeDir returns the host directory of the volume of the sandbox named
+// by id or name, found the way the transcript routes find it (a deleted
+// sandbox's name still finds its volume).
+func (api *API) VolumeDir(ctx context.Context, id uuid.UUID, name string) (string, error) {
+	err := validateRef(id, name)
+	if err != nil {
+		return "", ez.Wrap(err)
+	}
+
+	volume, err := api.findVolume(ctx, id, name)
+	if err != nil {
+		return "", ez.Wrap(err)
+	}
+
+	return filepath.Join(api.volumeRoot, volume), nil
+}
+
+// VolumeRootDir is the host directory holding the named volumes this API
+// reads (VolumeRoot when the API was made).
+func (api *API) VolumeRootDir() string {
+	return api.volumeRoot
 }
 
 // findVolume returns the volume of the sandbox named by id or name. A

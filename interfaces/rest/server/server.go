@@ -8,6 +8,7 @@ import (
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/events"
+	"github.com/vanclief/agent-composer/core/resources/agents"
 	"github.com/vanclief/agent-composer/core/resources/filesystem"
 	"github.com/vanclief/agent-composer/core/resources/harnessinfo"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
@@ -41,7 +42,9 @@ type Server struct {
 	SandboxesAPI  *sandboxes.API
 	SchedulesAPI  *schedules.API
 	KnowledgeAPI  *knowledgeapi.API
-	Messaging     *messaging.Service
+	// TurnsAPI reads agent and sandbox turns from their volumes.
+	TurnsAPI  *agents.TurnsAPI
+	Messaging *messaging.Service
 	// Events feeds GET /api/events.
 	Events *events.Bus
 }
@@ -66,6 +69,7 @@ func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.A
 		SandboxesAPI:  tasksAPI.Sandboxes,
 		SchedulesAPI:  schedulesAPI,
 		KnowledgeAPI:  knowledgeAPI,
+		TurnsAPI:      agents.NewTurnsAPI(tasksAPI.Sandboxes.VolumeRootDir(), tasksAPI.Sandboxes),
 		Messaging:     msg,
 		Events:        bus,
 	}
@@ -205,6 +209,14 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.SandboxesAPI.StartTerminal(request.GetContext(), nil, body)
 	case *sandboxes.ListTranscriptsRequest:
 		return s.SandboxesAPI.ListTranscripts(request.GetContext(), nil, body)
+	case *agents.ListSandboxTurnsRequest:
+		return s.TurnsAPI.ListSandboxTurns(request.GetContext(), nil, body)
+	case *agents.GetSandboxTurnRequest:
+		return s.TurnsAPI.GetSandboxTurn(request.GetContext(), nil, body)
+	case *agents.ListTurnsRequest:
+		return s.TurnsAPI.ListTurns(request.GetContext(), nil, body)
+	case *agents.GetTurnRequest:
+		return s.TurnsAPI.GetTurn(request.GetContext(), nil, body)
 	case *tasks.ListSpecsRequest:
 		return s.TasksAPI.ListSpecs(request.GetContext(), nil, body)
 	case *tasks.GetSpecRequest:

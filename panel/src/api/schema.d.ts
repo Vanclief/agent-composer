@@ -589,6 +589,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sandboxes/{id}/turns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a sandbox's turns
+         * @description The turns of the harness sessions on the sandbox's volume, newest first, read the way GET /agents/{name}/turns reads an agent's, so a finished task's reasoning can be read after its sandbox is stopped or deleted.
+         */
+        get: operations["listSandboxTurns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/{id}/turns/{n}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one of a sandbox's turns */
+        get: operations["getSandboxTurn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{name}/turns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List an agent's turns
+         * @description The turns of every harness session on the agent's volume agc-<name> (Claude Code .claude/projects/**\/*.jsonl, Codex .codex/sessions/**\/*.jsonl), newest first, read from the host side of the volume on every request; agc keeps no copy. A turn starts at a user message that is not a tool result; n numbers them from 1 across all sessions by start time. channel and thread come from the agent loop's agc-sessions.json when it names the session. 404 when the volume does not exist.
+         */
+        get: operations["listAgentTurns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{name}/turns/{n}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one of an agent's turns
+         * @description The whole turn: the text injected, each tool call with its arguments and result (cut to 4 KB), the final answer, and the token counts when the transcript has them.
+         */
+        get: operations["getAgentTurn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/specs": {
         parameters: {
             query?: never;
@@ -1243,6 +1320,73 @@ export interface components {
             /** Format: date-time */
             modified_at: string;
         };
+        /** @description Token counts summed over the turn's model calls; null when the transcript has none. */
+        TurnTokens: {
+            /**
+             * Format: int64
+             * @description Input tokens not read from the cache.
+             */
+            input: number;
+            /** Format: int64 */
+            output: number;
+            /** Format: int64 */
+            cache_read: number;
+            /** Format: int64 */
+            cache_write: number;
+        } | null;
+        TurnToolCall: {
+            name: string;
+            /** @description The tool's arguments as the model sent them. */
+            args: unknown;
+            /** @description The result as text, cut to 4096 bytes. */
+            result: string;
+            truncated: boolean;
+            /** @description Set when the harness marked the result as an error. */
+            error?: boolean;
+        };
+        TurnSummary: {
+            n: number;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            ended_at: string;
+            /** @description The harness session id. */
+            session: string;
+            /** @enum {string} */
+            harness: "claude_code" | "codex_cli";
+            /** @description From agc-sessions.json, empty when the session is not in it. */
+            channel: string;
+            /** @description The thread root id, or main; empty when the session is not in agc-sessions.json. */
+            thread: string;
+            /** @description How many tools the turn called. */
+            tool_calls: number;
+            /** @description The first line of the final answer, at most 200 characters. */
+            answer: string;
+            tokens: components["schemas"]["TurnTokens"];
+        };
+        TurnList: {
+            turns: components["schemas"]["TurnSummary"][];
+            /** @description Lines of the session files that are not JSON objects, left out. */
+            skipped: number;
+        };
+        Turn: {
+            n: number;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            ended_at: string;
+            session: string;
+            /** @enum {string} */
+            harness: "claude_code" | "codex_cli";
+            channel: string;
+            thread: string;
+            /** @description The user message as sent. */
+            injected: string;
+            tool_calls: components["schemas"]["TurnToolCall"][];
+            /** @description The final assistant text. */
+            answer: string;
+            tokens: components["schemas"]["TurnTokens"];
+        };
         SandboxWork: {
             /** @description The clone has uncommitted changes (git status --porcelain printed a line). */
             dirty: boolean;
@@ -1783,6 +1927,10 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Agent name, e.g. reviewer-1. */
+        AgentNameParam: string;
+        /** @description Turn number, from 1. */
+        TurnNumberParam: number;
         /** @description Maximum number of records to return. Defaults to 50 and is capped at 1000 by the service. */
         LimitParam: number;
         /** @description Base64 encoded cursor returned by a previous page. Supply it to fetch the next page. */
@@ -3015,6 +3163,124 @@ export interface operations {
                 };
                 content: {
                     "application/x-ndjson": string;
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    listSandboxTurns: {
+        parameters: {
+            query?: {
+                /** @description How many turns, newest first. */
+                limit?: number;
+                /** @description Only turns with n below this, for the next page. */
+                before?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Sandbox UUID or sandbox name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["SandboxIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Turns. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TurnList"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    getSandboxTurn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox UUID or sandbox name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["SandboxIdParam"];
+                /** @description Turn number, from 1. */
+                n: components["parameters"]["TurnNumberParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The turn. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Turn"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    listAgentTurns: {
+        parameters: {
+            query?: {
+                /** @description How many turns, newest first. */
+                limit?: number;
+                /** @description Only turns with n below this, for the next page. */
+                before?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Agent name, e.g. reviewer-1. */
+                name: components["parameters"]["AgentNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Turns. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TurnList"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    getAgentTurn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Agent name, e.g. reviewer-1. */
+                name: components["parameters"]["AgentNameParam"];
+                /** @description Turn number, from 1. */
+                n: components["parameters"]["TurnNumberParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The turn. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Turn"];
                 };
             };
             400: components["responses"]["Error"];

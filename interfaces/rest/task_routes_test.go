@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"github.com/vanclief/agent-composer/core/resources/agents"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -102,6 +103,7 @@ func newTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *task
 		TasksAPI:     tasksAPI,
 		SandboxesAPI: sandboxesAPI,
 		SchedulesAPI: schedulesAPI,
+		TurnsAPI:     agents.NewTurnsAPI(volumes, sandboxesAPI),
 		Messaging:    msg,
 		Events:       bus,
 	}

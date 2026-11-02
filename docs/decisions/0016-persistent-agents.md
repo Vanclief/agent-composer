@@ -106,6 +106,33 @@ that mock a backend and settles what it left open.
    every channel. Other agents follow the existing rules: their DM, the
    channels of their tasks, what `reads` lists.
 
+## Notes on item 5 (task `agents-turns`, 2026-11-02)
+
+- Built in `core/resources/agents/turns*.go`, for agents (`agc-<name>`)
+  and, with the same reader, for task sandboxes
+  (`GET /api/sandboxes/{id}/turns[/{n}]`). The contract differs from item 5
+  in one place: `injected` is the user text as the harness recorded it, not
+  message ids; the transcript does not carry agc's message ids. The loop can
+  put them in the text it sends if they are wanted.
+- Claude Code (2.1.x): a turn starts at a `type: user` line whose content
+  is a string or text blocks (`isMeta`, `isCompactSummary`, `isSidechain`
+  and "[Request interrupted by user" lines are not turns); `assistant`
+  lines are one per content block and repeat their call's `message.usage`
+  under one `message.id`, so usage is counted once per id; `tool_result`
+  blocks pair with `tool_use` by id. Tested on a fixture cut from a real
+  session.
+- Codex (0.166): `session_meta`, `response_item` (`message`,
+  `function_call`/`_output`, `custom_tool_call`/`_output`,
+  `local_shell_call`) and `event_msg` `token_count`, whose running
+  `total_token_usage` gives a turn's tokens as a difference. Only a session
+  with no model reply could be produced here (no OpenAI credentials in the
+  sandbox), so the user-turn and context-message handling is tested on a
+  real file and the tool call, answer and token lines of the fixture are
+  written from the format, untested against a real Codex run.
+- `n` needs every session's turns (DM threads are concurrent sessions), so
+  every file gets a light parse of line envelopes on each request and only
+  the files holding the requested page are parsed in full.
+
 ## Rationale
 
 - Rows not processes because a stopped agent costs nothing and the list of
