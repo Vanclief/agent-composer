@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -53,7 +54,7 @@ type agentMessenger interface {
 	Wait(ctx context.Context, channel string, after int64, timeout time.Duration) (*httpapi.MessagesResponse, error)
 	Channels(ctx context.Context) (*httpapi.ChannelsResponse, error)
 	// Deliver is agc task deliver on the sandbox's socket.
-	Deliver(ctx context.Context, summary string, out any) error
+	Deliver(ctx context.Context, summary string, report json.RawMessage, out any) error
 }
 
 // agentLoop is `agc agent run` (ADR 0009 item 2, ADR 0010): it joins
@@ -376,7 +377,8 @@ func (l *agentLoop) turn(ctx context.Context, p *msgmodels.Participant, prompt s
 		summary := strings.TrimSpace(strings.TrimPrefix(body, deliverPrefix))
 
 		var view any
-		err = l.msg.Deliver(ctx, summary, &view)
+		// DONE: delivers the summary only, with no report.
+		err = l.msg.Deliver(ctx, summary, nil, &view)
 		if err == nil {
 			l.logf("delivered, waiting for review")
 			return next

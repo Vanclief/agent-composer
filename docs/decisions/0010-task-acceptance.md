@@ -103,3 +103,45 @@ task itself persists so what happened can be read later and a VM revived.
 - The agent loop treats a `DONE:` answer as a delivery and keeps waiting.
 - `task.yaml` gains `accept:`; the panel gains the criteria field,
   checklist, `review` chip, Accept and Reject.
+
+## Delivery report
+
+Added 2026-11-02. A delivery may carry `report`, a JSON object, so the
+reviewer sees what they are accepting without reading the channel. It is
+optional on `POST /api/tasks/{id}/deliver` and on `POST /task/deliver` on
+the sandbox socket (passed through unchanged), and is stored on the task
+(`report`, jsonb, next to `summary`; `TaskView.report`, null when absent):
+
+```json
+{
+  "criteria": [ { "met": "yes", "note": "GET /api/agents returns the list; test TestListAgents" } ],
+  "changes":  { "branch": "agc/agents-core", "sha": "efbec13", "files": 41 },
+  "checks":   [ { "name": "go test ./...", "passed": true, "note": "" } ],
+  "left_out": [ { "what": "DM channel for agents", "why": "needs ADR 0011, TODO left in agents/wake.go" } ],
+  "needs":    [ "Decide whether never-kept agents are swept" ]
+}
+```
+
+Rules, checked on the request and in the model, any break is `EINVALID`:
+
+- `criteria` has exactly one entry per line of the task's `accept`, in the
+  same order, and none when the task has none; a mismatch names both counts.
+- `met` is `yes`, `no` or `partly`; `note` is at most 500 characters and may
+  be empty.
+- `changes` is optional; when given, `branch` is required, `sha` is 7 to 40
+  hex characters, and `files` is optional and not negative.
+- `checks[].name` is required, `passed` is a boolean, `note` ≤ 500.
+- `left_out[].what` and `why` are required; `needs[]` are non-empty strings.
+- Every list holds at most 50 entries. Strings are trimmed.
+
+Each delivery replaces the report with its own (null when it sends none),
+so a report never describes an earlier delivery; a rejection keeps it,
+like the summary. The summary stays one or two sentences, read first; the
+report is what the reviewer judges. The "Delivered:" message renders it
+after the summary: `- [x]`, `- [ ]` or `- [~]` (yes, no, partly) and the
+criterion's text with its note, `Changes: <branch> @ <sha> (<files> files)`,
+`Checks:` with ✓ or ✗, then `Left out:` and `Needs you:` as bullets, empty
+sections omitted. TASK.md's "Delivering" section tells the agent to write
+`report.json` and run `agc task deliver "<summary>" --report report.json`;
+an answer starting `DONE:` still delivers the summary alone, the fallback
+when no report can be written.

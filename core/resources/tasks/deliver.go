@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -17,10 +18,17 @@ import (
 // deliveredPrefix starts the message a delivery posts in #<task>.
 const deliveredPrefix = "Delivered: "
 
+// reportCut ends a Delivered message cut to fit a message body.
+const reportCut = "\n\n(cut: the full report is on the task)"
+
 type DeliverRequest struct {
 	ID      uuid.UUID `json:"id"`
 	Name    string    `json:"name"`
 	Summary string    `json:"summary"`
+	// Report is optional: what the delivery says against each accept
+	// criterion, the changes, the checks run, what was left out and what
+	// the reviewer must decide (ADR 0010, "Delivery report").
+	Report *taskmodels.Report `json:"report"`
 }
 
 func (r DeliverRequest) Validate() error {
@@ -39,13 +47,22 @@ func (r DeliverRequest) Validate() error {
 		return ez.New(ez.EINVALID, fmt.Sprintf("summary is longer than %d bytes", limit), nil)
 	}
 
+	if r.Report != nil {
+		err = r.Report.Validate()
+		if err != nil {
+			return ez.Wrap(err)
+		}
+	}
+
 	return nil
 }
 
-// Deliver sets delivered_at and summary and posts "Delivered: <summary>"
-// in #<task> as agc (ADR 0010 item 2). The sandboxes are left as they are.
-// A task can be delivered again; the last summary wins. A done task
-// cannot be delivered.
+// Deliver sets delivered_at, summary and report and posts "Delivered:
+// <summary>" in #<task> as agc, followed by the report rendered as
+// markdown when there is one (ADR 0010 item 2, "Delivery report"). The
+// sandboxes are left as they are. A task can be delivered again; the last
+// summary and report win. A report must carry one criterion per accept
+// line. A done task cannot be delivered.
 func (api *API) Deliver(ctx context.Context, requester interface{}, request *DeliverRequest) (*TaskView, error) {
 	err := request.Validate()
 	if err != nil {
@@ -63,20 +80,142 @@ func (api *API) Deliver(ctx context.Context, requester interface{}, request *Del
 
 	summary := strings.TrimSpace(request.Summary)
 
-	err = record.MarkDelivered(ctx, api.db, summary)
+	if request.Report != nil {
+		err = request.Report.ValidateFor(record.Accept)
+		if err != nil {
+			return nil, ez.Wrap(err)
+		}
+	}
+
+	err = record.MarkDelivered(ctx, api.db, summary, request.Report)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	api.post(ctx, record, deliveredPrefix+summary)
+	api.post(ctx, record, DeliveredMessage(record))
 
 	return api.view(ctx, record)
 }
 
 // deliverFromSandbox is agc task deliver on a sandbox's socket, which
-// speaks for its own task only.
-func (api *API) deliverFromSandbox(ctx context.Context, taskName string, summary string) (any, error) {
-	return api.Deliver(ctx, nil, &DeliverRequest{Name: taskName, Summary: summary})
+// speaks for its own task only. report is the request's report as sent.
+func (api *API) deliverFromSandbox(ctx context.Context, taskName string, summary string, report json.RawMessage) (any, error) {
+	decoded, err := DecodeReport(report)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return api.Deliver(ctx, nil, &DeliverRequest{Name: taskName, Summary: summary, Report: decoded})
+}
+
+// DecodeReport reads a delivery report from JSON; absent or null is nil.
+func DecodeReport(raw json.RawMessage) (*taskmodels.Report, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return nil, nil
+	}
+
+	report := &taskmodels.Report{}
+	err := json.Unmarshal([]byte(trimmed), report)
+	if err != nil {
+		return nil, ez.New(ez.EINVALID, "report is not a valid report object: "+err.Error(), err)
+	}
+
+	return report, nil
+}
+
+// DeliveredMessage is what a delivery posts in #<task>: "Delivered:
+// <summary>", then the report, when there is one, as markdown: a checklist
+// line per criterion, the changes, the checks, what was left out and what
+// the reviewer is asked to decide. Empty sections are left out. A message
+// too long for a body is cut; the task keeps the whole report.
+func DeliveredMessage(record *taskmodels.Task) string {
+	body := deliveredPrefix + record.Summary
+	if record.Report == nil {
+		return body
+	}
+
+	rendered := renderReport(record.Report.Normalized(), record.Accept)
+	if rendered != "" {
+		body += "\n\n" + rendered
+	}
+
+	if len(body) > msgmodels.MaxBodyBytes {
+		body = strings.ToValidUTF8(body[:msgmodels.MaxBodyBytes-len(reportCut)], "") + reportCut
+	}
+
+	return body
+}
+
+func renderReport(report taskmodels.Report, accept []string) string {
+	sections := []string{}
+
+	if len(report.Criteria) > 0 {
+		lines := []string{}
+		for i, criterion := range report.Criteria {
+			box := "[ ]"
+			if criterion.Met == taskmodels.MetYes {
+				box = "[x]"
+			}
+			if criterion.Met == taskmodels.MetPartly {
+				box = "[~]"
+			}
+
+			text := fmt.Sprintf("criterion %d", i+1)
+			if i < len(accept) {
+				text = accept[i]
+			}
+
+			lines = append(lines, "- "+box+" "+withNote(text, criterion.Note))
+		}
+		sections = append(sections, strings.Join(lines, "\n"))
+	}
+
+	if report.Changes != nil {
+		line := "Changes: " + report.Changes.Branch + " @ " + report.Changes.SHA
+		if report.Changes.Files != nil {
+			line += fmt.Sprintf(" (%d files)", *report.Changes.Files)
+		}
+		sections = append(sections, line)
+	}
+
+	if len(report.Checks) > 0 {
+		lines := []string{"Checks:"}
+		for _, check := range report.Checks {
+			mark := "✗"
+			if check.Passed {
+				mark = "✓"
+			}
+			lines = append(lines, "- "+mark+" "+withNote(check.Name, check.Note))
+		}
+		sections = append(sections, strings.Join(lines, "\n"))
+	}
+
+	if len(report.LeftOut) > 0 {
+		lines := []string{"Left out:"}
+		for _, left := range report.LeftOut {
+			lines = append(lines, "- "+left.What+": "+left.Why)
+		}
+		sections = append(sections, strings.Join(lines, "\n"))
+	}
+
+	if len(report.Needs) > 0 {
+		lines := []string{"Needs you:"}
+		for _, need := range report.Needs {
+			lines = append(lines, "- "+need)
+		}
+		sections = append(sections, strings.Join(lines, "\n"))
+	}
+
+	return strings.Join(sections, "\n\n")
+}
+
+func withNote(text string, note string) string {
+	if note == "" {
+		return text
+	}
+
+	return text + " — " + note
 }
 
 // post posts body in #<task> as agc. The change it reports is already

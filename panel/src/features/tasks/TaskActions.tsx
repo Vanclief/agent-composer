@@ -58,10 +58,11 @@ export function TaskActions({ task, actions, onDeleted, className }: TaskActions
   const count = task.sandboxes.length
 
   return (
-    <div className={cn('flex items-center gap-2', className)}>
+    <div className={cn('flex flex-wrap items-center gap-2', className)}>
       {task.status !== 'done' && (
         <>
           <AcceptButton task={task} actions={actions} />
+          <NotMet task={task} />
           <RejectButton task={task} actions={actions} />
         </>
       )}
@@ -69,12 +70,33 @@ export function TaskActions({ task, actions, onDeleted, className }: TaskActions
         title={`Delete task ${task.name}?`}
         pending={remove.isPending}
         onConfirm={() => remove.mutate(task.name, { onSuccess: () => onDeleted?.() })}
-        className="ml-2"
+        className="ml-auto"
       >
         {count === 0
           ? 'The task is deleted. It has no sandbox.'
           : `Its ${count === 1 ? 'sandbox' : `${count} sandboxes`} and their uncommitted work are deleted with it.`}
       </ConfirmDelete>
+    </div>
+  )
+}
+
+// Dim "2 not met" after Accept: the criteria the agent's report answers
+// no. Accept stays enabled (rtsdesign rule 14: the viewer decides).
+function NotMet({ task }: { task: TaskView }) {
+  const count = task.report?.criteria.filter((c) => c.met === 'no').length ?? 0
+  if (count === 0) {
+    return null
+  }
+  // A div, normal case and tracking: the dark theme's
+  // `aside > div:first-child` label rules (meant for the sidebar logo) also
+  // reach this row and would paint a direct span as the orange logo tile.
+  return (
+    <div
+      data-testid="not-met"
+      title={`The agent's report says ${count === 1 ? 'one criterion is' : `${count} criteria are`} not met`}
+      className="-ml-0.5 text-[11px] font-normal tracking-normal whitespace-nowrap text-muted-foreground normal-case"
+    >
+      {count} not met
     </div>
   )
 }

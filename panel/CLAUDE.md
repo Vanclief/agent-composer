@@ -11,7 +11,7 @@ the panel stays conflict-free.
 
 | Path                                                                                                                                                                                           | Owner               |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| `src/features/tasks/` (`TasksPage`, `TaskPage`, `TaskRail`, `ComputeTab`) + `tests/tasks.spec.ts`                                                                                              | tasks feature       |
+| `src/features/tasks/` (`TasksPage`, `TaskPage`, `TaskRail` with its Review section, `ComputeTab`) + `tests/tasks.spec.ts`                                                                      | tasks feature       |
 | `src/features/create-task/` (`CreateTaskDialog`) + `tests/create-task.spec.ts`                                                                                                                 | create-task feature |
 | `src/features/compute/` (`ComputePage`, `SandboxPage`)                                                                                                                                         | compute feature     |
 | `src/features/terminals/` (`TerminalsTab`, `TerminalPane`, mounted by `SandboxPage`) + `tests/terminals.spec.ts`                                                                               | terminals feature   |
@@ -93,25 +93,27 @@ its area.
 - **Statuses are verbatim:** render `<StatusPill status={task.status} />`
   or `<StatusPill status={sandbox.status} detail={sandbox.status_error} />`.
   Never derive, map or relabel a status in the UI. If a status is wrong, the
-  backend has to change. The pill's shape is an LED. Franco's spec,
-  2026-11-02, verbatim: "Running: green led blinking. Review: yellow led
-  blinking. Open: green led off. Done: green led on. Crashed: red dot
-  blinking. Canceled: red dot." (canceled is not a backend status yet;
-  failed is the steady red until it is). It overrides the older rtsdesign
-  tier text (open hollow blue, done green off). In the rtsdesign tiers
-  (`data-tier`): `lit` for alive (running: green blinking; review: yellow
-  blinking; starting/stopping: blue pulsing), `off` for ended well (done:
-  green on, steady; stopped: green off), `attention` for died or needs a
-  hand (crashed, or any word with a `detail`: red blinking; failed, error:
-  red on, steady; the only red on screen), `idle` for not started (open, and
-  any word the pill doesn't know: green off, grey text). Blinking means it
-  is doing something or waiting on someone; steady means it is settled:
-  running and done share the green, the blink tells them apart. A dead
-  thing never looks like a done one (red, never green).
-  `statusTier`/`tierRank` from `@/components/status-pill` give a status's
-  tier; the Tasks and Compute lists sort attention, lit, idle, off (rows
-  carry `data-tier`; off ones are muted), and their top row has
-  `<StatusLegend />` (four dots, the tier word on hover).
+  backend has to change. There is no LED: the word is the light (Franco,
+  2026-11-02, second round: "Only things that need my attention should be
+  blinking. Get rid of the led; it's the whole REVIEW that would blink. If
+  it's not running just make the green outline but not filled."; the rest is
+  rtsdesign rule 6, color by kind: green work, yellow a person's turn, blue
+  a machine in transition, red broken). The tiers (`data-tier`): `lit` for
+  alive (running, review, starting/stopping/creating), `off` for ended
+  (done, stopped), `attention` for died or needs a hand (crashed, or any
+  word with a `detail`; failed, error: the only red on screen), `idle` for
+  not started (open, and any word the pill doesn't know: grey text). In the
+  Tasks list's status tab (`index.css`): running filled green, transition
+  filled blue, both steady; review blinks the whole tab yellow and crashed
+  red, the only two things that blink anywhere; failed a steady red
+  outline; done a green outline, not filled; open and unknown a dim green
+  outline. The pill alone (rails, Compute, counts) carries the colors as
+  border and text and never blinks. A dead thing never looks like a done
+  one (red, never green). `statusTier`/`tierRank` from
+  `@/components/status-pill` give a status's tier; the Tasks and Compute
+  lists sort attention, lit, idle, off (rows carry `data-tier`; off ones
+  are muted). `Led({color})` is a small steady light for facts that are not
+  a status (the rail's criteria and checks).
 - **Attention is personal (rtsdesign rule 14):** a task in `review` waits on
   its manager first (ADR 0010: the manager or the owner accepts); it waits on
   the owner when the owner is the manager or the manager never joined
@@ -197,8 +199,12 @@ its area.
   `CreateTaskRequest` takes `accept`. `review` means delivered and waiting.
   The create dialog's Order card has "Accepted when" (one criterion per line,
   empty lines dropped). The task rail shows the criteria as unchecked boxes
-  under "Accepted when" (hidden when empty), the Summary once delivered, and
-  "Accepted by <name> <when>" once done. The rail shows the amber `review`
+  under "Accepted when" (hidden when empty) until delivered, then the
+  Review section (see Task page) against `report`
+  (`{ criteria: {met, note}[], changes?: {branch, sha, files?}, checks:
+{name, passed, note}[], left_out: {what, why}[], needs: string[] }` or
+  `null`; `POST /deliver` takes it next to `summary`), the Summary once delivered, and
+  "Accepted by <name> <when>" once done. The rail shows the yellow `review`
   pill, a "Delivered <when>" line, and Accept (confirms "Accept and stop N
   running sandboxes", or "Accept" when none run) and Reject… (a required
   "Why") until done. `by` is the signed-in name (`humanName()` in
@@ -309,16 +315,36 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   `/brief` redirects to the bare one. Right: the rail (`TaskRail`,
   `data-testid="task-header"`), 360px, scrolling on its own while the box
   fills the height.
-- Rail, top to bottom: the actions right-aligned (Accept, the one primary
-  button, green while `review`; Reject…; Delete), status pill and title
-  (h2), `name · #name` dim mono, who as plain muted lines with small icons
-  (`assignee` harness · model, `manager` and `owner` each after its xs
-  `Avatar`, `notify-chip`, and the
-  `for` link chip), `delivered-chip` / `accepted` lines, then hairline
-  sections: "Accepted when" (`criteria`), Brief (`brief`, clamped to six
-  lines with "Show more"), What the agent received (the newest sandbox's
-  TASK.md behind a toggle, `instructions`, Copy), Summary (`region`
-  "Delivery", `summary`).
+- Rail, top to bottom: the actions (Accept, the one primary button, green
+  while `review`, then a dim `N not met` (`not-met`, the report's `no`
+  answers; Accept is never disabled for it, rule 14); Reject…; Delete at the
+  far right), status pill and title (h2), `name · #name` dim mono,
+  `waiting-on`, `delivered-chip` / `accepted` lines; then, in `review` or
+  `done`, the Review section and the Summary under it; who as plain muted
+  lines with small icons (`assignee` harness · model, `manager` and `owner`
+  each after its xs `Avatar`, `notify-chip`, and the `for` link chip); then
+  hairline sections: "Accepted when" (`criteria`, unchecked boxes, only
+  before delivery), Brief (`brief`, clamped to six lines with "Show more"),
+  What the agent received (the newest sandbox's TASK.md behind a toggle,
+  `instructions`, Copy), Summary (`region` "Delivery", `summary`; here only
+  before delivery).
+- **Review** (`region` "Review", in `review` or `done` when there are
+  criteria or a report): what the reviewer accepts, read from
+  `task.report` (`Report` in `@/api/tasks`, typed ahead of the Go side's
+  deliver-report). Criteria: a row per `task.accept` line in order
+  (`criterion`, `data-met` yes/no/partly), its light at the left, the
+  status pill's LEDs held steady (`Led` in `status-pill.tsx`: `yes` green
+  as done, `no` red as failed, `partly` yellow as review; `data-light`), the line in normal weight, the agent's
+  note dim under it; with no report (or no answer for that line) an empty
+  dashed slot where the light goes (`empty-light`). Then, from the report,
+  each omitted when empty: Changes (`changes-branch` and `changes-sha`,
+  mono chips, the sha cut to 7; the branch links in a new tab to
+  `https://github.com/<repo>/compare/<ref>...<branch>` when the newest
+  sandbox's spec has `repo` (a `github.com/` prefix stripped) and `ref`;
+  `changes-files` dim), Checks (`check`, `data-passed`: a green or red
+  steady LED, name mono, note dim), Left out (`left-out`: what, why dim),
+  Needs you (`need`, each with the lit amber `AttentionMark` from
+  `attention.tsx` at its left edge: it waits on the reviewer).
 - Compute in the box: "Allocate compute" (outline, so Accept stays the one
   primary), the sandboxes as flat rows (`data-sandbox`, status pill, name,
   image, age, Open to `/compute/<name>`; the selected row is tinted with a
@@ -328,7 +354,8 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   (`TerminalsTab sandbox=…`). Messages in the box: `ChannelView` with the
   composer, filling the box.
 - Below 1200px the rail is a card above the box: who wraps on one line, and
-  criteria, brief, received and summary fold behind "Details".
+  criteria, brief, received and summary fold behind "Details"; in review or
+  done the Review section and the summary stay out of the fold.
 
 ## Talk: inbox, unread, notifications
 
@@ -490,8 +517,10 @@ Look at your screen with `npm run shot` and read the PNG before you report.
 Tasks (each with a brief and assignee):
 
 - `review-42` "Review 42": review (delivered 5 minutes ago, summary
-  "Reviewed PR 42: two findings, both fixed on agc/review-42.", two
-  criteria), assignee `claude_code`,
+  "Reviewed PR 42: two findings, both fixed on agc/review-42.", three
+  criteria, a full report: yes, partly, no; changes `agc/review-42` at
+  `3f9c2ab…`, 4 files; checks `go test ./...` passed and `go vet ./...`
+  failed; one left out; two needs), assignee `claude_code`,
   `for: attach-rulesets-to-task-specs`; sandbox `review-42` running
   (terminals `agent` running `claude`, and `bash` exited) and an older
   sandbox `review-42-2` stopped. `review-42`'s clone has uncommitted
@@ -499,7 +528,8 @@ Tasks (each with a brief and assignee):
   `work` is set only on `GET /api/sandboxes/:id` (and the list with
   `?work=1`) while it is running with a repo, as on the real server.
 - `flaky-ci` "Flaky CI": open, assignee `franco`, one criterion, no sandbox.
-- `docs-pass` "Docs pass": done, accepted by `franco` with a summary;
+- `docs-pass` "Docs pass": done, accepted by `franco` with a summary,
+  one criterion and `report: null`;
   sandbox `docs-pass` stopped.
 - `boot-fail` "Boot fail": open; sandbox `boot-fail` failed with
   `status_error: clone failed: repository not found`.
@@ -524,7 +554,7 @@ Creating a task
 returns at once. An allocated sandbox (`POST /api/tasks/{id}/sandboxes`, or
 `sandbox` on create) answers 201 `starting` for 2s, then `running`, and
 starts its `command` as the job `agent`. `POST /api/tasks/{id}/deliver
-{summary}`, `/accept {by}` (default the owner; sets `done_at` and
+{summary, report?}` (report stored as given, else `null`), `/accept {by}` (default the owner; sets `done_at` and
 `accepted_by`, stops the task's running or starting sandboxes, emits
 `task.done`) and `/reject {by, why}` (clears `delivered_at`) post
 "Delivered: …", "Accepted by <name>." and "Rejected by <name>: <why>" in
