@@ -1,2 +1,665 @@
 /* Eva look, talk area (docs/design/panel.md). Rules keyed on the markup's attributes;
-   unlayered so they win over Tailwind utilities. Filled by task panel-eva-talk. */
+   unlayered so they win over Tailwind utilities. Filled by task panel-eva-talk.
+
+   Talk reads like a log printed by an instrument: the channel's name a
+   filled tab over a ruler, messages plain lines in columns (when, who,
+   what), agc's notices dim mono, a question a yellow-framed plate with its
+   kind as a filled tab, the composer a one-pixel frame that turns cyan
+   while you type in it, Send a filled block cut at the corner. */
+
+/* ---------- the channel header: a filled tab on a ruler ---------- */
+.dark [data-testid='channel-header'],
+.dark [data-testid='inbox-header'] {
+  position: relative;
+  min-height: 2.5rem;
+  padding-top: 0;
+  padding-bottom: 6px;
+  align-items: flex-end;
+  border-bottom: 1px solid var(--eva-dim);
+  color: var(--muted-foreground);
+}
+.dark [data-testid='channel-header']::after,
+.dark [data-testid='inbox-header']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, var(--eva-dim) 0 1px, transparent 1px 12px);
+  pointer-events: none;
+}
+.dark [data-testid='channel-header'] > *,
+.dark [data-testid='inbox-header'] > * {
+  position: relative;
+  z-index: 1;
+}
+.dark [data-slot='channel-tab'] {
+  align-self: stretch;
+  margin-left: -16px;
+  margin-bottom: -6px;
+  padding: 0 22px 0 16px;
+  background: var(--eva);
+  color: var(--eva-ink);
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+}
+.dark [data-slot='channel-tab'] svg {
+  color: var(--eva-ink);
+}
+/* The inbox line is a label, not a name: condensed uppercase. */
+.dark [data-testid='inbox-header'] [data-slot='channel-tab'] {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.75rem;
+}
+/* "Direct · task x": the meta, small mono after the tab. */
+.dark [data-testid='channel-header'] > span:not([data-slot]) {
+  align-self: flex-end;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  margin-left: 6px;
+}
+/* Follow / Following: an outlined block at the far right; lit orange while
+   following, dim when not, muted and dashed for the inbox (always). */
+.dark [data-testid='follow-toggle'] {
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  border: 1px solid var(--eva-dim);
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  font-size: 0.7rem;
+}
+.dark [data-testid='follow-toggle'][data-state='on'] {
+  border-color: var(--eva);
+  color: var(--eva);
+  background: var(--eva-faint);
+}
+.dark [data-testid='follow-toggle']:hover:not(:disabled) {
+  background: var(--eva-faint);
+  color: var(--foreground);
+}
+.dark [data-testid='follow-toggle']:disabled {
+  border-style: dashed;
+  opacity: 1;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+/* ---------- members and the waiting strip ---------- */
+.dark [data-testid='members'] {
+  border-color: var(--eva-dim);
+  background: oklch(0.11 0.006 60 / 70%);
+}
+.dark [data-testid='members-count'] {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.65rem;
+}
+.dark [data-testid='waiting-strip'] {
+  border-color: var(--eva-yellow);
+  background: oklch(0.86 0.18 92 / 10%);
+  color: var(--eva-yellow);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+}
+.dark [data-testid='waiting-strip'] svg {
+  color: var(--eva-yellow);
+}
+.dark [data-testid='waiting-count'] {
+  display: inline-block;
+  min-width: 1.25rem;
+  margin-left: 4px;
+  padding: 0 4px;
+  background: var(--eva-yellow);
+  color: var(--eva-ink);
+  font-family: var(--font-mono);
+  text-align: center;
+}
+.dark [data-testid='waiting-strip']:hover {
+  background: oklch(0.86 0.18 92 / 18%);
+}
+
+/* ---------- the log: lines in columns ---------- */
+.dark [data-testid='message-list'] > ol,
+.dark [data-testid='thread-messages'] ol {
+  gap: 4px;
+}
+/* Every line: the time column, then the line. No rounded hover card: the
+   hovered line gets a faint orange wash and a left tick. */
+.dark [data-testid='message'] {
+  border-radius: 0;
+  gap: 12px;
+  border-left: 2px solid transparent;
+}
+.dark [data-testid='message-group'] [data-testid='message']:hover {
+  background: var(--eva-faint);
+  border-left-color: var(--eva-dim);
+}
+.dark [data-slot='stamp'] {
+  width: 4.5rem;
+  justify-content: flex-start;
+  padding-left: 4px;
+  white-space: nowrap;
+}
+.dark [data-slot='stamp'] time {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  line-height: 1.25rem;
+  color: oklch(0.62 0.03 70 / 80%);
+  letter-spacing: 0.02em;
+}
+.dark [data-testid='message-group'] [data-testid='message'] + [data-testid='message'] [data-slot='stamp'] time {
+  line-height: 1.25rem;
+}
+/* The sender: avatar, name in condensed uppercase, kind icon, its task. */
+.dark [data-slot='header'] {
+  gap: 6px;
+  min-height: 1.25rem;
+}
+.dark [data-slot='header'] [data-testid='author'] {
+  font-family: var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--eva);
+}
+.dark [data-slot='header'] [data-testid='author'][data-kind='human'] {
+  color: var(--foreground);
+}
+.dark [data-slot='header'] [data-slot='sender-icon'] {
+  color: var(--muted-foreground);
+  width: 0.8rem;
+  height: 0.8rem;
+}
+/* The agent's task: plain mono text, linked, no chip. */
+.dark [data-slot='header'] a > span {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--muted-foreground);
+  border-radius: 0;
+}
+.dark [data-slot='header'] a > span > svg {
+  display: none;
+}
+.dark [data-slot='header'] a:hover > span {
+  color: var(--eva-cyan);
+  filter: none;
+}
+.dark [data-slot='header'] > time {
+  font-size: 0.65rem;
+}
+/* The body: pale text, plain. */
+.dark [data-testid='message-body'] {
+  color: var(--foreground);
+}
+.dark [data-testid='message-body'] code {
+  border-radius: 0;
+  background: var(--eva-faint);
+}
+.dark [data-testid='code-block'] pre {
+  border-radius: 0;
+  border-color: var(--eva-dim);
+  border-left: 2px solid var(--eva);
+  background: oklch(0.1 0.005 60);
+}
+.dark [data-testid='code-block'] pre > code {
+  background: transparent;
+}
+.dark [data-testid='code-block'] button {
+  border-radius: 0;
+}
+.dark [data-testid='message-body'] a:not([data-testid]),
+.dark [data-testid='system-line'] a:not([data-testid]) {
+  color: var(--eva-cyan);
+}
+.dark [data-testid='mention-chip'],
+.dark [data-testid='channel-chip'] {
+  border-radius: 0;
+}
+.dark [data-testid='mention-chip'] {
+  background: transparent;
+  color: var(--eva);
+  box-shadow: inset 0 0 0 1px var(--eva-dim);
+}
+.dark [data-testid='mention-chip'][data-me='true'] {
+  background: var(--eva-cyan);
+  color: var(--eva-ink);
+  box-shadow: none;
+}
+.dark [data-testid='channel-chip'] {
+  background: transparent;
+  color: var(--eva-cyan);
+  border-color: transparent;
+}
+.dark [data-testid='channel-chip'] svg {
+  color: var(--eva-cyan);
+}
+/* "N replies": mono, the count orange. */
+.dark [data-testid='thread-footer'] {
+  border-radius: 0;
+  padding-left: 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+.dark [data-testid='thread-footer'] > svg,
+.dark [data-testid='thread-footer'] > span:first-of-type {
+  color: var(--eva);
+}
+.dark [data-testid='thread-footer']:hover {
+  background: transparent;
+}
+.dark [data-testid='thread-footer']:hover > span:first-of-type {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.dark button[aria-label='Reply in thread'] {
+  border-radius: 0;
+  box-shadow: none;
+  border-color: var(--eva-dim);
+  background: var(--background);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+.dark button[aria-label='Reply in thread']:hover {
+  border-color: var(--eva);
+  color: var(--eva);
+}
+
+/* Day separator and the unread line: a label on a dim rule. */
+.dark [data-testid='day-separator'],
+.dark [data-testid='unread-line'] {
+  padding: 8px 0 4px;
+}
+.dark [data-testid='day-separator'] > span:nth-child(2),
+.dark [data-testid='unread-line'] > span:nth-child(2) {
+  letter-spacing: 0.18em;
+  font-weight: 600;
+  padding: 0 8px;
+  border: 1px solid currentColor;
+}
+.dark [data-testid='day-separator'] > span:not(:nth-child(2)) {
+  background: var(--eva-dim);
+  opacity: 1;
+}
+.dark [data-testid='day-separator'] {
+  color: var(--eva);
+}
+.dark [data-testid='unread-line'] {
+  color: var(--eva-cyan);
+}
+.dark [data-testid='unread-line'] > span:nth-child(2) {
+  background: var(--eva-cyan);
+  color: var(--eva-ink);
+  border-color: var(--eva-cyan);
+}
+.dark [data-testid='unread-line'] > span:not(:nth-child(2)) {
+  opacity: 0.6;
+}
+/* "Jump to unread" and "New messages": square blocks. */
+.dark [data-testid='message-list'] ~ button {
+  border-radius: 0;
+  box-shadow: none;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  font-size: 0.7rem;
+  background: var(--eva-cyan);
+  border-color: var(--eva-cyan);
+  color: var(--eva-ink);
+}
+
+/* ---------- agc: dim mono notices ---------- */
+.dark [data-testid='system-line'] {
+  font-family: var(--font-mono);
+  color: oklch(0.62 0.03 70 / 85%);
+  align-items: center;
+}
+.dark [data-testid='system-line'] > span[title='agc'] {
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  box-shadow: inset 0 0 0 1px oklch(0.62 0.03 70 / 50%);
+}
+.dark [data-testid='system-line'] .text-sm,
+.dark [data-testid='system-line'] .text-xs {
+  font-size: 0.7rem;
+}
+.dark [data-testid='system-line'] > div > button[aria-expanded] {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-family: var(--font-sans);
+  font-weight: 600;
+}
+.dark [data-testid='system-line'] > div > button[aria-expanded]:hover {
+  color: var(--eva);
+}
+.dark [data-testid='system-line'] > div > div {
+  border-radius: 0;
+  border-color: var(--eva-dim);
+  background: oklch(0.1 0.005 60);
+  font-family: var(--font-sans);
+}
+.dark [data-testid='system-line'][data-system='delivered'] [data-status-icon] {
+  color: var(--eva-yellow);
+}
+.dark [data-testid='system-line'][data-system='accepted'] [data-status-icon] {
+  color: var(--eva-green);
+}
+.dark [data-testid='system-line'][data-system='rejected'] [data-status-icon] {
+  color: var(--eva-red);
+}
+
+/* ---------- a question: a yellow-framed plate, its kind a filled tab ---------- */
+.dark [data-testid='question-card'] {
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  border-radius: 0;
+  background: var(--eva-yellow);
+  padding: 0 14px 10px;
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    var(--cut) 100%,
+    0 calc(100% - var(--cut))
+  );
+}
+.dark [data-testid='question-card']::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  background: oklch(0.15 0.012 85);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut) + 1px) 0,
+    100% calc(var(--cut) - 1px),
+    100% 100%,
+    calc(var(--cut) - 1px) 100%,
+    0 calc(100% - var(--cut) + 1px)
+  );
+}
+.dark [data-testid='question-card'] > * {
+  position: relative;
+  z-index: 1;
+}
+.dark [data-testid='question-card'][data-state='answered'] {
+  background: oklch(0.62 0.03 70 / 40%);
+}
+.dark [data-testid='question-card'][data-state='answered']::after {
+  background: var(--card);
+}
+/* The kind tab hangs from the plate's top edge at the left. */
+.dark [data-testid='question-card'] [data-slot='kind'] {
+  align-self: stretch;
+  margin-left: -14px;
+  margin-right: 6px;
+  padding: 3px 16px 3px 10px;
+  background: var(--eva-yellow);
+  color: var(--eva-ink);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+  font-size: 0.7rem;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
+}
+.dark [data-testid='question-card'] [data-slot='kind'] svg {
+  color: var(--eva-ink);
+}
+.dark [data-testid='question-card'][data-state='answered'] [data-slot='kind'] {
+  background: oklch(0.62 0.03 70 / 25%);
+  color: var(--muted-foreground);
+}
+.dark [data-testid='question-card'][data-state='answered'] [data-slot='kind'] svg {
+  color: var(--muted-foreground);
+}
+.dark [data-testid='question-card'] > div:first-child {
+  margin-bottom: 4px;
+}
+.dark [data-testid='answer'] {
+  border-left-color: var(--eva-green);
+}
+.dark [data-testid='answered-by'] {
+  font-family: var(--font-mono);
+}
+
+/* ---------- acts: Send and Answer, filled blocks cut at the corner ---------- */
+.dark [data-act] {
+  border-radius: 0;
+  box-shadow: none;
+  border: 0;
+  background: var(--eva);
+  color: var(--eva-ink);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  font-size: 0.75rem;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+}
+.dark [data-act]:hover:not(:disabled) {
+  background: oklch(0.85 0.17 55);
+  color: var(--eva-ink);
+}
+.dark [data-act] svg {
+  color: currentColor;
+}
+/* Disabled: outlined and dim, the reason in its own label. */
+.dark [data-act]:disabled {
+  opacity: 1;
+  background: var(--eva-faint);
+  color: oklch(0.74 0.19 48 / 75%);
+  box-shadow: inset 0 0 0 1px var(--eva-dim);
+}
+.dark [data-act='answer']:not(:disabled) {
+  background: var(--eva-yellow);
+}
+
+/* ---------- the composer: a one-pixel frame, cyan while you type ---------- */
+.dark [data-slot='composer'] {
+  margin: 8px 16px 14px;
+  padding: 0;
+  gap: 0;
+  border: 1px solid var(--eva-dim);
+  background: oklch(0.1 0.005 60);
+}
+.dark [data-slot='composer']:focus-within {
+  border-color: var(--eva-cyan);
+  box-shadow: 0 0 0 1px var(--eva-cyan);
+}
+.dark [data-slot='composer'] textarea,
+.dark [data-testid='question-card'] textarea {
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.dark [data-slot='composer'] textarea {
+  border: 0;
+  padding: 10px 12px;
+}
+.dark [data-slot='composer'] textarea:focus-visible {
+  box-shadow: none;
+  outline: none;
+}
+.dark [data-testid='question-card'] textarea {
+  border-color: var(--eva-dim);
+  background: oklch(0.1 0.005 60);
+}
+.dark [data-testid='question-card'] textarea:focus-visible {
+  border-color: var(--eva-cyan);
+  box-shadow: 0 0 0 1px var(--eva-cyan);
+}
+.dark [data-slot='composer'] textarea::placeholder,
+.dark [data-testid='question-card'] textarea::placeholder {
+  color: oklch(0.62 0.03 70 / 70%);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+/* The bar under the draft: who you post as at the left, Send flush with
+   the frame's bottom right corner. */
+.dark [data-slot='composer'] > div:last-child {
+  border-top: 1px solid var(--eva-faint);
+  padding-left: 8px;
+  min-height: 2rem;
+}
+.dark [data-slot='composer'] > div:last-child > [data-act='send'] {
+  align-self: stretch;
+  height: auto;
+  padding: 0 16px;
+}
+.dark [data-slot='composer'] > :not(:last-child):not(textarea) {
+  margin: 8px 12px 0;
+}
+.dark [data-slot='identity'] {
+  border-radius: 0;
+  font-size: 0.7rem;
+}
+.dark [data-slot='identity'][data-joined='true'] {
+  border-color: oklch(0.8 0.14 200 / 50%);
+  background: oklch(0.8 0.14 200 / 8%);
+  color: var(--eva-cyan);
+}
+.dark [data-slot='identity'][data-joined='false'] {
+  border-color: oklch(0.62 0.03 70 / 50%);
+  color: var(--muted-foreground);
+}
+
+/* ---------- the thread pane ---------- */
+.dark [data-testid='thread-pane'] {
+  border-color: var(--eva-dim);
+  background: oklch(0.12 0.007 60);
+}
+.dark [data-testid='thread-pane'] > div:first-child {
+  border-color: var(--eva-dim);
+}
+.dark [data-testid='thread-pane'] > div:first-child > span:first-of-type {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--eva);
+}
+.dark [data-testid='thread-pane'] button[aria-label='Close thread'] {
+  border-radius: 0;
+}
+.dark [data-testid='thread-messages'] > div:nth-child(2) {
+  color: var(--eva);
+  letter-spacing: 0.16em;
+}
+.dark [data-testid='thread-messages'] > div:nth-child(2) > span:last-child {
+  background: var(--eva-dim);
+}
+
+/* ---------- sidebar: channel rows on the rail ---------- */
+/* Rows inherit the shell's rail look (nav a): muted, cyan when current.
+   Channel and people names are identifiers, so mono and lowercase. */
+.dark [data-testid='channel-rows'] a .font-mono {
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+.dark [data-testid='channel-rows'] a[data-unread='true'] {
+  color: var(--foreground);
+}
+.dark [data-testid='channel-rows'] a[data-unread='true'] .font-mono {
+  font-weight: 700;
+}
+.dark [data-testid='channel-rows'] a[data-testid='dm-row'] .text-xs {
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+}
+.dark [data-testid='channel-group'] > span {
+  color: oklch(0.74 0.19 48 / 70%);
+  letter-spacing: 0.18em;
+  font-size: 0.6rem;
+  font-weight: 600;
+}
+
+/* ---------- badges: square ---------- */
+.dark [data-testid='unread-badge'] {
+  border-radius: 0;
+  min-width: 1.25rem;
+  background: transparent;
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px oklch(0.92 0.02 80 / 45%);
+}
+/* A mention waits on you: filled. */
+.dark [data-testid='unread-badge'][data-mention='true'] {
+  background: var(--eva);
+  color: var(--eva-ink);
+  box-shadow: none;
+}
+.dark [data-testid='question-badge'] {
+  border-radius: 0;
+  border-color: var(--eva-yellow);
+  background: var(--eva-yellow);
+  color: var(--eva-ink);
+}
+.dark [data-testid='question-badge'] svg {
+  color: var(--eva-ink);
+}
+
+/* ---------- browse ---------- */
+.dark [data-testid='browse-row'] {
+  border-color: var(--eva-faint);
+}
+.dark [data-testid='browse-row']:hover {
+  background: var(--eva-faint);
+}
+.dark [data-testid='browse-last'] {
+  font-family: var(--font-mono);
+}
+/* The row you are on follows the rail: no frame, the shell's cyan bar. */
+.dark [data-testid='channel-rows'] a {
+  border-top-color: transparent;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+}
+.dark [data-testid='channel-rows'] a[aria-current='page'] {
+  border-left-color: var(--eva-cyan);
+  color: var(--eva-cyan);
+  background: oklch(0.8 0.14 200 / 10%);
+}
+/* On the filled current area header the badges invert: ink on orange. */
+.dark [data-current='true'] [data-testid='unread-badge'] {
+  color: var(--eva-ink);
+  box-shadow: inset 0 0 0 1px var(--eva-ink);
+}
+.dark [data-current='true'] [data-testid='unread-badge'][data-mention='true'] {
+  background: var(--eva-ink);
+  color: var(--eva);
+}
+
+/* The thread pane is an <aside>: undo the shell's sidebar-brand rules
+   (aside > div:first-child) that would fill its header's spans orange. */
+.dark [data-testid='thread-pane'] > div:first-child {
+  letter-spacing: normal;
+  text-transform: none;
+  background: transparent;
+}
+.dark [data-testid='thread-pane'] > div:first-child > span {
+  background: transparent;
+  border-radius: 0;
+}
+.dark [data-testid='thread-pane'] > div:first-child > span:first-of-type {
+  color: var(--eva);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.dark [data-testid='thread-pane'] > div:first-child > span.font-mono {
+  color: var(--muted-foreground);
+}
