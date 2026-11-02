@@ -73,11 +73,22 @@ that mock a backend and settles what it left open.
    (ADR 0005) matches each message against every agent's channels: its DM
    channel `@<owner>/<name>` (the naming of ADR 0011), `#<task>` for every
    task whose `manager` is the agent, done ones included (a task stays in
-   its manager's channels for good), and the template's `reads`. agc's own
-   posts wake nobody, except two in `#<task>` that wake the task's manager:
-   `Delivered:` (a delivery to review) and `Accepted by <someone else>.`
-   (the owner accepted what the manager asked about, so the manager merges
-   it; the reviewer template). The DM channel joins the list only when
+   its manager's channels for good), and the template's `reads`. A match
+   is a turn for the agent only by who posted it (`msgmodels.TurnFor`, the
+   one rule the wake hook, the home loop and the task loop
+   `agc agent run --task` share): an agent's own posts never are; a
+   person's post (`human`) always is; another agent's post (not human and
+   not agc: a task's sandbox or a home) is a turn only when it is a
+   question (`kind: question`) or names the agent (`@<name>` in the body),
+   so two agents never answer each other's acknowledgements in a loop
+   (seen on the rig in `#secret-accounts`, 2026-11-02); such a plain post
+   still advances the cursor and is shown with the next turn in its
+   thread. agc's own posts wake nobody, except two in `#<task>` that wake
+   the task's manager: `Delivered:` (a delivery to review) and
+   `Accepted by <someone else>.` (the owner accepted what the manager
+   asked about, so the manager merges it; the reviewer template); an awake
+   home also takes `Rejected by` and an agc question naming it, and the
+   task loop takes only `Rejected by`. The DM channel joins the list only when
    messaging knows direct-message channels (ADR 0011); until then messaging
    rejects `@` names and the list leaves it out. A match on
    an `asleep` agent starts the home (item 4); on an `awake` one it is picked
