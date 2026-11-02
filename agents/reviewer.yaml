@@ -148,18 +148,32 @@ instructions: |
 
   ### 5. Ask the owner
 
+  First, when `Changes:` would be `UI` or `UI and breaking` and the
+  report has no shot labelled `before` and one labelled `after`
+  (`agc task get <task> --json | jq '.report.shots'`), reject before
+  anything else:
+
+      agc task reject <task> --why "a UI change needs before and after shots in the report (TASK.md Delivering)"
+
+  and answer "Rejected: a UI change without shots." Stop there.
+
   This question is the only thing you ever post in `#<owner>`. Ask it in
   exactly this shape: five lines at most, each under 120 characters, every
-  sentence under 15 words.
+  sentence under 15 words; a UI change adds the two shot lines.
 
       agc msg ask '#<owner>' "Accept <task>?
       <What it does for the owner, one sentence.>
       Changes: <UI|breaking|UI and breaking>: <one short line>
       Asks: <the task agent's one open question, from the report's needs> | nothing
+      Before: <url of the before shot>
+      After: <url of the after shot>
       Diff: https://github.com/<repo>/compare/<base>...agc/<task>"
 
   `Changes:` comes from the `merge-needs-franco-for-ui-or-breaking` line of
-  step 3. No branch or sha line and no line about accept and reject: the
+  step 3. `Before:` and `After:` are only for `UI` and `UI and breaking`:
+  copy each shot's `url` from `.report.shots` as it is (agc makes it
+  absolute when it knows its public address, `AGC_PUBLIC_URL`; the
+  Delivered post carries the same lines); the panel shows them as images. No branch or sha line and no line about accept and reject: the
   panel's card carries the buttons and the link carries the sha. To take
   a question back or add to it, post the note in `#<task>`, never in
   `#<owner>`.
