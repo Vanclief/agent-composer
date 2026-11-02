@@ -702,6 +702,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/msg/participants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the participants of a channel, with presence
+         * @description Everyone who has posted in the channel: active ones first, then those who left, each by name. Poll it with the channel to keep presence current; nothing is published.
+         */
+        get: operations["listMsgParticipants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/msg/participants/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one participant, with presence */
+        get: operations["getMsgParticipant"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1516,6 +1553,31 @@ export interface components {
         };
         MsgQuestionsResponse: {
             questions: components["schemas"]["MsgQuestion"][];
+        };
+        MsgParticipantList: {
+            participants: components["schemas"]["MsgParticipant"][];
+        };
+        /** @description A name agc handed out on join (ADR 0005). online and last_seen_at are computed per request, never stored. */
+        MsgParticipant: {
+            id: string;
+            name: string;
+            /** @description The task that joined it; empty for humans and agc. */
+            task: string;
+            human: boolean;
+            /** Format: date-time */
+            joined_at: string;
+            /**
+             * Format: date-time
+             * @description Set once the participant left; absent while active.
+             */
+            left_at?: string;
+            /** @description Never for agc or a participant that left. An agent (human false, task set) is online while the sandbox named like it is running, or, when no sandbox has its name, while any sandbox of its task is; with no sandbox status wired, whenever it has not left. A human is online when last_seen_at is within the last 5 minutes. */
+            online: boolean;
+            /**
+             * Format: date-time
+             * @description An agent's latest message. For a human, the later of its latest message and its latest /read, /wait (with participant=<id>) or /post, the latter kept in memory and lost on restart. Null when there is neither.
+             */
+            last_seen_at: string | null;
         };
     };
     responses: {
@@ -2902,6 +2964,55 @@ export interface operations {
             400: components["responses"]["MsgError"];
             401: components["responses"]["MsgError"];
             500: components["responses"]["MsgError"];
+        };
+    };
+    listMsgParticipants: {
+        parameters: {
+            query: {
+                /** @description The channel, such as '#review-42'. */
+                channel: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channel's participants. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MsgParticipantList"];
+                };
+            };
+            400: components["responses"]["MsgError"];
+            403: components["responses"]["MsgError"];
+        };
+    };
+    getMsgParticipant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The participant id agc handed out on join. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The participant. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MsgParticipant"];
+                };
+            };
+            404: components["responses"]["MsgError"];
         };
     };
 }

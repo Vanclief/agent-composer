@@ -98,6 +98,10 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	tasksAPI := tasks.NewAPI(ctrl, sandboxesAPI, msg, secretsPath, specs)
 	tasksAPI.SetEvents(bus)
 
+	// Participant presence reads sandbox status through this seam, so
+	// messaging does not import the sandboxes API.
+	msg.SetPresence(sandboxesAPI)
+
 	// Sandboxes keep running while agc is down. Their messaging listeners
 	// come back here.
 	err = sandboxesAPI.Resume(rootCtx)

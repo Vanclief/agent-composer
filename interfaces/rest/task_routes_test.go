@@ -87,6 +87,7 @@ func newTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *task
 	msg.SetEvents(bus)
 	specs := task.Store{Dir: filepath.Join(t.TempDir(), "specs")}
 	sandboxesAPI := sandboxes.NewAPI(context.Background(), ctrl, msg, rt, secretsPath, socketDir)
+	msg.SetPresence(sandboxesAPI)
 	tasksAPI := tasks.NewAPI(ctrl, sandboxesAPI, msg, secretsPath, specs)
 	tasksAPI.SetEvents(bus)
 	server := &restserver.Server{
