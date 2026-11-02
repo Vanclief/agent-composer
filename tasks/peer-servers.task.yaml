@@ -1,0 +1,124 @@
+# agc task create -f tasks/peer-servers.task.yaml
+# Peer servers: one agc keeps the tasks, messaging and knowledge, and
+# allocates sandboxes on other agc servers too (Franco's Mac mini next to
+# the rig). Franco decided 2026-11-02: "agc has to be able to use compute
+# from other agc servers".
+name: peer-servers
+title: Peer servers, agc allocates sandboxes on other agc servers
+assignee: claude_code
+manager: franco
+owner: franco
+for: proposals-pass-through-human-gates
+accept:
+  - Config lists peer servers by name and URL; GET /api/servers returns each with reachable, cpus and memory in use and free, and the local server listed first as `local`
+  - "A task's sandbox block may name `server: <name>`; with none, the local server is used; the sandbox row records its server and every sandbox operation (allocate, start, stop, delete, terminals, the terminal websocket, transcripts) goes to that server through one Runtime implementation that calls the peer's REST"
+  - A sandbox on a peer talks in #<task> like a local one: the peer runs the vsock listener and forwards posts and waits to the primary's messaging REST with the peer token, so a task's agent on the Mac mini posts and reads exactly as on the rig
+  - "Secrets never leave a server: the peer resolves the spec's secrets from its own secrets file; a missing one fails allocation with a message naming the secret and the server"
+  - Peer calls carry a shared token from the secret AGC_PEER_TOKEN, checked on both sides; a wrong or missing token is refused; tests against httptest cover the remote runtime and the token check
+  - go build/vet/test pass; gofmt lists only the three known files; docs/openapi.yaml and make types updated; docs/decisions/0018-peer-servers.md, decisions/peer-servers.yaml, actions/peer-servers.yaml, proposals/peer-servers.yaml written; branch agc/peer-servers pushed; nothing merged
+brief: |
+  Let one agc use compute on other agc servers. Read AGENTS.md, ADR
+  0003, 0004, 0005, 0008, 0009 first, then core/resources/sandboxes
+  (api.go has the Runtime interface the sandbox API talks to; allocate,
+  start, stop, delete, terminals, resume), executor/, interfaces/cli/
+  client (the HTTP client the CLI already uses against a server),
+  messaging/ (the per-sandbox vsock listener and the REST at
+  /api/msg/*), then `agc rules show`. Write the whole thing; do not
+  stop at a plan.
+
+  Shape, keep it this simple:
+  - One primary, many peers. The primary holds tasks, messaging,
+    knowledge and the panel. A peer is just another `agc rest` with its
+    own secrets file and its own msb, on another machine (first target:
+    a Mac mini on the same LAN; microsandbox runs on Apple Silicon).
+    Peers do not know about each other.
+  - Config, not code: `servers: [{ name: mini, url: http://<ip>:1202 }]`
+    in core/controller.Config, read like `defaults:`. The local server
+    is always `local` and needs no entry. GET /api/servers lists local
+    plus the peers with reachable, cpus and memory in use (sum of its
+    running sandboxes' specs) and free (from the peer's own report of
+    its host), so the panel can show pools later.
+  - The sandbox row gets a `server` column (migration; empty means
+    local, so old rows need no backfill). The task's `sandbox:` block
+    gets `server: <name>`; agc task create and the panel pass it
+    through; unknown name fails validation naming the known servers.
+  - One Runtime per server. Keep the local Runtime as is and add a
+    remote one that implements the same interface by calling the peer's
+    sandbox routes, reusing interfaces/cli/client where it fits. The
+    sandbox API picks the runtime from the row's server. Terminals and
+    their websocket are proxied through the primary so the panel never
+    talks to a peer directly. Pick the smallest set of peer routes that
+    makes this work; where the existing /api/sandboxes routes already
+    do, reuse them under the token.
+  - Messaging stays on the primary. The peer runs the vsock listener
+    for its sandboxes (it already does for local ones) and forwards
+    join, post, read, wait and channels to the primary's /api/msg/*
+    with the peer token, carrying the sandbox's task identity in the
+    forwarded request so the primary's single access rule still applies
+    (the peer vouches for which sandbox spoke; the primary trusts the
+    peer, nothing else). The peer needs the primary's URL in its config
+    (`primary: { url }`) for that.
+  - The sandbox socket is more than messaging. It already serves POST
+    /task/deliver, and the sibling branch agc/agents-core adds GET
+    /agent, POST /agent/sleep and a proxy for POST /tasks, GET
+    /tasks/{name}, POST /tasks/{name}/accept|reject, all answered from
+    the primary's database. On a peer, forward the whole socket API to
+    the primary as a transparent proxy that adds the token and the
+    sandbox identity, so a task on a peer can deliver, sleep and create
+    tasks exactly like a local one. Say so in the ADR.
+  - Secrets never travel. The peer resolves the spec's secrets from its
+    own secrets file (ADR 0004); a missing secret fails the allocation
+    with a message naming the secret and the server, so Franco adds it
+    there. Add the shared secret AGC_PEER_TOKEN to the known-hosts
+    table in secrets/secrets.go bound to no host (it is checked, not
+    sent to a third party; say how you model that) and to ADR 0004's
+    table. Both sides read it from their secrets file. Never put a
+    token in the repo.
+  - Listening. Today agc binds to 127.0.0.1 and the rig rule
+    rig-services-bind-localhost says so. A peer must be reachable from
+    the primary. Do not change the rule: add `proposes: rule` in
+    proposals/peer-servers.yaml for Franco to decide (bind a peer to
+    its LAN address only with the token, or reach it through an SSH
+    tunnel or Tailscale and keep localhost). Implement the bind
+    address as config (`listen:`), default unchanged.
+  - Recovery, the watchdog and the main agent are sibling branches
+    (agc/watchdog, agc/recovery, agc/agents-*); they act through the
+    Runtime interface, so if your per-server runtime keeps that
+    interface they need no change. Say so in the ADR and keep it true.
+  - No panel UI (another task owns the panel); post a note in
+    #peer-servers describing GET /api/servers and the `server` field so
+    a panel task can add the pool view.
+
+  Record it: docs/decisions/0018-peer-servers.md in the style of the
+  others (0011 to 0017 are taken by sibling branches). Knowledge entries
+  in their own files: decisions/peer-servers.yaml (decided: { who:
+  franco, when: 2026-11-02 }), actions/peer-servers.yaml for what is
+  left open (at least: moving a sandbox between servers, peers of
+  peers, picking a server automatically by free capacity), proposals/
+  peer-servers.yaml with the rule proposal and one `proposes: code`
+  proposal (`change: agc/peer-servers`, by: claude_code). Cite existing
+  belief ids in `because`; write no evidence.
+
+  Your migration adds `server` to sandboxes; agc/agents-core also
+  changes that table. Pick a timestamp after 20261103000000 that no file
+  in models/migrations uses on any branch (bun tracks applied migrations
+  by timestamp, and two sharing one broke the rig once) and never rely
+  on column order.
+
+  Verify: go build ./... && go vet ./... && go test ./...; gofmt -l .
+  lists only the three known files; follow the REST checklist in
+  AGENTS.md including docs/openapi.yaml and `make types` (`cd panel &&
+  npm ci` first). You have one machine: test the primary-to-peer path
+  with two in-process servers or httptest, never by reaching another
+  host. Commit on branch agc/peer-servers, push it, never merge. Post
+  progress in #peer-servers. When done, answer DONE: with what changed,
+  exactly what Franco configures on the rig and on the Mac mini, and
+  what you left out and why.
+sandbox:
+  image: agc-agent
+  cpus: 2
+  memory: 6144
+  repo: https://github.com/vanclief/agent-composer
+  ref: feat/tasks-microsandbox
+  setup: cd panel && npm ci
+  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
