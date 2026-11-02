@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
+import { AGENT_JOB } from './JobIcon'
 import { JobShape } from './JobShape'
 
 // The close reason the server sends when the program exits.
@@ -168,7 +169,12 @@ export function TerminalPane({ sandbox, job, visible, onExited }: TerminalPanePr
       className={cn('min-h-0 flex-1 flex-col', visible ? 'flex' : 'hidden')}
     >
       <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
-        <IconChip icon={conceptIcons.terminal} concept="terminal" title={job.id} className="text-sm">
+        <IconChip
+          icon={job.id === AGENT_JOB ? conceptIcons.task : conceptIcons.terminal}
+          concept="terminal"
+          title={job.id}
+          className="text-sm"
+        >
           {job.command.join(' ')}
         </IconChip>
         <JobShape running={job.running} />
