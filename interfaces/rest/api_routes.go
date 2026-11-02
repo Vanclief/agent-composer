@@ -69,6 +69,7 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 
 	sandboxes := api.Group("/sandboxes")
 	sandboxes.GET("", h.ListSandboxes)
+	sandboxes.POST("/gc", h.GCSandboxes)
 	sandboxes.GET("/:id", h.GetSandbox)
 	sandboxes.POST("/:id/stop", h.StopSandbox)
 	sandboxes.POST("/:id/start", h.StartSandbox)
