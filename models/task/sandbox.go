@@ -37,7 +37,10 @@ type Sandbox struct {
 	Instructions string `bun:"instructions,notnull,default:''" json:"instructions"`
 	// Volume is the named volume holding the harness homes, kept after
 	// the sandbox is removed. Empty for sandboxes booted before volumes.
-	Volume    string     `bun:"volume,notnull,default:''" json:"volume"`
+	Volume string `bun:"volume,notnull,default:''" json:"volume"`
+	// Server is the agc server whose msb runs the VM, a name from the
+	// config's servers: (ADR 0018). Empty is the local server.
+	Server    string     `bun:"server,notnull,default:''" json:"server"`
 	BootError *string    `bun:"boot_error" json:"boot_error"`
 	BootedAt  *time.Time `bun:"booted_at" json:"booted_at"`
 	StoppedAt *time.Time `bun:"stopped_at" json:"stopped_at"`

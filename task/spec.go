@@ -31,6 +31,9 @@ const (
 	LabelKey = "agc.task"
 	// LabelSandbox carries the sandbox name.
 	LabelSandbox = "agc.sandbox"
+	// LabelServer marks a VM a peer runs for a primary; its value is the
+	// name the primary gives that peer (ADR 0018).
+	LabelServer = "agc.server"
 	// HomeDir is the sandbox user's home, where the repo is cloned. It is
 	// a private disk of the spec's disk size, removed with the sandbox.
 	HomeDir = "/home/agent"
@@ -74,6 +77,10 @@ type Spec struct {
 type Sandbox struct {
 	Spec    `yaml:",inline"`
 	Command string `yaml:"command" json:"command"`
+	// Server names the agc server whose msb runs the sandbox, one of the
+	// config's servers: or local; empty is local (ADR 0018). Only the
+	// allocating server knows its peers, so it checks the name.
+	Server string `yaml:"server" json:"server"`
 }
 
 // Validate checks the environment block.

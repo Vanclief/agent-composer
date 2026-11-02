@@ -13,6 +13,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/harnessinfo"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
 	knowledgeapi "github.com/vanclief/agent-composer/core/resources/knowledge"
+	"github.com/vanclief/agent-composer/core/resources/peers"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/schedules"
 	settingsapi "github.com/vanclief/agent-composer/core/resources/settings"
@@ -45,6 +46,9 @@ type Server struct {
 	// TurnsAPI reads agent and sandbox turns from their volumes.
 	TurnsAPI  *agents.TurnsAPI
 	AgentsAPI *agents.API
+	// PeersAPI lists the servers and serves the peer routes (ADR 0018);
+	// set after New.
+	PeersAPI  *peers.API
 	Messaging *messaging.Service
 	// Events feeds GET /api/events.
 	Events *events.Bus
@@ -277,6 +281,38 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 	// handler passes the connection's own context.
 	case *events.SubscribeRequest:
 		return s.Events.Subscribe(request.GetContext()), nil
+
+	case *peers.ListServersRequest:
+		return s.PeersAPI.ListServers(request.GetContext(), nil, body)
+	// The peer routes (ADR 0018), under AGC_PEER_TOKEN. Creating a VM and
+	// running a command in one (a clone, a setup script) last as long as
+	// a local boot may.
+	case *peers.HostRequest:
+		return s.PeersAPI.Host(request.GetContext(), nil, body)
+	case *peers.CheckSecretsRequest:
+		return s.PeersAPI.CheckSecrets(request.GetContext(), nil, body)
+	case *peers.CreateVMRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 30*time.Minute)
+		defer cancel()
+		return s.PeersAPI.CreateVM(ctx, nil, body)
+	case *peers.VMStatusRequest:
+		return s.PeersAPI.VMStatus(request.GetContext(), nil, body)
+	case *peers.StartVMRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
+		defer cancel()
+		return s.PeersAPI.StartVM(ctx, nil, body)
+	case *peers.StopVMRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
+		defer cancel()
+		return s.PeersAPI.StopVM(ctx, nil, body)
+	case *peers.RemoveVMRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
+		defer cancel()
+		return s.PeersAPI.RemoveVM(ctx, nil, body)
+	case *peers.ExecRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 30*time.Minute)
+		defer cancel()
+		return s.PeersAPI.Exec(ctx, nil, body)
 
 	case *knowledgeapi.ListRequest:
 		return s.KnowledgeAPI.List(request.GetContext(), nil, body)

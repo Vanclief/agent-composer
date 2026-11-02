@@ -26,6 +26,11 @@ const (
 	minMemoryMiB     = 256
 	maxNameBytes     = 128
 
+	// DefaultCPUs and DefaultMemoryMiB are what a spec that sets neither
+	// gets.
+	DefaultCPUs      = defaultCPUs
+	DefaultMemoryMiB = defaultMemoryMiB
+
 	// DefaultDiskMiB and MinDiskMiB bound the private disk (Spec.DiskMiB).
 	DefaultDiskMiB = 20 * 1024
 	MinDiskMiB     = 2 * 1024

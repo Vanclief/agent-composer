@@ -397,6 +397,7 @@ func runServer(ctx context.Context, project string) error {
 
 	group, gctx := errgroup.WithContext(ctx)
 	app := restserver.New(gctx, stack.Controller, stack.HooksAPI, stack.WorkflowAPI, stack.TasksAPI, stack.SchedulesAPI, stack.KnowledgeAPI, stack.AgentsAPI, stack.Messaging, stack.Events)
+	app.PeersAPI = stack.PeersAPI
 
 	group.Go(func() error {
 		stack.StartScheduler(gctx)

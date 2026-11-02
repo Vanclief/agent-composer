@@ -19,7 +19,7 @@ func (r StartRequest) Validate() error {
 }
 
 // Start boots a stopped sandbox from its disk. Secrets are read again from
-// the store, since their values may have changed.
+// the store of the sandbox's server, since their values may have changed.
 func (api *API) Start(ctx context.Context, requester interface{}, request *StartRequest) (*SandboxView, error) {
 	err := request.Validate()
 	if err != nil {
@@ -41,7 +41,7 @@ func (api *API) Start(ctx context.Context, requester interface{}, request *Start
 		return nil, ez.Wrap(err)
 	}
 
-	bindings, err := api.resolveSecrets(spec)
+	bindings, err := api.resolveSecretsOn(ctx, record.Server, spec)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}

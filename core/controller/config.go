@@ -24,4 +24,13 @@ type Config struct {
 	SQLite   sqlite.ConnectionConfig   `mapstructure:"sqlite"`
 	// Defaults fill in a task's assignee, model and owner (ADR 0009).
 	Defaults DefaultsSettings `mapstructure:"defaults"`
+	// Servers are the peers this server allocates sandboxes on; the local
+	// server is always "local" and needs no entry (ADR 0018).
+	Servers []ServerSettings `mapstructure:"servers"`
+	// Primary is set on a peer: the server its sandboxes' sockets forward
+	// to (ADR 0018).
+	Primary PrimarySettings `mapstructure:"primary"`
+	// Listen is the address agc rest binds, such as 127.0.0.1:1202. Empty
+	// keeps ":" + app.port.
+	Listen string `mapstructure:"listen"`
 }

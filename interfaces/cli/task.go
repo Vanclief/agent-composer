@@ -36,6 +36,7 @@ func taskCommand() *cli.Command {
 					&cli.StringFlag{Name: "name", Usage: "Task name (defaults to name: in the file, else made from the title)"},
 					&cli.StringFlag{Name: "brief", Usage: "What to do and what done looks like (defaults to brief: in the file)"},
 					&cli.BoolFlag{Name: "wait", Usage: "Against a server, poll until the sandbox is running or failed (locally create always waits)"},
+					&cli.StringFlag{Name: "on", Usage: "agc server whose msb runs the sandbox: local or a name in servers: (overrides sandbox.server in the file; ADR 0018)"},
 				},
 				Action: taskCreate,
 			},
@@ -284,6 +285,17 @@ func taskCreate(c *cli.Context) error {
 
 		if request.Title == "" && request.Name == "" {
 			return ez.New(ez.EINVALID, "the task needs a title: pass --title or set title: in the file", nil)
+		}
+
+		on := strings.TrimSpace(c.String("on"))
+		if on != "" {
+			if request.Sandbox == nil {
+				return ez.New(ez.EINVALID, "--on picks the server of the task's sandbox, and this task has none: add sandbox: to the file or pass --from", nil)
+			}
+
+			placed := *request.Sandbox
+			placed.Server = on
+			request.Sandbox = &placed
 		}
 
 		defaults, local := svc.Defaults()

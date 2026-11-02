@@ -65,18 +65,25 @@ type resizeMessage struct {
 // This is a plain echo handler, not the request dispatch, because it hijacks
 // the connection and must not inherit the dispatch's request timeout.
 func (h *Handler) TerminalSocket(c echo.Context) error {
-	const op = "Handler.TerminalSocket"
+	return h.serveTerminal(c, "Handler.TerminalSocket", replayBytes, func(ctx context.Context) (executor.TerminalExecutor, func(), error) {
+		return h.ConnectTerminal(ctx, c.Param("id"))
+	})
+}
 
+// serveTerminal attaches to the job c names in the executor connect
+// returns, replaying replay bytes, and relays it over a WebSocket: the
+// panel's terminal, and a peer's for its primary (ADR 0018).
+func (h *Handler) serveTerminal(c echo.Context, op string, replay int, connect func(ctx context.Context) (executor.TerminalExecutor, func(), error)) error {
 	ctx, cancel := context.WithCancel(c.Request().Context())
 	defer cancel()
 
-	exe, release, err := h.ConnectTerminal(ctx, c.Param("id"))
+	exe, release, err := connect(ctx)
 	if err != nil {
 		return h.ManageError(c, op, requests.New(c.Request().Header, c.RealIP()), ez.Wrap(err))
 	}
 	defer release()
 
-	stream, err := exe.AttachTerminal(ctx, c.Param("job"), replayBytes)
+	stream, err := exe.AttachTerminal(ctx, c.Param("job"), replay)
 	if err != nil {
 		return h.ManageError(c, op, requests.New(c.Request().Header, c.RealIP()), ez.Wrap(err))
 	}

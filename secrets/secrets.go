@@ -20,12 +20,27 @@ import (
 	"github.com/vanclief/ez"
 )
 
-// KnownHosts maps well-known secret names to their API hosts (ADR 0004 table).
+// PeerToken is the secret agc servers share to call each other (ADR 0018).
+// agc reads it from its own secrets file and checks it on the peer routes;
+// it is never sent to a third party and never given to a sandbox.
+const PeerToken = "AGC_PEER_TOKEN"
+
+// KnownHosts maps well-known secret names to their API hosts (ADR 0004
+// table). An entry with no hosts is agc's own secret: it is bound to no
+// host, so no spec can request it, with or without NAME@host.
 var KnownHosts = map[string][]string{
 	"ANTHROPIC_API_KEY":       {"api.anthropic.com"},
 	"CLAUDE_CODE_OAUTH_TOKEN": {"api.anthropic.com"},
 	"OPENAI_API_KEY":          {"api.openai.com"},
 	"GITHUB_TOKEN":            {"api.github.com", "github.com"},
+	PeerToken:                 {},
+}
+
+// agcOnly reports whether name is agc's own secret, listed in KnownHosts
+// bound to no host.
+func agcOnly(name string) bool {
+	hosts, ok := KnownHosts[name]
+	return ok && len(hosts) == 0
 }
 
 var (
@@ -192,25 +207,22 @@ func (s *Store) Resolve(requests []Request) ([]Binding, error) {
 
 	for _, req := range requests {
 		value, ok := s.values[req.Name]
-		if !ok {
+		if !ok && !agcOnly(req.Name) {
 			problems = append(problems, fmt.Sprintf("secret %s is not set in %s", req.Name, s.path))
 			if code == "" {
 				code = ez.ENOTFOUND
 			}
 		}
 
-		hosts := req.Hosts
-		if len(hosts) == 0 {
-			hosts = KnownHosts[req.Name]
-		}
-		if len(hosts) == 0 {
-			problems = append(problems, fmt.Sprintf("secret %s has no known hosts: write %s@host in the spec", req.Name, req.Name))
+		hosts, problem := hostsFor(req)
+		if problem != "" {
+			problems = append(problems, problem)
 			if code == "" {
 				code = ez.EINVALID
 			}
 		}
 
-		bindings = append(bindings, Binding{Name: req.Name, Value: value, Hosts: append([]string(nil), hosts...)})
+		bindings = append(bindings, Binding{Name: req.Name, Value: value, Hosts: hosts})
 	}
 
 	if len(problems) > 0 {
@@ -218,4 +230,81 @@ func (s *Store) Resolve(requests []Request) ([]Binding, error) {
 	}
 
 	return bindings, nil
+}
+
+// Bind is Resolve without values, for a sandbox on another agc server,
+// which reads the values from its own secrets file (ADR 0018): one
+// Binding per request with its hosts and an empty Value.
+func Bind(requests []Request) ([]Binding, error) {
+	bindings := make([]Binding, 0, len(requests))
+	problems := []string{}
+
+	for _, req := range requests {
+		hosts, problem := hostsFor(req)
+		if problem != "" {
+			problems = append(problems, problem)
+		}
+
+		bindings = append(bindings, Binding{Name: req.Name, Hosts: hosts})
+	}
+
+	if len(problems) > 0 {
+		return nil, ez.New(ez.EINVALID, strings.Join(problems, "\n"), nil)
+	}
+
+	return bindings, nil
+}
+
+// Fill sets each binding's value from the store, on the server that runs
+// the sandbox (ADR 0018). where names that server in the error, which
+// lists every missing secret by name.
+func (s *Store) Fill(bindings []Binding, where string) ([]Binding, error) {
+	filled := make([]Binding, 0, len(bindings))
+	problems := []string{}
+	code := ""
+
+	for _, binding := range bindings {
+		if agcOnly(binding.Name) || len(binding.Hosts) == 0 {
+			problems = append(problems, fmt.Sprintf("secret %s is bound to no host and is never given to a sandbox", binding.Name))
+			if code == "" {
+				code = ez.EINVALID
+			}
+			continue
+		}
+
+		value, ok := s.values[binding.Name]
+		if !ok {
+			problems = append(problems, fmt.Sprintf("secret %s is not set on server %s: add it to %s there", binding.Name, where, s.path))
+			if code == "" {
+				code = ez.ENOTFOUND
+			}
+			continue
+		}
+
+		filled = append(filled, Binding{Name: binding.Name, Value: value, Hosts: append([]string(nil), binding.Hosts...)})
+	}
+
+	if len(problems) > 0 {
+		return nil, ez.New(code, strings.Join(problems, "\n"), nil)
+	}
+
+	return filled, nil
+}
+
+// hostsFor is the request's hosts, or KnownHosts', or a problem: none
+// known, or the name is agc's own secret.
+func hostsFor(req Request) ([]string, string) {
+	if agcOnly(req.Name) {
+		return nil, fmt.Sprintf("secret %s is agc's own, bound to no host, and is never given to a sandbox", req.Name)
+	}
+
+	hosts := req.Hosts
+	if len(hosts) == 0 {
+		hosts = KnownHosts[req.Name]
+	}
+	if len(hosts) == 0 {
+		return nil, fmt.Sprintf("secret %s has no known hosts: write %s@host in the spec", req.Name, req.Name)
+	}
+
+	return append([]string(nil), hosts...), ""
 }

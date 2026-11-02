@@ -35,9 +35,13 @@ booted_at TIMESTAMP, stopped_at TIMESTAMP, created_at TIMESTAMP NOT NULL, update
 		}
 	}
 
-	// The later column too (createAgents), so the current model can read
+	// The later columns too (createAgents, sandboxServer), so the current model can read
 	// the rows.
 	err = addColumn(ctx, db, "sandboxes", "agent", "TEXT NOT NULL DEFAULT ''")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = sandboxServer(ctx, db)
 	if err != nil {
 		t.Fatal(err)
 	}

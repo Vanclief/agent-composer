@@ -119,4 +119,22 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	knowledge.GET("/conflicts", h.KnowledgeConflicts)
 
 	api.Any("/msg/*", echo.WrapHandler(h.Messaging()))
+
+	// Peer servers (ADR 0018): the pool, the routes a peer serves its
+	// primary under AGC_PEER_TOKEN, and the primary's end of a peer VM's
+	// forwarded socket, which checks the token itself.
+	api.GET("/servers", h.ListServers)
+
+	peer := api.Group("/peer", h.RequirePeerToken)
+	peer.GET("/host", h.PeerHost)
+	peer.POST("/secrets/check", h.PeerCheckSecrets)
+	peer.POST("/vms", h.PeerCreateVM)
+	peer.GET("/vms/:name", h.PeerVMStatus)
+	peer.POST("/vms/:name/start", h.PeerStartVM)
+	peer.POST("/vms/:name/stop", h.PeerStopVM)
+	peer.DELETE("/vms/:name", h.PeerRemoveVM)
+	peer.POST("/vms/:name/exec", h.PeerExec)
+	peer.GET("/vms/:name/terminals/:job/ws", h.PeerTerminalSocket)
+
+	api.Any("/peer/sockets/:name/*", h.PeerSocket)
 }

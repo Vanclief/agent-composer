@@ -297,3 +297,53 @@ func TestResolveCombinesProblems(t *testing.T) {
 		t.Fatalf("message %q leaks the secret value", msg)
 	}
 }
+
+func TestPeerTokenIsBoundToNoHost(t *testing.T) {
+	store, _ := loadStore(t)
+
+	// Neither by name nor with explicit hosts does a spec get it.
+	for _, req := range []Request{{Name: PeerToken}, {Name: PeerToken, Hosts: []string{"example.com"}}} {
+		_, err := store.Resolve([]Request{req})
+		if err == nil || !strings.Contains(err.Error(), "agc's own") {
+			t.Fatalf("Resolve(%+v) = %v, want refused as agc's own", req, err)
+		}
+
+		_, err = Bind([]Request{req})
+		if err == nil || !strings.Contains(err.Error(), "agc's own") {
+			t.Fatalf("Bind(%+v) = %v, want refused as agc's own", req, err)
+		}
+	}
+
+	_, err := store.Fill([]Binding{{Name: PeerToken, Hosts: []string{"example.com"}}}, "mini")
+	if err == nil || !strings.Contains(err.Error(), "never given to a sandbox") {
+		t.Fatalf("Fill() = %v, want refused", err)
+	}
+}
+
+func TestBindAndFill(t *testing.T) {
+	store, path := loadStore(t)
+
+	bound, err := Bind([]Request{{Name: "GITHUB_TOKEN"}, {Name: "MISSING", Hosts: []string{"api.missing.dev"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bound[0].Value != "" || !reflect.DeepEqual(bound[0].Hosts, []string{"api.github.com", "github.com"}) {
+		t.Fatalf("Bind() = %+v, want hosts and no value", bound)
+	}
+
+	_, err = store.Fill(bound, "mini")
+	if err == nil || ez.ErrorCode(err) != ez.ENOTFOUND || !strings.Contains(err.Error(), "secret MISSING is not set on server mini: add it to "+path) {
+		t.Fatalf("Fill() = %v, want MISSING named with the server", err)
+	}
+	if strings.Contains(err.Error(), secretValue) {
+		t.Fatal("Fill() error carries a value")
+	}
+
+	filled, err := store.Fill(bound[:1], "mini")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filled[0].Value != secretValue {
+		t.Fatal("Fill() did not set the value")
+	}
+}

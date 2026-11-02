@@ -102,7 +102,14 @@ func (api *API) AllocateHome(ctx context.Context, request HomeRequest) (*Sandbox
 	env[EnvAgent] = request.Agent
 	spec.Env = env
 
-	bindings, err := api.resolveSecrets(spec)
+	server := serverKey(request.Sandbox.Server)
+
+	_, err = api.runtimeFor(server)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	bindings, err := api.resolveSecretsOn(ctx, server, spec)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -112,7 +119,7 @@ func (api *API) AllocateHome(ctx context.Context, request HomeRequest) (*Sandbox
 		return nil, ez.Wrap(err)
 	}
 
-	record := &taskmodels.Sandbox{Agent: request.Agent, Spec: encodedSpec, Command: strings.TrimSpace(request.Command), Instructions: request.Instructions}
+	record := &taskmodels.Sandbox{Agent: request.Agent, Server: server, Spec: encodedSpec, Command: strings.TrimSpace(request.Command), Instructions: request.Instructions}
 
 	err = api.insert(ctx, request.Agent, record)
 	if err != nil {
@@ -164,9 +171,10 @@ func briefPath(record *taskmodels.Sandbox) string {
 	return BriefPath
 }
 
-// startHomeListener serves an agent's home: messaging as the agent, and
-// the agent routes. agc task deliver has nothing to deliver in a home.
-func (api *API) startHomeListener(home string) error {
+// homeHandler is what an agent's home's socket answers: messaging as the
+// agent, and the agent routes. agc task deliver has nothing to deliver in
+// a home.
+func (api *API) homeHandler(home string) http.Handler {
 	caller := func(r *http.Request) (messaging.Caller, error) {
 		homes, err := api.currentHomes()
 		if err != nil {
@@ -176,33 +184,35 @@ func (api *API) startHomeListener(home string) error {
 		return homes.Caller(r.Context(), home)
 	}
 
-	return api.startListener(home, caller, func(mux *http.ServeMux) {
-		mux.HandleFunc("POST "+httpapi.DeliverPath, func(w http.ResponseWriter, r *http.Request) {
-			httpapi.WriteError(w, ez.New(ez.EINVALID, "sandbox "+home+" is an agent's home and has no task to deliver; agents manage tasks, they do not deliver them", nil))
-		})
-		mux.HandleFunc("GET "+httpapi.AgentPath, api.serveAgent(home))
-		mux.HandleFunc("POST "+httpapi.AgentSleepPath, api.serveSleep(home))
-		mux.HandleFunc("POST "+httpapi.TasksPath, api.serveCreateTask(home))
-		mux.HandleFunc("GET "+httpapi.TaskPath, api.serveTask(home, func(ctx context.Context, homes Homes, r *http.Request) (any, error) {
-			return homes.GetTask(ctx, home, r.PathValue("name"))
-		}))
-		mux.HandleFunc("POST "+httpapi.TaskAcceptPath, api.serveTask(home, func(ctx context.Context, homes Homes, r *http.Request) (any, error) {
-			return homes.AcceptTask(ctx, home, r.PathValue("name"))
-		}))
-		mux.HandleFunc("POST "+httpapi.TaskRejectPath, func(w http.ResponseWriter, r *http.Request) {
-			var body httpapi.RejectBody
-
-			err := httpapi.DecodeBody(w, r, &body)
-			if err != nil {
-				httpapi.WriteError(w, err)
-				return
-			}
-
-			api.serveTask(home, func(ctx context.Context, homes Homes, r *http.Request) (any, error) {
-				return homes.RejectTask(ctx, home, r.PathValue("name"), body.Why)
-			})(w, r)
-		})
+	mux := http.NewServeMux()
+	mux.Handle("/", httpapi.New(api.msg, caller))
+	mux.HandleFunc("POST "+httpapi.DeliverPath, func(w http.ResponseWriter, r *http.Request) {
+		httpapi.WriteError(w, ez.New(ez.EINVALID, "sandbox "+home+" is an agent's home and has no task to deliver; agents manage tasks, they do not deliver them", nil))
 	})
+	mux.HandleFunc("GET "+httpapi.AgentPath, api.serveAgent(home))
+	mux.HandleFunc("POST "+httpapi.AgentSleepPath, api.serveSleep(home))
+	mux.HandleFunc("POST "+httpapi.TasksPath, api.serveCreateTask(home))
+	mux.HandleFunc("GET "+httpapi.TaskPath, api.serveTask(home, func(ctx context.Context, homes Homes, r *http.Request) (any, error) {
+		return homes.GetTask(ctx, home, r.PathValue("name"))
+	}))
+	mux.HandleFunc("POST "+httpapi.TaskAcceptPath, api.serveTask(home, func(ctx context.Context, homes Homes, r *http.Request) (any, error) {
+		return homes.AcceptTask(ctx, home, r.PathValue("name"))
+	}))
+	mux.HandleFunc("POST "+httpapi.TaskRejectPath, func(w http.ResponseWriter, r *http.Request) {
+		var body httpapi.RejectBody
+
+		err := httpapi.DecodeBody(w, r, &body)
+		if err != nil {
+			httpapi.WriteError(w, err)
+			return
+		}
+
+		api.serveTask(home, func(ctx context.Context, homes Homes, r *http.Request) (any, error) {
+			return homes.RejectTask(ctx, home, r.PathValue("name"), body.Why)
+		})(w, r)
+	})
+
+	return mux
 }
 
 func (api *API) serveAgent(home string) http.HandlerFunc {

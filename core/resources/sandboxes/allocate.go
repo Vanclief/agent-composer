@@ -70,8 +70,10 @@ func (api *API) Allocate(ctx context.Context, requester interface{}, request *Al
 	return api.AllocateFor(ctx, owner, request.Sandbox)
 }
 
-// AllocateFor inserts a sandbox for owner and returns it as starting.
-// Missing secrets fail here, before anything is inserted. A goroutine with
+// AllocateFor inserts a sandbox for owner, on request.Server (empty or
+// local: this server), and returns it as starting. An unknown server and
+// missing secrets fail here, before anything is inserted; a peer's
+// secrets are checked on the peer (ADR 0018). A goroutine with
 // its own context then creates the VM, clones the repo, writes the agent
 // config and TASK.md, runs setup, sets booted_at and starts the command as
 // a terminal. A failure sets boot_error and discards the VM.
@@ -83,7 +85,14 @@ func (api *API) AllocateFor(ctx context.Context, owner *taskmodels.Task, request
 
 	spec := request.Spec
 
-	bindings, err := api.resolveSecrets(spec)
+	server := serverKey(request.Server)
+
+	_, err = api.runtimeFor(server)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	bindings, err := api.resolveSecretsOn(ctx, server, spec)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -98,7 +107,7 @@ func (api *API) AllocateFor(ctx context.Context, owner *taskmodels.Task, request
 		command = AgentCommand(owner)
 	}
 
-	record := &taskmodels.Sandbox{TaskID: owner.ID, Spec: encodedSpec, Command: command, Instructions: Instructions(owner, spec)}
+	record := &taskmodels.Sandbox{TaskID: owner.ID, Server: server, Spec: encodedSpec, Command: command, Instructions: Instructions(owner, spec)}
 
 	err = api.insert(ctx, owner.Name, record)
 	if err != nil {

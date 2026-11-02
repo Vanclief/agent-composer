@@ -23,6 +23,7 @@ import (
 	"github.com/vanclief/agent-composer/executor/sandbox"
 	"github.com/vanclief/agent-composer/messaging"
 	msgclient "github.com/vanclief/agent-composer/messaging/client"
+	"github.com/vanclief/agent-composer/messaging/httpapi"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/task"
@@ -908,14 +909,14 @@ func TestStartListenerLeavesASocketServedElsewhere(t *testing.T) {
 	caller := func(*http.Request) (messaging.Caller, error) {
 		return messaging.Caller{Task: "shared"}, nil
 	}
-	routes := func(*http.ServeMux) {}
+	handler := httpapi.New(env.api.msg, caller)
 
-	err := env.api.startListener("shared", caller, routes)
+	err := env.api.startListener("shared", handler)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = other.startListener("shared", caller, routes)
+	err = other.startListener("shared", handler)
 	if err != nil {
 		t.Fatal(err)
 	}

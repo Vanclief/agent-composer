@@ -14,6 +14,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/agents"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
 	"github.com/vanclief/agent-composer/core/resources/knowledge"
+	"github.com/vanclief/agent-composer/core/resources/peers"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/schedules"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
@@ -44,6 +45,9 @@ type Stack struct {
 	KnowledgeAPI *knowledge.API
 	// AgentsAPI is persistent agents (ADR 0016).
 	AgentsAPI *agents.API
+	// PeersAPI is the other agc servers sandboxes run on, and the peer
+	// routes this one serves (ADR 0018).
+	PeersAPI *peers.API
 	// Events is the live feed behind GET /api/events.
 	Events *events.Bus
 }
@@ -102,6 +106,15 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 
 	specs := task.Store{Dir: filepath.Join(home, "config", "specs")}
 	sandboxesAPI := sandboxes.NewAPI(rootCtx, ctrl, msg, sandboxes.SandboxRuntime{}, secretsPath, filepath.Join(home, "tasks"))
+
+	// Every peer in servers: is a runtime the sandboxes API routes to by
+	// the row's server; VMs run here for a primary have their sockets in
+	// their own directory (ADR 0018).
+	peersAPI, err := peers.NewAPI(ctrl, sandboxesAPI, sandboxes.SandboxRuntime{}, secretsPath, filepath.Join(home, "peer-sockets"))
+	if err != nil {
+		return nil, err
+	}
+	sandboxesAPI.SetServers(peersAPI.Runtimes())
 	tasksAPI := tasks.NewAPI(ctrl, sandboxesAPI, msg, secretsPath, specs)
 	tasksAPI.SetEvents(bus)
 	schedulesAPI := schedules.NewAPI(ctrl, tasksAPI, secretsPath)
@@ -116,6 +129,13 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	err = sandboxesAPI.Resume(rootCtx)
 	if err != nil {
 		log.Warn().Err(err).Msg("sandbox messaging resume failed")
+	}
+
+	// VMs run here for a primary keep running too; their forwarders come
+	// back here.
+	err = peersAPI.Resume(rootCtx)
+	if err != nil {
+		log.Warn().Err(err).Msg("peer socket forwarder resume failed")
 	}
 
 	// The knowledge directory holds evidence/, beliefs/, decisions/ and
@@ -147,6 +167,7 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		SchedulesAPI: schedulesAPI,
 		KnowledgeAPI: knowledgeAPI,
 		AgentsAPI:    agentsAPI,
+		PeersAPI:     peersAPI,
 		Events:       bus,
 	}, nil
 }

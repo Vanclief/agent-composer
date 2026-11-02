@@ -71,7 +71,7 @@ func Start(ctx context.Context, s *server.Server, log zerolog.Logger) error {
 
 	// Start the server
 	go func() {
-		err := e.Start(":" + s.Ctrl.Config.App.Port)
+		err := e.Start(s.Ctrl.ListenAddress())
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 			return

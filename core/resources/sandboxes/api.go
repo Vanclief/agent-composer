@@ -65,9 +65,13 @@ type Runtime interface {
 }
 
 type API struct {
-	db          bun.IDB
-	msg         *messaging.Service
+	db  bun.IDB
+	msg *messaging.Service
+	// rt routes every call to the runtime of the sandbox's server
+	// (router, ADR 0018); local is this server's, peers the others'.
 	rt          Runtime
+	local       Runtime
+	peers       map[string]Runtime
 	secretsPath string
 	socketDir   string
 	// volumeRoot is where msb keeps named volumes on this host
@@ -181,10 +185,11 @@ func New(rootCtx context.Context, db bun.IDB, msg *messaging.Service, rt Runtime
 		rootCtx = context.Background()
 	}
 
-	return &API{
+	api := &API{
 		db:          db,
 		msg:         msg,
-		rt:          rt,
+		local:       rt,
+		peers:       map[string]Runtime{},
 		secretsPath: secretsPath,
 		socketDir:   socketDir,
 		volumeRoot:  VolumeRoot(),
@@ -192,6 +197,9 @@ func New(rootCtx context.Context, db bun.IDB, msg *messaging.Service, rt Runtime
 		listeners:   map[string]*listener{},
 		booting:     map[string]*boot{},
 	}
+	api.rt = router{api: api}
+
+	return api
 }
 
 // SandboxView is a Sandbox with its status. Status is starting or failed
@@ -213,7 +221,10 @@ type SandboxView struct {
 	// Volume is the named volume holding the harness homes and their
 	// transcripts, kept after the sandbox is deleted. Empty for sandboxes
 	// booted before volumes.
-	Volume      string     `json:"volume"`
+	Volume string `json:"volume"`
+	// Server is the agc server whose msb runs the VM: local, or a peer
+	// from the config's servers: (ADR 0018).
+	Server      string     `json:"server"`
 	Status      string     `json:"status"`
 	StatusError string     `json:"status_error,omitempty"`
 	BootedAt    *time.Time `json:"booted_at"`
@@ -300,6 +311,7 @@ func baseView(record *taskmodels.Sandbox, owner *taskmodels.Task) (*SandboxView,
 		TaskID:       record.TaskID,
 		Task:         owner.Name,
 		Agent:        record.Agent,
+		Server:       serverName(record.Server),
 		Name:         record.Name,
 		Spec:         spec,
 		Command:      record.Command,

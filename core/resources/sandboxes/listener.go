@@ -30,25 +30,44 @@ func (api *API) socketPath(name string) string {
 	return filepath.Join(api.socketDir, name+".sock")
 }
 
-// startSandboxListener serves the sandbox's socket: as its task, or, for
-// an agent's home, as that agent (startHomeListener).
+// startSandboxListener serves the sandbox's socket with socketHandler. A
+// sandbox on a peer gets no listener here: the peer serves its socket and
+// forwards every request to ServeForwarded (ADR 0018).
 func (api *API) startSandboxListener(record *taskmodels.Sandbox, owner *taskmodels.Task, spec task.Spec) error {
+	if record.Server != "" {
+		return nil
+	}
+
+	handler, err := api.socketHandler(record, owner, spec)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return api.startListener(record.Name, handler)
+}
+
+// socketHandler is what the sandbox's socket answers: messaging as its
+// task plus agc task deliver, or, for an agent's home, as that agent
+// (homeHandler).
+func (api *API) socketHandler(record *taskmodels.Sandbox, owner *taskmodels.Task, spec task.Spec) (http.Handler, error) {
 	if record.Agent != "" {
-		return api.startHomeListener(record.Name)
+		return api.homeHandler(record.Name), nil
 	}
 
 	grants, err := Grants(owner, spec)
 	if err != nil {
-		return ez.Wrap(err)
+		return nil, ez.Wrap(err)
 	}
 
 	caller := func(*http.Request) (messaging.Caller, error) {
 		return messaging.Caller{Task: owner.Name, Grants: grants}, nil
 	}
 
-	return api.startListener(record.Name, caller, func(mux *http.ServeMux) {
-		mux.HandleFunc("POST "+httpapi.DeliverPath, api.serveDeliver(owner.Name))
-	})
+	mux := http.NewServeMux()
+	mux.Handle("/", httpapi.New(api.msg, caller))
+	mux.HandleFunc("POST "+httpapi.DeliverPath, api.serveDeliver(owner.Name))
+
+	return mux, nil
 }
 
 // Grants are the channels a sandbox of owner may use besides #<task>: the
@@ -75,11 +94,10 @@ func Grants(owner *taskmodels.Task, spec task.Spec) ([]messaging.Grant, error) {
 	return append(grants, messaging.Grant{Channel: inbox}), nil
 }
 
-// startListener serves messaging for the sandbox called name, as caller
-// says, plus the routes routes adds, on the sandbox's socket, unless this
-// process already does, or another agc process does (the socket answers).
-// A socket nobody answers is stale and replaced.
-func (api *API) startListener(name string, caller func(*http.Request) (messaging.Caller, error), routes func(mux *http.ServeMux)) error {
+// startListener serves handler on the socket of the sandbox called name,
+// unless this process already does, or another agc process does (the
+// socket answers). A socket nobody answers is stale and replaced.
+func (api *API) startListener(name string, handler http.Handler) error {
 	api.mu.Lock()
 	defer api.mu.Unlock()
 
@@ -111,11 +129,7 @@ func (api *API) startListener(name string, caller func(*http.Request) (messaging
 		return ez.New(ez.EINTERNAL, "cannot listen on "+path, err)
 	}
 
-	mux := http.NewServeMux()
-	mux.Handle("/", httpapi.New(api.msg, caller))
-	routes(mux)
-
-	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 
 	go func() {
 		err := srv.Serve(ln)
