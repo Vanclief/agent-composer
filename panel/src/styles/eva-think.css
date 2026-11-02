@@ -3,79 +3,70 @@
 
    Every item is an indexed chamfered plate (the row's background is the
    frame, ::after one pixel inside is the fill); its left edge is a tab with
-   the server's label word and an LED: green grounded or passed, cyan
-   judgment (a person's word), dim opinion, red contested, in doubt or
-   failed (filled, ink text), yellow needs a human (filled, blinking). The
+   the server's label word. No LED: the word is the light (Franco,
+   2026-11-02, second round; docs/design/panel.md Lights), colored by kind:
+   grounded or passed a green outline (as done), opinion and unknown words a
+   dim green outline (as open), judgment a cyan outline (a person's word),
+   contested, in doubt or failed a steady red outline (as failed), needs a
+   human the whole tab blinking yellow (as review, the only blink here). The
    why chain in the detail pane is a rail of small plates; what-if is a
    filled yellow tab across the top while it is on. */
 
-/* ---- Labels and LEDs, everywhere in the area ----------------------------
-   LabelMark keeps its shape (circle, half, triangle, two circles), drawn as
-   the LED in the system's colors; the word is muted unless it is red or
-   yellow. */
+/* ---- Labels: the word is the light, everywhere in the area -------------
+   LabelMark's shape is hidden; the word sits in a one-pixel outline in its
+   kind's color and never blinks outside a plate's tab. */
 .dark main [data-label] {
+  --light: oklch(0.8 0.2 150 / 45%);
   color: var(--muted-foreground);
   font-family: var(--font-mono);
-  text-transform: lowercase;
   letter-spacing: 0.04em;
+  padding: 0 5px;
+  box-shadow: inset 0 0 0 1px var(--light);
 }
 .dark main [data-label] > svg {
-  color: var(--muted-foreground);
-  fill: none;
+  display: none;
 }
-.dark main [data-label='grounded'] > svg,
-.dark main [data-label='passed'] > svg,
-.dark main [data-label='done'] > svg {
+.dark main :is([data-label='grounded'], [data-label='passed']) {
+  --light: var(--eva-green);
   color: var(--eva-green);
-  fill: var(--eva-green);
-  filter: drop-shadow(0 0 3px oklch(0.8 0.2 150 / 80%));
 }
-.dark main [data-label='open'] > svg {
-  color: oklch(0.45 0.08 150);
-  fill: oklch(0.25 0.05 150);
-}
-.dark main [data-label='judgment'] > svg {
+.dark main [data-label='judgment'] {
+  --light: var(--eva-cyan);
   color: var(--eva-cyan);
-  filter: drop-shadow(0 0 3px oklch(0.8 0.14 200 / 70%));
-}
-.dark main [data-label='opinion'] > svg {
-  color: oklch(0.62 0.03 70 / 70%);
 }
 .dark main :is([data-label='contested'], [data-label='in_doubt'], [data-label='in doubt'], [data-label='failed']) {
+  --light: var(--eva-red);
   color: var(--eva-red);
-}
-.dark
-  main
-  :is([data-label='contested'], [data-label='in_doubt'], [data-label='in doubt'], [data-label='failed'])
-  > svg {
-  color: var(--eva-red);
-  filter: drop-shadow(0 0 3px oklch(0.62 0.25 27 / 80%));
-}
-.dark main :is([data-label='in_doubt'], [data-label='in doubt'], [data-label='failed']) > svg {
-  fill: var(--eva-red);
 }
 .dark main [data-label='needs a human'] {
+  --light: var(--eva-yellow);
   color: var(--eva-yellow);
 }
-.dark main [data-label='needs a human'] > svg {
-  color: var(--eva-yellow);
-  fill: var(--eva-yellow);
-  filter: drop-shadow(0 0 3px oklch(0.86 0.18 92 / 80%));
-  animation: var(--animate-led-blink);
+/* An action's to do / done: the word is the light too, dim outline while
+   open, green outline once done; the checkbox stays only in the group
+   headers, as a plain square. */
+.dark main span:has(> [data-testid='done-mark']):not(h2) {
+  --light: oklch(0.8 0.2 150 / 45%);
+  color: var(--muted-foreground);
+  padding: 0 5px;
+  box-shadow: inset 0 0 0 1px var(--light);
 }
-
-/* An action's checkbox is a square LED: to do is green off, done green on. */
+.dark main span:has(> [data-testid='done-mark'][data-done='true']):not(h2) {
+  --light: var(--eva-green);
+  color: var(--eva-green);
+}
+.dark main span:has(> [data-testid='done-mark']) > [data-testid='done-mark'] {
+  display: none;
+}
 .dark main [data-testid='done-mark'] {
   border-radius: 0;
   border-width: 1px;
-  border-color: oklch(0.45 0.08 150);
-  background: oklch(0.25 0.05 150);
-  color: var(--eva-ink);
+  border-color: oklch(0.8 0.2 150 / 45%);
+  background: transparent;
+  color: var(--eva-green);
 }
 .dark main [data-testid='done-mark'][data-done='true'] {
   border-color: var(--eva-green);
-  background: var(--eva-green);
-  box-shadow: 0 0 6px 1px oklch(0.8 0.2 150 / 60%);
 }
 
 /* ---- The header strip: the total, the counts by label, a ruler ---------- */
@@ -233,7 +224,8 @@
   background: oklch(0.74 0.19 48 / 22%);
 }
 
-/* The tab: the plate's left edge, top to bottom, the label word and its LED. */
+/* The tab: the plate's left edge, top to bottom, holding the label word,
+   which fills it and draws its own outline. */
 .dark [data-testid='think-card'] > a > div:first-child > span:first-child {
   position: absolute;
   left: 0;
@@ -241,14 +233,15 @@
   bottom: 0;
   width: 7.5rem;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
-  padding: 0 8px 0 12px;
-  background: var(--eva-faint);
+  padding: 0;
+  background: transparent;
   border-right: 1px solid var(--eva-dim);
   clip-path: polygon(0 0, 100% 0, 100% 100%, calc(var(--cut) - 1px) 100%, 0 calc(100% - var(--cut) + 1px));
 }
 .dark [data-testid='think-card'] > a > div:first-child > span:first-child > svg {
+  align-self: center;
   color: var(--eva);
 }
 .dark
@@ -256,71 +249,31 @@
   > a
   > div:first-child
   > span:first-child
-  :is([data-label], [data-label] + span, span:has(> [data-testid='done-mark'])) {
+  > :is([data-label], span:has(> [data-testid='done-mark'])) {
+  flex: 1;
+  justify-content: center;
+  padding: 0 8px;
   font-family: var(--font-sans);
   font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--muted-foreground);
-  gap: 8px;
-}
-.dark [data-testid='think-card'] > a > div:first-child > span:first-child [data-label] > svg {
-  width: 10px;
-  height: 10px;
-}
-/* Dead or doubted: the tab filled red, ink text, the LED ringed in ink. */
-.dark
-  [data-testid='think-card']
-  > a
-  > div:first-child
-  > span:first-child:has(
-    :is([data-label='contested'], [data-label='in_doubt'], [data-label='in doubt'], [data-label='failed'])
-  ) {
-  background: var(--eva-red);
-  border-right-color: var(--eva-red);
-}
-/* Waiting on a human: the tab filled yellow. */
-.dark [data-testid='think-card'] > a > div:first-child > span:first-child:has([data-label='needs a human']) {
-  background: var(--eva-yellow);
-  border-right-color: var(--eva-yellow);
 }
 .dark
   [data-testid='think-card']
   > a
   > div:first-child
   > span:first-child
-  :is(
-    [data-label='contested'],
-    [data-label='in_doubt'],
-    [data-label='in doubt'],
-    [data-label='failed'],
-    [data-label='needs a human']
-  ) {
-  color: var(--eva-ink);
+  > :is([data-label='contested'], [data-label='in_doubt'], [data-label='in doubt'], [data-label='failed']) {
   font-weight: 700;
 }
-.dark
-  [data-testid='think-card']
-  > a
-  > div:first-child
-  > span:first-child
-  :is(
-    [data-label='contested'],
-    [data-label='in_doubt'],
-    [data-label='in doubt'],
-    [data-label='failed'],
-    [data-label='needs a human']
-  )
-  > svg {
-  color: var(--eva-ink);
-  fill: var(--eva-ink);
-  filter: none;
+/* Needs a human: the whole tab blinks yellow, filled then outlined, the
+   one thing in this area that blinks (tab-blink, index.css). */
+.dark [data-testid='think-card'] > a > div:first-child > span:first-child > [data-label='needs a human'] {
+  --tab: var(--eva-yellow);
+  font-weight: 700;
+  animation: tab-blink 1s steps(1, end) infinite;
 }
-.dark [data-testid='think-card'] > a > div:first-child > span:first-child [data-label='contested'] > svg {
-  width: 14px;
-}
-
 /* The sentence, the title line, in pale text. */
 .dark [data-testid='card-text'] {
   color: var(--foreground);
@@ -537,45 +490,19 @@
   color: var(--foreground);
   letter-spacing: 0.05em;
 }
-/* The item's header: its label as a tab, the sentence in pale text. */
-.dark aside[aria-label='Detail'] > div:first-of-type > div:first-child {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 14px 3px 10px;
-  background: var(--eva-faint);
-  border-left: 3px solid var(--eva-dim);
-  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
-}
+/* The item's header: its label word as the light, a step larger; the
+   sentence in pale text. */
 .dark
   aside[aria-label='Detail']
   > div:first-of-type
   > div:first-child
   :is([data-label], span:has(> [data-testid='done-mark'])) {
+  padding: 2px 10px;
   font-family: var(--font-sans);
+  font-size: 0.8rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-}
-.dark
-  aside[aria-label='Detail']
-  > div:first-of-type
-  > div:first-child:has(
-    :is([data-label='contested'], [data-label='in_doubt'], [data-label='in doubt'], [data-label='failed'])
-  ) {
-  border-left-color: var(--eva-red);
-  background: oklch(0.62 0.25 27 / 18%);
-}
-.dark
-  aside[aria-label='Detail']
-  > div:first-of-type
-  > div:first-child:has([data-label='grounded'], [data-label='passed']) {
-  border-left-color: var(--eva-green);
-}
-.dark aside[aria-label='Detail'] > div:first-of-type > div:first-child:has([data-label='judgment']) {
-  border-left-color: var(--eva-cyan);
-}
-.dark aside[aria-label='Detail'] > div:first-of-type > div:first-child:has([data-label='needs a human']) {
-  border-left-color: var(--eva-yellow);
 }
 .dark [data-testid='detail-text'] {
   color: var(--foreground);
