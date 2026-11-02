@@ -142,6 +142,10 @@ func TestTaskCreateAndAcceptInsideAHome(t *testing.T) {
 			_ = json.NewDecoder(r.Body).Decode(&created)
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(tasks.TaskView{Name: "review-42", Manager: "reviewer-1", Status: "open"})
+		case "GET /tasks/review-42":
+			_ = json.NewEncoder(w).Encode(tasks.TaskView{Name: "review-42", Manager: "reviewer-1", Status: "review"})
+		case "POST /tasks/review-42/reject":
+			_ = json.NewEncoder(w).Encode(tasks.TaskView{Name: "review-42", Manager: "reviewer-1", Status: "open"})
 		case "POST /tasks/review-42/accept":
 			_ = json.NewEncoder(w).Encode(tasks.TaskView{Name: "review-42", Manager: "reviewer-1", Status: "done", AcceptedBy: "reviewer-1"})
 		default:
@@ -169,6 +173,19 @@ func TestTaskCreateAndAcceptInsideAHome(t *testing.T) {
 		t.Fatalf("create = %q, request = %+v", out, created)
 	}
 
+	out, err = runAgc(t, "task", "get", "review-42")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "review") {
+		t.Fatalf("get = %q", out)
+	}
+
+	_, err = runAgc(t, "task", "reject", "review-42", "--why", "Check the tests too.")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	out, err = runAgc(t, "task", "accept", "review-42")
 	if err != nil {
 		t.Fatal(err)
@@ -182,7 +199,7 @@ func TestTaskCreateAndAcceptInsideAHome(t *testing.T) {
 		t.Fatal("task list inside a home succeeded")
 	}
 
-	want := "POST /tasks\nPOST /tasks/review-42/accept"
+	want := "POST /tasks\nGET /tasks/review-42\nPOST /tasks/review-42/reject\nPOST /tasks/review-42/accept"
 	if strings.Join(requests, "\n") != want {
 		t.Fatalf("requests = %q", requests)
 	}

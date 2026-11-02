@@ -29,13 +29,14 @@ func insideHome() bool {
 }
 
 // homeService is taskService inside an agent's home, which cannot reach
-// agc rest: agc task create and agc task accept go over the home's
-// messaging socket, as the agent (it manages what it creates and accepts
-// only what it manages). Everything else says it is not served here.
+// agc rest: agc task create, get, accept and reject go over the home's
+// messaging socket, as the agent (it manages what it creates and reads,
+// accepts and rejects only what it manages). Everything else says it is
+// not served here.
 type homeService struct{}
 
 func notInHome(what string) error {
-	return ez.New(ez.EINVALID, "inside an agent's home only agc task create and agc task accept work ("+what+" does not): the home reaches agc over its messaging socket only", nil)
+	return ez.New(ez.EINVALID, "inside an agent's home only agc task create, get, accept and reject work ("+what+" does not): the home reaches agc over its messaging socket only", nil)
 }
 
 func (homeService) Defaults() (controller.DefaultsSettings, bool) {
@@ -73,7 +74,14 @@ func (homeService) ListTasks(ctx context.Context) (*tasks.ListResponse, error) {
 }
 
 func (homeService) GetTask(ctx context.Context, ref string) (*tasks.TaskView, error) {
-	return nil, notInHome("task get")
+	out := &tasks.TaskView{}
+
+	err := newMsgClient().GetTask(ctx, ref, out)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return out, nil
 }
 
 func (homeService) DeliverTask(ctx context.Context, ref string, summary string) (*tasks.TaskView, error) {
@@ -81,7 +89,18 @@ func (homeService) DeliverTask(ctx context.Context, ref string, summary string) 
 }
 
 func (homeService) RejectTask(ctx context.Context, ref string, by string, why string) (*tasks.TaskView, error) {
-	return nil, notInHome("task reject")
+	if by != "" {
+		return nil, ez.New(ez.EINVALID, "inside an agent's home the agent rejects, so --by is not taken", nil)
+	}
+
+	out := &tasks.TaskView{}
+
+	err := newMsgClient().RejectTask(ctx, ref, why, out)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return out, nil
 }
 
 func (homeService) DeleteTask(ctx context.Context, ref string) (*tasks.DeleteResponse, error) {

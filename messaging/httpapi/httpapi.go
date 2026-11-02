@@ -68,16 +68,25 @@ const DeliverPath = "/task/deliver"
 
 // The routes an agent's home serves on its socket besides messaging (ADR
 // 0016); only home sockets serve them. The agent loop reads AgentPath on
-// every wait cycle and posts AgentSleepPath once idle; agc task create and
-// agc task accept inside a home post TasksPath and TaskAcceptPath, since a
-// home cannot reach agc rest.
+// every wait cycle and posts AgentSleepPath once idle. agc task create,
+// get, accept and reject inside a home use the task routes, since a home
+// cannot reach agc rest; that short list is all a manager needs.
 const (
 	AgentPath      = "/agent"
 	AgentSleepPath = "/agent/sleep"
 	TasksPath      = "/tasks"
-	// TaskAcceptPath is a pattern; {name} is the task's name.
+	// TaskPath, TaskAcceptPath and TaskRejectPath are patterns; {name} is
+	// the task's name.
+	TaskPath       = "/tasks/{name}"
 	TaskAcceptPath = "/tasks/{name}/accept"
+	TaskRejectPath = "/tasks/{name}/reject"
 )
+
+// RejectBody is the body of a reject from an agent's home: why the task
+// goes back.
+type RejectBody struct {
+	Why string `json:"why"`
+}
 
 // DeliverRequest is the body of a delivery: what the agent says it did.
 type DeliverRequest struct {

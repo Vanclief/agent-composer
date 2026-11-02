@@ -895,6 +895,39 @@ func TestHomeSocketServesTheAgent(t *testing.T) {
 		t.Fatalf("accept another's task: %v, want ENOTAUTHORIZED", err)
 	}
 
+	err = client.GetTask(ctx, "not-mine", &tasks.TaskView{})
+	if ez.ErrorCode(err) != ez.ENOTAUTHORIZED {
+		t.Fatalf("get another's task: %v, want ENOTAUTHORIZED", err)
+	}
+
+	err = client.RejectTask(ctx, "not-mine", "no", &tasks.TaskView{})
+	if ez.ErrorCode(err) != ez.ENOTAUTHORIZED {
+		t.Fatalf("reject another's task: %v, want ENOTAUTHORIZED", err)
+	}
+
+	read := &tasks.TaskView{}
+	err = client.GetTask(ctx, "review-42", read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read.Name != "review-42" || read.Status != "open" {
+		t.Fatalf("get = %+v", read)
+	}
+
+	_, err = env.tasks.Deliver(ctx, nil, &tasks.DeliverRequest{Name: "review-42", Summary: "Reviewed."})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rejected := &tasks.TaskView{}
+	err = client.RejectTask(ctx, "review-42", "Check the tests too.", rejected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rejected.Status != "open" || rejected.DeliveredAt != nil {
+		t.Fatalf("rejected = %+v", rejected)
+	}
+
 	accepted := &tasks.TaskView{}
 	err = client.AcceptTask(ctx, "review-42", accepted)
 	if err != nil {

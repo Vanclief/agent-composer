@@ -40,8 +40,12 @@ type Homes interface {
 	// CreateTask creates a task managed by the agent from a create
 	// request body.
 	CreateTask(ctx context.Context, home string, body []byte) (any, error)
+	// GetTask reads a task the agent manages.
+	GetTask(ctx context.Context, home string, taskName string) (any, error)
 	// AcceptTask accepts a task the agent manages.
 	AcceptTask(ctx context.Context, home string, taskName string) (any, error)
+	// RejectTask sends back a task the agent manages, with why.
+	RejectTask(ctx context.Context, home string, taskName string, why string) (any, error)
 }
 
 // SetHomes sets what serves the agent routes on every home's socket.
@@ -179,7 +183,25 @@ func (api *API) startHomeListener(home string) error {
 		mux.HandleFunc("GET "+httpapi.AgentPath, api.serveAgent(home))
 		mux.HandleFunc("POST "+httpapi.AgentSleepPath, api.serveSleep(home))
 		mux.HandleFunc("POST "+httpapi.TasksPath, api.serveCreateTask(home))
-		mux.HandleFunc("POST "+httpapi.TaskAcceptPath, api.serveAcceptTask(home))
+		mux.HandleFunc("GET "+httpapi.TaskPath, api.serveTask(home, func(ctx context.Context, homes Homes, r *http.Request) (any, error) {
+			return homes.GetTask(ctx, home, r.PathValue("name"))
+		}))
+		mux.HandleFunc("POST "+httpapi.TaskAcceptPath, api.serveTask(home, func(ctx context.Context, homes Homes, r *http.Request) (any, error) {
+			return homes.AcceptTask(ctx, home, r.PathValue("name"))
+		}))
+		mux.HandleFunc("POST "+httpapi.TaskRejectPath, func(w http.ResponseWriter, r *http.Request) {
+			var body httpapi.RejectBody
+
+			err := httpapi.DecodeBody(w, r, &body)
+			if err != nil {
+				httpapi.WriteError(w, err)
+				return
+			}
+
+			api.serveTask(home, func(ctx context.Context, homes Homes, r *http.Request) (any, error) {
+				return homes.RejectTask(ctx, home, r.PathValue("name"), body.Why)
+			})(w, r)
+		})
 	})
 }
 
@@ -260,7 +282,8 @@ func (api *API) serveCreateTask(home string) http.HandlerFunc {
 	}
 }
 
-func (api *API) serveAcceptTask(home string) http.HandlerFunc {
+// serveTask answers one of the task routes of a home with fn's view.
+func (api *API) serveTask(home string, fn func(ctx context.Context, homes Homes, r *http.Request) (any, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		homes, err := api.currentHomes()
 		if err != nil {
@@ -268,7 +291,7 @@ func (api *API) serveAcceptTask(home string) http.HandlerFunc {
 			return
 		}
 
-		view, err := homes.AcceptTask(r.Context(), home, r.PathValue("name"))
+		view, err := fn(r.Context(), homes, r)
 		if err != nil {
 			httpapi.WriteError(w, err)
 			return

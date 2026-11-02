@@ -122,21 +122,52 @@ func (h homes) CreateTask(ctx context.Context, home string, body []byte) (any, e
 	return h.api.tasks.Create(ctx, nil, request)
 }
 
-// AcceptTask accepts a task the agent manages, as the agent.
-func (h homes) AcceptTask(ctx context.Context, home string, taskName string) (any, error) {
+// managedTask returns the agent living in home and its task called
+// taskName, refused when the agent does not manage it.
+func (h homes) managedTask(ctx context.Context, home string, taskName string) (*agent.Agent, *tasks.TaskView, error) {
 	record, err := agent.GetAgentByHome(ctx, h.api.db, home)
 	if err != nil {
-		return nil, ez.Wrap(err)
+		return nil, nil, ez.Wrap(err)
 	}
 
 	view, err := h.api.tasks.Get(ctx, nil, &tasks.GetRequest{Name: taskName})
 	if err != nil {
-		return nil, ez.Wrap(err)
+		return nil, nil, ez.Wrap(err)
 	}
 
 	if view.Manager != record.Name {
-		return nil, ez.New(ez.ENOTAUTHORIZED, "task "+taskName+" is managed by "+view.Manager+", not by "+record.Name, nil)
+		return nil, nil, ez.New(ez.ENOTAUTHORIZED, "task "+taskName+" is managed by "+view.Manager+", not by "+record.Name, nil)
+	}
+
+	return record, view, nil
+}
+
+// GetTask reads a task the agent manages.
+func (h homes) GetTask(ctx context.Context, home string, taskName string) (any, error) {
+	_, view, err := h.managedTask(ctx, home, taskName)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return view, nil
+}
+
+// AcceptTask accepts a task the agent manages, as the agent.
+func (h homes) AcceptTask(ctx context.Context, home string, taskName string) (any, error) {
+	record, _, err := h.managedTask(ctx, home, taskName)
+	if err != nil {
+		return nil, ez.Wrap(err)
 	}
 
 	return h.api.tasks.Accept(ctx, nil, &tasks.AcceptRequest{Name: taskName, By: record.Name})
+}
+
+// RejectTask sends back a task the agent manages, as the agent.
+func (h homes) RejectTask(ctx context.Context, home string, taskName string, why string) (any, error) {
+	record, _, err := h.managedTask(ctx, home, taskName)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	return h.api.tasks.Reject(ctx, nil, &tasks.RejectRequest{Name: taskName, By: record.Name, Why: why})
 }

@@ -180,14 +180,37 @@ func (c *Client) CreateTask(ctx context.Context, request any, out any) error {
 
 // AcceptTask accepts, from an agent's home, a task the agent manages.
 func (c *Client) AcceptTask(ctx context.Context, name string, out any) error {
-	path := strings.Replace(httpapi.TaskAcceptPath, "{name}", url.PathEscape(name), 1)
-
-	err := c.do(ctx, http.MethodPost, path, nil, struct{}{}, out)
+	err := c.do(ctx, http.MethodPost, taskPath(httpapi.TaskAcceptPath, name), nil, struct{}{}, out)
 	if err != nil {
 		return ez.Wrap(err)
 	}
 
 	return nil
+}
+
+// GetTask reads, from an agent's home, a task the agent manages.
+func (c *Client) GetTask(ctx context.Context, name string, out any) error {
+	err := c.do(ctx, http.MethodGet, taskPath(httpapi.TaskPath, name), nil, nil, out)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// RejectTask sends back, from an agent's home, a task the agent manages.
+func (c *Client) RejectTask(ctx context.Context, name string, why string, out any) error {
+	err := c.do(ctx, http.MethodPost, taskPath(httpapi.TaskRejectPath, name), nil, httpapi.RejectBody{Why: why}, out)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// taskPath fills {name} in a task route pattern.
+func taskPath(pattern string, name string) string {
+	return strings.Replace(pattern, "{name}", url.PathEscape(name), 1)
 }
 
 // do sends one request and decodes the JSON answer into out. Error
