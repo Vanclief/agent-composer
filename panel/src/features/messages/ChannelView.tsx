@@ -1,4 +1,7 @@
 // One channel's live feed and post box, filling the height it is given.
+// While it is open, every message it shows counts as read (unread.ts).
+import { useEffect, type ReactNode } from 'react'
+
 import { useChannelMessages } from '@/api/hooks'
 import { conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
@@ -9,6 +12,7 @@ import { Composer } from './Composer'
 import { useIdentity } from './identity'
 import { membersOf, type Member } from './members'
 import { MessageList } from './MessageList'
+import { markRead } from './unread'
 
 function plural(n: number, word: string) {
   return `${n} ${word}${n === 1 ? '' : 's'}`
@@ -47,20 +51,37 @@ function MembersStrip({ members }: { members: Member[] }) {
   )
 }
 
-// channel is "#name".
-export function ChannelView({ channel }: { channel: string }) {
+// channel is "#name". header goes above the members; emptyReason is the
+// empty slot's text when the channel has no messages.
+export function ChannelView({
+  channel,
+  header,
+  emptyReason = 'No messages',
+}: {
+  channel: string
+  header?: ReactNode
+  emptyReason?: string
+}) {
   const feed = useChannelMessages(channel)
   const identity = useIdentity()
   const empty = !feed.isPending && !feed.error && feed.messages.length === 0
   const members = membersOf(feed.messages)
+  const lastID = feed.messages.at(-1)?.id
+
+  useEffect(() => {
+    if (lastID !== undefined) {
+      markRead(channel, lastID)
+    }
+  }, [channel, lastID])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {header}
       {members.length > 0 && <MembersStrip members={members} />}
       <ErrorText error={feed.error} className="m-3 mb-0" />
       {empty ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-6">
-          <EmptySlot reason="No messages" />
+          <EmptySlot reason={emptyReason} />
         </div>
       ) : (
         <MessageList messages={feed.messages} />

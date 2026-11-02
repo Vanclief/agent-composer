@@ -577,6 +577,18 @@ function createState() {
     post('#review-42', tester, 'Reproduced 2 of 3 locally. The third looks flaky.')
     post('#review-42', reviewer, 'Fixed the loop node. Pushing to review-42.')
     post('#releases', reviewer, 'v0.4.0 tagged.')
+    // ADR 0009 item 5: franco's inbox. agc's two opening messages for
+    // review-42 (the first mentions @franco), then the review-42 agent
+    // escalating a decision only the owner can make.
+    for (const opening of messages.filter((m) => m.channel === '#review-42' && m.from === 'agc')) {
+      post('#franco', agc, opening.body).created_at = opened
+    }
+    post(
+      '#franco',
+      reviewer,
+      '@franco decision needed on review-42: the third workflow/ failure is a flaky test, not the loop node. ' +
+        'Quarantine it and merge the fix, or block the merge until the flake is fixed too?',
+    )
     // The seeded human has left, so the panel can join as @franco.
     franco.left_at = iso()
   }

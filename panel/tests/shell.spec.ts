@@ -65,7 +65,8 @@ test('Work nav opens Compute, which stays in Work mode', async ({ page }) => {
 test('the three modes are a vertical list', async ({ page }) => {
   await page.goto('/panel/tasks')
   const mode = page.getByRole('navigation', { name: 'Mode' })
-  await expect(mode.getByRole('link')).toHaveText(['Think', 'Work', 'Talk'])
+  // Talk carries its unread count.
+  await expect(mode.getByRole('link')).toHaveText(['Think', 'Work', /^Talk(\d+\+?)?$/])
   const think = await mode.getByRole('link', { name: 'Think' }).boundingBox()
   const work = await mode.getByRole('link', { name: 'Work' }).boundingBox()
   const talk = await mode.getByRole('link', { name: 'Talk' }).boundingBox()
@@ -90,19 +91,14 @@ test('/ opens Talk when it was the last mode', async ({ page }) => {
   await expect(page).toHaveURL(/\/panel\/messages$/)
 })
 
-test('the Talk sidebar lists channels with their counts', async ({ page }) => {
-  const res = await page.request.get('/api/msg/channels')
-  const { channels } = (await res.json()) as { channels: { channel: string; count: number }[] }
+test('the Talk sidebar lists channels with their unread counts', async ({ page }) => {
   await page.goto('/panel/messages')
   const nav = page.getByRole('navigation', { name: 'Main' })
   for (const name of ['#review-42', '#releases']) {
-    const info = channels.find((c) => c.channel === name)
-    expect(info).toBeDefined()
     const row = nav.getByRole('link', { name: new RegExp(`^${name}\\b`) })
     await expect(row).toBeVisible()
-    await expect(row.getByTestId('channel-count')).toHaveText(/^\d+$/)
-    const count = Number(await row.getByTestId('channel-count').textContent())
-    expect(count).toBeGreaterThanOrEqual(info!.count)
+    // Never opened in this browser: every message is unread.
+    await expect(row.getByTestId('unread-badge')).toHaveText(/^\d+$/)
   }
 })
 
@@ -123,5 +119,5 @@ test('Work mode shows no channel rows', async ({ page }) => {
   await page.goto('/panel/tasks')
   const nav = page.getByRole('navigation', { name: 'Main' })
   await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute'])
-  await expect(nav.getByTestId('channel-count')).toHaveCount(0)
+  await expect(nav.getByTestId('channel-rows')).toHaveCount(0)
 })

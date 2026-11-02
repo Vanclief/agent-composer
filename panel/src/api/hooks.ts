@@ -40,6 +40,9 @@ export const queryKeys = {
   conflicts: ['knowledge', 'conflicts'] as const,
   participants: (channel: string) => ['msg', 'participants', channel] as const,
   sandboxWork: (ref: string) => ['sandboxes', ref, 'work'] as const,
+  // A channel's messages after the read cursor, up to its last id
+  // (src/features/messages/unread.ts).
+  unread: (channel: string, after: number, last: number) => ['msg', 'unread', channel, after, last] as const,
 }
 
 // ---------- tasks and sandboxes (ADR 0008) ----------
