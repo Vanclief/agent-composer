@@ -1,4 +1,4 @@
-// Owned by the foundation (layout, routing, theme).
+// Owned by the foundation (layout, routing).
 import { expect, test, type Page } from '@playwright/test'
 
 test('/ redirects to tasks on a first visit', async ({ page }) => {
@@ -16,18 +16,6 @@ test('/ redirects to tasks on a first visit', async ({ page }) => {
 test('unknown paths go to tasks', async ({ page }) => {
   await page.goto('/panel/no/such/page')
   await expect(page).toHaveURL(/\/panel\/tasks$/)
-})
-
-test('theme defaults to dark and the toggle persists', async ({ page }) => {
-  await page.goto('/panel/tasks')
-  const html = page.locator('html')
-  await expect(html).toHaveClass(/dark/)
-
-  await page.getByRole('button', { name: 'Light theme' }).click()
-  await expect(html).not.toHaveClass(/dark/)
-  await page.reload()
-  await expect(html).not.toHaveClass(/dark/)
-  await expect(page.getByRole('button', { name: 'Dark theme' })).toBeVisible()
 })
 
 function header(page: Page, area: string) {

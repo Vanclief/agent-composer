@@ -8,6 +8,7 @@ actions:
     action: Remove the light theme and its toggle once every page follows the look; the look is dark only.
     because: [panel-reads-like-an-instrument]
     opened: { who: franco, when: 2026-11-02 }
+    done: { who: claude_code, when: 2026-11-02 }
   - id: render-events-as-moments
     action: Give a delivery, an accept, an agent waking and a watchdog alert one short visible moment each in the panel, driven by the SSE events, and nothing more.
     because: [feedback-not-decoration-makes-a-ui-feel-alive, panel-reads-like-an-instrument]

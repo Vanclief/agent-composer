@@ -345,8 +345,7 @@ test('screenshot', async ({ page }) => {
     await page.waitForTimeout(400)
     await page.screenshot({ path })
   }
-  for (const theme of ['dark', 'light']) {
-    await page.addInitScript((value) => localStorage.setItem('agc.panel.theme', value), theme)
+  for (const theme of ['dark']) {
     const dialog = await openDialog(page)
     await shoot(`${dir}/newtask-blank-${theme}.png`)
 

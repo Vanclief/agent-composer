@@ -2,7 +2,7 @@
 // --width / --height say otherwise.
 //
 //   npm run shot -- /tasks
-//   npm run shot -- /tasks/review-42/messages --theme light
+//   npm run shot -- /tasks/review-42/messages
 //   npm run shot -- /messages --out /tmp/messages.png --wait 2000
 //   npm run shot -- /tasks/review-42 --width 1000
 //   npm run shot -- /think/beliefs --storage agc.panel.group.work=closed
@@ -30,12 +30,11 @@ function flag(name: string) {
   return process.argv[i + 1]
 }
 
-const flagsWithValues = new Set(['--out', '--theme', '--wait', '--width', '--height', '--storage', '--click'])
+const flagsWithValues = new Set(['--out', '--wait', '--width', '--height', '--storage', '--click'])
 const positional = process.argv
   .slice(2)
   .filter((arg, i, all) => !arg.startsWith('--') && !flagsWithValues.has(all[i - 1]))
 const route = '/' + (positional[0] ?? '/tasks').replace(/^\/+/, '')
-const theme = flag('--theme') ?? 'dark'
 const settleMs = Number(flag('--wait') ?? 1000)
 const width = Number(flag('--width') ?? 1440)
 const height = Number(flag('--height') ?? 900)
@@ -57,7 +56,6 @@ const port = (vite.httpServer?.address() as AddressInfo).port
 const browser = await chromium.launch()
 try {
   const context = await browser.newContext({ viewport: { width, height } })
-  await context.addInitScript((value) => localStorage.setItem('agc.panel.theme', value), theme)
   await context.addInitScript((pairs) => pairs.forEach(([key, value]) => localStorage.setItem(key, value)), storage)
   const page = await context.newPage()
   page.on('pageerror', (error) => console.error('page error:', error.message))
