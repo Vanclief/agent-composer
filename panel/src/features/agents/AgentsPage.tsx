@@ -1,6 +1,6 @@
 // /agents: every persistent agent, one row each: state (verbatim), name
 // (bold when kept, muted and "numbered" while not), role, harness and
-// model, how many tasks it manages and when it was last active. Awake
+// model (with its effort), how many tasks it manages and when it was last active. Awake
 // first, then waking, then asleep. "New agent" makes a numbered one.
 import { useMemo, useState } from 'react'
 import { Clock, Plus } from 'lucide-react'
@@ -131,7 +131,11 @@ function AgentRow({ agent }: { agent: AgentView }) {
       >
         <Readout label="owner" title={`Owner ${agent.owner}`} value={agent.owner ? `@${agent.owner}` : '–'} />
         <Readout label="harness" title="Harness" value={agent.harness} />
-        <Readout label="model" title="Model" value={agent.model || '–'} />
+        <Readout
+          label="model"
+          title={agent.effort ? `Model, effort ${agent.effort}` : 'Model'}
+          value={agent.effort ? `${agent.model || '–'} · ${agent.effort}` : agent.model || '–'}
+        />
       </div>
     </li>
   )

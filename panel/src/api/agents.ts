@@ -50,6 +50,19 @@ export type AgentView = {
   conversations: AgentConversation[]
   last_active_at: string | null
   created_at: string
+  // What it is made of. Optional until the Go side (agent-effort,
+  // sandbox-skills, agent-rules) ships them; read with a fallback.
+  // effort: low, medium, high, xhigh or max; empty is the harness default.
+  effort?: string
+  // Skill names; GET /api/skills/{name} has each one's text.
+  skills?: string[]
+  rules?: AgentRule[]
+}
+
+export type AgentRule = {
+  id: string
+  // The rule's sentence.
+  rule: string
 }
 
 export type CreateAgentRequest = {
@@ -90,5 +103,24 @@ export const agents = {
   // awake → asleep.
   sleep(name: string) {
     return apiFetch<AgentView>('POST', `/agents/${enc(name)}/sleep`)
+  },
+}
+
+// ---------- skills (sandbox-skills) ----------
+
+export type SkillSummary = { name: string; description: string }
+
+export const skills = {
+  list(signal?: AbortSignal) {
+    return apiFetch<{ skills: SkillSummary[] }>('GET', '/skills', undefined, signal)
+  },
+  // The skill's markdown, as text: never parsed, even when it looks like JSON.
+  async text(name: string, signal?: AbortSignal) {
+    const response = await fetch(`/api/skills/${enc(name)}`, { signal })
+    if (!response.ok) {
+      // apiFetch turns the error body into an ApiError with the server's text.
+      return apiFetch<string>('GET', `/skills/${enc(name)}`, undefined, signal)
+    }
+    return response.text()
   },
 }

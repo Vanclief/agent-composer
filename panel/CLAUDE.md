@@ -306,6 +306,20 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   cards Home (`/compute/<home>`, or "Not woken yet"), Tasks
   (`/tasks/<name>`, status verbatim), Conversations (`/messages/<channel>`,
   the agent's inbox `#<name>` first) and Identity.
+- What an agent is made of (contract of agent-effort, sandbox-skills and
+  agent-rules, hand-typed and optional on `AgentView` until the Go side
+  ships): `effort` (`low medium high xhigh max`, empty for the harness
+  default), `skills` (names) and `rules` (`{id, rule}`). Identity shows the
+  model with the effort as a dim mono chip (`agent-model`, `agent-effort`,
+  none when empty); the list's model readout adds `· <effort>` and nothing
+  else. The Skills card is a tile row (`button[data-skill]`, concept
+  `skill`) or "no skills"; a tile opens the skill's markdown as plain text
+  in a dialog (`skill-text`, `skills.text` / `useSkillText`,
+  `GET /api/skills/{name}`, never parsed). The Rules card is a row per rule
+  (`li[data-rule]`, the sentence, then the id dim mono), not clickable, or
+  "no rules". Mock: `orchestrator-1` has effort `high`, skills `rtsdesign`
+  and `go-style` and two rules; `ada` effort `medium`, one skill, one rule;
+  the others none. `GET /api/skills` lists both skills.
 
 ## Accounts (ahead of accounts-model and accounts-usage)
 
