@@ -202,3 +202,66 @@ func TestTaskDeliverOverTheSocketReturnsTheRefusal(t *testing.T) {
 		t.Fatalf("err %v, message %q", err, ez.ErrorMessage(err))
 	}
 }
+
+// The order TASK.md, the guest readme and ADR 0010 give: the summary
+// first, --report <file> after it. urfave/cli stops reading flags at the
+// summary, so leafArgs must pick --report out; the summary carries no flag
+// text and the report is sent.
+func TestTaskDeliverReadsAReportAfterTheSummary(t *testing.T) {
+	bodies := []map[string]json.RawMessage{}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := map[string]json.RawMessage{}
+		err := json.NewDecoder(r.Body).Decode(&body)
+		if err != nil {
+			t.Error(err)
+		}
+		bodies = append(bodies, body)
+
+		httpapi.WriteJSON(w, http.StatusOK, tasks.TaskView{Name: "fix-login", Status: tasks.StatusReview})
+	}))
+	defer server.Close()
+
+	t.Setenv("AGC_SERVER", "")
+	t.Setenv("AGC_TASK", "fix-login")
+	t.Setenv("AGC_MSG_URL", server.URL)
+
+	file := filepath.Join(t.TempDir(), "report.json")
+	err := os.WriteFile(file, []byte(cliReport), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = runAgc(t, "task", "deliver", "Fixed 2FA; all checks pass.", "--report", file)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = runAgc(t, "task", "deliver", "Fixed 2FA again.", "--report="+file)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = runAgc(t, "task", "deliver", "--report", file, "Fixed 2FA, flag first.")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{`"Fixed 2FA; all checks pass."`, `"Fixed 2FA again."`, `"Fixed 2FA, flag first."`}
+	if len(bodies) != len(want) {
+		t.Fatalf("bodies = %v", bodies)
+	}
+	for i, body := range bodies {
+		if string(body["summary"]) != want[i] {
+			t.Fatalf("summary = %s, want %s", body["summary"], want[i])
+		}
+		if string(body["report"]) != cliReport {
+			t.Fatalf("report = %s, want %s", body["report"], cliReport)
+		}
+	}
+
+	_, err = runAgc(t, "task", "deliver", "Fixed 2FA.", "--report")
+	if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), "--report needs a value") {
+		t.Fatalf("err %v", err)
+	}
+}

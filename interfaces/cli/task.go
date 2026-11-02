@@ -141,11 +141,13 @@ var valueFlags = map[string]string{
 	"--role":    "role",
 	"--harness": "harness",
 	"--model":   "model",
+	"--report":  "report",
 }
 
 // leafArgs returns the positional arguments. urfave/cli stops reading
-// flags at the first argument, so --yes, --json, --server <url> and
-// -f <file> written after a name are picked out here and set on c.
+// flags at the first argument, so --yes, --json, --server <url>,
+// -f <file> and --report <file> written after a name (or after the
+// summary of agc task deliver) are picked out here and set on c.
 func leafArgs(c *cli.Context) ([]string, bool, error) {
 	yes := c.Bool("yes")
 	names := []string{}
