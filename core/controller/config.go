@@ -26,4 +26,6 @@ type Config struct {
 	Defaults DefaultsSettings `mapstructure:"defaults"`
 	// Watchdog sets when a running task is reported (ADR 0013).
 	Watchdog WatchdogSettings `mapstructure:"watchdog"`
+	// Recovery bounds the watchdog's restarts of crashed sandboxes (ADR 0017).
+	Recovery RecoverySettings `mapstructure:"recovery"`
 }

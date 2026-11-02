@@ -3,8 +3,11 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +21,7 @@ import (
 	"github.com/vanclief/agent-composer/messaging/httpapi"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 	"github.com/vanclief/agent-composer/runtime/harnesses"
+	"github.com/vanclief/agent-composer/task"
 )
 
 const (
@@ -36,7 +40,30 @@ const (
 	// (core/resources/tasks).
 	acceptedPrefix = "Accepted by "
 	rejectedPrefix = "Rejected by "
+	// resumePrompt is the turn of an agent whose saved session continues
+	// after its sandbox was restarted (ADR 0017).
+	resumePrompt = "agc restarted your sandbox; continue where you were; the repo clone may need a fresh pull."
 )
+
+// defaultAgentState is where the loop keeps its session, on the harness
+// volume next to ~/.claude and ~/.codex, so it outlives a crash of the VM.
+var defaultAgentState = filepath.Join(task.HarnessDir, "agc-agent.json")
+
+// agentState is what the loop saves after every turn, so that after its
+// sandbox restarts it continues its harness session instead of starting
+// over on the brief (ADR 0017).
+type agentState struct {
+	Harness string `json:"harness"`
+	Task    string `json:"task"`
+	// Session is the harness session id (claude --resume, codex exec
+	// resume).
+	Session string `json:"session"`
+	// Cursor is the last message in #<task> the loop handled.
+	Cursor int64 `json:"cursor"`
+	// Delivered is set once the loop delivered and cleared by a
+	// rejection: a resumed loop in review waits instead of taking a turn.
+	Delivered bool `json:"delivered"`
+}
 
 // agentHarness runs one turn: prompt on session, or a new session when
 // session is empty. It returns the final answer and the session id.
@@ -74,6 +101,12 @@ type agentLoop struct {
 	log     io.Writer
 	// joined is called with the participant once joined.
 	joined func(p *msgmodels.Participant) error
+	// harnessName is the harness id saved with the session.
+	harnessName string
+	// statePath is the agentState file; empty keeps nothing.
+	statePath string
+	// delivered says the task waits in review since the loop delivered.
+	delivered bool
 }
 
 func agentCommand() *cli.Command {
@@ -92,6 +125,7 @@ func agentCommand() *cli.Command {
 					&cli.StringFlag{Name: "name", Usage: "Messaging name to join as (default $AGC_SANDBOX, else the task name)"},
 					&cli.StringFlag{Name: "manager", Usage: "Messaging name of the task's manager, who may post /accept and /reject"},
 					&cli.StringFlag{Name: "owner", Usage: "Messaging name of the task's owner, who may post /accept and /reject"},
+					&cli.StringFlag{Name: "state", Usage: "File the loop keeps its harness session in, resumed when it exists (ADR 0017)", Value: defaultAgentState},
 				},
 				Action: agentRun,
 			},
@@ -131,6 +165,9 @@ func agentRun(c *cli.Context) error {
 		brief:   string(brief),
 		closers: closers,
 		log:     os.Stdout,
+		// A restarted sandbox continues this session (ADR 0017).
+		harnessName: c.String("harness"),
+		statePath:   c.String("state"),
 		joined: func(p *msgmodels.Participant) error {
 			// agc msg post from the harness then speaks as the same
 			// participant, so the loop does not take it for a reply.
@@ -170,9 +207,31 @@ func (l *agentLoop) run(ctx context.Context) error {
 		return err
 	}
 
-	l.logf("joined %s as @%s, first turn on the brief", l.channel(), p.Name)
+	// replayUpTo is the channel's last message when the loop started:
+	// a resumed loop reads from its saved cursor, and what its own earlier
+	// run posted up to here is not a turn.
+	replayUpTo := cursor
+	session := ""
 
-	session := l.turn(ctx, p, l.brief, "")
+	saved := l.loadState()
+	if saved == nil {
+		l.logf("joined %s as @%s, first turn on the brief", l.channel(), p.Name)
+		session = l.turn(ctx, p, l.brief, "")
+	} else {
+		if saved.Cursor > 0 && saved.Cursor < cursor {
+			cursor = saved.Cursor
+		}
+		l.delivered = saved.Delivered
+		session = saved.Session
+
+		if l.delivered {
+			l.logf("joined %s as @%s, resumed session %s, waiting for review", l.channel(), p.Name, session)
+		} else {
+			l.logf("joined %s as @%s, resuming session %s", l.channel(), p.Name, session)
+			session = l.resume(ctx, p, session)
+		}
+	}
+	l.saveState(session, cursor)
 
 	for {
 		res, err := l.msg.Wait(ctx, l.channel(), cursor, agentWaitTimeout)
@@ -192,6 +251,11 @@ func (l *agentLoop) run(ctx context.Context) error {
 				continue
 			}
 
+			// The earlier run's own posts, read again after a restart.
+			if m.ID <= replayUpTo && m.Task == l.task {
+				continue
+			}
+
 			if isSystem(m) && strings.HasPrefix(m.Body, acceptedPrefix) {
 				l.logf("the task is accepted (%s), exiting", strings.TrimSpace(m.Body))
 				return nil
@@ -207,9 +271,99 @@ func (l *agentLoop) run(ctx context.Context) error {
 				prompt = l.brief + "\n\n---\n\n" + prompt
 			}
 
+			if isSystem(m) && strings.HasPrefix(m.Body, rejectedPrefix) {
+				l.delivered = false
+			}
+
 			l.logf("message %d from @%s, next turn", m.ID, m.From)
 			session = l.turn(ctx, p, prompt, session)
+			l.saveState(session, cursor)
 		}
+
+		l.saveState(session, cursor)
+	}
+}
+
+// resume takes the resumed agent's first turn on its saved session. When
+// the harness cannot continue it, the loop starts over on the brief.
+func (l *agentLoop) resume(ctx context.Context, p *msgmodels.Participant, session string) string {
+	answer, next, err := l.harness.Run(ctx, resumePrompt, session)
+	if err != nil {
+		l.logf("cannot resume session %s, starting over on the brief: %s", session, ez.ErrorMessage(err))
+		return l.turn(ctx, p, l.brief, "")
+	}
+
+	if next == "" {
+		next = session
+	}
+
+	l.answer(ctx, p, answer, nil)
+
+	return next
+}
+
+// loadState reads the saved state, nil when there is none, it is for
+// another harness or task, or it holds no session.
+func (l *agentLoop) loadState() *agentState {
+	if l.statePath == "" {
+		return nil
+	}
+
+	data, err := os.ReadFile(l.statePath)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		l.logf("cannot read %s, starting on the brief: %s", l.statePath, err)
+		return nil
+	}
+
+	state := &agentState{}
+	err = json.Unmarshal(data, state)
+	if err != nil {
+		l.logf("cannot read %s, starting on the brief: %s", l.statePath, err)
+		return nil
+	}
+
+	if state.Session == "" || state.Harness != l.harnessName || state.Task != l.task {
+		return nil
+	}
+
+	return state
+}
+
+// saveState writes the state, replacing the file whole so a crash never
+// leaves half of it. A failure is logged: the loop goes on.
+func (l *agentLoop) saveState(session string, cursor int64) {
+	if l.statePath == "" || session == "" {
+		return
+	}
+
+	state := agentState{Harness: l.harnessName, Task: l.task, Session: session, Cursor: cursor, Delivered: l.delivered}
+
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		l.logf("cannot save the session: %s", err)
+		return
+	}
+
+	err = os.MkdirAll(filepath.Dir(l.statePath), 0o700)
+	if err != nil {
+		l.logf("cannot save the session: %s", err)
+		return
+	}
+
+	tmp := l.statePath + ".tmp"
+
+	err = os.WriteFile(tmp, append(data, '\n'), 0o600)
+	if err != nil {
+		l.logf("cannot save the session: %s", err)
+		return
+	}
+
+	err = os.Rename(tmp, l.statePath)
+	if err != nil {
+		l.logf("cannot save the session: %s", err)
 	}
 }
 
@@ -306,6 +460,13 @@ func (l *agentLoop) turn(ctx context.Context, p *msgmodels.Participant, prompt s
 		next = session
 	}
 
+	l.answer(ctx, p, answer, err)
+
+	return next
+}
+
+// answer posts one turn's answer, or its failure, as turn describes.
+func (l *agentLoop) answer(ctx context.Context, p *msgmodels.Participant, answer string, err error) {
 	body := strings.TrimSpace(answer)
 	if err != nil {
 		body = "The agent's harness failed: " + ez.ErrorMessage(err)
@@ -323,8 +484,9 @@ func (l *agentLoop) turn(ctx context.Context, p *msgmodels.Participant, prompt s
 		var view any
 		err = l.msg.Deliver(ctx, summary, &view)
 		if err == nil {
+			l.delivered = true
 			l.logf("delivered, waiting for review")
-			return next
+			return
 		}
 
 		l.logf("cannot deliver, posting the answer: %s", ez.ErrorMessage(err))
@@ -335,7 +497,7 @@ func (l *agentLoop) turn(ctx context.Context, p *msgmodels.Participant, prompt s
 		_, err = l.msg.Ask(ctx, p.ID, l.channel(), question)
 		if err == nil {
 			l.logf("asked, waiting for the answer")
-			return next
+			return
 		}
 
 		l.logf("cannot ask, posting the answer: %s", ez.ErrorMessage(err))
@@ -345,8 +507,6 @@ func (l *agentLoop) turn(ctx context.Context, p *msgmodels.Participant, prompt s
 	if err != nil {
 		l.logf("cannot post the answer: %s", ez.ErrorMessage(err))
 	}
-
-	return next
 }
 
 func (l *agentLoop) pause(ctx context.Context) {

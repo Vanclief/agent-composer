@@ -80,6 +80,8 @@ type API struct {
 	mu        sync.Mutex
 	listeners map[string]*listener
 	booting   map[string]*boot
+	// restarting holds the sandboxes Restart is starting again.
+	restarting map[string]bool
 	// deliver serves agc task deliver on the sandbox sockets; nil until
 	// the tasks API sets it with OnDeliver.
 	deliver DeliverFunc

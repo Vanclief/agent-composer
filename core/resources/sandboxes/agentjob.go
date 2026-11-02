@@ -110,3 +110,13 @@ func (api *API) Running(ctx context.Context, name string) (bool, error) {
 
 	return status == StatusRunning, nil
 }
+
+// Status is the runtime's status word for sandbox name, verbatim.
+func (api *API) Status(ctx context.Context, name string) (string, error) {
+	status, err := api.rt.Status(ctx, name)
+	if err != nil {
+		return "", ez.Wrap(err)
+	}
+
+	return status, nil
+}

@@ -783,7 +783,7 @@ func TestResume(t *testing.T) {
 	env.rt.statuses["down"] = "stopped"
 	env.rt.failing["broken"] = true
 
-	err := env.api.Resume(context.Background())
+	err := env.api.Resume(context.Background(), false)
 	if err != nil {
 		t.Fatal(err)
 	}

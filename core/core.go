@@ -42,6 +42,8 @@ type Stack struct {
 	Events *events.Bus
 	// Watchdog reports stuck tasks to their owner (ADR 0013).
 	Watchdog *watchdog.Watchdog
+	// Sandboxes restarts what went down while agc was off (ADR 0017).
+	Sandboxes *sandboxes.API
 }
 
 type StackOptions struct {
@@ -103,7 +105,7 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 
 	// Sandboxes keep running while agc is down. Their messaging listeners
 	// come back here.
-	err = sandboxesAPI.Resume(rootCtx)
+	err = sandboxesAPI.Resume(rootCtx, false)
 	if err != nil {
 		log.Warn().Err(err).Msg("sandbox messaging resume failed")
 	}
@@ -126,12 +128,21 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		TasksAPI:     tasksAPI,
 		KnowledgeAPI: knowledgeAPI,
 		Events:       bus,
-		Watchdog:     watchdog.New(ctrl.DB, msg, sandboxesAPI, bus, watchdog.Settings(ctrl.Watchdog())),
+		Watchdog:     watchdog.New(ctrl.DB, msg, sandboxesAPI, bus, watchdog.SettingsFrom(ctrl.Watchdog(), ctrl.Recovery())),
+		Sandboxes:    sandboxesAPI,
 	}, nil
 }
 
 // StartScheduler blocks while the scheduler runs until the context is canceled.
+// Only the server calls it, so only the server restarts sandboxes that went
+// down while agc was off, before its watchdog starts (ADR 0017).
 func (s *Stack) StartScheduler(ctx context.Context) {
-	go s.Watchdog.Run(ctx)
+	go func() {
+		err := s.Sandboxes.Resume(ctx, true)
+		if err != nil {
+			log.Warn().Err(err).Msg("sandbox recovery failed")
+		}
+		s.Watchdog.Run(ctx)
+	}()
 	s.Scheduler.Start(ctx)
 }

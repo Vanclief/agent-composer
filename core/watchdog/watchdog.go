@@ -1,7 +1,8 @@
 // Package watchdog watches the sandboxes of every task that is not done and
 // tells the task's channel and its owner, as agc, when the agent has gone
-// silent, has exited, or the task has waited too long in review. Every
-// signal is mechanical: no model is asked (ADR 0013).
+// silent, has exited, or the task has waited too long in review, and
+// restarts a sandbox msb reports crashed, a few times an hour at most.
+// Every signal is mechanical: no model is asked (ADR 0013, ADR 0017).
 package watchdog
 
 import (
@@ -15,6 +16,7 @@ import (
 	"github.com/uptrace/bun"
 	"github.com/vanclief/ez"
 
+	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/events"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/messaging"
@@ -36,6 +38,9 @@ const (
 	KindSilent = "silent"
 	KindExited = "exited"
 	KindReview = "review"
+
+	// restartWindow is the period Settings.Restarts counts restarts in.
+	restartWindow = time.Hour
 )
 
 // Poster posts as agc (messaging.Service).
@@ -43,16 +48,24 @@ type Poster interface {
 	PostAsSystem(ctx context.Context, channel, body string) (*msgmodels.Message, error)
 }
 
-// Probe reads a sandbox from the runtime (sandboxes.API).
+// Probe reads a sandbox from the runtime and restarts it (sandboxes.API).
 type Probe interface {
-	Running(ctx context.Context, name string) (bool, error)
+	Status(ctx context.Context, name string) (string, error)
 	AgentJob(ctx context.Context, record *taskmodels.Sandbox) (*sandboxes.AgentJob, error)
+	Restart(ctx context.Context, record *taskmodels.Sandbox, owner *taskmodels.Task) error
 }
 
-// Settings are the thresholds; zero turns a check off.
+// Settings are the thresholds; zero turns a check off. Restarts is how
+// many times within an hour a crashed sandbox is restarted (ADR 0017).
 type Settings struct {
-	Silence time.Duration
-	Review  time.Duration
+	Silence  time.Duration
+	Review   time.Duration
+	Restarts int
+}
+
+// SettingsFrom is the watchdog's settings from the resolved config.
+func SettingsFrom(dog controller.Watchdog, recovery controller.Recovery) Settings {
+	return Settings{Silence: dog.Silence, Review: dog.Review, Restarts: recovery.Restarts}
 }
 
 // Alert is one condition that holds now.
@@ -100,6 +113,19 @@ type Watchdog struct {
 
 	mu    sync.Mutex
 	state map[string]*tracked
+	// restarts is what the watchdog restarted, by sandbox name.
+	restarts map[string]*restartLog
+}
+
+// restartLog is one sandbox's recent restarts.
+type restartLog struct {
+	// at holds when each restart within restartWindow was tried.
+	at []time.Time
+	// lastErr is the last restart's failure, empty if it started.
+	lastErr string
+	// gaveUp is set once the limit was reached and said; it clears when
+	// the sandbox is seen running again.
+	gaveUp bool
 }
 
 // New returns a watchdog. bus may be nil.
@@ -112,6 +138,7 @@ func New(db bun.IDB, msg Poster, probe Probe, bus *events.Bus, settings Settings
 		settings: settings,
 		now:      time.Now,
 		state:    map[string]*tracked{},
+		restarts: map[string]*restartLog{},
 	}
 }
 
@@ -191,17 +218,7 @@ func (w *Watchdog) raise(ctx context.Context, record *taskmodels.Task, alert Ale
 		return
 	}
 
-	channels := []string{messaging.TaskChannel(record.Name)}
-	if record.Owner != "" {
-		channels = append(channels, "#"+record.Owner)
-	}
-
-	for _, channel := range channels {
-		_, err := w.msg.PostAsSystem(ctx, channel, alert.Body)
-		if err != nil {
-			log.Warn().Err(err).Str("task", record.Name).Str("channel", channel).Msg("watchdog cannot post")
-		}
-	}
+	w.tell(ctx, record, alert.Body)
 
 	entry.posted = now
 	w.events.Publish(events.Event{Type: EventAlert, Data: AlertEvent{Alert: alert}})
@@ -253,12 +270,27 @@ func (w *Watchdog) taskAlerts(ctx context.Context, record *taskmodels.Task) []Al
 
 	for i := range boxes {
 		box := &boxes[i]
-		if box.BootedAt == nil || box.BootError != nil || box.Command == "" {
+		if box.BootedAt == nil || box.BootError != nil {
 			continue
 		}
 
-		running, err := w.probe.Running(ctx, box.Name)
-		if err != nil || !running {
+		status, err := w.probe.Status(ctx, box.Name)
+		if err != nil {
+			continue
+		}
+
+		if status == sandboxes.StatusCrashed && sandboxes.Recoverable(box, record, status) {
+			w.restart(ctx, record, box)
+			continue
+		}
+
+		if status != sandboxes.StatusRunning {
+			continue
+		}
+
+		w.seenRunning(box.Name)
+
+		if box.Command == "" {
 			continue
 		}
 
@@ -287,6 +319,95 @@ func (w *Watchdog) taskAlerts(ctx context.Context, record *taskmodels.Task) []Al
 	}
 
 	return alerts
+}
+
+// restart starts a crashed sandbox again, at most Settings.Restarts times
+// within restartWindow, and says each try in #<task> and #<owner>. Past
+// the limit it gives up and says so once, with the reason, until the
+// sandbox is seen running again. Callers hold w.mu.
+func (w *Watchdog) restart(ctx context.Context, record *taskmodels.Task, box *taskmodels.Sandbox) {
+	if w.settings.Restarts <= 0 {
+		return
+	}
+
+	entry, ok := w.restarts[box.Name]
+	if !ok {
+		entry = &restartLog{}
+		w.restarts[box.Name] = entry
+	}
+	if entry.gaveUp {
+		return
+	}
+
+	now := w.now()
+	recent := []time.Time{}
+	for _, at := range entry.at {
+		if now.Sub(at) < restartWindow {
+			recent = append(recent, at)
+		}
+	}
+	entry.at = recent
+
+	if len(entry.at) >= w.settings.Restarts {
+		entry.gaveUp = true
+		w.tell(ctx, record, GaveUp(box.Name, len(entry.at), entry.lastErr))
+		return
+	}
+
+	entry.at = append(entry.at, now)
+	tries := fmt.Sprintf("restart %d of %d this hour", len(entry.at), w.settings.Restarts)
+
+	log.Info().Str("task", record.Name).Str("sandbox", box.Name).Msg("restarting a crashed sandbox")
+
+	err := w.probe.Restart(ctx, box, record)
+	if err != nil {
+		entry.lastErr = ez.ErrorMessage(err)
+		log.Warn().Err(err).Str("sandbox", box.Name).Msg("watchdog cannot restart the crashed sandbox")
+		w.tell(ctx, record, fmt.Sprintf("%s crashed and agc could not restart it (%s): %s", box.Name, tries, entry.lastErr))
+		return
+	}
+
+	entry.lastErr = ""
+	continues := "its agent continues."
+	if box.Command == "" {
+		continues = "it is running again."
+	}
+	w.tell(ctx, record, fmt.Sprintf("%s crashed; agc restarted it (%s) and %s", box.Name, tries, continues))
+}
+
+// GaveUp is the one line the watchdog posts when it stops restarting a
+// sandbox.
+func GaveUp(sandbox string, restarts int, lastErr string) string {
+	body := fmt.Sprintf("agc gave up restarting %s: it crashed again after %s within an hour", sandbox, plural(restarts, "restart"))
+	if lastErr != "" {
+		body = fmt.Sprintf("agc gave up restarting %s: %s within an hour, the last failed with: %s", sandbox, plural(restarts, "restart"), lastErr)
+	}
+
+	return body + ". It stays down until someone starts it."
+}
+
+// seenRunning lets the watchdog restart a sandbox again after it gave up,
+// once someone started it. Callers hold w.mu.
+func (w *Watchdog) seenRunning(name string) {
+	entry, ok := w.restarts[name]
+	if ok {
+		entry.gaveUp = false
+	}
+}
+
+// tell posts body as agc in #<task> and, when the task has one, #<owner>.
+func (w *Watchdog) tell(ctx context.Context, record *taskmodels.Task, body string) {
+	channels := []string{messaging.TaskChannel(record.Name)}
+	if record.Owner != "" {
+		channels = append(channels, "#"+record.Owner)
+	}
+
+	for _, channel := range channels {
+		_, err := w.msg.PostAsSystem(ctx, channel, body)
+		if err != nil {
+			log.Warn().Err(err).Str("task", record.Name).Str("channel", channel).Msg("watchdog cannot post")
+		}
+	}
 }
 
 // silentAlert holds when the agent job has written nothing to its terminal

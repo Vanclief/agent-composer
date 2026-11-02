@@ -21,11 +21,29 @@ import (
 
 type fakeProbe struct {
 	running bool
-	job     *sandboxes.AgentJob
+	// status, when set, is what Status reports instead of running.
+	status string
+	job    *sandboxes.AgentJob
+	// restarted counts Restart calls; restartErr is what they return.
+	restarted  int
+	restartErr error
 }
 
-func (p *fakeProbe) Running(ctx context.Context, name string) (bool, error) {
-	return p.running, nil
+func (p *fakeProbe) Status(ctx context.Context, name string) (string, error) {
+	if p.status != "" {
+		return p.status, nil
+	}
+	if p.running {
+		return sandboxes.StatusRunning, nil
+	}
+
+	return sandboxes.StatusStopped, nil
+}
+
+func (p *fakeProbe) Restart(ctx context.Context, record *taskmodels.Sandbox, owner *taskmodels.Task) error {
+	p.restarted++
+
+	return p.restartErr
 }
 
 func (p *fakeProbe) AgentJob(ctx context.Context, record *taskmodels.Sandbox) (*sandboxes.AgentJob, error) {
@@ -117,7 +135,7 @@ func newEnv(t *testing.T) *env {
 	t.Cleanup(cancel)
 
 	e := &env{db: db, msg: msg, probe: probe, task: record, box: box, clock: start, feed: bus.Subscribe(feedCtx)}
-	e.dog = New(db, msg, probe, bus, Settings{Silence: 15 * time.Minute, Review: 2 * time.Hour})
+	e.dog = New(db, msg, probe, bus, Settings{Silence: 15 * time.Minute, Review: 2 * time.Hour, Restarts: 3})
 	e.dog.now = func() time.Time {
 		return e.clock
 	}
