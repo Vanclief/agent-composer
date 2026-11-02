@@ -89,9 +89,11 @@ export function assignedToHarness(task: { assignee: string; model: string }) {
   return task.model !== '' || HARNESSES.includes(task.assignee)
 }
 
-// The list order: open, then running, then done (any other word last),
-// newest first inside each. The words are the server's, never relabeled.
-const STATUS_ORDER = ['open', 'running', 'done']
+// The list order: review first (delivered, waiting for someone to accept
+// or reject it, ADR 0010), then open, running and done (any other word
+// last), newest first inside each. The words are the server's, never
+// relabeled.
+const STATUS_ORDER = ['review', 'open', 'running', 'done']
 
 function statusRank(status: string) {
   const i = STATUS_ORDER.indexOf(status)
@@ -102,4 +104,16 @@ export function sortTasks<T extends { status: string; created_at: string }>(list
   return [...list].sort(
     (a, b) => statusRank(a.status) - statusRank(b.status) || b.created_at.localeCompare(a.created_at),
   )
+}
+
+// shortAge as words after a verb: "just now", "5m ago".
+export function ago(iso: string, now = Date.now()) {
+  const age = shortAge(iso, now)
+  if (age === 'now') {
+    return 'just now'
+  }
+  if (age === iso) {
+    return iso
+  }
+  return `${age} ago`
 }

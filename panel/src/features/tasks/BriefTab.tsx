@@ -1,8 +1,9 @@
-// /tasks/:name/brief: what to do and what done looks like (ADR 0008), then
-// the exact TASK.md the newest sandbox's agent received (ADR 0009 item 6),
-// both verbatim.
+// /tasks/:name/brief: what to do and what done looks like (ADR 0008), the
+// criteria it is accepted on and the verdict (ADR 0010 item 6), then the
+// exact TASK.md the newest sandbox's agent received (ADR 0009 item 6), all
+// verbatim.
 import { useState } from 'react'
-import { Check, Copy } from 'lucide-react'
+import { Check, CircleCheck, Copy } from 'lucide-react'
 import { useParams } from 'react-router'
 
 import { useTask } from '@/api/hooks'
@@ -10,7 +11,10 @@ import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { IconChip } from '@/components/icon-chip'
 import { Button } from '@/components/ui/button'
+import type { TaskView } from '@/api/tasks'
 import { cn } from '@/lib/utils'
+
+import { ago } from './format'
 
 export function BriefTab() {
   const { name = '' } = useParams()
@@ -39,6 +43,9 @@ export function BriefTab() {
             <EmptySlot reason="No brief" className="m-4" />
           )}
         </section>
+
+        <Criteria task={task.data} />
+        <Delivery task={task.data} />
 
         <section
           aria-label="What the agent received"
@@ -69,6 +76,88 @@ export function BriefTab() {
         </section>
       </div>
     </div>
+  )
+}
+
+// The criteria as unchecked boxes: agc does not evaluate them; the manager
+// or the owner does when accepting. Hidden when there are none.
+function Criteria({ task }: { task: TaskView }) {
+  if (task.accept.length === 0) {
+    return null
+  }
+  const Icon = conceptIcons.criteria
+  return (
+    <section
+      aria-label="Accepted when"
+      className="rounded-xl border border-border bg-white shadow-sm dark:bg-zinc-900/60"
+    >
+      <header className="flex items-baseline gap-2 border-b border-border px-4 py-2 text-sm font-medium">
+        <Icon aria-hidden className={cn('size-4 self-center', conceptColors.criteria.text)} />
+        <h3>Accepted when</h3>
+        <span className="text-xs font-normal text-muted-foreground">
+          agc does not check these; the manager or owner does
+        </span>
+      </header>
+      <ul data-testid="criteria" className="flex flex-col gap-1.5 px-4 py-3 text-sm">
+        {task.accept.map((criterion, i) => (
+          <li key={i} data-testid="criterion" className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={false}
+              disabled
+              readOnly
+              aria-label={criterion}
+              className="mt-0.5 size-4 shrink-0 accent-zinc-500"
+            />
+            <span>{criterion}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+// The agent's last delivery summary and, once done, who accepted it and
+// when. Read-only; hidden when the task was never delivered nor accepted.
+function Delivery({ task }: { task: TaskView }) {
+  const done = task.status === 'done'
+  if (!task.summary && !done) {
+    return null
+  }
+  const Icon = conceptIcons.delivery
+  return (
+    <section aria-label="Delivery" className="rounded-xl border border-border bg-white shadow-sm dark:bg-zinc-900/60">
+      <header className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2 text-sm font-medium">
+        <Icon aria-hidden className={cn('size-4', conceptColors.delivery.text)} />
+        Summary
+        {task.delivered_at && !done ? (
+          <span
+            className="text-xs font-normal text-muted-foreground"
+            title={new Date(task.delivered_at).toLocaleString()}
+          >
+            delivered {ago(task.delivered_at)}
+          </span>
+        ) : null}
+        {done ? (
+          <span
+            data-testid="accepted"
+            title={task.done_at ? new Date(task.done_at).toLocaleString() : undefined}
+            className="ml-auto inline-flex items-center gap-1.5 text-xs font-normal text-emerald-700 dark:text-emerald-400"
+          >
+            <CircleCheck aria-hidden className="size-3.5" />
+            {task.accepted_by ? `Accepted by ${task.accepted_by}` : 'Accepted'}
+            {task.done_at ? ` ${ago(task.done_at)}` : ''}
+          </span>
+        ) : null}
+      </header>
+      {task.summary ? (
+        <pre data-testid="summary" className="px-4 py-3 font-sans text-sm leading-relaxed whitespace-pre-wrap">
+          {task.summary}
+        </pre>
+      ) : (
+        <EmptySlot reason="Accepted without a delivery" className="m-4" />
+      )}
+    </section>
   )
 }
 

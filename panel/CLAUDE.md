@@ -11,7 +11,7 @@ the panel stays conflict-free.
 
 | Path                                                                                                                                                             | Owner               |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| `src/features/tasks/` (`TasksPage`, `TaskPage`, `BriefTab`, `ComputeTab`) + `tests/tasks.spec.ts`                                                               | tasks feature       |
+| `src/features/tasks/` (`TasksPage`, `TaskPage`, `BriefTab`, `ComputeTab`) + `tests/tasks.spec.ts`                                                                | tasks feature       |
 | `src/features/create-task/` (`CreateTaskDialog`) + `tests/create-task.spec.ts`                                                                                   | create-task feature |
 | `src/features/compute/` (`ComputePage`, `SandboxPage`)                                                                                                           | compute feature     |
 | `src/features/terminals/` (`TerminalsTab`, `TerminalPane`, mounted by `SandboxPage`) + `tests/terminals.spec.ts`                                                 | terminals feature   |
@@ -93,16 +93,29 @@ Each page sets the top bar title with `usePageTitle('…')` from
 - `@/api/tasks` (ADR 0008): `TaskView`, `SandboxView`, `SandboxRequest`
   (the spec fields inline plus `command`), `CreateTaskRequest`, and the
   `tasks.*`/`sandboxes.*` calls. Hand-typed until the OpenAPI spec has them.
-  A task's `status` (`open`, `running`, `done`) is computed by the server; a
+  A task's `status` (`open`, `running`, `review`, `done`) is computed by the server; a
   sandbox's (`starting`, `failed` with `status_error`, `running`, `stopped`,
   `unknown`) is read live. `{id}` accepts an id or a name everywhere.
   `notify` (boolean on `TaskView`; optional on `CreateTaskRequest`, default
   `true`) turns the "Task started" / "Task done" toasts and chime on for that
   task. The create dialog sends it from "Notify me" in the Order card; the task
   header shows a bell chip when it is on.
+- Acceptance (ADR 0010): `TaskView` carries `accept` (the criteria, may be
+  empty), `delivered_at` (set by the agent's delivery, cleared by a reject),
+  `summary` (the last delivery's, kept after a reject) and `accepted_by`;
+  `CreateTaskRequest` takes `accept`. `review` means delivered and waiting.
+  The create dialog's Order card has "Accepted when" (one criterion per line,
+  empty lines dropped). The Brief tab shows the criteria as unchecked boxes
+  under "Accepted when" (hidden when empty) and a Summary card with
+  "Accepted by <name> <when>" once done. The header shows the amber `review`
+  pill, a "Delivered <when>" chip, and Accept (confirms "Accept and stop N
+  running sandboxes", or "Accept" when none run) and Reject… (a required
+  "Why") until done. `by` is the signed-in name (`humanName()` in
+  `src/features/messages/identity.ts`). The list sorts `review` first.
 - `@/api/hooks`: tasks `useTasks` (polls every 5s, or 30s while the live
   event stream is connected; sandboxes embedded newest first), `useTask(nameOrId)`, `useCreateTask` (returns at once; an
-  optional `sandbox` comes back `starting`), `useDoneTask`, `useDeleteTask`
+  optional `sandbox` comes back `starting`), `useDeliverTask` (`{ref, summary}`),
+  `useAcceptTask` (`{ref, by}`), `useRejectTask` (`{ref, by, why}`), `useDeleteTask`
   (deletes its sandboxes too), `useAllocate(task)` (201, `starting`, then
   `running`); sandboxes `useSandboxes`, `useSandbox(nameOrId)`,
   `useStopSandbox`, `useStartSandbox`, `useDeleteSandbox`; terminals
@@ -130,12 +143,12 @@ event has `event: <type>`, `data: <json>` and an `id` (the event number); the
 server sends a comment every 20s as a heartbeat. The panel does not rely on
 replay: after a drop it refetches tasks, sandboxes and channels.
 
-| Type             | `data`                                    | Sent when                                                                                                   |
-| ---------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `task.created`   | `{ "task": TaskView }`                    | a task is created (after its sandbox, if any, is allocated)                                                 |
-| `task.done`      | `{ "task": TaskView, "summary": string }` | a task is marked done; `summary` is the last message in `#<task>` from neither a human nor `agc`, else `""` |
-| `sandbox.status` | `{ "sandbox": SandboxView }`              | every status change: starting→running, →failed, stop, start, and delete (with status `"deleted"`)           |
-| `message.posted` | `{ "message": Message }`                  | a message is posted in any channel                                                                          |
+| Type             | `data`                                    | Sent when                                                                                                                                  |
+| ---------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `task.created`   | `{ "task": TaskView }`                    | a task is created (after its sandbox, if any, is allocated)                                                                                |
+| `task.done`      | `{ "task": TaskView, "summary": string }` | a task is accepted; `summary` is the task's delivery summary, else the last message in `#<task>` from neither a human nor `agc`, else `""` |
+| `sandbox.status` | `{ "sandbox": SandboxView }`              | every status change: starting→running, →failed, stop, start, and delete (with status `"deleted"`)                                          |
+| `message.posted` | `{ "message": Message }`                  | a message is posted in any channel                                                                                                         |
 
 - `@/api/events` (`useLiveEvents(onEvent)`): the app's one `EventSource`,
   opened by the shell (`src/shell/layout.tsx`). Each event invalidates the
@@ -192,15 +205,18 @@ Look at your screen with `npm run shot` and read the PNG before you report.
 
 Tasks (each with a brief and assignee):
 
-- `review-42` "Review 42": running, assignee `claude_code`,
+- `review-42` "Review 42": review (delivered 5 minutes ago, summary
+  "Reviewed PR 42: two findings, both fixed on agc/review-42.", two
+  criteria), assignee `claude_code`,
   `for: attach-rulesets-to-task-specs`; sandbox `review-42` running
   (terminals `agent` running `claude`, and `bash` exited) and an older
   sandbox `review-42-2` stopped. `review-42`'s clone has uncommitted
   changes and 2 unpushed commits; every other clone is clean. A sandbox's
   `work` is set only on `GET /api/sandboxes/:id` (and the list with
   `?work=1`) while it is running with a repo, as on the real server.
-- `flaky-ci` "Flaky CI": open, assignee `franco`, no sandbox.
-- `docs-pass` "Docs pass": done; sandbox `docs-pass` stopped.
+- `flaky-ci` "Flaky CI": open, assignee `franco`, one criterion, no sandbox.
+- `docs-pass` "Docs pass": done, accepted by `franco` with a summary;
+  sandbox `docs-pass` stopped.
 - `boot-fail` "Boot fail": open; sandbox `boot-fail` failed with
   `status_error: clone failed: repository not found`.
 
@@ -210,11 +226,16 @@ hosts). Messages in `#review-42` (from @reviewer, @tester and human @franco,
 who has left so you can join as franco) and `#releases`. Creating a task
 returns at once. An allocated sandbox (`POST /api/tasks/{id}/sandboxes`, or
 `sandbox` on create) answers 201 `starting` for 2s, then `running`, and
-starts its `command` as the job `agent`. The terminal WebSocket echoes input
+starts its `command` as the job `agent`. `POST /api/tasks/{id}/deliver
+{summary}`, `/accept {by}` (default the owner; sets `done_at` and
+`accepted_by`, stops the task's running or starting sandboxes, emits
+`task.done`) and `/reject {by, why}` (clears `delivered_at`) post
+"Delivered: …", "Accepted by <name>." and "Rejected by <name>: <why>" in
+`#<task>` as `agc`; `/done` is gone. The terminal WebSocket echoes input
 and acknowledges resize frames.
 
 `GET /api/events` streams the four live events from the mock's own
-operations (create, boot, stop/start/delete, done, post) with the 20s
+operations (create, boot, stop/start/delete, accept, post) with the 20s
 heartbeat. `notify` is true on every seeded task except `docs-pass`. Mock
 only: `POST /api/msg/join` with a `task` joins as that task's agent (not
 human), so a test can post the closing message `task.done` summarizes.

@@ -50,7 +50,7 @@ test('a task created through the API appears without a reload and toasts "Task s
   await expect(page.getByTestId('notify-chip')).toBeVisible()
 })
 
-test('marking a task done through the API toasts "Task done" with the summary', async ({ page, request }) => {
+test('accepting a task through the API toasts "Task done" with the summary', async ({ page, request }) => {
   const task = await createTask(request, unique('Live done'))
   const agent = await request.post('/api/msg/join', {
     data: { name: `bot-${Date.now().toString(36)}${Math.floor(Math.random() * 1000)}`, task: task.name },
@@ -64,7 +64,7 @@ test('marking a task done through the API toasts "Task done" with the summary', 
   expect(posted.ok()).toBe(true)
 
   await openLive(page)
-  const done = await request.post(`/api/tasks/${task.name}/done`)
+  const done = await request.post(`/api/tasks/${task.name}/accept`, { data: { by: 'franco' } })
   expect(done.ok()).toBe(true)
 
   const toastDone = toast(page, 'Task done', task.name)
@@ -84,7 +84,7 @@ test('a task with notify false shows no toast', async ({ page, request }) => {
   expect(quiet.notify).toBe(false)
   // The card arriving proves the event did; no toast came with it.
   await expect(page.locator(`li[data-task="${quiet.name}"]`)).toBeVisible()
-  await request.post(`/api/tasks/${quiet.name}/done`)
+  await request.post(`/api/tasks/${quiet.name}/accept`, { data: { by: 'franco' } })
   await expect(page.locator(`li[data-task="${quiet.name}"]`).getByText('done', { exact: true })).toBeVisible()
   await page.waitForTimeout(500)
   await expect(page.locator(`[data-testid="toast-task"][data-task="${quiet.name}"]`)).toHaveCount(0)

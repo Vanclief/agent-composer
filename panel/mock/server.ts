@@ -47,6 +47,11 @@ type Task = {
   // when it is done.
   notify: boolean
   done_at: string | null
+  // ADR 0010: criteria, the last delivery and who accepted.
+  accept: string[]
+  delivered_at: string | null
+  summary: string
+  accepted_by: string
   created_at: string
   updated_at: string
 }
@@ -244,6 +249,10 @@ function createState() {
       for: '',
       notify: true,
       done_at: null,
+      accept: [],
+      delivered_at: null,
+      summary: '',
+      accepted_by: '',
       created_at: at,
       updated_at: at,
       ...fields,
@@ -375,13 +384,15 @@ function createState() {
     return list.sort((a, b) => b.created_at.localeCompare(a.created_at))
   }
 
-  // done when done_at is set, otherwise running when a sandbox runs,
-  // otherwise open.
+  // done when done_at is set, otherwise review when delivered_at is set
+  // (ADR 0010), otherwise running when a sandbox runs, otherwise open.
   function taskView(task: Task): TaskView {
     const boxes = sandboxesOf(task)
     let status = 'open'
     if (task.done_at) {
       status = 'done'
+    } else if (task.delivered_at) {
+      status = 'review'
     } else if (boxes.some((b) => b.status === 'running')) {
       status = 'running'
     }
@@ -484,6 +495,9 @@ function createState() {
         manager: 'agent-composer-da',
         owner: 'franco',
         for: 'attach-rulesets-to-task-specs',
+        accept: ['`go test ./...` passes', 'every finding is posted in #review-42'],
+        delivered_at: iso(Date.now() - 5 * 60_000),
+        summary: 'Reviewed PR 42: two findings, both fixed on agc/review-42.',
       },
       40 * 60_000,
     )
@@ -503,6 +517,7 @@ function createState() {
       'flaky-ci',
       {
         brief: 'Find why CI fails one run in five and fix it.',
+        accept: ['CI passes ten runs in a row'],
         assignee: 'franco',
         manager: 'franco',
         owner: 'franco',
@@ -521,6 +536,9 @@ function createState() {
         owner: 'franco',
         notify: false,
         done_at: iso(Date.now() - 86_400_000),
+        accepted_by: 'franco',
+        summary: 'Brought docs/ up to date with the REST API.',
+        delivered_at: iso(Date.now() - 90_000_000),
       },
       2 * 86_400_000,
     )
@@ -583,6 +601,31 @@ function createState() {
 
   seed()
 
+  // Stops a sandbox (also a starting one) as POST /sandboxes/:id/stop does.
+  function stopSandbox(sandbox: Sandbox) {
+    sandbox.runtime = 'stopped'
+    sandbox.stopped_at = iso()
+    readyAt.delete(sandbox.name)
+    if (sandbox.booted_at === null && sandbox.boot_error === null) {
+      // A starting sandbox stops before its boot finishes.
+      sandbox.booted_at = sandbox.stopped_at
+    }
+    for (const job of terminals.get(sandbox.name) ?? []) {
+      job.running = false
+    }
+    emitSandbox(sandbox)
+  }
+
+  // The reserved participant agc posts as.
+  function agc() {
+    for (const p of participants.values()) {
+      if (p.name === 'agc' && !p.left_at) {
+        return p
+      }
+    }
+    return join('agc', '', false)
+  }
+
   // The work in each clone: review-42 has uncommitted changes and 2
   // unpushed commits, every other clone is clean.
   clones.set('review-42', { dirty: true, unpushed: 2 })
@@ -596,6 +639,9 @@ function createState() {
     messages,
     taskView,
     sandboxView,
+    sandboxesOf,
+    stopSandbox,
+    agc,
     withWork,
     clones,
     findTask,
@@ -697,15 +743,58 @@ async function tasksAPI(state: State, method: string, rest: string[], req: Incom
     state.tasks.delete(task.name)
     return { deleted: true, name: task.name }
   }
-  if (rest.length === 2 && method === 'POST' && rest[1] === 'done') {
+  // ADR 0010 item 2: the agent delivers; the task goes to review.
+  if (rest.length === 2 && method === 'POST' && rest[1] === 'deliver') {
+    const body = await readJSON(req, apiError)
+    const summary = str(body.summary).trim()
+    if (!summary) {
+      throw apiError(400, 'summary is required')
+    }
     if (task.done_at) {
       throw apiError(409, `task ${task.name} is already done`)
     }
+    task.delivered_at = iso()
+    task.summary = summary
+    task.updated_at = task.delivered_at
+    state.post('#' + task.name, state.agc(), `Delivered: ${summary}`)
+    return state.taskView(task)
+  }
+  // ADR 0010 item 4: sets done_at and accepted_by, posts in #<task>, then
+  // stops every running or starting sandbox of the task.
+  if (rest.length === 2 && method === 'POST' && rest[1] === 'accept') {
+    const body = await readJSON(req, apiError)
+    if (task.done_at) {
+      throw apiError(409, `task ${task.name} is already done`)
+    }
+    const by = str(body.by).trim() || task.owner
     task.done_at = iso()
+    task.accepted_by = by
     task.updated_at = task.done_at
+    state.post('#' + task.name, state.agc(), `Accepted by ${by}.`)
+    for (const view of state.sandboxesOf(task)) {
+      if (view.status === 'running' || view.status === 'starting') {
+        state.stopSandbox(state.findSandbox(view.name))
+      }
+    }
     const view = state.taskView(task)
-    state.emit('task.done', { task: view, summary: state.summary(task) })
+    state.emit('task.done', { task: view, summary: task.summary || state.summary(task) })
     return view
+  }
+  // ADR 0010 item 5: clears delivered_at and sends the task back with why.
+  if (rest.length === 2 && method === 'POST' && rest[1] === 'reject') {
+    const body = await readJSON(req, apiError)
+    const by = str(body.by).trim() || task.owner
+    const why = str(body.why).trim()
+    if (!why) {
+      throw apiError(400, 'why is required')
+    }
+    if (task.done_at) {
+      throw apiError(409, `task ${task.name} is already done`)
+    }
+    task.delivered_at = null
+    task.updated_at = iso()
+    state.post('#' + task.name, state.agc(), `Rejected by ${by}: ${why}`)
+    return state.taskView(task)
   }
   if (rest.length === 2 && method === 'POST' && rest[1] === 'sandboxes') {
     const request = sandboxRequest(await readJSON(req, apiError))
@@ -755,6 +844,7 @@ function taskFields(body: Record<string, unknown>) {
     for: str(body.for),
     // Default true: only an explicit false turns notifications off.
     notify: body.notify !== false,
+    accept: Array.isArray(body.accept) ? body.accept.map(str).filter((c) => c.trim() !== '') : [],
   }
 }
 
@@ -806,12 +896,7 @@ async function sandboxesAPI(state: State, method: string, rest: string[], req: I
     if (view.status !== 'running') {
       throw apiError(409, `sandbox ${sandbox.name} is ${view.status}, not running`)
     }
-    sandbox.runtime = 'stopped'
-    sandbox.stopped_at = iso()
-    for (const job of state.terminals.get(sandbox.name) ?? []) {
-      job.running = false
-    }
-    state.emitSandbox(sandbox)
+    state.stopSandbox(sandbox)
     return state.sandboxView(sandbox)
   }
   if (rest.length === 2 && method === 'POST' && rest[1] === 'start') {

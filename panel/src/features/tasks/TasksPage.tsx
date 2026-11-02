@@ -1,6 +1,6 @@
 // /tasks: every task as one card: status, title and name, then who works on
-// it, who manages it, what it is for and its compute. Open tasks first,
-// then running, then done, newest first inside each.
+// it, who manages it, what it is for and its compute. Tasks in review
+// first, then open, running and done, newest first inside each.
 import { useMemo, useState } from 'react'
 import { Clock, Plus } from 'lucide-react'
 import { Link } from 'react-router'

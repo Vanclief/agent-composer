@@ -115,3 +115,9 @@ export function useIdentity() {
     rejoin,
   }
 }
+
+// The signed-in human's name, without joining: what the task page sends as
+// `by` when accepting or rejecting (ADR 0010).
+export function humanName() {
+  return readName()
+}

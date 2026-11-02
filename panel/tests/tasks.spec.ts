@@ -23,7 +23,7 @@ function chip(form: Locator, group: string, text: string) {
   return form.getByRole('radiogroup', { name: group }).getByRole('radio', { name: text, exact: true })
 }
 
-test('the list puts open tasks first, then running, then done, newest first', async ({ page }) => {
+test('the list puts tasks in review first, then open, running and done, newest first', async ({ page }) => {
   await page.goto('/panel/tasks')
   await expect(page.getByTestId('page-title')).toHaveText('Tasks')
   await expect(page.getByRole('button', { name: 'New task' })).toBeVisible()
@@ -31,14 +31,14 @@ test('the list puts open tasks first, then running, then done, newest first', as
 
   // Other tests add their own tasks to the shared mock; only the seeded
   // ones have a fixed place.
-  const seeded = ['boot-fail', 'flaky-ci', 'review-42', 'docs-pass']
+  const seeded = ['review-42', 'boot-fail', 'flaky-ci', 'docs-pass']
   const order = await page.locator('[data-task]').evaluateAll((els) => els.map((el) => el.getAttribute('data-task')))
   expect(order.filter((name) => seeded.includes(name ?? ''))).toEqual(seeded)
 
   const statuses: [string, string][] = [
+    ['review-42', 'review'],
     ['boot-fail', 'open'],
     ['flaky-ci', 'open'],
-    ['review-42', 'running'],
     ['docs-pass', 'done'],
   ]
   for (const [name, status] of statuses) {
@@ -81,12 +81,14 @@ test('a task opens on its brief tab with its chips, and has compute and messages
   await expect(page.getByRole('heading', { level: 2, name: 'Review 42' })).toBeVisible()
   await expect(page.getByTestId('page-title')).toHaveText('Review 42')
   const header = page.getByTestId('task-header')
-  await expect(header.locator('[data-status]')).toHaveText('running')
+  await expect(header.locator('[data-status]')).toHaveText('review')
+  await expect(header.getByTestId('delivered-chip')).toHaveText(/^Delivered \d+m ago$/)
   await expect(header.getByTestId('assignee')).toHaveText('claude_code · claude-opus-5-5')
   await expect(header.getByTestId('manager')).toHaveText('@agent-composer-da')
   await expect(header.getByTestId('owner')).toHaveText('@franco')
   await expect(header.getByTestId('for')).toHaveText('attach-rulesets-to-task-specs')
-  await expect(header.getByRole('button', { name: 'Mark done' })).toBeVisible()
+  await expect(header.getByRole('button', { name: 'Accept', exact: true })).toBeVisible()
+  await expect(header.getByRole('button', { name: 'Reject…' })).toBeVisible()
 
   const tabs = page.getByRole('navigation', { name: 'Task' })
   await expect(tabs.getByRole('link')).toHaveText(['Brief', 'Compute', 'Messages'])
@@ -148,16 +150,114 @@ test('allocate compute from a saved spec adds a starting sandbox', async ({ page
   await expect(row).toHaveCount(0)
 })
 
-test('mark done sets the pill to done and locks allocation', async ({ page, request }) => {
-  const task = await createTask(request, unique('Finish me'))
-  await page.goto(`/panel/tasks/${task.name}/compute`)
-  const header = page.getByTestId('task-header')
-  await expect(header.locator('[data-status]').first()).toHaveText('open')
+test('the brief tab lists the criteria as unchecked boxes, and hides them when there are none', async ({
+  page,
+  request,
+}) => {
+  await page.goto('/panel/tasks/review-42/brief')
+  const criteria = page.getByRole('region', { name: 'Accepted when' })
+  await expect(criteria.getByRole('heading', { name: 'Accepted when' })).toBeVisible()
+  await expect(criteria).toContainText('agc does not check these; the manager or owner does')
+  const boxes = criteria.getByRole('checkbox')
+  await expect(boxes).toHaveCount(2)
+  await expect(criteria.getByTestId('criterion')).toHaveText([
+    '`go test ./...` passes',
+    'every finding is posted in #review-42',
+  ])
+  for (const box of await boxes.all()) {
+    await expect(box).not.toBeChecked()
+  }
+  // Delivered, not accepted: the summary shows, no verdict yet.
+  await expect(page.getByTestId('summary')).toHaveText('Reviewed PR 42: two findings, both fixed on agc/review-42.')
+  await expect(page.getByTestId('accepted')).toHaveCount(0)
 
-  await header.getByRole('button', { name: 'Mark done' }).click()
+  await page.goto('/panel/tasks/flaky-ci/brief')
+  await expect(page.getByRole('region', { name: 'Accepted when' }).getByRole('checkbox')).toHaveCount(1)
+
+  const plain = await createTask(request, unique('No criteria'))
+  await page.goto(`/panel/tasks/${plain.name}/brief`)
+  await expect(page.getByTestId('brief')).toHaveText('Do it.')
+  await expect(page.getByRole('region', { name: 'Accepted when' })).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Delivery' })).toHaveCount(0)
+})
+
+test('the review status shows verbatim in its own amber pill', async ({ page }) => {
+  await page.goto('/panel/tasks')
+  const pill = card(page, 'review-42').getByTestId('task-status').locator('[data-status]')
+  await expect(pill).toHaveText('review')
+  await expect(pill).toHaveAttribute('data-status', 'review')
+  await expect(pill).toHaveClass(/amber/)
+})
+
+test('a done task shows who accepted it and its summary, read-only', async ({ page }) => {
+  await page.goto('/panel/tasks/docs-pass/brief')
+  await expect(page.getByTestId('accepted')).toHaveText(/^Accepted by franco \d+d ago$/)
+  await expect(page.getByTestId('summary')).toHaveText('Brought docs/ up to date with the REST API.')
+  const header = page.getByTestId('task-header')
+  await expect(header.getByRole('button', { name: 'Accept', exact: true })).toHaveCount(0)
+  await expect(header.getByRole('button', { name: 'Reject…' })).toHaveCount(0)
+})
+
+test('accept says what it stops, sends by, and the task becomes done', async ({ page, request }) => {
+  const task = await createTask(request, unique('Accept me'), { sandbox: { image: 'agc-agent', command: 'claude' } })
+  await expect
+    .poll(async () => (await (await request.get(`/api/tasks/${task.name}`)).json()).status, { timeout: 10_000 })
+    .toBe('running')
+  await page.goto(`/panel/tasks/${task.name}/brief`)
+  const header = page.getByTestId('task-header')
+  await expect(header.locator('[data-status]').first()).toHaveText('running')
+
+  await header.getByRole('button', { name: 'Accept', exact: true }).click()
+  const dialog = page.getByRole('alertdialog')
+  const confirm = dialog.getByTestId('accept-confirm')
+  await expect(confirm).toHaveText('Accept and stop 1 running sandbox')
+  const posted = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith(`/api/tasks/${task.name}/accept`))
+  await confirm.click()
+  expect((await posted).postDataJSON()).toEqual({ by: 'franco' })
+
   await expect(header.locator('[data-status]').first()).toHaveText('done')
-  await expect(header.getByRole('button', { name: 'Mark done' })).toHaveCount(0)
+  await expect(page.getByTestId('accepted')).toHaveText('Accepted by franco just now')
+  await expect(header.getByRole('button', { name: 'Accept', exact: true })).toHaveCount(0)
+  await expect(header.getByRole('button', { name: 'Reject…' })).toHaveCount(0)
+  // Accepting stopped the sandbox and kept it.
+  const after = await (await request.get(`/api/tasks/${task.name}`)).json()
+  expect(after.accepted_by).toBe('franco')
+  expect(after.sandboxes.map((b: { status: string }) => b.status)).toEqual(['stopped'])
+  await page.getByRole('navigation', { name: 'Task' }).getByRole('link', { name: 'Compute' }).click()
   await expect(page.getByRole('button', { name: 'Allocate compute: task is done' })).toBeDisabled()
+})
+
+test('accept with no running sandbox confirms with "Accept" alone', async ({ page, request }) => {
+  const task = await createTask(request, unique('Accept plain'))
+  await page.goto(`/panel/tasks/${task.name}`)
+  await page.getByTestId('task-header').getByRole('button', { name: 'Accept', exact: true }).click()
+  await expect(page.getByRole('alertdialog').getByTestId('accept-confirm')).toHaveText('Accept')
+})
+
+test('reject needs a reason, sends by and why, and returns the task to running', async ({ page, request }) => {
+  const task = await createTask(request, unique('Reject me'), { sandbox: { image: 'agc-agent' } })
+  await expect
+    .poll(async () => (await (await request.get(`/api/tasks/${task.name}`)).json()).status, { timeout: 10_000 })
+    .toBe('running')
+  const delivered = await request.post(`/api/tasks/${task.name}/deliver`, { data: { summary: 'All done.' } })
+  expect((await delivered.json()).status).toBe('review')
+
+  await page.goto(`/panel/tasks/${task.name}/brief`)
+  const header = page.getByTestId('task-header')
+  await expect(header.locator('[data-status]').first()).toHaveText('review')
+  await header.getByRole('button', { name: 'Reject…' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('button', { name: 'Reject: needs a reason' })).toBeDisabled()
+  await dialog.getByRole('textbox', { name: 'Why' }).fill('The Stop icon is still hollow.')
+  const posted = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith(`/api/tasks/${task.name}/reject`))
+  await dialog.getByRole('button', { name: 'Reject', exact: true }).click()
+  expect((await posted).postDataJSON()).toEqual({ by: 'franco', why: 'The Stop icon is still hollow.' })
+
+  await expect(dialog).toHaveCount(0)
+  await expect(header.locator('[data-status]').first()).toHaveText('running')
+  await expect(header.getByTestId('delivered-chip')).toHaveCount(0)
+  // The summary is kept so the history reads.
+  await expect(page.getByTestId('summary')).toHaveText('All done.')
 })
 
 test('delete asks in a dialog, then returns to the list', async ({ page, request }) => {
@@ -213,6 +313,10 @@ test('creating returns at once; allocation starts, then runs', async ({ request 
   const terminals = await (await request.get(`/api/sandboxes/${task.name}/terminals`)).json()
   expect(terminals.terminals).toMatchObject([{ id: 'agent', command: ['claude'], running: true }])
 
-  const done = await request.post(`/api/tasks/${task.name}/done`)
-  expect((await done.json()).status).toBe('done')
+  const done = await request.post(`/api/tasks/${task.name}/accept`, { data: {} })
+  const accepted = await done.json()
+  expect(accepted.status).toBe('done')
+  // by defaults to the owner; both sandboxes are stopped.
+  expect(accepted.accepted_by).toBe('franco')
+  expect(accepted.sandboxes.map((b: { status: string }) => b.status)).toEqual(['stopped', 'stopped'])
 })
