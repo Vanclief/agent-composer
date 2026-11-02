@@ -409,6 +409,12 @@ func runServer(ctx context.Context, project string) error {
 		return nil
 	})
 
+	// Account usage is polled only under agc rest, every 10 minutes.
+	group.Go(func() error {
+		stack.AccountsUsage.Start(gctx)
+		return nil
+	})
+
 	group.Go(func() error {
 		return rest.Start(gctx, app, log.Logger)
 	})
