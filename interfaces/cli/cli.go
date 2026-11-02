@@ -415,6 +415,12 @@ func runServer(ctx context.Context, project string) error {
 		return nil
 	})
 
+	// The sandbox collector runs only under agc rest too (ADR 0008 "Garbage collection").
+	group.Go(func() error {
+		stack.TasksAPI.Sandboxes.StartGC(gctx)
+		return nil
+	})
+
 	group.Go(func() error {
 		return rest.Start(gctx, app, log.Logger)
 	})
