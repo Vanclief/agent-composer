@@ -11,6 +11,7 @@ import (
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/events"
+	"github.com/vanclief/agent-composer/core/resources/accounts"
 	"github.com/vanclief/agent-composer/core/resources/accounts/usage"
 	"github.com/vanclief/agent-composer/core/resources/agents"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
@@ -45,6 +46,8 @@ type Stack struct {
 	KnowledgeAPI *knowledge.API
 	// AgentsAPI is persistent agents (ADR 0016).
 	AgentsAPI *agents.API
+	// AccountsAPI is provider accounts and their defaults (ADR 0018).
+	AccountsAPI *accounts.API
 	// Events is the live feed behind GET /api/events.
 	Events *events.Bus
 	// AccountsUsage keeps the latest usage of every anthropic oauth
@@ -143,6 +146,10 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 
 	accountsUsage := usage.NewPoller(usage.NoAccounts{}, secretsPath)
 
+	// Accounts are rows plus secrets.env lines; a running sandbox naming
+	// one keeps it from being deleted (ADR 0018).
+	accountsAPI := accounts.NewAPI(ctrl, secretsPath, sandboxesAPI)
+
 	return &Stack{
 		Controller:    ctrl,
 		Scheduler:     sch,
@@ -154,6 +161,7 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		SchedulesAPI:  schedulesAPI,
 		KnowledgeAPI:  knowledgeAPI,
 		AgentsAPI:     agentsAPI,
+		AccountsAPI:   accountsAPI,
 		Events:        bus,
 		AccountsUsage: accountsUsage,
 	}, nil

@@ -20,6 +20,7 @@ import (
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/events"
+	"github.com/vanclief/agent-composer/core/resources/accounts"
 	"github.com/vanclief/agent-composer/core/resources/agents"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/schedules"
@@ -27,6 +28,7 @@ import (
 	"github.com/vanclief/agent-composer/interfaces/rest/handler"
 	restserver "github.com/vanclief/agent-composer/interfaces/rest/server"
 	"github.com/vanclief/agent-composer/messaging"
+	accountmodels "github.com/vanclief/agent-composer/models/account"
 	agentmodels "github.com/vanclief/agent-composer/models/agent"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 	schedulemodels "github.com/vanclief/agent-composer/models/schedule"
@@ -82,6 +84,7 @@ func serveTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *ta
 		(*schedulemodels.Schedule)(nil),
 		(*schedulemodels.Item)(nil),
 		(*agentmodels.Agent)(nil),
+		(*accountmodels.Account)(nil),
 	}
 	for _, table := range tables {
 		_, err = db.NewCreateTable().Model(table).Exec(context.Background())
@@ -119,6 +122,7 @@ func serveTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *ta
 		SchedulesAPI: schedulesAPI,
 		TurnsAPI:     agents.NewTurnsAPI(volumes, sandboxesAPI),
 		AgentsAPI:    agentsAPI,
+		AccountsAPI:  accounts.New(db, secretsPath, sandboxesAPI),
 		Messaging:    msg,
 		Events:       bus,
 	}

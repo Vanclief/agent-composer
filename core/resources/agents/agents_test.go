@@ -26,6 +26,7 @@ import (
 	"github.com/vanclief/agent-composer/executor/sandbox"
 	"github.com/vanclief/agent-composer/messaging"
 	msgclient "github.com/vanclief/agent-composer/messaging/client"
+	accountmodels "github.com/vanclief/agent-composer/models/account"
 	"github.com/vanclief/agent-composer/models/agent"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
@@ -177,6 +178,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	tables := []interface{}{
 		(*taskmodels.Task)(nil),
 		(*taskmodels.Sandbox)(nil),
+		(*accountmodels.Account)(nil),
 		(*msgmodels.Participant)(nil),
 		(*msgmodels.Message)(nil),
 		(*agent.Agent)(nil),

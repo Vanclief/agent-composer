@@ -1,6 +1,7 @@
 package models
 
 import (
+	"github.com/vanclief/agent-composer/models/account"
 	"github.com/vanclief/agent-composer/models/agent"
 	"github.com/vanclief/agent-composer/models/execution"
 	"github.com/vanclief/agent-composer/models/hook"
@@ -14,6 +15,7 @@ import (
 var REGISTRABLE = []interface{}{}
 
 var ALL = []interface{}{
+	(*account.Account)(nil),
 	(*hook.Hook)(nil),
 	(*messaging.Participant)(nil), (*messaging.Message)(nil),
 	(*agent.Conversation)(nil),

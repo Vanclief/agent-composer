@@ -29,6 +29,12 @@ tags:
     description: >
       A schedule creates a task from a template every interval, or one task per new item its poll
       command lists (ADR 0012). agc rest runs the scheduler; next_run_at is computed, never stored.
+  - name: Accounts
+    description: >
+      An account is a credential for one provider (ADR 0018), kept as a line of secrets.env
+      (ACCOUNT_<NAME>) and described by a row. At most one account per provider is the default,
+      bound to a sandbox whose spec names no credential variable of its harness. No route returns
+      a value.
   - name: Agents
     description: >
       A persistent agent (ADR 0016) is a row, not a process: born numbered from a role template
@@ -988,6 +994,112 @@ paths:
       responses:
         '101':
           description: Switching to the WebSocket protocol.
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /accounts:
+    get:
+      tags: [Accounts]
+      operationId: listAccounts
+      summary: List accounts and providers
+      description: >
+        Every account by provider, then name, with its usage (null until the usage fetcher is
+        wired, and for every account that is not anthropic oauth), and every provider with the
+        harnesses it serves and the variable each kind of account is handed to. Values are never
+        returned.
+      responses:
+        '200':
+          description: Accounts and providers.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountList'
+        '500':
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [Accounts]
+      operationId: createAccount
+      summary: Add an account
+      description: >
+        Writes ACCOUNT_<NAME>=<value> (name upper-cased, dashes as underscores) to secrets.env,
+        mode 0600, created when missing, and inserts the row, not as the default. The value is
+        trimmed, quoted as secrets.env reads it, and never returned or logged. 400 for a bad name,
+        provider or kind (openai has no oauth kind yet) or an empty value; 409 when the name is
+        taken or its secret is already set in secrets.env.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountRequest'
+      responses:
+        '201':
+          description: The account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /accounts/{name}:
+    parameters:
+      - $ref: '#/components/parameters/AccountNameParam'
+    delete:
+      tags: [Accounts]
+      operationId: deleteAccount
+      summary: Delete an account
+      description: >
+        Removes the row and its secrets.env line. 409 while a running or booting sandbox's spec
+        names its secret (a default bound at allocation is recorded in the spec); stop the
+        sandbox first.
+      responses:
+        '204':
+          description: Deleted.
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /accounts/{name}/default:
+    parameters:
+      - $ref: '#/components/parameters/AccountNameParam'
+    post:
+      tags: [Accounts]
+      operationId: setDefaultAccount
+      summary: Make an account its provider's default
+      description: >
+        The provider's previous default loses the flag in the same transaction. From now on a
+        sandbox allocated or started for a harness of this provider, whose spec sets none of the
+        variables the harness reads, gets `<secret> as <variable>`.
+      responses:
+        '200':
+          description: The account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Accounts]
+      operationId: clearDefaultAccount
+      summary: Take the default flag off an account
+      description: The provider is left with no default; sandboxes get no credential from it.
+      responses:
+        '200':
+          description: The account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
         '404':
           $ref: '#/components/responses/Error'
         '500':
@@ -1960,6 +2072,13 @@ paths:
           $ref: '#/components/responses/MsgError'
 components:
   parameters:
+    AccountNameParam:
+      name: name
+      in: path
+      required: true
+      description: Account name, e.g. work.
+      schema:
+        type: string
     AgentNameParam:
       name: name
       in: path
@@ -4300,6 +4419,147 @@ components:
           $ref: '#/components/schemas/ScheduleTemplate'
         poll:
           $ref: '#/components/schemas/SchedulePoll'
+    Account:
+      type: object
+      description: An account, never its value (ADR 0018).
+      properties:
+        name:
+          type: string
+          pattern: '^[a-z0-9-]{1,32}$'
+        provider:
+          $ref: '#/components/schemas/AccountProvider'
+        kind:
+          $ref: '#/components/schemas/AccountKind'
+        secret:
+          type: string
+          description: The secrets.env name holding the value, ACCOUNT_<NAME>.
+        email:
+          type: string
+          description: The account's email, empty when not given.
+        default:
+          type: boolean
+          description: Whether this is its provider's default account.
+        created_at:
+          type: string
+          format: date-time
+        usage:
+          allOf:
+            - $ref: '#/components/schemas/AccountUsage'
+          nullable: true
+          description: Usage for anthropic oauth accounts once the usage fetcher is wired, else null.
+      required:
+        - name
+        - provider
+        - kind
+        - secret
+        - email
+        - default
+        - created_at
+        - usage
+    AccountProvider:
+      type: string
+      enum: [anthropic, openai]
+    AccountKind:
+      type: string
+      enum: [oauth, api_key]
+    AccountUsage:
+      type: object
+      properties:
+        updated_at:
+          type: string
+          format: date-time
+        windows:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountUsageWindow'
+        error:
+          type: string
+          description: Why usage could not be read, empty when it was.
+      required:
+        - updated_at
+        - windows
+        - error
+    AccountUsageWindow:
+      type: object
+      properties:
+        id:
+          type: string
+          description: session, weekly or a model's slug.
+        label:
+          type: string
+        used:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: The share used.
+        resets_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - id
+        - label
+        - used
+        - resets_at
+    AccountProviderView:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/AccountProvider'
+        harnesses:
+          type: array
+          description: The harnesses its accounts serve.
+          items:
+            type: string
+        variables:
+          type: object
+          description: The guest variable each kind of account is handed to; oauth is absent for a provider without that kind.
+          properties:
+            oauth:
+              type: string
+            api_key:
+              type: string
+          required:
+            - api_key
+      required:
+        - id
+        - harnesses
+        - variables
+    AccountList:
+      type: object
+      properties:
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Account'
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountProviderView'
+      required:
+        - accounts
+        - providers
+    CreateAccountRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          pattern: '^[a-z0-9-]{1,32}$'
+        provider:
+          $ref: '#/components/schemas/AccountProvider'
+        kind:
+          $ref: '#/components/schemas/AccountKind'
+        value:
+          type: string
+          writeOnly: true
+          description: The token or key, written to secrets.env and never returned.
+        email:
+          type: string
+      required:
+        - name
+        - provider
+        - kind
+        - value
     Schedule:
       type: object
       properties:

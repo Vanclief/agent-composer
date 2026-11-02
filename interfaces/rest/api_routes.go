@@ -95,6 +95,14 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	agents.POST("/:name/sleep", h.SleepAgent)
 	agents.DELETE("/:name", h.DeleteAgent)
 
+	// Accounts (ADR 0018); :name is the account's name.
+	accounts := api.Group("/accounts")
+	accounts.GET("", h.ListAccounts)
+	accounts.POST("", h.CreateAccount)
+	accounts.DELETE("/:name", h.DeleteAccount)
+	accounts.POST("/:name/default", h.SetDefaultAccount)
+	accounts.DELETE("/:name/default", h.ClearDefaultAccount)
+
 	schedules := api.Group("/schedules")
 	schedules.GET("", h.ListSchedules)
 	schedules.POST("", h.CreateSchedule)

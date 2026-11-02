@@ -480,6 +480,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List accounts and providers
+         * @description Every account by provider, then name, with its usage (null until the usage fetcher is wired, and for every account that is not anthropic oauth), and every provider with the harnesses it serves and the variable each kind of account is handed to. Values are never returned.
+         */
+        get: operations["listAccounts"];
+        put?: never;
+        /**
+         * Add an account
+         * @description Writes ACCOUNT_<NAME>=<value> (name upper-cased, dashes as underscores) to secrets.env, mode 0600, created when missing, and inserts the row, not as the default. The value is trimmed, quoted as secrets.env reads it, and never returned or logged. 400 for a bad name, provider or kind (openai has no oauth kind yet) or an empty value; 409 when the name is taken or its secret is already set in secrets.env.
+         */
+        post: operations["createAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accounts/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete an account
+         * @description Removes the row and its secrets.env line. 409 while a running or booting sandbox's spec names its secret (a default bound at allocation is recorded in the spec); stop the sandbox first.
+         */
+        delete: operations["deleteAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accounts/{name}/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make an account its provider's default
+         * @description The provider's previous default loses the flag in the same transaction. From now on a sandbox allocated or started for a harness of this provider, whose spec sets none of the variables the harness reads, gets `<secret> as <variable>`.
+         */
+        post: operations["setDefaultAccount"];
+        /**
+         * Take the default flag off an account
+         * @description The provider is left with no default; sandboxes get no credential from it.
+         */
+        delete: operations["clearDefaultAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents": {
         parameters: {
             query?: never;
@@ -2013,6 +2087,64 @@ export interface components {
             task: components["schemas"]["ScheduleTemplate"];
             poll?: components["schemas"]["SchedulePoll"];
         };
+        /** @description An account, never its value (ADR 0018). */
+        Account: {
+            name: string;
+            provider: components["schemas"]["AccountProvider"];
+            kind: components["schemas"]["AccountKind"];
+            /** @description The secrets.env name holding the value, ACCOUNT_<NAME>. */
+            secret: string;
+            /** @description The account's email, empty when not given. */
+            email: string;
+            /** @description Whether this is its provider's default account. */
+            default: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** @description Usage for anthropic oauth accounts once the usage fetcher is wired, else null. */
+            usage: components["schemas"]["AccountUsage"] | null;
+        };
+        /** @enum {string} */
+        AccountProvider: "anthropic" | "openai";
+        /** @enum {string} */
+        AccountKind: "oauth" | "api_key";
+        AccountUsage: {
+            /** Format: date-time */
+            updated_at: string;
+            windows: components["schemas"]["AccountUsageWindow"][];
+            /** @description Why usage could not be read, empty when it was. */
+            error: string;
+        };
+        AccountUsageWindow: {
+            /** @description session, weekly or a model's slug. */
+            id: string;
+            label: string;
+            /** @description The share used. */
+            used: number;
+            /** Format: date-time */
+            resets_at: string | null;
+        };
+        AccountProviderView: {
+            id: components["schemas"]["AccountProvider"];
+            /** @description The harnesses its accounts serve. */
+            harnesses: string[];
+            /** @description The guest variable each kind of account is handed to; oauth is absent for a provider without that kind. */
+            variables: {
+                oauth?: string;
+                api_key: string;
+            };
+        };
+        AccountList: {
+            accounts: components["schemas"]["Account"][];
+            providers: components["schemas"]["AccountProviderView"][];
+        };
+        CreateAccountRequest: {
+            name: string;
+            provider: components["schemas"]["AccountProvider"];
+            kind: components["schemas"]["AccountKind"];
+            /** @description The token or key, written to secrets.env and never returned. */
+            value: string;
+            email?: string;
+        };
         Schedule: {
             /** Format: uuid */
             id: string;
@@ -2219,6 +2351,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Account name, e.g. work. */
+        AccountNameParam: string;
         /** @description Agent name, e.g. reviewer-1. */
         AgentNameParam: string;
         /** @description Turn number, from 1. */
@@ -3241,6 +3375,128 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    listAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accounts and providers. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountList"];
+                };
+            };
+            500: components["responses"]["Error"];
+        };
+    };
+    createAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description The account. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
+            };
+            400: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    deleteAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    setDefaultAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
+            };
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    clearDefaultAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
             };
             404: components["responses"]["Error"];
             500: components["responses"]["Error"];

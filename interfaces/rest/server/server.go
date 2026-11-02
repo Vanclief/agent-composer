@@ -8,6 +8,7 @@ import (
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/events"
+	"github.com/vanclief/agent-composer/core/resources/accounts"
 	"github.com/vanclief/agent-composer/core/resources/agents"
 	"github.com/vanclief/agent-composer/core/resources/filesystem"
 	"github.com/vanclief/agent-composer/core/resources/harnessinfo"
@@ -45,12 +46,14 @@ type Server struct {
 	// TurnsAPI reads agent and sandbox turns from their volumes.
 	TurnsAPI  *agents.TurnsAPI
 	AgentsAPI *agents.API
-	Messaging *messaging.Service
+	// AccountsAPI is provider accounts (ADR 0018).
+	AccountsAPI *accounts.API
+	Messaging   *messaging.Service
 	// Events feeds GET /api/events.
 	Events *events.Bus
 }
 
-func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API, tasksAPI *tasks.API, schedulesAPI *schedules.API, knowledgeAPI *knowledgeapi.API, agentsAPI *agents.API, msg *messaging.Service, bus *events.Bus) *Server {
+func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API, tasksAPI *tasks.API, schedulesAPI *schedules.API, knowledgeAPI *knowledgeapi.API, agentsAPI *agents.API, accountsAPI *accounts.API, msg *messaging.Service, bus *events.Bus) *Server {
 	if rootCtx == nil {
 		rootCtx = context.Background()
 	}
@@ -72,6 +75,7 @@ func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.A
 		KnowledgeAPI:  knowledgeAPI,
 		TurnsAPI:      agents.NewTurnsAPI(tasksAPI.Sandboxes.VolumeRootDir(), tasksAPI.Sandboxes),
 		AgentsAPI:     agentsAPI,
+		AccountsAPI:   accountsAPI,
 		Messaging:     msg,
 		Events:        bus,
 	}
@@ -254,6 +258,17 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.TasksAPI.DeleteSpec(request.GetContext(), nil, body)
 	case *tasks.ListSecretsRequest:
 		return s.TasksAPI.ListSecrets(request.GetContext(), nil, body)
+
+	case *accounts.ListRequest:
+		return s.AccountsAPI.List(request.GetContext(), nil, body)
+	case *accounts.CreateRequest:
+		return s.AccountsAPI.Create(request.GetContext(), nil, body)
+	case *accounts.SetDefaultRequest:
+		return s.AccountsAPI.SetDefault(request.GetContext(), nil, body)
+	case *accounts.ClearDefaultRequest:
+		return s.AccountsAPI.ClearDefault(request.GetContext(), nil, body)
+	case *accounts.DeleteRequest:
+		return s.AccountsAPI.Delete(request.GetContext(), nil, body)
 
 	case *schedules.ListRequest:
 		return s.SchedulesAPI.List(request.GetContext(), nil, body)

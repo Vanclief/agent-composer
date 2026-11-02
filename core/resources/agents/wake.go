@@ -97,6 +97,7 @@ func (api *API) allocate(ctx context.Context, record *agent.Agent) error {
 
 	view, err := api.sbx.AllocateHome(ctx, sandboxes.HomeRequest{
 		Agent:        record.Name,
+		Harness:      record.Harness,
 		Sandbox:      tmpl.Sandbox,
 		Command:      Command(record),
 		Instructions: tmpl.Instructions,

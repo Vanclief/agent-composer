@@ -127,6 +127,10 @@ secrets:
   requests to the bound hosts. No request returns the value.
 - A schedule's poll command reads its secrets on the host by their own
   names, so `as` is refused there.
+- **Managed accounts.** [ADR 0018](0018-accounts.md) keeps accounts as rows
+  plus `ACCOUNT_<NAME>` lines of `secrets.env`, with a default per provider
+  bound as `<secret> as <variable>` when a spec names no credential of its
+  harness.
 
 ## Rationale
 

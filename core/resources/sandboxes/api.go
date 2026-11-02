@@ -22,6 +22,7 @@ import (
 	"github.com/vanclief/agent-composer/executor"
 	"github.com/vanclief/agent-composer/executor/sandbox"
 	"github.com/vanclief/agent-composer/messaging"
+	"github.com/vanclief/agent-composer/models/agent"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/secrets"
 	"github.com/vanclief/agent-composer/task"
@@ -387,29 +388,37 @@ func (api *API) TaskSandboxes(ctx context.Context, owner *taskmodels.Task) ([]Sa
 	return views, nil
 }
 
-// resolveSecrets reads the secrets file only when the spec asks for
-// secrets. Its errors name secrets, never values, and pass through as is.
-func (api *API) resolveSecrets(spec task.Spec) ([]secrets.Binding, error) {
+// resolveSecrets binds the provider default account for harness when the
+// spec names no credential of it (withDefaultAccount), then resolves the
+// spec's secrets, reading the secrets file only when there are any. It
+// returns the spec with the default bound, to store and boot from. Its
+// errors name secrets, never values, and pass through as is.
+func (api *API) resolveSecrets(ctx context.Context, spec task.Spec, harness agent.Harness) (task.Spec, []secrets.Binding, error) {
+	spec, err := api.withDefaultAccount(ctx, spec, harness)
+	if err != nil {
+		return spec, nil, ez.Wrap(err)
+	}
+
 	requests, err := spec.SecretRequests()
 	if err != nil {
-		return nil, ez.Wrap(err)
+		return spec, nil, ez.Wrap(err)
 	}
 
 	if len(requests) == 0 {
-		return nil, nil
+		return spec, nil, nil
 	}
 
 	store, err := secrets.Load(api.secretsPath)
 	if err != nil {
-		return nil, ez.Wrap(err)
+		return spec, nil, ez.Wrap(err)
 	}
 
 	bindings, err := store.Resolve(requests)
 	if err != nil {
-		return nil, ez.Wrap(err)
+		return spec, nil, ez.Wrap(err)
 	}
 
-	return bindings, nil
+	return spec, bindings, nil
 }
 
 // Executor connects to a running sandbox, for terminals and workflow steps.

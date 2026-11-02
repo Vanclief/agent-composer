@@ -23,6 +23,8 @@ import (
 	"github.com/vanclief/agent-composer/executor/sandbox"
 	"github.com/vanclief/agent-composer/messaging"
 	msgclient "github.com/vanclief/agent-composer/messaging/client"
+	accountmodels "github.com/vanclief/agent-composer/models/account"
+	agentmodels "github.com/vanclief/agent-composer/models/agent"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/task"
@@ -184,6 +186,8 @@ func newTestDB(t *testing.T) *bun.DB {
 		(*taskmodels.Sandbox)(nil),
 		(*msgmodels.Participant)(nil),
 		(*msgmodels.Message)(nil),
+		(*accountmodels.Account)(nil),
+		(*agentmodels.Agent)(nil),
 	}
 	for _, table := range tables {
 		_, err = db.NewCreateTable().Model(table).Exec(context.Background())
