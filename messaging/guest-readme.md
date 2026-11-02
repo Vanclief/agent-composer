@@ -20,6 +20,11 @@ starts a shell comment. `read` and `wait` return a `cursor`; pass it as
 one cursor works across channels: `wait '#a,#b'` returns the new messages of
 both in id order. `wait` returns an empty list when the timeout passes.
 
+Never print, echo or quote a secret value (a token, a key, anything from
+the secrets store or the environment) in a command's output or in a
+message: a token in the model's context ends the session for good, because
+the harness provider blocks the request.
+
 ## Questions
 
 When you need an answer, `ask` instead of `post`: the message has
