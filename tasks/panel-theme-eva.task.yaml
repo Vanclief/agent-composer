@@ -1,0 +1,85 @@
+name: panel-theme-eva
+title: "Eva: an Evangelion / Blade Runner theme for the panel, as a third theme"
+manager: franco
+owner: franco
+assignee: claude_code
+model: claude-opus-5-5
+brief: |
+  Add a third theme to the control panel, `eva`, in the visual language of
+  the NERV and MAGI displays in Neon Genesis Evangelion, with the amber and
+  cyan glow of Blade Runner. Franco's words: "a Neon Genesis / Bladerunner
+  like UI would work very well here". It is a preference, so it ships as a
+  theme the user picks, and the current dark look stays the default.
+
+  Read first: panel/CLAUDE.md (the design rules, the shadcn tokens, the
+  `npm run shot` script), panel/src/index.css (the token blocks for `:root`
+  and `.dark`), panel/src/main.tsx (next-themes, `attribute="class"`,
+  storageKey `agc.panel.theme`), panel/src/shell/theme-toggle.tsx, and
+  rules/ beliefs/ decisions/ at the repo root for the rules on the UI:
+  statuses are shown verbatim from the backend and read off color and
+  shape; disabled controls say why in their own label.
+
+  What eva looks like, as tokens: a near-black ground (not pure black), a
+  warm orange as the primary type and border color, alert red for
+  destructive and failed, acid green for running and online, dim amber for
+  muted text, cyan as the single cool accent for selection and focus. Thin
+  one-pixel borders in dim orange, radius zero everywhere, uppercase with
+  letter spacing on section labels and the mode rows, the existing
+  monospace for ids and numbers. A faint text glow on the active item only.
+  No scanlines, noise or animation over content: legibility first, every
+  text color AA against its ground, every status color distinct from the
+  others at a glance and from its hollow or filled shape.
+
+  How it is built:
+  1. The theme is a class `eva` on <html>, a sibling of `dark`, with its own
+     token block in index.css overriding the shadcn variables, `--radius`,
+     and the concept colors. Register `eva` in the next-themes provider
+     (`themes={['light','dark','eva']}`) and make the sidebar toggle cycle
+     or choose between the three, the label of each option being its name.
+  2. Concept colors that are hard-coded as Tailwind classes in components
+     (status lights, presence dots, mode row colors, badges, the attention
+     colors) move to CSS variables in index.css with values in `:root`,
+     `.dark` and `.eva`, so the theme can retint them. Keep this bounded:
+     only the colors the theme needs to change, one variable per concept,
+     same names across the three blocks, the dark and light values exactly
+     what they render today. Do not restyle components, change layout or
+     touch component structure beyond swapping a class for a variable.
+  3. `npm run shot -- <route> --theme eva` renders the route in the theme
+     (today the flag knows light).
+  4. Record it: `decisions/panel-theme-eva.yaml` with the decision "the
+     panel's look is a theme the user picks; dark stays the default" decided
+     by franco on 2026-11-02, citing the existing UI beliefs; a
+     `proposals/panel-theme-eva.yaml` entry (`proposes: code`, `change:
+     agc/panel-theme-eva`, by claude_code). Keep them in their own files.
+     No ADR: this is a theme, not a design change.
+
+  Work on branch agc/panel-theme-eva from feat/tasks-microsandbox, push,
+  never merge. Another task (panel-attention) is changing panel components
+  on its own branch at the same time; keep your diff to index.css, main.tsx,
+  theme-toggle.tsx, the shot script and the class-for-variable swaps, so
+  the merge is clean. Verify with `make panel-check` and screenshots of
+  /tasks, /talk and the Agents page in eva, dark and light; put the eva
+  screenshots' paths in your delivery message (do not commit PNGs).
+  Deliver with `agc task deliver` and a summary of what changed, what you
+  verified, and anything in the theme you were unsure about.
+
+  Never print, echo, grep or read environment variables or secret values
+  (no env, printenv, gh auth status, cat of credential files): the secrets
+  in your environment are placeholders bound to hosts, and once one appears
+  in your context the secret policy blocks your own model calls and your
+  session is dead.
+accept:
+  - "The sidebar theme control offers light, dark and eva by name; choosing eva sets class eva on html, persists under agc.panel.theme, and dark remains the default on a fresh profile."
+  - "In eva every text color meets AA contrast against its ground, and the task statuses open, running, review, done and the sandbox statuses render in colors distinct from each other and from the dark theme's semantics (red stays failed or destructive, green stays running or online)."
+  - Light and dark render pixel-identical to before, apart from colors now read through variables.
+  - "`npm run shot -- /tasks --theme eva` writes a screenshot in the theme; make panel-check passes."
+  - decisions/panel-theme-eva.yaml and proposals/panel-theme-eva.yaml exist in their own files and agc proposals show lists the proposal.
+  - Branch agc/panel-theme-eva is pushed and not merged.
+sandbox:
+  image: agc-agent
+  cpus: 2
+  memory: 6144
+  repo: https://github.com/vanclief/agent-composer
+  ref: feat/tasks-microsandbox
+  setup: cd panel && npm ci
+  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
