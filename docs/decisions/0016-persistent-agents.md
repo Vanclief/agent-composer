@@ -71,7 +71,12 @@ that mock a backend and settles what it left open.
 6. **A message wakes the agent; silence puts it to sleep.** An `OnPost` hook
    (ADR 0005) matches each message against every agent's channels: its DM
    channel `@<owner>/<name>` (the naming of ADR 0011), `#<task>` for every
-   task whose `manager` is the agent, and the template's `reads`. A match on
+   task whose `manager` is the agent, done ones included (a task stays in
+   its manager's channels for good), and the template's `reads`. agc's own
+   posts wake nobody, except two in `#<task>` that wake the task's manager:
+   `Delivered:` (a delivery to review) and `Accepted by <someone else>.`
+   (the owner accepted what the manager asked about, so the manager merges
+   it; the reviewer template). A match on
    an `asleep` agent starts the home (item 4); on an `awake` one it is picked
    up by the running loop. The loop is `agc agent run --agent <name>` inside
    the home, the job `agent` of ADR 0009, reading "messages since my last
@@ -98,8 +103,11 @@ that mock a backend and settles what it left open.
    with `agc task create` from its home, and shown on the agent page. The work
    still runs in task sandboxes with task agents; a persistent agent is the
    one who briefs, answers questions, accepts or rejects (ADR 0010), and
-   talks to Franco about it. Whether an act needs a human yes is a gate of
-   ADR 0007, settled per role in ADR 0015 for `main`.
+   talks to Franco about it. Like a task sandbox (ADR 0009 item 5), a home
+   may post in its owner's inbox `#<owner>`, to ask there; the inbox is not
+   in its channels, so a post there does not wake it. Whether an act needs
+   a human yes is a gate of ADR 0007, settled per role in ADR 0015 for
+   `main`.
 
 9. **`main` reads everything.** One clause in `authorize` (ADR 0005): the
    participant whose agent has role `main` may read, wait on and post in

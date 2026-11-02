@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	"github.com/vanclief/ez"
 
@@ -44,8 +45,11 @@ func (h homes) agentOf(ctx context.Context, home string) (*agent.Agent, *Templat
 }
 
 // Caller is who a home speaks as in messaging: its agent, by the home's
-// name, granted the channels it reads now (Channels). The main role needs
-// no grants: messaging lets it in everywhere.
+// name, granted the channels it reads now (Channels) and, like a task
+// sandbox (ADR 0009 item 5), its owner's inbox #<owner>, so it can ask the
+// owner there. The inbox is not in Reads: a post there does not wake this
+// agent. The
+// main role needs no grants: messaging lets it in everywhere.
 func (h homes) Caller(ctx context.Context, home string) (messaging.Caller, error) {
 	record, tmpl, err := h.agentOf(ctx, home)
 	if err != nil {
@@ -60,6 +64,10 @@ func (h homes) Caller(ctx context.Context, home string) (messaging.Caller, error
 	grants := []messaging.Grant{}
 	for _, channel := range channels {
 		grants = append(grants, messaging.Grant{Channel: channel})
+	}
+
+	if record.Owner != "" && !slices.Contains(channels, "#"+record.Owner) {
+		grants = append(grants, messaging.Grant{Channel: "#" + record.Owner})
 	}
 
 	return messaging.Caller{Agent: home, Grants: grants}, nil
