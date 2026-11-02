@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/vanclief/ez"
 	"gopkg.in/yaml.v3"
@@ -118,12 +119,15 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 		return nil, ez.Wrap(err)
 	}
 
+	// Stamped with the scheduler's clock, not the model's: a schedule that
+	// never ran is due at created_at, and RunDue compares against api.now.
 	record := &schedulemodels.Schedule{
-		Name:    name,
-		Every:   strings.TrimSpace(request.Every),
-		Enabled: request.Enabled == nil || *request.Enabled,
-		Task:    request.Task,
-		Poll:    cleanPoll(request.Poll),
+		Name:      name,
+		Every:     strings.TrimSpace(request.Every),
+		Enabled:   request.Enabled == nil || *request.Enabled,
+		Task:      request.Task,
+		Poll:      cleanPoll(request.Poll),
+		CreatedAt: api.now().UTC().Truncate(time.Microsecond),
 	}
 
 	err = api.checkTemplate(record)
