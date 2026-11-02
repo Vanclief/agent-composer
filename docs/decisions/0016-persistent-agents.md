@@ -38,6 +38,12 @@ that mock a backend and settles what it left open.
    a rename, so the list stays readable while the agent is on trial.
    Templates name no harness credential, only `GITHUB_TOKEN`, and rely on
    the provider's default account (ADR 0018).
+   The repo ships `agents/reviewer.yaml` (reviews code and manages code
+   tasks, merging what it may), `agents/main.yaml` (reads every channel,
+   ADR 0015), `agents/developer.yaml` (an agc developer that manages its
+   own tasks) and `agents/designer.yaml` (a UI/UX designer for the panel
+   who proposes changes to Franco, makes the agreed ones into tasks it
+   manages, and merges them only after Franco accepts).
 
 3. **Keeping names it.** `POST /api/agents/{name}/keep { name, role? }` sets
    `kept`, renames the row and may change the role. The home sandbox and the
