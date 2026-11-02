@@ -15,6 +15,7 @@ import { StatusPill } from '@/components/status-pill'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
+import { ActChip, useAttention } from './attention'
 import { ago, assignedToHarness } from './format'
 import { TaskActions, type useTaskActions } from './TaskActions'
 import { ForChip } from './TaskChips'
@@ -43,6 +44,7 @@ export function TaskRail({ task, actions, error, onDeleted, className }: TaskRai
         <p title="Name and channel" className="font-mono text-xs text-muted-foreground">
           {task.name} · #{task.name}
         </p>
+        <Waiting task={task} />
       </div>
       <Who task={task} />
       <Moments task={task} />
@@ -64,6 +66,35 @@ export function TaskRail({ task, actions, error, onDeleted, className }: TaskRai
       </div>
     </aside>
   )
+}
+
+// Who the task waits on, under the status: "Waiting on you" lit amber with
+// the acts, or "Waiting on @name" dim; nothing when it waits on nobody.
+function Waiting({ task }: { task: TaskView }) {
+  const attention = useAttention()(task)
+  if (attention.mine.length > 0) {
+    return (
+      <p
+        data-testid="waiting-on"
+        data-attention="me"
+        className="flex flex-wrap items-center gap-1.5 text-sm font-medium text-amber-700 dark:text-amber-400"
+      >
+        <span aria-hidden className="block size-2 rounded-full bg-amber-500 shadow-[0_0_6px_1px] shadow-amber-500/60" />
+        Waiting on you:
+        {attention.mine.map((act) => (
+          <ActChip key={act.act} act={act} />
+        ))}
+      </p>
+    )
+  }
+  if (attention.others.length > 0) {
+    return (
+      <p data-testid="waiting-on" data-attention="other" className="text-sm text-muted-foreground">
+        Waiting on {attention.others.map((n) => '@' + n).join(', ')}
+      </p>
+    )
+  }
+  return null
 }
 
 // One fact: a small dim icon, then the value as plain muted text.

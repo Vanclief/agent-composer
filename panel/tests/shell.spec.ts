@@ -33,7 +33,7 @@ test('the mode switch swaps the nav between Work and Think', async ({ page }) =>
   const mode = page.getByRole('navigation', { name: 'Mode' })
   const nav = page.getByRole('navigation', { name: 'Main' })
   await expect(mode.getByRole('link', { name: 'Work' })).toHaveAttribute('aria-current', 'page')
-  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute', 'Agents'])
+  await expect(nav.getByRole('link')).toHaveText([/^Tasks(\d+)?$/, 'Compute', 'Agents'])
 
   await mode.getByRole('link', { name: 'Think' }).click()
   await expect(page).toHaveURL(/\/panel\/think\/beliefs$/)
@@ -44,7 +44,7 @@ test('the mode switch swaps the nav between Work and Think', async ({ page }) =>
 
   await mode.getByRole('link', { name: 'Work' }).click()
   await expect(page).toHaveURL(/\/panel\/tasks$/)
-  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute', 'Agents'])
+  await expect(nav.getByRole('link')).toHaveText([/^Tasks(\d+)?$/, 'Compute', 'Agents'])
 })
 
 test('Work nav opens Compute, which stays in Work mode', async ({ page }) => {
@@ -55,7 +55,7 @@ test('Work nav opens Compute, which stays in Work mode', async ({ page }) => {
   await expect(page).toHaveURL(/\/panel\/compute$/)
   await expect(page.getByTestId('page-title')).toHaveText('Compute')
   await expect(mode.getByRole('link', { name: 'Work' })).toHaveAttribute('aria-current', 'page')
-  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute', 'Agents'])
+  await expect(nav.getByRole('link')).toHaveText([/^Tasks(\d+)?$/, 'Compute', 'Agents'])
 
   await page.goto('/panel/compute/review-42')
   await expect(page.getByTestId('page-title')).toHaveText('review-42')
@@ -65,8 +65,8 @@ test('Work nav opens Compute, which stays in Work mode', async ({ page }) => {
 test('the three modes are a vertical list', async ({ page }) => {
   await page.goto('/panel/tasks')
   const mode = page.getByRole('navigation', { name: 'Mode' })
-  // Talk carries its unread count.
-  await expect(mode.getByRole('link')).toHaveText(['Think', 'Work', /^Talk(\d+\+?)?$/])
+  // Work carries the tasks waiting on me, Talk its unread count.
+  await expect(mode.getByRole('link')).toHaveText(['Think', /^Work(\d+)?$/, /^Talk(\d+\+?)?$/])
   const think = await mode.getByRole('link', { name: 'Think' }).boundingBox()
   const work = await mode.getByRole('link', { name: 'Work' }).boundingBox()
   const talk = await mode.getByRole('link', { name: 'Talk' }).boundingBox()
@@ -132,6 +132,38 @@ test('clicking a channel in the sidebar opens and highlights it', async ({ page 
 test('Work mode shows no channel rows', async ({ page }) => {
   await page.goto('/panel/tasks')
   const nav = page.getByRole('navigation', { name: 'Main' })
-  await expect(nav.getByRole('link')).toHaveText(['Tasks', 'Compute', 'Agents'])
+  await expect(nav.getByRole('link')).toHaveText([/^Tasks(\d+)?$/, 'Compute', 'Agents'])
   await expect(nav.getByTestId('channel-rows')).toHaveCount(0)
+})
+
+test('a stored name that is not the server owner rings the chip; one click signs in as the owner', async ({ page }) => {
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('seeded')) {
+      sessionStorage.setItem('seeded', '1')
+      localStorage.setItem('agc.panel.human', 'test')
+    }
+  })
+  await page.goto('/panel/tasks')
+  const chip = page.getByTestId('me')
+  await expect(chip).toHaveText('@test')
+  await expect(chip).toHaveAttribute('data-mismatch', 'true')
+  await expect(chip).toHaveAttribute('title', "You are @test here, the server's owner is @franco")
+
+  await chip.click()
+  const joined = page.waitForRequest((r) => r.url().endsWith('/api/msg/join') && r.method() === 'POST')
+  await page.getByTestId('sign-in-owner').click()
+  expect((await joined).postDataJSON()).toEqual({ name: 'franco' })
+  await expect(chip).toHaveText('@franco')
+  await expect(chip).not.toHaveAttribute('data-mismatch')
+  await expect(chip).toHaveAttribute('title', 'Signed in as @franco')
+  expect(await page.evaluate(() => localStorage.getItem('agc.panel.human'))).toBe('franco')
+})
+
+test('with no stored name the panel is the server owner from GET /api/defaults', async ({ page, request }) => {
+  const defaults = await (await request.get('/api/defaults')).json()
+  expect(defaults).toEqual({ harness: 'claude_code', model: 'claude-opus-5-5', owner: 'franco', system: 'agc' })
+  await page.route('**/api/defaults', (route) => route.fulfill({ json: { ...defaults, owner: 'ada' } }))
+  await page.goto('/panel/tasks')
+  await expect(page.getByTestId('me')).toHaveText('@ada')
+  await expect(page.getByTestId('me')).not.toHaveAttribute('data-mismatch')
 })
