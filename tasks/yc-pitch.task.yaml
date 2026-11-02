@@ -1,0 +1,60 @@
+# agc task create -f tasks/yc-pitch.task.yaml
+# Drafts a Y Combinator application for the agc knowledge system from public
+# information only. It submits nothing and logs in nowhere: the draft comes
+# back as a branch and a message, and Franco decides what to send.
+name: yc-pitch
+title: Draft a YC application for the agc knowledge and decision system
+assignee: claude_code
+for: proposals-pass-through-human-gates
+brief: |
+  Write a complete first draft of a Y Combinator application for agc, the
+  knowledge and decision system in this repository (rules, evidence,
+  beliefs, decisions, actions, proposals and gates: ADR 0006 and 0007),
+  as the product of a company to be founded by Franco Valencia.
+
+  Do first, with the browser (`npx playwright install chromium` is in
+  setup; use a short Playwright script, read only):
+  1. Read the current YC application questions at ycombinator.com/apply
+     and the current batch deadline and standard deal. Put what you read
+     in the pitch doc with the URL next to each fact. Write nothing under
+     evidence/: you are not a witness (rule evidence-who-is-never-a-model);
+     Franco adds the evidence once he has seen the pages himself.
+  2. Read YC's Requests for Startups and list the ones this fits.
+  3. Find the YC companies in agent tooling, developer tools and
+     decision or knowledge software from the last two years from the YC
+     directory, and write one line each on how agc differs.
+
+  Then write docs/pitch/yc-application.md with:
+  - Every current application question, answered honestly in Franco's
+    voice. Progress is a working Go CLI and REST API, one repository
+    using it on itself, zero outside users and zero revenue: say exactly
+    that. Do not invent traction, customers or a team.
+  - A one-paragraph pitch and a one-sentence pitch.
+  - The thesis: an LLM is a great parser and a terrible sensor, so the
+    product is the layer that keeps a human's beliefs grounded in
+    evidence while agents propose and gates decide what lands.
+  - Open questions for Franco, marked as such, where the answer is his
+    (co-founder, incorporation, how it makes money, what he wants to be
+    true in two years).
+  Also write docs/pitch/competitors.md with the directory findings.
+
+  Post a short line in #yc-pitch when you start, after the research and
+  when you are done, so Franco can follow from the panel; agc has no
+  direct messages, the task channel is how you reach him.
+
+  Done looks like: both files committed on branch agc/yc-pitch, pushed,
+  and a message in #yc-pitch with the one-sentence pitch, the deadline
+  you found and the list of open questions. Never create an account,
+  never log in, never submit a form anywhere.
+sandbox:
+  image: agc-agent
+  cpus: 2
+  memory: 4096
+  repo: https://github.com/vanclief/agent-composer
+  ref: feat/tasks-microsandbox
+  setup: |
+    npx playwright install chromium
+  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
+  # A bare `claude` waits at its prompt for someone to type; hand it the
+  # brief so the task starts on its own.
+  command: claude Read /home/agent/TASK.md and do everything it says, start to finish, without waiting for me.
