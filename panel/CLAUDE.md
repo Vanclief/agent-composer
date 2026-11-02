@@ -535,8 +535,17 @@ Tasks (each with a brief and assignee):
   `status_error: clone failed: repository not found`.
 
 Saved spec `backend-review`. Secrets
-`CLAUDE_CODE_OAUTH_TOKEN`, `GITHUB_TOKEN` (with hosts) and `CUSTOM` (no
-hosts). Messages in `#review-42` (from @reviewer, @tester and human @franco,
+`CLAUDE_CODE_OAUTH_TOKEN`, `GITHUB_TOKEN` (with hosts), `CUSTOM` (no
+hosts) and `ANTHROPIC_WORK` (`api.anthropic.com`, read by no harness);
+`GET /api/secrets` also answers `harnesses: [{ id, reads }]` (claude_code
+reads `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`; codex_cli
+`OPENAI_API_KEY`; pi both API keys), typed ahead of the Go side as
+`SecretHarness` with `useSecretHarnesses()` in `@/api/hooks`. In the create
+dialog a picked secret no harness reads, bound to no host or only to a
+provider's API, offers the task harness's variables as toggle chips
+(`data-secret-as`, `data-env`); picking one writes `NAME as ENV[@hosts]`
+and the chip reads `NAME → ENV`, as does the secret chip
+(`data-spec-secret`) in a sandbox's parts on the task's Compute view. Messages in `#review-42` (from @reviewer, @tester and human @franco,
 who has left so you can join as franco), `#releases`, and franco's inbox
 `#franco`: agc's two opening messages for `review-42` (the first mentions
 `@franco`) and an escalation from the review-42 agent @reviewer asking a

@@ -600,3 +600,21 @@ test('an open question for me in the task channel adds an answer chip to the thr
   await expect(page).toHaveURL(new RegExp(`/panel/messages/${task.name}\\?thread=${asked.id}$`))
   await expect(page.getByTestId('thread-pane')).toContainText('Squash or keep?')
 })
+
+test("a sandbox's aliased secret reads NAME → ENV in its parts", async ({ page, request }) => {
+  const task = await createTask(request, unique('Alias check'), {
+    sandbox: {
+      image: 'agc-agent',
+      secrets: ['GITHUB_TOKEN', 'ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN@api.anthropic.com'],
+    },
+  })
+  await page.goto(`/panel/tasks/${task.name}/compute`)
+  const parts = page.getByTestId('sandbox-parts')
+  await expect(parts.locator('[data-spec-secret="GITHUB_TOKEN"]')).toHaveText('GITHUB_TOKEN')
+  const alias = parts.locator('[data-spec-secret="ANTHROPIC_WORK"]')
+  await expect(alias).toHaveText('ANTHROPIC_WORK → CLAUDE_CODE_OAUTH_TOKEN')
+  await expect(alias.locator('[title]')).toHaveAttribute(
+    'title',
+    'Secret ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN@api.anthropic.com, sent only to api.anthropic.com',
+  )
+})

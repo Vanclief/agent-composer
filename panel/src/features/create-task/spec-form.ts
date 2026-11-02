@@ -12,6 +12,9 @@ export const MEMORY_CHOICES = [1, 2, 4, 8, 16].map((gb) => gb * 1024)
 
 export type SecretPick = {
   name: string
+  // The variable it arrives as in the sandbox (NAME as ENV); empty: the
+  // name itself.
+  env: string
   // Comma-separated, as typed.
   hosts: string
   // The loaded spec set its own hosts, so the hosts input stays visible
@@ -105,14 +108,18 @@ function asCount(v: unknown) {
   return v === undefined || v === null || v === '' || !Number.isFinite(n) || n <= 0 ? null : n
 }
 
-// NAME or NAME@host1,host2.
-function parseSecret(entry: string): SecretPick {
+// NAME, NAME@host1,host2, NAME as ENV or NAME as ENV@host1,host2.
+export function parseSecret(entry: string): SecretPick {
   const at = entry.indexOf('@')
+  const head = at < 0 ? entry : entry.slice(0, at)
+  const as = head.match(/^\s*(\S+)\s+as\s+(\S+)\s*$/)
+  const name = as ? as[1] : head.trim()
+  const env = as ? as[2] : ''
   if (at < 0) {
-    return { name: entry.trim(), hosts: '', custom: false }
+    return { name, env, hosts: '', custom: false }
   }
   const hosts = splitHosts(entry.slice(at + 1))
-  return { name: entry.slice(0, at).trim(), hosts: hosts.join(', '), custom: true }
+  return { name, env, hosts: hosts.join(', '), custom: true }
 }
 
 function splitHosts(hosts: string) {
@@ -122,9 +129,11 @@ function splitHosts(hosts: string) {
     .filter(Boolean)
 }
 
-function secretEntry(s: SecretPick) {
+export function secretEntry(s: SecretPick) {
   const hosts = splitHosts(s.hosts)
-  return hosts.length ? s.name + '@' + hosts.join(',') : s.name
+  const env = s.env.trim()
+  const head = env && env !== s.name ? s.name + ' as ' + env : s.name
+  return hosts.length ? head + '@' + hosts.join(',') : head
 }
 
 // NAME:DEST[:rw] or host:PATH:DEST[:rw]; read-only unless :rw.

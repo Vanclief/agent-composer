@@ -30,7 +30,33 @@ export function TaskChip({ task, title, className }: { task: string; title?: str
   )
 }
 
-// cpus, memory and image, plus repo and ref when full is set.
+// A spec's secrets entry, verbatim: NAME, or NAME → ENV for NAME as ENV;
+// the hosts after @ go in the tooltip.
+export function SecretChip({ entry }: { entry: string }) {
+  const at = entry.indexOf('@')
+  const head = (at < 0 ? entry : entry.slice(0, at)).trim()
+  const hosts = at < 0 ? '' : entry.slice(at + 1)
+  const as = head.match(/^(\S+)\s+as\s+(\S+)$/)
+  return (
+    <span data-spec-secret={as ? as[1] : head} className="inline-flex max-w-full">
+      <IconChip
+        icon={conceptIcons.secret}
+        concept="secret"
+        title={hosts ? 'Secret ' + entry + ', sent only to ' + hosts : 'Secret ' + entry}
+      >
+        {as ? (
+          <>
+            {as[1]} <span className="text-muted-foreground/70">→</span> {as[2]}
+          </>
+        ) : (
+          head
+        )}
+      </IconChip>
+    </span>
+  )
+}
+
+// cpus, memory and image, plus repo, ref and secrets when full is set.
 export function SpecChips({ sandbox, full = false }: { sandbox: SandboxView; full?: boolean }) {
   const { spec } = sandbox
   return (
@@ -60,6 +86,7 @@ export function SpecChips({ sandbox, full = false }: { sandbox: SandboxView; ful
           {spec.ref}
         </IconChip>
       )}
+      {full && (spec.secrets ?? []).map((entry) => <SecretChip key={entry} entry={entry} />)}
     </>
   )
 }

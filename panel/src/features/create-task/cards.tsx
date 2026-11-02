@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 
 import type { Secret } from '@/api/client'
+import type { SecretHarness } from '@/api/hooks'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
@@ -36,6 +37,7 @@ import {
   parseChannel,
   repoDir,
   rowId,
+  type SecretPick,
   type SpecForm,
   type VolumeKind,
   type VolumeRow,
@@ -221,12 +223,24 @@ export function CodeCard({ form, update }: CardProps) {
 
 type SecretChip = { name: string; hosts: string[]; known: boolean }
 
+// The providers' API hosts agc binds by default (secrets.KnownHosts): a
+// secret sent only there is an account, so it may stand in for a variable.
+const PROVIDER_HOSTS = ['api.anthropic.com', 'api.openai.com']
+
 export function SecretsCard({
   form,
   update,
   secrets,
   error,
-}: CardProps & { secrets: Secret[] | undefined; error: unknown }) {
+  harnesses,
+  harness,
+}: CardProps & {
+  secrets: Secret[] | undefined
+  error: unknown
+  // GET /api/secrets' harnesses, and the task's harness ('' for a person).
+  harnesses?: SecretHarness[]
+  harness?: string
+}) {
   // Every secret secrets.env has, plus any the form selects that it does
   // not (from a saved spec), so nothing selected is hidden.
   const chips: SecretChip[] = (secrets ?? []).map((s) => ({ name: s.name, hosts: s.hosts ?? [], known: true }))
@@ -237,9 +251,37 @@ export function SecretsCard({
   }
   const picked = (name: string) => form.secrets.find((s) => s.name === name)
 
+  // A variable some harness reads; a secret named so needs no alias.
+  const read = new Set((harnesses ?? []).flatMap((h) => h.reads))
+  // The hosts of a provider's API: the defaults, plus the hosts of every
+  // secret a harness reads.
+  const providerHosts = new Set(PROVIDER_HOSTS)
+  for (const s of secrets ?? []) {
+    if (read.has(s.name)) {
+      for (const h of s.hosts ?? []) {
+        providerHosts.add(h)
+      }
+    }
+  }
+  const reads = (harnesses ?? []).find((h) => h.id === harness)?.reads ?? []
+
+  // The variables a picked chip may stand in for, empty when it offers none.
+  function asChoices(chip: SecretChip, pick: SecretPick) {
+    const typed = pick.hosts
+      .split(',')
+      .map((h) => h.trim())
+      .filter(Boolean)
+    const hosts = typed.length ? typed : chip.hosts
+    if (read.has(chip.name) || !hosts.every((h) => providerHosts.has(h))) {
+      return []
+    }
+    const env = pick.env.trim()
+    return env && !reads.includes(env) ? [...reads, env] : reads
+  }
+
   function toggle(chip: SecretChip, on: boolean) {
     if (on) {
-      update({ secrets: [...form.secrets, { name: chip.name, hosts: '', custom: false }] })
+      update({ secrets: [...form.secrets, { name: chip.name, env: '', hosts: '', custom: false }] })
       return
     }
     update({ secrets: form.secrets.filter((s) => s.name !== chip.name) })
@@ -249,17 +291,23 @@ export function SecretsCard({
     update({ secrets: form.secrets.map((s) => (s.name === name ? { ...s, hosts } : s)) })
   }
 
+  function setEnv(name: string, env: string) {
+    update({ secrets: form.secrets.map((s) => (s.name === name ? { ...s, env } : s)) })
+  }
+
   return (
     <Card
       name="secrets"
       concept="secret"
       label="Secrets"
-      tip="Secrets from secrets.env. Each is sent only to its hosts."
+      tip="Secrets from secrets.env. Each is sent only to its hosts. A secret can stand in for the variable a harness reads"
       count={form.secrets.length}
     >
       <div className="flex flex-wrap items-center gap-1.5">
         {chips.map((chip) => {
           const pick = picked(chip.name)
+          const choices = pick ? asChoices(chip, pick) : []
+          const env = pick?.env.trim() ?? ''
           const needsHosts = Boolean(pick) && (!chip.hosts.length || Boolean(pick?.custom))
           let tip = 'No known hosts: say where it may be sent'
           if (!chip.known) {
@@ -268,7 +316,7 @@ export function SecretsCard({
             tip = 'Sent only to ' + chip.hosts.join(', ')
           }
           return (
-            <div key={chip.name} className="flex items-center gap-1">
+            <div key={chip.name} className="flex max-w-full flex-wrap items-center gap-1">
               <Tip wrap tip={tip}>
                 <Toggle
                   data-secret={chip.name}
@@ -284,6 +332,15 @@ export function SecretsCard({
                 >
                   {chip.known ? <conceptIcons.secret aria-hidden /> : <TriangleAlert className="text-red-500" />}
                   {chip.name}
+                  {env && env !== chip.name ? (
+                    <>
+                      {' '}
+                      <span data-secret-arrow className="text-muted-foreground/70">
+                        →
+                      </span>{' '}
+                      <span data-secret-env>{env}</span>
+                    </>
+                  ) : null}
                   {chip.hosts.length ? <Globe aria-hidden className="opacity-60" /> : null}
                 </Toggle>
               </Tip>
@@ -298,6 +355,29 @@ export function SecretsCard({
                   onChange={(e) => setHosts(chip.name, e.target.value)}
                   placeholder="api.example.com, example.com"
                 />
+              ) : null}
+              {choices.length && pick ? (
+                <ToggleGroup
+                  type="single"
+                  data-secret-as={chip.name}
+                  aria-label={`${chip.name} as`}
+                  value={env}
+                  onValueChange={(v) => setEnv(chip.name, v)}
+                  className="gap-1"
+                >
+                  {choices.map((v) => (
+                    <Tip key={v} wrap tip={`Sent as ${v}`}>
+                      <ToggleGroupItem
+                        value={v}
+                        data-env={v}
+                        size="sm"
+                        className={cn(chipBase, conceptColors.env.on, 'font-mono')}
+                      >
+                        {v}
+                      </ToggleGroupItem>
+                    </Tip>
+                  ))}
+                </ToggleGroup>
               ) : null}
             </div>
           )

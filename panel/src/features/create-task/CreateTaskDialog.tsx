@@ -7,7 +7,7 @@ import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { File, Loader2, Play, Trash2, X } from 'lucide-react'
 import { useNavigate } from 'react-router'
 
-import { useCreateTask, useDeleteSpec, useSaveSpec, useSecrets, useSpecs } from '@/api/hooks'
+import { useCreateTask, useDeleteSpec, useSaveSpec, useSecretHarnesses, useSecrets, useSpecs } from '@/api/hooks'
 import type { CreateTaskRequest } from '@/api/tasks'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
@@ -38,6 +38,7 @@ const tileOff = 'border-border text-muted-foreground hover:bg-accent hover:text-
 
 export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) {
   const secrets = useSecrets()
+  const secretHarnesses = useSecretHarnesses()
   const specs = useSpecs()
   const create = useCreateTask()
   const saveSpec = useSaveSpec()
@@ -488,7 +489,14 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
                     <div className="grid grid-cols-2 gap-3">
                       <MachineCard form={form} update={update} />
                       <CodeCard form={form} update={update} />
-                      <SecretsCard form={form} update={update} secrets={secrets.data} error={secrets.error} />
+                      <SecretsCard
+                        form={form}
+                        update={update}
+                        secrets={secrets.data}
+                        error={secrets.error}
+                        harnesses={secretHarnesses.data}
+                        harness={person ? '' : agent.worker}
+                      />
                       <EnvCard form={form} update={update} />
                       <VolumesCard form={form} update={update} />
                       <ChannelsCard form={form} update={update} slug={name} />

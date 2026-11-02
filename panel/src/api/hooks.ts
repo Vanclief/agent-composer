@@ -470,3 +470,20 @@ export function useAllParticipants() {
     retry: false,
   })
 }
+
+// ---------- secret accounts ----------
+
+// GET /api/secrets' harnesses: the variables each harness reads, preferred
+// first, so a secret no harness reads can stand in for one (NAME as ENV).
+// Typed here until docs/openapi.yaml has it; then schema.d.ts does.
+export type SecretHarness = { id: string; reads: string[] }
+
+export function useSecretHarnesses() {
+  return useQuery({
+    queryKey: [...queryKeys.secrets, 'harnesses'] as const,
+    queryFn: async () => {
+      const body = (await unwrap(api.GET('/secrets'))) as { harnesses?: SecretHarness[] }
+      return body.harnesses ?? []
+    },
+  })
+}
