@@ -85,29 +85,51 @@ func (api *API) GC(ctx context.Context, requester interface{}, request *GCReques
 }
 
 // StartGC runs the collector every GCInterval until ctx ends, one run at a
-// time. Only agc rest calls it; keep_done 0 turns it off.
+// time. Only agc rest calls it. Each tick deletes the sandboxes of tasks
+// done longer than keep_done ago and archives the channels of tasks done
+// longer than archive_done ago (ADR 0005 "Archived channels"); a setting
+// of 0 turns its half off, and both 0 stops the ticker altogether.
 func (api *API) StartGC(ctx context.Context) {
 	if api.keepDone == 0 {
 		log.Info().Msg("sandboxes: collector off, keep_done is 0")
+	}
+	if api.archiveDone == 0 {
+		log.Info().Msg("messaging: archiving off, archive_done is 0")
+	}
+	if api.keepDone == 0 && api.archiveDone == 0 {
 		return
 	}
 
-	log.Info().Dur("every", GCInterval).Dur("keep_done", api.keepDone).Msg("sandboxes: collector started")
+	log.Info().Dur("every", GCInterval).Dur("keep_done", api.keepDone).Dur("archive_done", api.archiveDone).Msg("sandboxes: collector started")
 
 	ticker := time.NewTicker(GCInterval)
 	defer ticker.Stop()
 
 	for {
-		_, err := api.collect(ctx, api.keepDone, false)
-		if err != nil {
-			log.Warn().Err(err).Msg("sandboxes: collector run failed")
-		}
+		api.tick(ctx)
 
 		select {
 		case <-ctx.Done():
 			log.Info().Msg("sandboxes: collector stopped")
 			return
 		case <-ticker.C:
+		}
+	}
+}
+
+// tick is one run of the collector: sandboxes, then channels.
+func (api *API) tick(ctx context.Context) {
+	if api.keepDone > 0 {
+		_, err := api.collect(ctx, api.keepDone, false)
+		if err != nil {
+			log.Warn().Err(err).Msg("sandboxes: collector run failed")
+		}
+	}
+
+	if api.archiveDone > 0 {
+		_, err := api.archiveChannels(ctx, api.archiveDone)
+		if err != nil {
+			log.Warn().Err(err).Msg("messaging: archiving run failed")
 		}
 	}
 }
