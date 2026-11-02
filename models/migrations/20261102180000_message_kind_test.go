@@ -35,6 +35,13 @@ VALUES (?, ?, ?, ?, ?, ?)`, "#stop-icon", "franco", "p1", "", "hello", now)
 		}
 	}
 
+	// The later column too (createAgents), so the current model can read
+	// the rows.
+	err = addColumn(ctx, db, "messaging_messages", "agent", "TEXT NOT NULL DEFAULT ''")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	var messages []msgmodels.Message
 	err = db.NewSelect().Model(&messages).Scan(ctx)
 	if err != nil {

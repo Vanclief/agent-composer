@@ -145,6 +145,51 @@ func (c *Client) Deliver(ctx context.Context, summary string, out any) error {
 	return nil
 }
 
+// Agent reads GET /agent on an agent's home socket into out: the agent,
+// the channels it reads now and its idle (ADR 0016).
+func (c *Client) Agent(ctx context.Context, out any) error {
+	err := c.do(ctx, http.MethodGet, httpapi.AgentPath, nil, nil, out)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// AgentSleep asks agc to stop the agent's home, POST /agent/sleep. agc
+// answers before it stops the VM.
+func (c *Client) AgentSleep(ctx context.Context) error {
+	err := c.do(ctx, http.MethodPost, httpapi.AgentSleepPath, nil, struct{}{}, nil)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// CreateTask creates a task from an agent's home, with the agent as its
+// manager; request is a task create request and out gets the task.
+func (c *Client) CreateTask(ctx context.Context, request any, out any) error {
+	err := c.do(ctx, http.MethodPost, httpapi.TasksPath, nil, request, out)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// AcceptTask accepts, from an agent's home, a task the agent manages.
+func (c *Client) AcceptTask(ctx context.Context, name string, out any) error {
+	path := strings.Replace(httpapi.TaskAcceptPath, "{name}", url.PathEscape(name), 1)
+
+	err := c.do(ctx, http.MethodPost, path, nil, struct{}{}, out)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
 // do sends one request and decodes the JSON answer into out. Error
 // answers come back as ez errors with the code the status maps to.
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, in, out any) error {
@@ -183,7 +228,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode != http.StatusOK {
+	if res.StatusCode < 200 || res.StatusCode > 299 {
 		failure := httpapi.ErrorResponse{}
 		_ = json.NewDecoder(res.Body).Decode(&failure)
 		if failure.Error == "" {
@@ -191,6 +236,11 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		}
 
 		return ez.New(ez.HTTPStatusToError(res.StatusCode), failure.Error, nil)
+	}
+
+	// A home's sleep answers 204 with no body.
+	if out == nil || res.StatusCode == http.StatusNoContent {
+		return nil
 	}
 
 	err = json.NewDecoder(res.Body).Decode(out)

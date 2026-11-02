@@ -77,6 +77,16 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	sandboxes.GET("/:id/transcripts", h.ListTranscripts)
 	sandboxes.GET("/:id/transcripts/*", h.GetTranscript)
 
+	// Persistent agents (ADR 0016).
+	agents := api.Group("/agents")
+	agents.GET("", h.ListAgents)
+	agents.POST("", h.CreateAgent)
+	agents.GET("/:name", h.GetAgent)
+	agents.POST("/:name/keep", h.KeepAgent)
+	agents.POST("/:name/wake", h.WakeAgent)
+	agents.POST("/:name/sleep", h.SleepAgent)
+	agents.DELETE("/:name", h.DeleteAgent)
+
 	schedules := api.Group("/schedules")
 	schedules.GET("", h.ListSchedules)
 	schedules.POST("", h.CreateSchedule)

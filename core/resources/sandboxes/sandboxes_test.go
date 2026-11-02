@@ -894,12 +894,17 @@ func TestStartListenerLeavesASocketServedElsewhere(t *testing.T) {
 	env := newTestEnv(t)
 	other := New(context.Background(), env.db, env.api.msg, env.rt, env.api.secretsPath, env.api.socketDir)
 
-	err := env.api.startListener("shared", "shared", nil)
+	caller := func(*http.Request) (messaging.Caller, error) {
+		return messaging.Caller{Task: "shared"}, nil
+	}
+	routes := func(*http.ServeMux) {}
+
+	err := env.api.startListener("shared", caller, routes)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = other.startListener("shared", "shared", nil)
+	err = other.startListener("shared", caller, routes)
 	if err != nil {
 		t.Fatal(err)
 	}

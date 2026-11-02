@@ -272,7 +272,8 @@ func (s Spec) RepoURL() (string, string, error) {
 }
 
 // SandboxSpec is the sandbox called name, allocated to the Task called
-// taskName. The guest reaches agc messaging on vsockPort, which the runtime
+// taskName, or to no task when taskName is empty (an agent's home: no
+// AGC_TASK and no task label). The guest reaches agc messaging on vsockPort, which the runtime
 // connects to vsockPath. HomeDir is a private disk of the spec's size and
 // HarnessDir the named volume VolumeName(name).
 func (s Spec) SandboxSpec(taskName string, name string, bindings []secrets.Binding, vsockPath string, vsockPort uint32) (sandbox.Spec, error) {
@@ -280,7 +281,10 @@ func (s Spec) SandboxSpec(taskName string, name string, bindings []secrets.Bindi
 	for k, v := range s.Env {
 		env[k] = v
 	}
-	env[EnvTask] = taskName
+	// An agent's home has no task (ADR 0016).
+	if taskName != "" {
+		env[EnvTask] = taskName
+	}
 	env[EnvSandbox] = name
 	env[EnvMsgVsockPort] = strconv.FormatUint(uint64(vsockPort), 10)
 
@@ -299,6 +303,11 @@ func (s Spec) SandboxSpec(taskName string, name string, bindings []secrets.Bindi
 		return sandbox.Spec{}, ez.Wrap(err)
 	}
 
+	labels := map[string]string{LabelSandbox: name}
+	if taskName != "" {
+		labels[LabelKey] = taskName
+	}
+
 	return sandbox.Spec{
 		Name:      name,
 		Image:     s.Image,
@@ -311,7 +320,7 @@ func (s Spec) SandboxSpec(taskName string, name string, bindings []secrets.Bindi
 		DiskMiB:   diskMiB,
 		VsockPath: vsockPath,
 		VsockPort: vsockPort,
-		Labels:    map[string]string{LabelKey: taskName, LabelSandbox: name},
+		Labels:    labels,
 	}, nil
 }
 

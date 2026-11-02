@@ -8,6 +8,7 @@ import (
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/events"
+	"github.com/vanclief/agent-composer/core/resources/agents"
 	"github.com/vanclief/agent-composer/core/resources/filesystem"
 	"github.com/vanclief/agent-composer/core/resources/harnessinfo"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
@@ -41,12 +42,13 @@ type Server struct {
 	SandboxesAPI  *sandboxes.API
 	SchedulesAPI  *schedules.API
 	KnowledgeAPI  *knowledgeapi.API
+	AgentsAPI     *agents.API
 	Messaging     *messaging.Service
 	// Events feeds GET /api/events.
 	Events *events.Bus
 }
 
-func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API, tasksAPI *tasks.API, schedulesAPI *schedules.API, knowledgeAPI *knowledgeapi.API, msg *messaging.Service, bus *events.Bus) *Server {
+func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API, tasksAPI *tasks.API, schedulesAPI *schedules.API, knowledgeAPI *knowledgeapi.API, agentsAPI *agents.API, msg *messaging.Service, bus *events.Bus) *Server {
 	if rootCtx == nil {
 		rootCtx = context.Background()
 	}
@@ -66,6 +68,7 @@ func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.A
 		SandboxesAPI:  tasksAPI.Sandboxes,
 		SchedulesAPI:  schedulesAPI,
 		KnowledgeAPI:  knowledgeAPI,
+		AgentsAPI:     agentsAPI,
 		Messaging:     msg,
 		Events:        bus,
 	}
@@ -178,6 +181,29 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 5*time.Minute)
 		defer cancel()
 		return s.TasksAPI.Delete(ctx, nil, body)
+
+	case *agents.ListRequest:
+		return s.AgentsAPI.List(request.GetContext(), nil, body)
+	case *agents.GetRequest:
+		return s.AgentsAPI.Get(request.GetContext(), nil, body)
+	case *agents.CreateRequest:
+		return s.AgentsAPI.Create(request.GetContext(), nil, body)
+	case *agents.KeepRequest:
+		return s.AgentsAPI.Keep(request.GetContext(), nil, body)
+	// Waking starts a stopped home and sleeping stops it, which can outlive
+	// the default request timeout, like a sandbox's start and stop.
+	case *agents.WakeRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
+		defer cancel()
+		return s.AgentsAPI.Wake(ctx, nil, body)
+	case *agents.SleepRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
+		defer cancel()
+		return s.AgentsAPI.Sleep(ctx, nil, body)
+	case *agents.DeleteRequest:
+		ctx, cancel := context.WithTimeout(s.workflowExecutionStartContext(), 2*time.Minute)
+		defer cancel()
+		return s.AgentsAPI.Delete(ctx, nil, body)
 
 	case *sandboxes.AllocateRequest:
 		return s.SandboxesAPI.Allocate(request.GetContext(), nil, body)

@@ -22,19 +22,32 @@ import (
 // Each sandbox has its own unix socket, named after it. The VM connects
 // guest vsock port msgVsockPort to it, so every request on it comes from
 // that sandbox, speaking for its task: the caller's Task is the task name,
-// so the sandbox posts in #<task> (ADR 0005, ADR 0008).
+// so the sandbox posts in #<task> (ADR 0005, ADR 0008). An agent's home
+// speaks for its agent instead (home.go, ADR 0016).
 
 func (api *API) socketPath(name string) string {
 	return filepath.Join(api.socketDir, name+".sock")
 }
 
-func (api *API) startSandboxListener(name string, owner *taskmodels.Task, spec task.Spec) error {
+// startSandboxListener serves the sandbox's socket: as its task, or, for
+// an agent's home, as that agent (startHomeListener).
+func (api *API) startSandboxListener(record *taskmodels.Sandbox, owner *taskmodels.Task, spec task.Spec) error {
+	if record.Agent != "" {
+		return api.startHomeListener(record.Name)
+	}
+
 	grants, err := Grants(owner, spec)
 	if err != nil {
 		return ez.Wrap(err)
 	}
 
-	return api.startListener(name, owner.Name, grants)
+	caller := func(*http.Request) (messaging.Caller, error) {
+		return messaging.Caller{Task: owner.Name, Grants: grants}, nil
+	}
+
+	return api.startListener(record.Name, caller, func(mux *http.ServeMux) {
+		mux.HandleFunc("POST "+httpapi.DeliverPath, api.serveDeliver(owner.Name))
+	})
 }
 
 // Grants are the channels a sandbox of owner may use besides #<task>: the
@@ -61,11 +74,11 @@ func Grants(owner *taskmodels.Task, spec task.Spec) ([]messaging.Grant, error) {
 	return append(grants, messaging.Grant{Channel: inbox}), nil
 }
 
-// startListener serves messaging for the sandbox called name, as the task
-// called taskName, on the sandbox's socket, unless this process already
-// does, or another agc process does (the socket answers). A socket nobody
-// answers is stale and replaced.
-func (api *API) startListener(name string, taskName string, grants []messaging.Grant) error {
+// startListener serves messaging for the sandbox called name, as caller
+// says, plus the routes routes adds, on the sandbox's socket, unless this
+// process already does, or another agc process does (the socket answers).
+// A socket nobody answers is stale and replaced.
+func (api *API) startListener(name string, caller func(*http.Request) (messaging.Caller, error), routes func(mux *http.ServeMux)) error {
 	api.mu.Lock()
 	defer api.mu.Unlock()
 
@@ -97,13 +110,9 @@ func (api *API) startListener(name string, taskName string, grants []messaging.G
 		return ez.New(ez.EINTERNAL, "cannot listen on "+path, err)
 	}
 
-	caller := func(*http.Request) (messaging.Caller, error) {
-		return messaging.Caller{Task: taskName, Grants: grants}, nil
-	}
-
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.New(api.msg, caller))
-	mux.HandleFunc("POST "+httpapi.DeliverPath, api.serveDeliver(taskName))
+	routes(mux)
 
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 
