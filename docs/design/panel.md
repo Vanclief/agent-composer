@@ -71,14 +71,21 @@ outlined and dim. Every text color meets AA on its ground.
 
 ## Lights
 
-The status pill is an LED, Franco's spec verbatim: "Running: green led
-blinking. Review: yellow led blinking. Open: green led off. Done: green led
-on. Crashed: red dot blinking. Canceled: red dot." Canceled is not a backend
-status yet; failed is the steady red until it is. Blinking means doing
-something or waiting on someone; steady means settled. Blink is hard, once
-a second (`--animate-led-blink`), never a fade. In a plate's status tab the
-alive and dead words sit on their color as filled blocks with ink text;
-open, done and stopped stay dim.
+The status pill is an LED, 10px, everywhere. Franco's spec verbatim:
+"Running: green led blinking. Review: yellow led blinking. Open: green led
+off. Done: green led on. Crashed: red dot blinking. Canceled: red dot."
+The same grammar is rtsdesign rule 6 in Franco's skill, current as of
+2026-11-02: color is the kind of thing (green work, yellow a person's turn,
+blue a machine in transition, red broken); blinking is doing or waiting,
+steady is settled, off is nothing. So: running green blinking, review
+yellow blinking, starting and stopping blue pulsing, done green on, stopped
+green off, crashed red blinking, failed red steady, open green off, an
+unknown word green off with grey text. Canceled is not a backend status
+yet; failed is the steady red until it is. The four `data-tier` values
+(lit, off, attention, idle) stay. Blink is hard, once a second
+(`--animate-led-blink`), never a fade. In a plate's status tab the alive and
+dead words sit on their color as filled blocks with ink text; open, done
+and stopped stay dim.
 
 ## Motion
 
