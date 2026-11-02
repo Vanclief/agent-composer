@@ -92,6 +92,23 @@ async function serve(page: Page, data: Fixture) {
       found.default = method === 'POST'
       return route.fulfill({ json: found })
     }
+    if (verb === 'signin' && found) {
+      const step = path.split('/')[4]
+      if (method === 'POST' && !step) {
+        return route.fulfill({
+          json: { url: `https://claude.ai/oauth/authorize?state=state-${name}`, expires_at: iso(10 * MIN) },
+        })
+      }
+      if (method === 'POST' && step === 'complete') {
+        found.signed_in_at = iso(0)
+        found.usage = { updated_at: iso(0), windows: [], error: '' }
+        return route.fulfill({ json: found })
+      }
+      if (method === 'DELETE' && !step) {
+        found.signed_in_at = null
+        return route.fulfill({ json: found })
+      }
+    }
     if (method === 'DELETE' && !verb && found) {
       data.accounts = data.accounts.filter((a) => a !== found)
       return route.fulfill({ status: 204 })
@@ -327,4 +344,205 @@ test('Sign in on a rejected token replaces it: DELETE, then POST', async ({ page
   await dialog.getByRole('button', { name: 'Replace token', exact: true }).click()
   await expect(dialog).toHaveCount(0)
   expect(calls).toEqual(['DELETE /accounts/stale-max', 'POST /accounts'])
+})
+
+// ---------- sign-in (contract of accounts-signin) ----------
+
+const CODE = 'made-up-code-4f2a#state-need-max'
+
+// Claude's default is need-max, whose usage error is error.
+function signinFixture(error: string) {
+  const data = fixture()
+  for (const a of data.accounts) {
+    a.default = false
+  }
+  data.accounts.push(
+    account('need-max', {
+      email: 'need@example.com',
+      default: true,
+      usage: { updated_at: iso(-MIN), windows: [], error },
+    }),
+  )
+  return data
+}
+
+test('the sign-in line replaces the two sign-in errors, every other error stays verbatim', async ({ page }) => {
+  const data = signinFixture('inference-only token: sign in for usage')
+  await serve(page, data)
+  await page.goto('/panel/accounts')
+  const claude = card(page, 'anthropic')
+  const line = claude.locator('[data-testid="sign-in-line"][data-need]')
+  await expect(line).toHaveAttribute('data-need', 'usage')
+  await expect(line).toContainText('Sign in for usage')
+  await expect(line.getByRole('button', { name: 'Sign in' })).toBeVisible()
+  await expect(claude.getByRole('alert')).toHaveCount(0)
+
+  data.accounts.find((a) => a.name === 'need-max')!.usage = {
+    updated_at: iso(-MIN),
+    windows: [],
+    error: 'sign-in expired: sign in again',
+  }
+  await page.reload()
+  await expect(line).toHaveAttribute('data-need', 'expired')
+  await expect(line).toContainText('Sign in again to use this account')
+  await expect(claude.getByRole('alert')).toHaveCount(0)
+
+  for (const error of ['usage: HTTP 500', 'token rejected: 401 invalid credentials']) {
+    data.accounts.find((a) => a.name === 'need-max')!.usage = { updated_at: iso(-MIN), windows: [], error }
+    await page.reload()
+    await expect(claude.getByRole('alert')).toHaveText(error)
+    await expect(line).toHaveCount(0)
+  }
+})
+
+test('the dialog begins a sign-in, opens the page and completes it with the pasted code', async ({ page }) => {
+  const calls = await serve(page, signinFixture('inference-only token: sign in for usage'))
+  await page.goto('/panel/accounts')
+  const claude = card(page, 'anthropic')
+  await claude.locator('[data-testid="sign-in-line"] [data-act="sign-in"]').click()
+
+  const dialog = page.getByTestId('sign-in-dialog')
+  await expect(dialog.getByRole('heading')).toHaveText('Sign in: need@example.com')
+  await expect(dialog).toContainText('Sign in with this account in the browser, then paste the code it shows.')
+  const open = dialog.getByRole('link', { name: 'Open the sign-in page' })
+  await expect(open).toHaveAttribute('href', 'https://claude.ai/oauth/authorize?state=state-need-max')
+  await expect(open).toHaveAttribute('target', '_blank')
+  expect(calls).toEqual(['POST /accounts/need-max/signin'])
+
+  await expect(dialog.getByRole('button', { name: 'Finish: paste the code' })).toBeDisabled()
+  const field = dialog.getByLabel('Paste the code shown after signing in')
+  await field.fill(CODE)
+  const completed = page.waitForRequest((r) => r.url().endsWith('/api/accounts/need-max/signin/complete'))
+  await dialog.getByRole('button', { name: 'Finish', exact: true }).click()
+  expect((await completed).postDataJSON()).toEqual({ code: CODE })
+
+  await expect(dialog).toHaveCount(0)
+  await expect(claude.getByTestId('signed-in')).toHaveText('Signed in just now')
+  await expect(claude.locator('[data-testid="sign-in-line"][data-need]')).toHaveCount(0)
+  expect(calls).toEqual(['POST /accounts/need-max/signin', 'POST /accounts/need-max/signin/complete'])
+  expect(await page.content()).not.toContain(CODE)
+})
+
+test('a failed sign-in shows the backend error verbatim, keeps the dialog and clears the code', async ({ page }) => {
+  await serve(page, signinFixture('sign-in expired: sign in again'))
+  await page.route('**/api/accounts/need-max/signin/complete', (route) =>
+    apiError(route, 400, 'EBADREQUEST', 'token exchange failed: HTTP 400'),
+  )
+  await page.goto('/panel/accounts')
+  await card(page, 'anthropic').locator('[data-testid="sign-in-line"] [data-act="sign-in"]').click()
+  const dialog = page.getByTestId('sign-in-dialog')
+  const field = dialog.getByLabel('Paste the code shown after signing in')
+  await expect(field).toHaveAttribute('type', 'password')
+  await field.fill(CODE)
+  await dialog.getByRole('button', { name: 'Finish', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toHaveText('token exchange failed: HTTP 400')
+  await expect(field).toHaveValue('')
+  await expect(dialog.getByRole('button', { name: 'Finish: paste the code' })).toBeDisabled()
+  await expect(dialog.getByRole('button', { name: 'Start again' })).toBeVisible()
+  expect(await page.content()).not.toContain(CODE)
+})
+
+test('an expired sign-in page says so and starts again', async ({ page }) => {
+  const calls = await serve(page, signinFixture('inference-only token: sign in for usage'))
+  let begins = 0
+  await page.route('**/api/accounts/need-max/signin', (route) => {
+    if (route.request().method() !== 'POST') {
+      return route.fallback()
+    }
+    begins += 1
+    calls.push('POST /accounts/need-max/signin')
+    // The first one has already expired, the second is good for 10 minutes.
+    return route.fulfill({
+      json: {
+        url: `https://claude.ai/oauth/authorize?state=s${begins}`,
+        expires_at: iso(begins === 1 ? -MIN : 10 * MIN),
+      },
+    })
+  })
+  await page.goto('/panel/accounts')
+  await card(page, 'anthropic').locator('[data-testid="sign-in-line"] [data-act="sign-in"]').click()
+  const dialog = page.getByTestId('sign-in-dialog')
+  await expect(dialog.getByTestId('sign-in-expired')).toContainText('The sign-in page expired.')
+  await expect(dialog.getByRole('button', { name: 'Open the sign-in page: expired' })).toBeDisabled()
+  await expect(dialog.getByRole('button', { name: 'Finish: the sign-in page expired' })).toBeDisabled()
+
+  await dialog.getByRole('button', { name: 'Start again' }).click()
+  await expect(dialog.getByRole('link', { name: 'Open the sign-in page' })).toHaveAttribute(
+    'href',
+    'https://claude.ai/oauth/authorize?state=s2',
+  )
+  await expect(dialog.getByTestId('sign-in-expired')).toHaveCount(0)
+  expect(calls).toEqual(['POST /accounts/need-max/signin', 'POST /accounts/need-max/signin'])
+})
+
+test('Manage Accounts… shows the signed-in state, Sign in and Sign out with a confirm', async ({ page }) => {
+  const data = fixture()
+  data.accounts.find((a) => a.name === 'main-max')!.signed_in_at = iso(-2 * HOUR)
+  const calls = await serve(page, data)
+  await page.goto('/panel/accounts')
+  await card(page, 'anthropic').locator('[data-act="manage-accounts"]').click()
+  const dialog = page.getByTestId('manage-accounts-dialog')
+  const main = dialog.locator('[data-account="main-max"]')
+  const stale = dialog.locator('[data-account="stale-max"]')
+  await expect(main.getByTestId('sign-in-state')).toHaveText('Signed in 2h ago')
+  await expect(stale.getByTestId('sign-in-state')).toHaveText('Not signed in')
+  await expect(stale.locator('[data-act="sign-out"]')).toHaveCount(0)
+
+  await main.locator('[data-act="sign-out"]').click()
+  const confirm = page.getByRole('alertdialog')
+  await expect(confirm.getByRole('heading')).toHaveText('Sign out of main-max?')
+  await confirm.getByRole('button', { name: 'Sign out' }).click()
+  await expect(main.getByTestId('sign-in-state')).toHaveText('Not signed in')
+  expect(calls).toEqual(['DELETE /accounts/main-max/signin'])
+
+  // Sign in from the row opens the dialog for that account.
+  await stale.locator('[data-act="sign-in"]').click()
+  await expect(page.getByTestId('sign-in-dialog').getByRole('heading')).toHaveText('Sign in: stale@example.com')
+  expect(calls).toEqual(['DELETE /accounts/main-max/signin', 'POST /accounts/stale-max/signin'])
+})
+
+test('a refused sign-out shows the backend refusal verbatim', async ({ page }) => {
+  const data = fixture()
+  data.accounts.find((a) => a.name === 'main-max')!.signed_in_at = iso(-2 * HOUR)
+  await serve(page, data)
+  await page.route('**/api/accounts/main-max/signin', (route) =>
+    route.request().method() === 'DELETE'
+      ? apiError(route, 409, 'ECONFLICT', 'account main-max is signing in')
+      : route.fallback(),
+  )
+  await page.goto('/panel/accounts')
+  await card(page, 'anthropic').locator('[data-act="manage-accounts"]').click()
+  const main = page.getByTestId('manage-accounts-dialog').locator('[data-account="main-max"]')
+  await main.locator('[data-act="sign-out"]').click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Sign out' }).click()
+  await expect(main.getByRole('alert')).toHaveText('account main-max is signing in')
+  await expect(main.getByTestId('sign-in-state')).toHaveText('Signed in 2h ago')
+})
+
+test('the mock signs plain-max in with code#state, refuses a wrong state, and signs it out', async ({ page }) => {
+  await page.goto('/panel/accounts')
+  await card(page, 'anthropic').locator('[data-act="manage-accounts"]').click()
+  const row = page.getByTestId('manage-accounts-dialog').locator('[data-account="plain-max"]')
+  await expect(row.getByTestId('sign-in-state')).toHaveText('Not signed in')
+  await row.locator('[data-act="sign-in"]').click()
+
+  const dialog = page.getByTestId('sign-in-dialog')
+  const href = await dialog.getByRole('link', { name: 'Open the sign-in page' }).getAttribute('href')
+  const state = new URL(href!).searchParams.get('state')
+  expect(new URL(href!).searchParams.get('scope')).toBe('user:profile user:inference')
+  const field = dialog.getByLabel('Paste the code shown after signing in')
+
+  await field.fill('made-up-code#not-the-state')
+  await dialog.getByRole('button', { name: 'Finish', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toHaveText('state does not match the pending sign-in; start again')
+
+  await field.fill(`made-up-code#${state}`)
+  await dialog.getByRole('button', { name: 'Finish', exact: true }).click()
+  await expect(dialog).toHaveCount(0)
+
+  await card(page, 'anthropic').locator('[data-act="manage-accounts"]').click()
+  await expect(row.getByTestId('sign-in-state')).toHaveText('Signed in just now')
+  await row.locator('[data-act="sign-out"]').click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Sign out' }).click()
+  await expect(row.getByTestId('sign-in-state')).toHaveText('Not signed in')
 })
