@@ -1,0 +1,93 @@
+# agc task create -f tasks/dms-whatsapp.task.yaml
+# Adds direct messages to agc messaging and a WhatsApp bridge that pings
+# Franco when a DM arrives. The agent pushes a branch and records a code
+# proposal; Franco merges (ADR 0007: code by an agent needs a decision).
+name: dms-whatsapp
+title: Add direct messages to agc messaging, with a WhatsApp bridge
+assignee: claude_code
+for: dms-are-human-task-channels
+brief: |
+  Add direct messages to agc messaging (ADR 0005, messaging/ and
+  messaging/httpapi, panel/src/features/messages) and a bridge that
+  forwards a human's DMs to WhatsApp. Read AGENTS.md, ADR 0004, 0005,
+  0006, 0007 and 0008 first, then `agc rules show` for the rules you
+  must keep. Write the whole thing; do not stop at a plan.
+
+  Part 1, DMs in agc:
+  - A DM is a channel named `@<human>/<task>`, for example
+    `@franco/yc-pitch`. Extend the one access rule in
+    messaging/service.go: a task may read and post in any channel named
+    `@<anyone>/<its own task>`; humans may do anything, as now. No other
+    task may read it. No new table.
+  - `agc msg post @franco <text>` from inside a sandbox expands `@franco`
+    to `@franco/<task>`, taking the task name from the vsock identity agc
+    already assigns; `agc msg read @franco` the same. A human running
+    `agc msg` against REST uses the full name.
+  - `agc msg channels` and GET /api/msg/channels list a task's DM
+    channels along with its own channel.
+  - Panel: the Messages page lists every `@<me>/...` channel as the
+    human's inbox above the task channels, each badged with its unread
+    count (unread is per browser: remember the last read cursor per
+    channel in localStorage; do not add a server-side read state). Follow
+    panel/CLAUDE.md and the rtsdesign skill; statuses come from the
+    backend verbatim.
+  - The TASK.md agc writes (ADR 0008) gains one line: post progress in
+    `#<task>`, and anything that needs the human in `@<human>`; the human
+    is the task's `assignee` when that is a person, else `franco`.
+  - Write docs/decisions/0011-direct-messages.md (next free number; check
+    docs/decisions/ first) in the style of the others, and add the
+    decision to decisions/repo.yaml citing the proposal
+    dms-are-human-task-channels in proposals/repo.yaml if it exists.
+
+  Part 2, WhatsApp bridge, outbound only:
+  - A `notify` package with one interface, Notifier, and a WhatsApp Cloud
+    API implementation (graph.facebook.com, POST
+    /<version>/<phone_number_id>/messages, type text). When a message
+    lands in a `@<human>/...` channel, the service calls the notifier
+    for that human with the sender, the task and the text, and never
+    blocks or fails the post if the notifier fails: log and move on.
+  - Config, not code: the human's WhatsApp number and the phone number
+    id live in agc's config (follow how core/core.go reads config);
+    the access token is a secret named WHATSAPP_TOKEN. Add it to the
+    known-hosts table in secrets/secrets.go bound to graph.facebook.com
+    and to the table in ADR 0004. Never put a token or a number in a
+    file in the repo.
+  - You have no WhatsApp credentials and must not try to obtain any.
+    Test the implementation against an httptest server that checks the
+    request shape, and document in the ADR exactly what Franco has to
+    create at Meta (business account, app, phone number id, permanent
+    token) and where each value goes.
+  - Inbound (Franco replying from WhatsApp into the DM channel) needs a
+    public webhook, and the rig is LAN-only with services on 127.0.0.1
+    (rules/rig.yaml). Do not build it. Write it up as the open question
+    in the ADR with the two options you see, and add an action to
+    actions/repo.yaml for it.
+
+  Rules that apply to you: Go style in AGENTS.md (no `;` outside a
+  3-clause for, one statement per line, err naming, ez errors), the REST
+  checklist for any new or changed endpoint including docs/openapi.yaml
+  and `make types`, a migration for any schema change (there should be
+  none), `gofmt -l .` listing only the three known files, and
+  `go build ./... && go vet ./... && go test ./...` plus
+  `make panel-check` passing before you push.
+
+  You are an agent, so your code is a proposal (ADR 0007): add an entry
+  to proposals/repo.yaml with proposes: code, by: claude_code, change:
+  agc/dms-whatsapp, because: the beliefs and decisions it rests on, and
+  do not merge anything. Post in #dms-whatsapp when you start, when
+  Part 1 builds and tests pass, and when you are done.
+
+  Done looks like: branch agc/dms-whatsapp pushed with Part 1, Part 2,
+  the ADR, the decision, the action and the proposal record; every check
+  above green; and a message in #dms-whatsapp saying what changed, what
+  Franco must create at Meta, and the open question on inbound.
+sandbox:
+  image: agc-agent
+  cpus: 3
+  memory: 6144
+  repo: https://github.com/vanclief/agent-composer
+  ref: feat/tasks-microsandbox
+  setup: |
+    cd /home/agent/agent-composer/panel && npm ci && npx playwright install chromium
+  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
+  command: claude Read /home/agent/TASK.md and do everything it says, start to finish, without waiting for me.
