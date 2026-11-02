@@ -109,6 +109,8 @@ func (api *API) AllocateFor(ctx context.Context, owner *taskmodels.Task, request
 		return nil, ez.Wrap(err)
 	}
 
+	api.publish(view)
+
 	bootCtx, cancel := context.WithTimeout(api.rootCtx, bootTimeout)
 	done := make(chan struct{})
 
@@ -138,7 +140,10 @@ func (api *API) AllocateFor(ctx context.Context, owner *taskmodels.Task, request
 }
 
 // insert names the sandbox and inserts it. The first sandbox of a task is
-// named after it, later ones <task>-2, <task>-3: the first free name.
+// named after it, later ones <task>-2, <task>-3: the first free name. A
+// name is taken while a sandbox has it or while a deleted sandbox's volume
+// (task.VolumeName) is still on the host, so a new sandbox never inherits
+// another's transcripts.
 func (api *API) insert(ctx context.Context, owner *taskmodels.Task, encodedSpec []byte, command string, instructions string) (*taskmodels.Sandbox, error) {
 	api.naming.Lock()
 	defer api.naming.Unlock()
@@ -156,11 +161,18 @@ func (api *API) insert(ctx context.Context, owner *taskmodels.Task, encodedSpec 
 		}
 
 		if !taken {
+			taken, err = api.volumeExists(task.VolumeName(candidate))
+			if err != nil {
+				return nil, ez.Wrap(err)
+			}
+		}
+
+		if !taken {
 			name = candidate
 		}
 	}
 
-	record := &taskmodels.Sandbox{TaskID: owner.ID, Name: name, Spec: encodedSpec, Command: command, Instructions: instructions}
+	record := &taskmodels.Sandbox{TaskID: owner.ID, Name: name, Spec: encodedSpec, Command: command, Instructions: instructions, Volume: task.VolumeName(name)}
 
 	err := record.Insert(ctx, api.db)
 	if err != nil {
@@ -211,6 +223,7 @@ func (api *API) cancelBoot(name string) {
 func (api *API) boot(ctx context.Context, record *taskmodels.Sandbox, owner *taskmodels.Task, spec task.Spec, bindings []secrets.Binding) bool {
 	err := api.bootSandbox(ctx, record, owner, spec, bindings)
 	if err == nil {
+		api.publishCurrent(context.WithoutCancel(ctx), record, owner)
 		return true
 	}
 
@@ -221,6 +234,8 @@ func (api *API) boot(ctx context.Context, record *taskmodels.Sandbox, owner *tas
 	if err != nil {
 		log.Error().Err(err).Str("sandbox", record.Name).Str("boot_error", msg).Msg("cannot record sandbox boot error")
 	}
+
+	api.publishCurrent(context.WithoutCancel(ctx), record, owner)
 
 	return false
 }
@@ -342,12 +357,15 @@ func Instructions(owner *taskmodels.Task, spec task.Spec) string {
 	b.WriteString("- Commit on a branch named `agc/" + name + "` and push it.\n")
 	b.WriteString("- Post what you changed and what you verified in `#" + name + "` with\n")
 	b.WriteString("  `agc msg post '#" + name + "' <text>`; your manager reads that channel and\n")
-	b.WriteString("  answers there. Ask your manager there too, then keep working on what\n")
-	b.WriteString("  does not depend on the answer.\n")
+	b.WriteString("  answers there. Ask your manager there too, with\n")
+	b.WriteString("  `agc msg ask '#" + name + "' <question>` (or start your answer with\n")
+	b.WriteString("  `QUESTION:`) so the question shows up as waiting on them, then keep\n")
+	b.WriteString("  working on what does not depend on the answer.\n")
 
 	if owner.Owner != "" {
-		b.WriteString("- If something needs a decision only " + owner.Owner + " can make, post it in\n")
-		b.WriteString("  `#" + owner.Owner + "` (their inbox) and say so in `#" + name + "`; do not wait idle.\n")
+		b.WriteString("- If something needs a decision only " + owner.Owner + " can make, ask it in\n")
+		b.WriteString("  `#" + owner.Owner + "` (their inbox) with `agc msg ask '#" + owner.Owner + "' <question>` so it\n")
+		b.WriteString("  shows up as waiting on them, and say so in `#" + name + "`; do not wait idle.\n")
 	}
 
 	b.WriteString("- Do not modify files outside the repository, and never print secret values.\n")
@@ -398,11 +416,22 @@ func AgentCommand(owner *taskmodels.Task) string {
 	return strings.Join(fields, " ")
 }
 
-// prepare clones the repo, writes the agent config and TASK.md (the
-// instructions), and runs the setup script, as the sandbox user. Setup
-// runs in the repo, or in the home directory when there is no repo, and
-// can still change the agent config.
+// prepare gives the sandbox user the home disk (a fresh ext4 disk belongs
+// to root), lays out the home (homeScript), clones the repo, writes the
+// agent config and TASK.md (the instructions), and runs the setup script,
+// as the sandbox user. Setup runs in the repo, or in the home directory
+// when there is no repo, and can still change the agent config.
 func prepare(ctx context.Context, sb Sandbox, spec task.Spec, instructions string) error {
+	err := run(ctx, sb, executor.Command{Name: "chown", Args: []string{guestUser + ":" + guestUser, task.HomeDir}, User: "root"}, "chown "+task.HomeDir)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	err = run(ctx, sb, executor.Command{Name: "bash", Args: []string{"-c", homeScript}}, "home setup")
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
 	dir := ""
 
 	if spec.Repo != "" {
@@ -456,6 +485,32 @@ func prepare(ctx context.Context, sb Sandbox, spec task.Spec, instructions strin
 
 	return nil
 }
+
+// guestUser is the sandbox user (sandbox.Spec's default).
+const guestUser = "agent"
+
+// homeScript lays out a fresh home disk, which hides the image's
+// /home/agent: the shell dotfiles from /etc/skel, and ~/.claude and
+// ~/.codex as links into the harness volume (task.HarnessDir), so the
+// harness transcripts outlive the sandbox. A real directory already in
+// their place is moved into the volume first. It runs again harmlessly.
+const homeScript = `set -eu
+cd "$HOME"
+if [ ! -e .profile ]
+then
+  cp -r /etc/skel/. .
+fi
+for d in .claude .codex
+do
+  mkdir -p "` + task.HarnessDir + `/$d"
+  if [ -d "$d" ] && [ ! -L "$d" ]
+  then
+    cp -r "$d/." "` + task.HarnessDir + `/$d/"
+    rm -rf "$d"
+  fi
+  ln -sfn "` + task.HarnessDir + `/$d" "$d"
+done
+`
 
 // agentConfigTemplate merges first-run answers into the sandbox user's
 // Claude Code and Codex config, keeping whatever is already there (a

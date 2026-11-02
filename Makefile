@@ -5,19 +5,21 @@
 .PHONY: panel types panel-check build install test rig-deploy
 
 # Panel production build into panel/dist.
-panel: | panel/node_modules
+panel: panel/node_modules
 	cd panel && npm run build
 
-# Installs panel dependencies from package-lock.json when they are missing.
-panel/node_modules:
+# Installs panel dependencies from package-lock.json when they are missing or
+# older than the lockfile (a merged branch that added a dependency).
+panel/node_modules: panel/package-lock.json
 	cd panel && npm ci
+	touch panel/node_modules
 
 # Regenerates panel/src/api/schema.d.ts from docs/openapi.yaml.
-types: | panel/node_modules
+types: panel/node_modules
 	cd panel && npm run types
 
 # Types drift, tsc, eslint and the Playwright smoke tests.
-panel-check: | panel/node_modules
+panel-check: panel/node_modules
 	cd panel && npx playwright install chromium
 	cd panel && npm run check
 

@@ -7,6 +7,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronDown, ChevronRight, CircleCheck, Copy } from 'lucide-react'
 
 import type { TaskView } from '@/api/tasks'
+import { Avatar } from '@/components/avatar'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
@@ -66,10 +67,21 @@ export function TaskRail({ task, actions, error, onDeleted, className }: TaskRai
 }
 
 // One fact: a small dim icon, then the value as plain muted text.
-function Fact({ icon: Icon, children, title }: { icon: typeof Check; children: ReactNode; title?: string }) {
+// lead replaces the icon (the manager's and owner's avatars).
+function Fact({
+  icon: Icon,
+  lead,
+  children,
+  title,
+}: {
+  icon?: typeof Check
+  lead?: ReactNode
+  children: ReactNode
+  title?: string
+}) {
   return (
     <li title={title} className="flex min-w-0 items-center gap-2 text-muted-foreground">
-      <Icon aria-hidden className="size-3.5 shrink-0" />
+      {lead ?? (Icon && <Icon aria-hidden className="size-3.5 shrink-0" />)}
       <span className="min-w-0 truncate">{children}</span>
     </li>
   )
@@ -90,7 +102,12 @@ function Who({ task }: { task: TaskView }) {
         </span>
       </Fact>
       {task.manager && (
-        <Fact icon={conceptIcons.human} title={`manager ${task.manager}`}>
+        <Fact
+          // The manager may be an agent; shown as human only when it is the
+          // owner, who always is one (as TaskChips' ManagerChip).
+          lead={<Avatar name={task.manager} size="xs" human={task.manager === task.owner} className="-mx-px" />}
+          title={`manager ${task.manager}`}
+        >
           <span data-testid="manager" className="text-foreground/80">
             @{task.manager}
           </span>{' '}
@@ -98,7 +115,7 @@ function Who({ task }: { task: TaskView }) {
         </Fact>
       )}
       {task.owner && (
-        <Fact icon={conceptIcons.human} title={`owner ${task.owner}`}>
+        <Fact lead={<Avatar name={task.owner} size="xs" human className="-mx-px" />} title={`owner ${task.owner}`}>
           <span data-testid="owner" className="text-foreground/80">
             @{task.owner}
           </span>{' '}

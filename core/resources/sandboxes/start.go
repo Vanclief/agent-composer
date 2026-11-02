@@ -63,5 +63,12 @@ func (api *API) Start(ctx context.Context, requester interface{}, request *Start
 		return nil, ez.Wrap(err)
 	}
 
-	return api.view(ctx, record, owner)
+	view, err := api.view(ctx, record, owner)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	api.publish(view)
+
+	return view, nil
 }

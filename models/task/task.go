@@ -44,6 +44,10 @@ type Task struct {
 	Owner string `bun:"owner,notnull,default:''" json:"owner"`
 	// For is the id of the knowledge action or decision the Task serves.
 	For string `bun:"for_id,notnull,default:''" json:"for"`
+	// Notify asks the panel for a toast and a chime when the task starts
+	// and when it is done. No default tag: bun would insert DEFAULT for
+	// false. Existing rows got true from the migration.
+	Notify bool `bun:"notify,notnull" json:"notify"`
 	// Accept is what accepted means: ordered criteria, text agc does not
 	// evaluate (ADR 0010 item 1). Stored as a JSON array.
 	Accept []string `bun:"accept,type:jsonb,notnull,default:'[]'" json:"accept"`
@@ -165,11 +169,13 @@ func now() time.Time {
 	return time.Now().UTC().Truncate(time.Microsecond)
 }
 
-// MarkAccepted sets DoneAt to now and AcceptedBy to by (ADR 0010 item 4). A Task
-// already done keeps its first DoneAt and AcceptedBy.
-func (t *Task) MarkAccepted(ctx context.Context, db bun.IDB, by string) error {
+// MarkAccepted sets DoneAt to now and AcceptedBy to by (ADR 0010 item 4),
+// and reports whether this call did. A Task already done keeps its first
+// DoneAt and AcceptedBy: when another accept stored them first, t is
+// reloaded with them and the result is false.
+func (t *Task) MarkAccepted(ctx context.Context, db bun.IDB, by string) (bool, error) {
 	if t.DoneAt != nil {
-		return nil
+		return false, nil
 	}
 
 	at := now()
@@ -177,12 +183,28 @@ func (t *Task) MarkAccepted(ctx context.Context, db bun.IDB, by string) error {
 	t.AcceptedBy = by
 	t.UpdatedAt = at
 
-	_, err := db.NewUpdate().Model(t).Column("done_at", "accepted_by", "updated_at").WherePK().Exec(ctx)
+	result, err := db.NewUpdate().Model(t).Column("done_at", "accepted_by", "updated_at").WherePK().Where("done_at IS NULL").Exec(ctx)
 	if err != nil {
-		return ez.Wrap(err)
+		return false, ez.Wrap(err)
 	}
 
-	return nil
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return false, ez.Wrap(err)
+	}
+
+	if changed > 0 {
+		return true, nil
+	}
+
+	stored, err := GetTaskByID(ctx, db, t.ID)
+	if err != nil {
+		return false, ez.Wrap(err)
+	}
+
+	*t = *stored
+
+	return false, nil
 }
 
 // MarkDelivered sets DeliveredAt to now and Summary to summary; the last

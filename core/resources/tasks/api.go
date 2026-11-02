@@ -11,6 +11,7 @@ import (
 	"github.com/vanclief/ez"
 
 	"github.com/vanclief/agent-composer/core/controller"
+	"github.com/vanclief/agent-composer/core/events"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/messaging"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
@@ -34,6 +35,28 @@ type API struct {
 	defaults    controller.DefaultsSettings
 	secretsPath string
 	specs       task.Store
+	// events gets task.created and task.done, nil drops them.
+	events *events.Bus
+}
+
+// CreatedEvent is the data of task.created.
+type CreatedEvent struct {
+	Task *TaskView `json:"task"`
+}
+
+// DoneEvent is the data of task.done, published when the task is
+// accepted. Summary is its delivered summary, else the agent's closing
+// message in #<task> (see doneSummary), or "".
+type DoneEvent struct {
+	Task    *TaskView `json:"task"`
+	Summary string    `json:"summary"`
+}
+
+// SetEvents publishes task.created and task.done on bus, and the
+// sandboxes' sandbox.status, from now on. Call it before the API is used.
+func (api *API) SetEvents(bus *events.Bus) {
+	api.events = bus
+	api.Sandboxes.SetEvents(bus)
 }
 
 // NewAPI returns the tasks API. msg carries the task channels, the
@@ -67,6 +90,7 @@ func New(db bun.IDB, sandboxesAPI *sandboxes.API, msg *messaging.Service, defaul
 	}
 
 	msg.OnPost(api.onCommand)
+	msg.SetChannelsFor(api.channelsFor)
 	sandboxesAPI.OnDeliver(api.deliverFromSandbox)
 
 	return api
@@ -91,6 +115,7 @@ type TaskView struct {
 	Manager     string                  `json:"manager"`
 	Owner       string                  `json:"owner"`
 	For         string                  `json:"for"`
+	Notify      bool                    `json:"notify"`
 	Status      string                  `json:"status"`
 	DoneAt      *time.Time              `json:"done_at"`
 	AcceptedBy  string                  `json:"accepted_by"`
@@ -165,6 +190,7 @@ func newView(record *taskmodels.Task, views []sandboxes.SandboxView) *TaskView {
 		Manager:     record.Manager,
 		Owner:       record.Owner,
 		For:         record.For,
+		Notify:      record.Notify,
 		Status:      status,
 		Accept:      accept,
 		DeliveredAt: record.DeliveredAt,

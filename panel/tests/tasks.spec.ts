@@ -23,7 +23,7 @@ function chip(form: Locator, group: string, text: string) {
   return form.getByRole('radiogroup', { name: group }).getByRole('radio', { name: text, exact: true })
 }
 
-test('the list puts tasks in review first, then open, running and done, newest first', async ({ page }) => {
+test('the list puts tasks in review first, then running, open and done, newest first', async ({ page }) => {
   await page.goto('/panel/tasks')
   await expect(page.getByTestId('page-title')).toHaveText('Tasks')
   await expect(page.getByRole('button', { name: 'New task' })).toBeVisible()
@@ -174,7 +174,7 @@ test('the rail shows the brief and the instructions the agent received, verbatim
   const instructions = page.getByTestId('instructions')
   await expect(instructions).toHaveText(task.sandboxes[0].instructions)
   await expect(instructions).toContainText('You are claude_code (claude-opus-5-5) working for the task `review-42`')
-  await expect(page.getByRole('button', { name: 'Copy' })).toBeVisible()
+  await expect(page.getByTestId('task-header').getByRole('button', { name: 'Copy', exact: true })).toBeVisible()
 
   await page.goto('/panel/tasks/flaky-ci')
   await expect(page.getByTestId('brief')).toHaveText('Find why CI fails one run in five and fix it.')
@@ -356,13 +356,18 @@ test('messages open with agc addressing the manager and owner, then the instruct
   await page.addInitScript(() => localStorage.setItem('agc.panel.human', `t${Date.now().toString(36)}`))
   await page.goto('/panel/tasks/review-42/messages')
   const messages = page.getByTestId('message-list').getByTestId('message')
+  // Bodies render as markdown: `code` loses its backticks and #franco is a
+  // channel chip (the # is its icon).
   await expect(messages.first()).toContainText(
-    '@agent-composer-da (manager), @franco (owner): task `review-42` is open: Review 42.\n' +
-      'Agent: claude_code (claude-opus-5-5) on sandbox `review-42`, starting.\n' +
+    '@agent-composer-da (manager), @franco (owner): task review-42 is open: Review 42.\n' +
+      'Agent: claude_code (claude-opus-5-5) on sandbox review-42, starting.\n' +
       "The agent's instructions are the next message. Reply here to talk to it; " +
-      'it escalates to #franco when only the owner can decide. Post /accept to accept the task, /reject <why> to send it back.',
+      'it escalates to franco when only the owner can decide. Post /accept to accept the task, /reject <why> to send it back.',
   )
-  await expect(messages.nth(1)).toContainText(task.sandboxes[0].instructions)
+  await expect(messages.first().getByTestId('channel-chip')).toHaveAttribute('href', '/panel/messages/franco')
+  // The instructions collapse to one line until expanded.
+  await messages.nth(1).getByRole('button', { name: 'Instructions' }).click()
+  await expect(messages.nth(1)).toContainText(`You are ${task.assignee} (${task.model}) working for the task`)
   await expect(page.getByTestId('message-list').getByTestId('author').first()).toHaveText('@agc')
 })
 

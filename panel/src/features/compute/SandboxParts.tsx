@@ -109,6 +109,8 @@ type SandboxActionsProps = {
   sandbox: SandboxView
   // Runs after the sandbox is deleted.
   onDeleted?: () => void
+  // Small ghost buttons for a list row; Delete turns red on hover only.
+  quiet?: boolean
   className?: string
   // More of what Delete does, under what is lost.
   deleteNote?: ReactNode
@@ -117,7 +119,7 @@ type SandboxActionsProps = {
 // Stop when running, Start when stopped or unknown, and Delete always,
 // behind a dialog. Stop and Delete ask first, saying what work the clone
 // would lose. A failed sandbox only gets Delete.
-export function SandboxActions({ sandbox, onDeleted, className, deleteNote }: SandboxActionsProps) {
+export function SandboxActions({ sandbox, onDeleted, quiet = false, className, deleteNote }: SandboxActionsProps) {
   const stop = useStopSandbox()
   const start = useStartSandbox()
   const remove = useDeleteSandbox()
@@ -125,6 +127,9 @@ export function SandboxActions({ sandbox, onDeleted, className, deleteNote }: Sa
   const canStop = sandbox.status === 'running'
   const canStart = sandbox.status === 'stopped' || sandbox.status === 'unknown'
   const error = stop.error ?? start.error ?? remove.error
+  const variant = quiet ? 'ghost' : 'outline'
+  const size = quiet ? 'xs' : 'sm'
+  const quietText = quiet && 'text-muted-foreground'
 
   return (
     <div className={cn('flex flex-col items-end gap-2', className)}>
@@ -136,7 +141,7 @@ export function SandboxActions({ sandbox, onDeleted, className, deleteNote }: Sa
             icon={Square}
             onConfirm={() => stop.mutate(sandbox.name)}
             trigger={
-              <Button variant="outline" size="sm" disabled={busy}>
+              <Button variant={variant} size={size} disabled={busy} className={cn(quietText)}>
                 {stop.isPending ? <Loader2 className="animate-spin" /> : <Square />}
                 Stop
               </Button>
@@ -144,7 +149,13 @@ export function SandboxActions({ sandbox, onDeleted, className, deleteNote }: Sa
           />
         )}
         {canStart && (
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => start.mutate(sandbox.name)}>
+          <Button
+            variant={variant}
+            size={size}
+            disabled={busy}
+            className={cn(quietText)}
+            onClick={() => start.mutate(sandbox.name)}
+          >
             {start.isPending ? <Loader2 className="animate-spin" /> : <Play />}
             Start
           </Button>
@@ -157,11 +168,15 @@ export function SandboxActions({ sandbox, onDeleted, className, deleteNote }: Sa
           onConfirm={() => remove.mutate(sandbox.name, { onSuccess: () => onDeleted?.() })}
           trigger={
             <Button
-              variant="outline"
-              size="sm"
+              variant={variant}
+              size={size}
               disabled={busy}
               title="Delete the sandbox"
-              className="border-red-500/40 text-red-600 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400"
+              className={
+                quiet
+                  ? 'text-muted-foreground hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400'
+                  : 'border-red-500/40 text-red-600 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400'
+              }
             >
               {remove.isPending ? <Loader2 className="animate-spin" /> : <Trash2 />}
               Delete

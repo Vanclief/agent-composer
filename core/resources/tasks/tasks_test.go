@@ -162,6 +162,7 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	rt := &fakeRuntime{statuses: map[string]string{}}
 	msg := messaging.NewService(db)
+	t.Setenv(sandboxes.EnvVolumeRoot, t.TempDir())
 	sandboxesAPI := sandboxes.New(context.Background(), db, msg, rt, secretsPath, socketDir)
 	specs := task.Store{Dir: filepath.Join(t.TempDir(), "specs")}
 	api := New(db, sandboxesAPI, msg, controller.DefaultsSettings{Harness: "claude_code", Model: "claude-opus-5-5", Owner: "franco"}, secretsPath, specs)

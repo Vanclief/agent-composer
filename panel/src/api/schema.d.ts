@@ -283,7 +283,7 @@ export interface paths {
         put?: never;
         /**
          * Accept a task
-         * @description Sets `done_at` and `accepted_by`, posts "Accepted by <name>." in #<task> as agc, then stops every running sandbox of the task as POST /sandboxes/{id}/stop does, and every starting one as soon as its boot finishes, keeping its disk; a sandbox that cannot be stopped is logged and does not fail the accept (ADR 0010 item 4). Nothing is deleted, and a stopped sandbox can be started again. A task already done is returned as it is. The body is optional. `/accept` posted in #<task> by the manager or the owner, and `/accept <task>` posted by the owner in #<owner>, do the same.
+         * @description Sets `done_at` and `accepted_by`, posts "Accepted by <name>." in #<task> as agc, then stops every running sandbox of the task as POST /sandboxes/{id}/stop does, and every starting one as soon as its boot finishes, keeping its disk; a sandbox that cannot be stopped is logged and does not fail the accept (ADR 0010 item 4). Nothing is deleted, and a stopped sandbox can be started again. A task already done is returned as it is. The body is optional. `/accept` posted in #<task> by the manager or the owner, and `/accept <task>` posted by the owner in #<owner>, do the same. The first accept publishes `task.done` on GET /events, and each sandbox it stops `sandbox.status`.
          */
         post: operations["acceptTask"];
         delete?: never;
@@ -368,7 +368,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a sandbox
-         * @description Cancels a boot in progress, stops the VM if needed and removes it with its disk and uncommitted work. Volumes and the task's channel history are kept.
+         * @description Cancels a boot in progress, stops the VM if needed and removes it with its disk (including /home/agent) and uncommitted work. Volumes, among them the sandbox's own volume with the harness transcripts, and the task's channel history are kept.
          */
         delete: operations["deleteSandbox"];
         options?: never;
@@ -452,6 +452,46 @@ export interface paths {
          * @description Upgrades to a WebSocket. Binary frames carry terminal bytes both ways; a text frame {"type":"resize","rows":N,"cols":N} resizes. Recent output is replayed first. The socket closes normally with reason "job completed" when the program exits; closing it detaches and the job keeps running.
          */
         get: operations["attachTerminal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/{id}/transcripts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a sandbox's harness transcripts
+         * @description The Claude Code and Codex session files (.claude/projects/**\/*.jsonl, .codex/sessions/**\/*.jsonl) on the sandbox's volume, newest first. Read on the host side of the volume, never through the VM, so it works for stopped sandboxes and, by name, for deleted ones whose volume is left. Links are not listed.
+         */
+        get: operations["listTranscripts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/{id}/transcripts/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream one harness transcript
+         * @description Streams one transcript as JSON Lines from the host side of the sandbox's volume (Range requests supported). path is a listed path, relative to the volume and under .claude/projects/ or .codex/sessions/; its slashes are path separators. A path with "..", "." or empty segments is refused (400), and so is anything but a regular file.
+         */
+        get: operations["getTranscript"];
         put?: never;
         post?: never;
         delete?: never;
@@ -594,6 +634,66 @@ export interface paths {
          * @description Every contradiction where at least one side is contested, in the order declared, with the live evidence and opinions each side rests on. No side is picked.
          */
         get: operations["knowledgeConflicts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream live events
+         * @description Server-sent events (`text/event-stream`, `Cache-Control: no-cache`) until the client goes away. Each event is `id: <n>` (the event number), `event: <type>` and `data: <json>`; the server sends the comment `: ping` every 20 seconds as a heartbeat. Missed events are never replayed: after a reconnect, refetch. A client that falls too far behind is disconnected. Types and their data: `task.created` (TaskCreatedEvent) when a task is created, after its sandbox, if any, is allocated; `task.done` (TaskDoneEvent) when a task is accepted, the first time only; `sandbox.status` (SandboxStatusEvent) on every status change: allocated (starting), booted, failed, stopped (by POST /sandboxes/{id}/stop or by the task's accept, also right after a boot that finished once the task was accepted), started, and deleted (status `deleted`); `message.posted` (MessagePostedEvent) for every message stored in any channel, agc's included.
+         */
+        get: operations["streamEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/msg/post": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post a message or a question
+         * @description Appends a message to a channel as the given participant, which must belong to the caller; agc fills in `from`, `task` and `human`. `kind` is `message` (the default) or `question`; anything else is 400. A reply (`reply_to`) to a question from someone other than its asker answers it. Inside a sandbox `agc msg post` and `agc msg ask` reach the same call over the sandbox's socket, limited to the task's channels.
+         */
+        post: operations["postMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/msg/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List questions and whether they are answered
+         * @description Messages of kind `question`, newest first, at most 500. Each carries its answer, the first reply to it from someone other than the asker (by participant and by name), computed on every request and never stored; `answer_id`, `answered_by` and `answered_at` are null while it is open. A sandbox sees only its task's channels.
+         */
+        get: operations["listQuestions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -820,6 +920,8 @@ export interface components {
             cpus?: number;
             /** @description MiB. */
             memory?: number;
+            /** @description Size of /home/agent, a private ext4 disk removed with the sandbox: a whole number followed by M, G or T, such as 10G. Default 20G, minimum 2G. */
+            disk?: string;
             /** @description host/owner/name or an https URL, cloned to /home/agent/<name>. */
             repo?: string;
             /** @description Branch, tag or commit checked out after the clone. */
@@ -857,6 +959,8 @@ export interface components {
             owner: string;
             /** @description Id of the knowledge action or decision the task serves; empty for none. */
             for: string;
+            /** @description The panel shows a toast and plays a chime when the task starts (task.created) and when it is done (task.done). */
+            notify: boolean;
             /**
              * @description Computed: done when done_at is set, otherwise review when delivered_at is set, otherwise running when a sandbox is running, otherwise open (ADR 0010 item 3).
              * @enum {string}
@@ -901,6 +1005,11 @@ export interface components {
             /** @description The human the task answers to, a messaging name. Defaults to the configured owner; its sandboxes may post in #<owner>. */
             owner?: string;
             for?: string;
+            /**
+             * @description Notify in the panel when the task starts and when it is done (task.yaml `notify:`).
+             * @default true
+             */
+            notify: boolean;
             sandbox?: components["schemas"]["SandboxRequest"];
         };
         DeliverTaskRequest: {
@@ -935,7 +1044,9 @@ export interface components {
             command: string;
             /** @description The TASK.md written into the sandbox at /home/agent/TASK.md, byte for byte (ADR 0009). */
             instructions: string;
-            /** @description starting until booted, failed when the boot failed (status_error says why), otherwise the runtime's word verbatim (running, stopped), or unknown when the runtime cannot be asked (status_error says why). */
+            /** @description The named volume agc-<name> holding the harness homes (~/.claude, ~/.codex) and their transcripts, mounted at /home/agent/.harness and kept after the sandbox is deleted. Empty for sandboxes booted before volumes. */
+            volume: string;
+            /** @description starting until booted, failed when the boot failed (status_error says why), otherwise the runtime's word verbatim (running, stopped), or unknown when the runtime cannot be asked (status_error says why). In a sandbox.status event, deleted once it is gone. */
             status: string;
             /** @description Why the status is failed or unknown. */
             status_error?: string;
@@ -947,6 +1058,59 @@ export interface components {
             created_at: string;
             /** @description What stopping or deleting the sandbox would lose (ADR 0008 item 6), read live from its clone. Set by GET /sandboxes/{id} and by the list with work=1 when the sandbox is running and has a repo; null otherwise, and null when the check failed. */
             work: components["schemas"]["SandboxWork"] | null;
+        };
+        /** @description A message in a channel, as /api/msg returns it (ADR 0005). */
+        ChannelMessage: {
+            /**
+             * Format: int64
+             * @description Also the read cursor; ids are totally ordered per channel.
+             */
+            id: number;
+            channel: string;
+            from: string;
+            participant_id: string;
+            /** @description The poster's task; empty for a human and for agc. */
+            task: string;
+            human: boolean;
+            /** Format: int64 */
+            reply_to?: number;
+            body: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        /** @description Data of `task.created`. */
+        TaskCreatedEvent: {
+            task: components["schemas"]["Task"];
+        };
+        /** @description Data of `task.done`. */
+        TaskDoneEvent: {
+            task: components["schemas"]["Task"];
+            /** @description The task's `summary` when it is delivered; otherwise the body of the last message in #<task> from neither a human nor agc (`/accept` and `/reject` commands skipped). Cut to 500 characters; empty when there is none. */
+            summary: string;
+        };
+        /** @description Data of `sandbox.status`; status is `deleted` once the sandbox is gone. */
+        SandboxStatusEvent: {
+            sandbox: components["schemas"]["Sandbox"];
+        };
+        /** @description Data of `message.posted`. */
+        MessagePostedEvent: {
+            message: components["schemas"]["ChannelMessage"];
+        };
+        TranscriptList: {
+            /** @description The volume read. */
+            volume: string;
+            transcripts: components["schemas"]["Transcript"][];
+        };
+        Transcript: {
+            /** @description Relative to the volume, which the guest sees at /home/agent/.harness. */
+            path: string;
+            /**
+             * Format: int64
+             * @description Bytes.
+             */
+            size: number;
+            /** Format: date-time */
+            modified_at: string;
         };
         SandboxWork: {
             /** @description The clone has uncommitted changes (git status --porcelain printed a line). */
@@ -1298,6 +1462,61 @@ export interface components {
         JSONValue: ({
             [key: string]: unknown;
         } | unknown[] | string | number | boolean) | null;
+        MsgErrorResponse: {
+            error: string;
+        };
+        /**
+         * @description A question waits on the channel's readers until someone else replies to it.
+         * @enum {string}
+         */
+        MsgKind: "message" | "question";
+        MsgPostRequest: {
+            /** @description The id join returned; it must belong to the caller. */
+            participant_id: string;
+            /** @description `#` followed by 1-64 lowercase letters, digits, _ or -. */
+            channel: string;
+            /** @description Plain text, at most 64 KiB. */
+            body: string;
+            /**
+             * Format: int64
+             * @description Id of a message in the same channel this replies to.
+             */
+            reply_to?: number;
+            kind?: components["schemas"]["MsgKind"];
+        };
+        MsgMessage: {
+            /**
+             * Format: int64
+             * @description Also the read cursor; ids are totally ordered per channel.
+             */
+            id: number;
+            channel: string;
+            /** @description The sender's name, filled in by agc. */
+            from: string;
+            participant_id: string;
+            /** @description The sender's task, empty for humans and for agc. */
+            task: string;
+            human: boolean;
+            /** Format: int64 */
+            reply_to?: number;
+            body: string;
+            kind: components["schemas"]["MsgKind"];
+            /** Format: date-time */
+            created_at: string;
+        };
+        MsgQuestion: components["schemas"]["MsgMessage"] & {
+            /**
+             * Format: int64
+             * @description The first reply from someone other than the asker.
+             */
+            answer_id: number | null;
+            answered_by: string | null;
+            /** Format: date-time */
+            answered_at: string | null;
+        };
+        MsgQuestionsResponse: {
+            questions: components["schemas"]["MsgQuestion"][];
+        };
     };
     responses: {
         /** @description Error response with machine-readable code and request identifier. */
@@ -1307,6 +1526,15 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Messaging error. */
+        MsgError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MsgErrorResponse"];
             };
         };
     };
@@ -2311,6 +2539,60 @@ export interface operations {
             500: components["responses"]["Error"];
         };
     };
+    listTranscripts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox UUID or sandbox name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["SandboxIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Transcripts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscriptList"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    getTranscript: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Sandbox UUID or sandbox name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["SandboxIdParam"];
+                /** @description Transcript path relative to the volume, as listed. */
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The transcript. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": string;
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
     listSavedSpecs: {
         parameters: {
             query?: never;
@@ -2541,6 +2823,85 @@ export interface operations {
             };
             400: components["responses"]["Error"];
             500: components["responses"]["Error"];
+        };
+    };
+    streamEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The stream. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            500: components["responses"]["Error"];
+        };
+    };
+    postMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MsgPostRequest"];
+            };
+        };
+        responses: {
+            /** @description The stored message. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MsgMessage"];
+                };
+            };
+            400: components["responses"]["MsgError"];
+            401: components["responses"]["MsgError"];
+            404: components["responses"]["MsgError"];
+            500: components["responses"]["MsgError"];
+        };
+    };
+    listQuestions: {
+        parameters: {
+            query?: {
+                /** @description Only questions in this channel, e.g. `#fix-login`. */
+                channel?: string;
+                /** @description `1` keeps only unanswered questions; `0` or absent keeps all. */
+                open?: "0" | "1" | "true" | "false";
+                /** @description Only questions in the channels this person reads: their inbox `#<name>` and `#<task>` for every task they manage or own. */
+                for?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The questions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MsgQuestionsResponse"];
+                };
+            };
+            400: components["responses"]["MsgError"];
+            401: components["responses"]["MsgError"];
+            500: components["responses"]["MsgError"];
         };
     };
 }

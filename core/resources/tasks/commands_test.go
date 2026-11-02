@@ -59,7 +59,7 @@ func TestChannelCommands(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, err = env.msg.Post(ctx, caller, p.ID, channel, body, nil)
+		_, err = env.msg.Post(ctx, caller, p.ID, channel, body, nil, "")
 		if err != nil {
 			t.Fatal(err)
 		}
