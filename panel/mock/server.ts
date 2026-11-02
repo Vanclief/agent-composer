@@ -1261,7 +1261,9 @@ async function msgAPI(state: State, method: string, verb: string, url: URL, req:
     if (kind !== 'message' && kind !== 'question') {
       throw msgError(400, `kind "${kind}" is invalid: use message or question`)
     }
-    return state.post(channel, p, text, replyTo, kind)
+    const posted = state.post(channel, p, text, replyTo, kind)
+    runCommand(state, posted)
+    return posted
   }
 
   throw msgError(404, 'no such endpoint')
@@ -2746,4 +2748,53 @@ async function accountSigninAPI(
     return account
   }
   throw apiError(404, 'no such endpoint')
+}
+
+// The channel commands of ADR 0010 (core/resources/tasks/commands.go):
+// "/accept" and "/reject <why>" in #<task> from its manager or owner, and
+// "/accept <task>" from the owner in their inbox #<owner>. Never from a
+// task's sandbox or agc; anything else is an ordinary message.
+function runCommand(state: State, m: Message) {
+  if (m.task || m.from === 'agc') {
+    return
+  }
+  const trimmed = m.body.trim()
+  const space = trimmed.search(/\s/)
+  const verb = space < 0 ? trimmed : trimmed.slice(0, space)
+  const arg = space < 0 ? '' : trimmed.slice(space).trim()
+  if (verb !== '/accept' && !(verb === '/reject' && arg)) {
+    return
+  }
+  const channel = m.channel.replace(/^#/, '')
+  let task: Task | undefined
+  if (verb === '/accept' && arg) {
+    task = channel === m.from ? state.tasks.get(arg.replace(/^#/, '')) : undefined
+    if (!task || task.owner !== m.from) {
+      return
+    }
+  } else {
+    task = state.tasks.get(channel)
+    if (!task || (m.from !== task.manager && m.from !== task.owner)) {
+      return
+    }
+  }
+  if (task.done_at) {
+    return
+  }
+  if (verb === '/reject') {
+    task.delivered_at = null
+    task.updated_at = iso()
+    state.post('#' + task.name, state.agc(), `Rejected by ${m.from}: ${arg}`)
+    return
+  }
+  task.done_at = iso()
+  task.accepted_by = m.from
+  task.updated_at = task.done_at
+  state.post('#' + task.name, state.agc(), `Accepted by ${m.from}.`)
+  for (const view of state.sandboxesOf(task)) {
+    if (view.status === 'running' || view.status === 'starting') {
+      state.stopSandbox(state.findSandbox(view.name))
+    }
+  }
+  state.emit('task.done', { task: state.taskView(task), summary: task.summary || state.summary(task) })
 }
