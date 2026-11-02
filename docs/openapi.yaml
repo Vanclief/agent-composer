@@ -33,6 +33,10 @@ tags:
     description: >
       A sandbox is the compute a task is allocated: one microsandbox VM (ADR 0003, ADR 0008).
       Once booted, its status is read live from the runtime and passed through verbatim.
+  - name: Agents
+    description: >
+      Persistent agents (ADR 0016). An agent's memory is its volume agc-<name>, and the harness
+      transcripts on it are the record its turns are read from.
   - name: Events
     description: >
       The live feed: a server-sent events stream of what changes tasks, sandboxes and channels.
@@ -1199,6 +1203,130 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
+  /sandboxes/{id}/turns:
+    get:
+      tags: [Sandboxes]
+      operationId: listSandboxTurns
+      summary: List a sandbox's turns
+      description: >
+        The turns of the harness sessions on the sandbox's volume, newest first, read the way
+        GET /agents/{name}/turns reads an agent's, so a finished task's reasoning can be read
+        after its sandbox is stopped or deleted.
+      parameters:
+        - $ref: '#/components/parameters/SandboxIdParam'
+        - name: limit
+          in: query
+          description: How many turns, newest first.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+        - name: before
+          in: query
+          description: Only turns with n below this, for the next page.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Turns.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TurnList'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /sandboxes/{id}/turns/{n}:
+    get:
+      tags: [Sandboxes]
+      operationId: getSandboxTurn
+      summary: Get one of a sandbox's turns
+      parameters:
+        - $ref: '#/components/parameters/SandboxIdParam'
+        - $ref: '#/components/parameters/TurnNumberParam'
+      responses:
+        '200':
+          description: The turn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Turn'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /agents/{name}/turns:
+    get:
+      tags: [Agents]
+      operationId: listAgentTurns
+      summary: List an agent's turns
+      description: >
+        The turns of every harness session on the agent's volume agc-<name> (Claude Code
+        .claude/projects/**/*.jsonl, Codex .codex/sessions/**/*.jsonl), newest first, read from
+        the host side of the volume on every request; agc keeps no copy. A turn starts at a user
+        message that is not a tool result; n numbers them from 1 across all sessions by start
+        time. channel and thread come from the agent loop's agc-sessions.json when it names the
+        session. 404 when the volume does not exist.
+      parameters:
+        - $ref: '#/components/parameters/AgentNameParam'
+        - name: limit
+          in: query
+          description: How many turns, newest first.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+        - name: before
+          in: query
+          description: Only turns with n below this, for the next page.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Turns.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TurnList'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /agents/{name}/turns/{n}:
+    get:
+      tags: [Agents]
+      operationId: getAgentTurn
+      summary: Get one of an agent's turns
+      description: >
+        The whole turn: the text injected, each tool call with its arguments and result (cut to
+        4 KB), the final answer, and the token counts when the transcript has them.
+      parameters:
+        - $ref: '#/components/parameters/AgentNameParam'
+        - $ref: '#/components/parameters/TurnNumberParam'
+      responses:
+        '200':
+          description: The turn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Turn'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
   /specs:
     get:
       tags: [Tasks]
@@ -1635,6 +1763,21 @@ paths:
           $ref: '#/components/responses/MsgError'
 components:
   parameters:
+    AgentNameParam:
+      name: name
+      in: path
+      required: true
+      description: Agent name, e.g. reviewer-1.
+      schema:
+        type: string
+    TurnNumberParam:
+      name: n
+      in: path
+      required: true
+      description: Turn number, from 1.
+      schema:
+        type: integer
+        minimum: 1
     LimitParam:
       name: limit
       in: query
@@ -2627,6 +2770,117 @@ components:
         - path
         - size
         - modified_at
+    TurnTokens:
+      type: object
+      nullable: true
+      description: Token counts summed over the turn's model calls; null when the transcript has none.
+      properties:
+        input:
+          type: integer
+          format: int64
+          description: Input tokens not read from the cache.
+        output:
+          type: integer
+          format: int64
+        cache_read:
+          type: integer
+          format: int64
+        cache_write:
+          type: integer
+          format: int64
+      required: [input, output, cache_read, cache_write]
+    TurnToolCall:
+      type: object
+      properties:
+        name:
+          type: string
+        args:
+          description: The tool's arguments as the model sent them.
+        result:
+          type: string
+          description: The result as text, cut to 4096 bytes.
+        truncated:
+          type: boolean
+        error:
+          type: boolean
+          description: Set when the harness marked the result as an error.
+      required: [name, args, result, truncated]
+    TurnSummary:
+      type: object
+      properties:
+        n:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+        session:
+          type: string
+          description: The harness session id.
+        harness:
+          type: string
+          enum: [claude_code, codex_cli]
+        channel:
+          type: string
+          description: From agc-sessions.json, empty when the session is not in it.
+        thread:
+          type: string
+          description: The thread root id, or main; empty when the session is not in agc-sessions.json.
+        tool_calls:
+          type: integer
+          description: How many tools the turn called.
+        answer:
+          type: string
+          description: The first line of the final answer, at most 200 characters.
+        tokens:
+          $ref: '#/components/schemas/TurnTokens'
+      required: [n, started_at, ended_at, session, harness, channel, thread, tool_calls, answer, tokens]
+    TurnList:
+      type: object
+      properties:
+        turns:
+          type: array
+          items:
+            $ref: '#/components/schemas/TurnSummary'
+        skipped:
+          type: integer
+          description: Lines of the session files that are not JSON objects, left out.
+      required: [turns, skipped]
+    Turn:
+      type: object
+      properties:
+        n:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+        session:
+          type: string
+        harness:
+          type: string
+          enum: [claude_code, codex_cli]
+        channel:
+          type: string
+        thread:
+          type: string
+        injected:
+          type: string
+          description: The user message as sent.
+        tool_calls:
+          type: array
+          items:
+            $ref: '#/components/schemas/TurnToolCall'
+        answer:
+          type: string
+          description: The final assistant text.
+        tokens:
+          $ref: '#/components/schemas/TurnTokens'
+      required: [n, started_at, ended_at, session, harness, channel, thread, injected, tool_calls, answer, tokens]
     SandboxWork:
       type: object
       properties:
