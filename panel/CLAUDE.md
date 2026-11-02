@@ -66,7 +66,7 @@ Each page sets the top bar title with `usePageTitle('…')` from
 - **One icon per concept:** import from `@/components/concept-icons`
   (`conceptIcons.task`, `.sandbox`, `.brief`, `.cpu`, `.memory`, `.image`,
   `.repo`, `.ref`, `.setup`, `.secret`, `.env`, `.volume`, `.channel`,
-  `.savedSpec`, `.terminal`, `.message`, `.human`, `.raw`). Never pick a
+  `.savedSpec`, `.terminal`, `.message`, `.human`, `.raw`, `.question`, `.thread`). Never pick a
   different Lucide icon for one of these. A new concept is added there first.
 - **Statuses are verbatim:** render `<StatusPill status={task.status} />`
   or `<StatusPill status={sandbox.status} detail={sandbox.status_error} />`.
@@ -152,9 +152,13 @@ Each page sets the top bar title with `usePageTitle('…')` from
   (a live feed: read, then a long-poll wait loop), `useParticipants(channel)`.
   Every task or sandbox mutation refreshes both. Query keys live only in
   `queryKeys`.
-- `@/api/msg`: messaging types and calls (`/api/msg/join|leave|post|read|wait|channels|participants`),
+- `@/api/msg`: messaging types and calls (`/api/msg/join|leave|post|read|wait|channels|participants|questions`),
   hand-typed from `messaging/httpapi/httpapi.go`. Join answers 409
-  `name @x is already in use` while the name is held.
+  `name @x is already in use` while the name is held. A message's `kind`
+  is `message` (also when absent) or `question`; post takes `kind`.
+  `GET /api/msg/questions?channel=&open=1&for=<name>` answers
+  `{questions}`, each a message with `answered_by` (empty while open) and
+  `answered_at` (`null` while open); typed ahead of the Go side.
 - `@/api/terminals`: terminal types, `terminals.list/start`, and
   `terminalSocketURL(sandbox, job)`, all under `/api/sandboxes/{id}/terminals`.
   A sandbox allocated with a `command` runs it as the job `agent`. Binary frames carry bytes both ways; send
@@ -255,6 +259,53 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   "Inbox #<me>", with the line "Your inbox: agents and tasks escalate here"
   (`data-testid="inbox-header"`) and, when empty, an empty slot saying so.
 
+## Talk mode: messages, threads, questions
+
+All in `src/features/messages/`; `ChannelView` (Talk page and a task's
+Messages tab) provides the channel context (`context.ts`) every piece reads.
+
+- **Bodies** (`MessageBody.tsx`): markdown with react-markdown and
+  remark-gfm. Raw HTML is never rendered; it shows as literal text. Code
+  blocks are mono with a copy button (`data-testid="code-block"`), links open
+  in a new tab, `@name` is a chip (`mention-chip`, solid pink when it is me)
+  and `#name` (a letter first, so `PR #42` stays text) a channel chip
+  (`channel-chip`, the `#` is its icon) linking to `/messages/<name>`. Bodies
+  clamp at about 12 lines (`max-h-60`, `data-clamped`) with "Show more".
+- **Feed** (`MessageList.tsx`): top-level messages only. Day separators
+  (`day-separator`: Today, Yesterday, then the date); headers show relative
+  times ("3 min ago", exact on hover) and the gutter the clock on hover. An
+  "Unread" line (`unread-line`) sits before the first message not from me
+  past the read cursor as it was when the channel opened (none for a
+  never-opened channel), with a "Jump to unread" pill while it is above the
+  fold. Consecutive messages from one sender within 5 minutes group
+  (`message-group`); system lines and questions stand alone.
+- **System lines** (`parts.tsx`): posts from `agc` (empty task) are compact
+  muted lines with a small agc mark (`data-testid="system-line"`,
+  `data-system`), not bubbles; the author stays for screen readers only. A
+  post starting with `# ` (the instructions) collapses to one "Instructions"
+  line with an expand toggle. "Delivered: …" gets the delivery icon,
+  "Accepted by …" and "Rejected by …" the criteria icon.
+- **Threads** (`threads.ts`, `ThreadPane.tsx`): a reply (`reply_to`, at any
+  depth) belongs to its top-level message's thread and is not in the feed;
+  a reply whose parent is not loaded stays top level. The parent shows "N
+  replies" (`thread-footer`), and hovering any message shows "Reply in
+  thread". Both open `?thread=<id>`: a pane on the right from `lg` up, a
+  full sheet below (`thread-pane`), with the replies oldest first and a
+  composer ("Reply in thread") posting with `reply_to`.
+- **Questions** (`questions.ts`): kind `question` renders as a card
+  (`question-card`, `data-state` `open`/`answered`) with the question icon,
+  the asker and an inline Answer box that posts a `reply_to` to it. The
+  first reply from someone other than the asker answers it (the server's
+  `answered_by` covers answers outside the loaded feed): the card shows
+  "Answered by @name" and that answer. Open questions for me
+  (`GET /api/msg/questions?open=1&for=<me>`, minus my own; the mock treats
+  every open question as mine) pin a "Waiting for you: N" strip
+  (`waiting-strip`) at the top of their channel that scrolls to the next one,
+  and add a pink outlined question marker (`question-badge`,
+  `QuestionBadge.tsx`) beside the unread badge on the channel row and the
+  Talk mode row. Unread counting is unchanged. The questions query key
+  includes the channels' last ids, so `message.posted` refreshes it.
+
 ## Commands (run in `panel/`)
 
 First time: `npm ci && npx playwright install chromium`.
@@ -308,7 +359,11 @@ hosts). Messages in `#review-42` (from @reviewer, @tester and human @franco,
 who has left so you can join as franco), `#releases`, and franco's inbox
 `#franco`: agc's two opening messages for `review-42` (the first mentions
 `@franco`) and an escalation from the review-42 agent @reviewer asking a
-decision. Creating a task
+decision. `#review-42` has a thread (franco's reply to @reviewer's first
+message), a code block, an answered question (@tester, answered by franco)
+and an open one from @reviewer to @franco; `#flaky-ci` has an open question
+from its agent @fixer. Posts take `kind`; `GET /api/msg/questions` ignores
+`for`. Creating a task
 returns at once. An allocated sandbox (`POST /api/tasks/{id}/sandboxes`, or
 `sandbox` on create) answers 201 `starting` for 2s, then `running`, and
 starts its `command` as the job `agent`. `POST /api/tasks/{id}/deliver

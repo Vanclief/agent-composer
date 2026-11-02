@@ -1,7 +1,8 @@
 // Talk mode's channel list under Channels, mounted by the shell
 // (src/shell/layout.tsx). Inbox (#<me>) is pinned first, even before it
 // has a message; then the Tasks group (channels named after a task), then
-// Other. Each row has its unread badge and is bold while unread.
+// Other. Each row has its unread badge, the questions waiting for me
+// (QuestionBadge), and is bold while unread.
 import { Lock } from 'lucide-react'
 import { NavLink } from 'react-router'
 
@@ -11,7 +12,8 @@ import { ErrorText } from '@/components/error-text'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
-import { UnreadBadge } from './UnreadBadge'
+import { RowBadges } from './QuestionBadge'
+import { useOpenQuestions } from './questions'
 import { useUnread, type ChannelUnread } from './unread'
 
 function rowClass(isActive: boolean, unread: boolean) {
@@ -24,7 +26,17 @@ function rowClass(isActive: boolean, unread: boolean) {
   )
 }
 
-function ChannelRow({ channel, readOnly, unread }: { channel: string; readOnly: boolean; unread: ChannelUnread }) {
+function ChannelRow({
+  channel,
+  readOnly,
+  unread,
+  questions,
+}: {
+  channel: string
+  readOnly: boolean
+  unread: ChannelUnread
+  questions: number
+}) {
   const name = channel.replace(/^#/, '')
   return (
     <li>
@@ -37,7 +49,7 @@ function ChannelRow({ channel, readOnly, unread }: { channel: string; readOnly: 
       >
         {readOnly && <Lock aria-label="Read only" className="size-3.5 shrink-0" />}
         <span className="truncate font-mono">#{name}</span>
-        <UnreadBadge count={unread.count} mention={unread.mention} />
+        <RowBadges count={unread.count} mention={unread.mention} questions={questions} />
       </NavLink>
     </li>
   )
@@ -54,6 +66,7 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
 
 export function ChannelRows() {
   const unread = useUnread()
+  const questions = useOpenQuestions()
   const tasks = useTasks()
   const { channelsQuery, inbox } = unread
   const InboxIcon = conceptIcons.inbox
@@ -77,7 +90,7 @@ export function ChannelRows() {
         >
           <InboxIcon aria-hidden className={cn('size-3.5 shrink-0', conceptColors.inbox.text)} />
           <span className="truncate">Inbox</span>
-          <UnreadBadge count={inboxUnread.count} mention={inboxUnread.mention} />
+          <RowBadges count={inboxUnread.count} mention={inboxUnread.mention} questions={questions.of(inbox).length} />
         </NavLink>
       </li>
       {channelsQuery.isPending ? (
@@ -94,14 +107,26 @@ export function ChannelRows() {
           {taskChannels.length > 0 && (
             <Group label="Tasks">
               {taskChannels.map((c) => (
-                <ChannelRow key={c.channel} channel={c.channel} readOnly={c.read_only} unread={unread.of(c.channel)} />
+                <ChannelRow
+                  key={c.channel}
+                  channel={c.channel}
+                  readOnly={c.read_only}
+                  unread={unread.of(c.channel)}
+                  questions={questions.of(c.channel).length}
+                />
               ))}
             </Group>
           )}
           {other.length > 0 && (
             <Group label="Other">
               {other.map((c) => (
-                <ChannelRow key={c.channel} channel={c.channel} readOnly={c.read_only} unread={unread.of(c.channel)} />
+                <ChannelRow
+                  key={c.channel}
+                  channel={c.channel}
+                  readOnly={c.read_only}
+                  unread={unread.of(c.channel)}
+                  questions={questions.of(c.channel).length}
+                />
               ))}
             </Group>
           )}
