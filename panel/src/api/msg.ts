@@ -35,6 +35,9 @@ export type Message = {
   kind?: MessageKind
   body: string
   created_at: string
+  // A person posted it (not an agent, not agc). Absent on servers that
+  // predate it.
+  human?: boolean
 }
 
 export type MessageKind = 'message' | 'question'

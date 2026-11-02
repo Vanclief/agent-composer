@@ -120,6 +120,8 @@ type Message = {
   kind: 'message' | 'question'
   body: string
   created_at: string
+  // A person posted it, as models/messaging.Message.Human.
+  human: boolean
 }
 
 type Waiter = { channel: string; after: number; wake: () => void }
@@ -476,6 +478,7 @@ function createState() {
       kind,
       body,
       created_at: iso(),
+      human: p.human,
     }
     if (replyTo !== undefined) {
       m.reply_to = replyTo

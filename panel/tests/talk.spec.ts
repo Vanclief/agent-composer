@@ -136,7 +136,9 @@ test('a mention of me in another channel toasts; my own messages never do', asyn
   await page.addInitScript((n) => localStorage.setItem('agc.panel.human', n), me)
   await openLive(page, '/panel/messages/releases')
   const channel = `#talk-${suffix()}`
-  const agent = await joinAgent(request)
+  // A person's mention follows the channel (follow.ts); an agent's only toasts.
+  const person = await request.post('/api/msg/join', { data: { name: `p-${suffix()}`, task: '' } })
+  const agent = (await person.json()) as { id: string }
   const mention = await post(request, agent.id, channel, `@${me} can you look?`)
   const toast = page.locator(`[data-testid="toast-message"][data-id="${mention.id}"]`)
   await expect(toast).toBeVisible()
@@ -158,7 +160,8 @@ test('a mention of me in another channel toasts; my own messages never do', asyn
 })
 
 test('the Tasks group lists task channels and Other the rest', async ({ page }) => {
-  // #review-42 is followed because agc's opening message mentions @franco;
+  // #review-42 is followed because franco posted there and an agent asks
+  // @franco a question there (agc's opening mention alone would not);
   // #releases once opened.
   await page.goto('/panel/messages/releases')
   const tasks = page.getByRole('group', { name: 'Tasks' })
