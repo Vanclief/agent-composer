@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/shell/page-title'
 
 import { TaskActions, useTaskActions } from './TaskActions'
+import { AssigneeChip, ForChip, ManagerChip, OwnerChip } from './TaskChips'
 
 const TABS: { to: string; label: string; concept: Concept }[] = [
   { to: 'brief', label: 'Brief', concept: 'brief' },
@@ -53,22 +54,32 @@ export function TaskPage() {
   const data = task.data
   return (
     <div className="flex h-full flex-col">
-      <div data-testid="task-header" className="flex items-center gap-3 px-6 pt-6">
+      <div data-testid="task-header" className="flex items-start gap-3 px-6 pt-6">
         <span
           className={cn(
-            'grid size-10 shrink-0 place-items-center rounded-xl border',
+            'grid size-12 shrink-0 place-items-center rounded-xl border',
             conceptColors.task.bg,
             conceptColors.task.border,
             conceptColors.task.text,
           )}
         >
-          <TaskIcon className="size-5" />
+          <TaskIcon className="size-6" />
         </span>
-        <h2 className="truncate text-2xl font-semibold tracking-tight">{data.title}</h2>
-        <IconChip icon={conceptIcons.channel} concept="channel" title="Name and channel" className="shrink-0">
-          {data.name}
-        </IconChip>
-        <StatusPill status={data.status} />
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="flex min-w-0 items-center gap-3">
+            <StatusPill status={data.status} />
+            <h2 className="truncate text-2xl font-semibold tracking-tight">{data.title}</h2>
+            <IconChip icon={conceptIcons.channel} concept="channel" title="Name and channel" className="shrink-0">
+              {data.name}
+            </IconChip>
+          </div>
+          <div data-testid="task-chips" className="flex flex-wrap items-center gap-1.5">
+            <AssigneeChip task={data} />
+            <ManagerChip task={data} />
+            <OwnerChip task={data} />
+            <ForChip task={data} />
+          </div>
+        </div>
         <TaskActions task={data} actions={actions} onDeleted={() => navigate('/tasks')} className="ml-auto shrink-0" />
       </div>
       <ErrorText error={actions.error ?? task.error} className="mx-6 mt-4" />
