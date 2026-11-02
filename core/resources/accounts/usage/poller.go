@@ -247,8 +247,8 @@ func (p *Poller) PollAccount(ctx context.Context, name string) string {
 
 // pollOne reads account a and stores the reading; false when the reading
 // has an error. A signed-in account is read with its login's access
-// token; any other with its secret, and a refusal that says the token is
-// inference-only is reported as such.
+// token; any other with its secret, and its profile status tells an
+// inference-only token from a rejected one.
 func (p *Poller) pollOne(ctx context.Context, a Account, tokens Tokens) bool {
 	logins := p.currentLogins()
 
@@ -284,8 +284,11 @@ func (p *Poller) pollOne(ctx context.Context, a Account, tokens Tokens) bool {
 		result = Result{Usage: UsageView{Error: "fetch failed"}}
 	}
 
-	if !a.Login && inferenceOnly(result) {
-		result.Usage.Error = ErrInferenceOnly
+	if !a.Login {
+		why := noLoginError(result.profileStatus)
+		if why != "" {
+			result.Usage.Error = why
+		}
 	}
 
 	p.store(a.Name, result)
@@ -293,20 +296,19 @@ func (p *Poller) pollOne(ctx context.Context, a Account, tokens Tokens) bool {
 	return result.Usage.Error == ""
 }
 
-// inferenceOnly reports whether the API refused a token the way it
-// refuses one from `claude setup-token`: 403 on profile, or 401, 403 or
-// 429 on usage.
-func inferenceOnly(result Result) bool {
-	if result.profileStatus == http.StatusForbidden {
-		return true
+// noLoginError maps the profile status of an account with no login, the
+// one answer that tells a setup-token from a dead one (see the fetcher's
+// comment): 403 is inference-only whatever usage said, 401 is a rejected
+// token, anything else keeps the fetched why ("").
+func noLoginError(profileStatus int) string {
+	switch profileStatus {
+	case http.StatusForbidden:
+		return ErrInferenceOnly
+	case http.StatusUnauthorized:
+		return ErrTokenRejected
 	}
 
-	switch result.usageStatus {
-	case http.StatusUnauthorized, http.StatusForbidden, http.StatusTooManyRequests:
-		return true
-	}
-
-	return false
+	return ""
 }
 
 // storeError sets why as name's usage error and changes nothing else of
