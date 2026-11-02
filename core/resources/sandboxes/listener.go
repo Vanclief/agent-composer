@@ -100,7 +100,12 @@ func (api *API) startListener(name string, taskName string, grants []messaging.G
 	caller := func(*http.Request) (messaging.Caller, error) {
 		return messaging.Caller{Task: taskName, Grants: grants}, nil
 	}
-	srv := &http.Server{Handler: httpapi.New(api.msg, caller), ReadHeaderTimeout: 10 * time.Second}
+
+	mux := http.NewServeMux()
+	mux.Handle("/", httpapi.New(api.msg, caller))
+	mux.HandleFunc("POST "+httpapi.DeliverPath, api.serveDeliver(taskName))
+
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 
 	go func() {
 		err := srv.Serve(ln)
@@ -112,6 +117,48 @@ func (api *API) startListener(name string, taskName string, grants []messaging.G
 	api.listeners[name] = &listener{srv: srv, ln: ln}
 
 	return nil
+}
+
+// DeliverFunc delivers the task called taskName with summary, for agc task
+// deliver inside one of its sandboxes (ADR 0010 item 2), and returns the
+// task's view.
+type DeliverFunc func(ctx context.Context, taskName string, summary string) (any, error)
+
+// OnDeliver sets what agc task deliver calls on every sandbox's socket.
+// The socket speaks for its own task only, so a sandbox delivers no other.
+func (api *API) OnDeliver(deliver DeliverFunc) {
+	api.mu.Lock()
+	api.deliver = deliver
+	api.mu.Unlock()
+}
+
+func (api *API) serveDeliver(taskName string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		api.mu.Lock()
+		deliver := api.deliver
+		api.mu.Unlock()
+
+		if deliver == nil {
+			httpapi.WriteError(w, ez.New(ez.EUNAVAILABLE, "agc task deliver is not served here", nil))
+			return
+		}
+
+		var req httpapi.DeliverRequest
+
+		err := httpapi.DecodeBody(w, r, &req)
+		if err != nil {
+			httpapi.WriteError(w, err)
+			return
+		}
+
+		view, err := deliver(r.Context(), taskName, req.Summary)
+		if err != nil {
+			httpapi.WriteError(w, err)
+			return
+		}
+
+		httpapi.WriteJSON(w, http.StatusOK, view)
+	}
 }
 
 // stopListener stops this process's listener for the sandbox, if any.

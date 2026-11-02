@@ -17,10 +17,12 @@ import (
 	"github.com/vanclief/agent-composer/task"
 )
 
-// A task's status is computed, never stored (ADR 0008 item 2).
+// A task's status is computed, never stored (ADR 0008 item 2, ADR 0010
+// item 3).
 const (
 	StatusOpen    = "open"
 	StatusRunning = "running"
+	StatusReview  = "review"
 	StatusDone    = "done"
 )
 
@@ -45,7 +47,8 @@ func NewAPI(ctrl *controller.Controller, sandboxesAPI *sandboxes.API, msg *messa
 	return New(ctrl.DB, sandboxesAPI, msg, ctrl.Defaults(), secretsPath, specs)
 }
 
-// New is NewAPI over a bare database, for tests. It hooks /done into msg.
+// New is NewAPI over a bare database, for tests. It hooks /accept and
+// /reject into msg and serves agc task deliver on every sandbox's socket.
 func New(db bun.IDB, sandboxesAPI *sandboxes.API, msg *messaging.Service, defaults controller.DefaultsSettings, secretsPath string, specs task.Store) *API {
 	if sandboxesAPI == nil {
 		panic("Sandboxes reference is nil")
@@ -63,7 +66,8 @@ func New(db bun.IDB, sandboxesAPI *sandboxes.API, msg *messaging.Service, defaul
 		specs:       specs,
 	}
 
-	msg.OnPost(api.closeOnDone)
+	msg.OnPost(api.onCommand)
+	sandboxesAPI.OnDeliver(api.deliverFromSandbox)
 
 	return api
 }
@@ -76,20 +80,25 @@ func (api *API) Defaults() controller.DefaultsSettings {
 // TaskView is a Task with its computed status and its sandboxes, newest
 // first.
 type TaskView struct {
-	ID        uuid.UUID               `json:"id"`
-	Title     string                  `json:"title"`
-	Name      string                  `json:"name"`
-	Brief     string                  `json:"brief"`
-	Assignee  string                  `json:"assignee"`
-	Model     string                  `json:"model"`
-	Manager   string                  `json:"manager"`
-	Owner     string                  `json:"owner"`
-	For       string                  `json:"for"`
-	Status    string                  `json:"status"`
-	DoneAt    *time.Time              `json:"done_at"`
-	CreatedAt time.Time               `json:"created_at"`
-	UpdatedAt time.Time               `json:"updated_at"`
-	Sandboxes []sandboxes.SandboxView `json:"sandboxes"`
+	ID    uuid.UUID `json:"id"`
+	Title string    `json:"title"`
+	Name  string    `json:"name"`
+	Brief string    `json:"brief"`
+	// Accept is the task's criteria, always an array (ADR 0010 item 1).
+	Accept      []string                `json:"accept"`
+	Assignee    string                  `json:"assignee"`
+	Model       string                  `json:"model"`
+	Manager     string                  `json:"manager"`
+	Owner       string                  `json:"owner"`
+	For         string                  `json:"for"`
+	Status      string                  `json:"status"`
+	DoneAt      *time.Time              `json:"done_at"`
+	AcceptedBy  string                  `json:"accepted_by"`
+	DeliveredAt *time.Time              `json:"delivered_at"`
+	Summary     string                  `json:"summary"`
+	CreatedAt   time.Time               `json:"created_at"`
+	UpdatedAt   time.Time               `json:"updated_at"`
+	Sandboxes   []sandboxes.SandboxView `json:"sandboxes"`
 }
 
 // validateRef checks a request names a task by exactly one of id or name.
@@ -114,7 +123,8 @@ func (api *API) find(ctx context.Context, id uuid.UUID, name string) (*taskmodel
 }
 
 // view embeds the sandboxes and computes the status: done when done_at is
-// set, otherwise running when a sandbox is running, otherwise open.
+// set, otherwise review when delivered_at is set, otherwise running when a
+// sandbox is running, otherwise open.
 func (api *API) view(ctx context.Context, record *taskmodels.Task) (*TaskView, error) {
 	views, err := api.Sandboxes.TaskSandboxes(ctx, record)
 	if err != nil {
@@ -132,24 +142,37 @@ func newView(record *taskmodels.Task, views []sandboxes.SandboxView) *TaskView {
 		}
 	}
 
+	if record.DeliveredAt != nil {
+		status = StatusReview
+	}
+
 	if record.DoneAt != nil {
 		status = StatusDone
 	}
 
+	accept := record.Accept
+	if accept == nil {
+		accept = []string{}
+	}
+
 	return &TaskView{
-		ID:        record.ID,
-		Title:     record.Title,
-		Name:      record.Name,
-		Brief:     record.Brief,
-		Assignee:  record.Assignee,
-		Model:     record.Model,
-		Manager:   record.Manager,
-		Owner:     record.Owner,
-		For:       record.For,
-		Status:    status,
-		DoneAt:    record.DoneAt,
-		CreatedAt: record.CreatedAt,
-		UpdatedAt: record.UpdatedAt,
-		Sandboxes: views,
+		ID:          record.ID,
+		Title:       record.Title,
+		Name:        record.Name,
+		Brief:       record.Brief,
+		Assignee:    record.Assignee,
+		Model:       record.Model,
+		Manager:     record.Manager,
+		Owner:       record.Owner,
+		For:         record.For,
+		Status:      status,
+		Accept:      accept,
+		DeliveredAt: record.DeliveredAt,
+		Summary:     record.Summary,
+		AcceptedBy:  record.AcceptedBy,
+		DoneAt:      record.DoneAt,
+		CreatedAt:   record.CreatedAt,
+		UpdatedAt:   record.UpdatedAt,
+		Sandboxes:   views,
 	}
 }

@@ -142,7 +142,7 @@ func TestTaskAndMessagingRoutes(t *testing.T) {
 		{http.MethodGet, "/api/tasks/review-42", "", http.StatusNotFound, "task review-42 not found"},
 		{http.MethodGet, "/api/tasks/0190a7c2-0000-7000-8000-000000000000", "", http.StatusNotFound, "task with ID"},
 		{http.MethodGet, "/api/sandboxes/review-42", "", http.StatusNotFound, "sandbox review-42 not found"},
-		{http.MethodPost, "/api/tasks/review-42/done", "", http.StatusNotFound, "task review-42 not found"},
+		{http.MethodPost, "/api/tasks/review-42/accept", "", http.StatusNotFound, "task review-42 not found"},
 		{http.MethodPost, "/api/tasks/review-42/sandboxes", `{}`, http.StatusNotFound, "task review-42 not found"},
 		{http.MethodPost, "/api/sandboxes/review-42/stop", "", http.StatusNotFound, "sandbox review-42 not found"},
 		// The task-as-VM routes are gone (ADR 0008).
@@ -240,7 +240,7 @@ func TestTaskAndSandboxRoutes(t *testing.T) {
 		{http.MethodPost, "/api/sandboxes/review-facebook-ads/start", "", http.StatusOK, `"stopped_at":null`},
 		{http.MethodDelete, "/api/sandboxes/review-facebook-ads-2", "", http.StatusOK, `{"deleted":true,"name":"review-facebook-ads-2"}`},
 		{http.MethodGet, "/api/sandboxes/review-facebook-ads-2", "", http.StatusNotFound, "not found"},
-		{http.MethodPost, "/api/tasks/review-facebook-ads/done", "", http.StatusOK, `"status":"done"`},
+		{http.MethodPost, "/api/tasks/review-facebook-ads/accept", "", http.StatusOK, `"status":"done"`},
 		{http.MethodGet, "/api/tasks/review-facebook-ads", "", http.StatusOK, `"status":"done","done_at":"20`},
 		{http.MethodDelete, "/api/tasks/review-facebook-ads", "", http.StatusOK, `{"deleted":true,"name":"review-facebook-ads"}`},
 		{http.MethodGet, "/api/sandboxes", "", http.StatusOK, `{"sandboxes":[]}`},

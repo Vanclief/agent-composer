@@ -32,6 +32,9 @@ name: review-42
 title: Review PR 42
 brief: |
   Review PR 42 and post findings.
+accept:
+  - 'the findings are posted in #review-42'
+  - go test passes
 assignee: claude_code
 model: ' claude-opus-5-5 '
 manager: orchestrator
@@ -64,6 +67,9 @@ sandbox:
 	}
 	if loaded.Model != "claude-opus-5-5" || loaded.Manager != "orchestrator" || loaded.Owner != "franco" {
 		t.Fatalf("model, manager, owner = %q, %q, %q", loaded.Model, loaded.Manager, loaded.Owner)
+	}
+	if len(loaded.Accept) != 2 || loaded.Accept[0] != "the findings are posted in #review-42" || loaded.Accept[1] != "go test passes" {
+		t.Fatalf("accept = %q", loaded.Accept)
 	}
 	if loaded.Brief != "Review PR 42 and post findings.\n" {
 		t.Fatalf("brief = %q", loaded.Brief)

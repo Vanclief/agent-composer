@@ -24,7 +24,7 @@ tags:
   - name: Tasks
     description: >
       A task is work to be done, in words (ADR 0008). It allocates compute as sandboxes. Its
-      status is computed: done, running or open.
+      status is computed: done, review, running or open (ADR 0010).
   - name: Sandboxes
     description: >
       A sandbox is the compute a task is allocated: one microsandbox VM (ADR 0003, ADR 0008).
@@ -603,16 +603,60 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
-  /tasks/{id}/done:
+  /tasks/{id}/deliver:
     post:
       tags: [Tasks]
-      operationId: doneTask
-      summary: Mark a task done
+      operationId: deliverTask
+      summary: Deliver a task for review
       description: >
-        Sets `done_at`, the only thing that does; a task already done keeps its first `done_at`.
-        Its sandboxes are left as they are.
+        Sets `delivered_at` and `summary` and posts "Delivered: <summary>" in #<task> as agc
+        (ADR 0010 item 2). The sandboxes are left as they are; the agent keeps waiting for
+        review. A task can be delivered more than once; the last summary wins. Inside a sandbox
+        `agc task deliver` reaches the same call over the sandbox's messaging socket. 409 when the
+        task is done.
       parameters:
         - $ref: '#/components/parameters/TaskIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliverTaskRequest'
+      responses:
+        '200':
+          description: The task, now `review`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /tasks/{id}/accept:
+    post:
+      tags: [Tasks]
+      operationId: acceptTask
+      summary: Accept a task
+      description: >
+        Sets `done_at` and `accepted_by`, posts "Accepted by <name>." in #<task> as agc, then
+        stops every running or starting sandbox of the task as POST /sandboxes/{id}/stop does; a
+        sandbox that cannot be stopped is logged and does not fail the accept (ADR 0010 item 4).
+        Nothing is deleted, and a stopped sandbox can be started again. A task already done is
+        returned as it is. The body is optional. `/accept` posted in #<task> by the manager or
+        the owner, and `/accept <task>` posted by the owner in #<owner>, do the same.
+      parameters:
+        - $ref: '#/components/parameters/TaskIdParam'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptTaskRequest'
       responses:
         '200':
           description: The task, now `done`.
@@ -626,6 +670,38 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
+  /tasks/{id}/reject:
+    post:
+      tags: [Tasks]
+      operationId: rejectTask
+      summary: Send a delivered task back
+      description: >
+        Clears `delivered_at`, keeps `summary`, and posts "Rejected by <name>: <why>" in #<task>
+        as agc, which the agent takes as its next turn (ADR 0010 item 5). `/reject <why>` posted
+        in #<task> by the manager or the owner does the same. 409 when the task is done.
+      parameters:
+        - $ref: '#/components/parameters/TaskIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectTaskRequest'
+      responses:
+        '200':
+          description: The task, back to `running` or `open`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
   /tasks/{id}/sandboxes:
     post:
       tags: [Sandboxes]
@@ -634,8 +710,9 @@ paths:
       description: >
         Inserts a sandbox and returns it `starting`. The first sandbox of a task is named after
         it, later ones `<task>-2`, `<task>-3`. In the background agc creates the VM, clones the
-        repo, answers the harnesses' first-run prompts, writes /home/agent/TASK.md (title, brief
-        and the instruction to push a branch `agc/<task>` and post in `#<task>`), runs setup, sets
+        repo, answers the harnesses' first-run prompts, writes /home/agent/TASK.md (title, brief,
+        "Accepted when" with the task's criteria, and the instructions to push a branch
+        `agc/<task>`, post in `#<task>` and end with `agc task deliver`), runs setup, sets
         `booted_at`, then starts `command` as the first terminal. A failure sets `failed` with
         `status_error` and removes the VM. Missing secrets fail before anything is created.
       parameters:
@@ -1692,6 +1769,13 @@ components:
         brief:
           type: string
           description: What to do and what done looks like, markdown.
+        accept:
+          type: array
+          description: >
+            What accepted means, in order: criteria agc shows in TASK.md under "Accepted when" and
+            does not evaluate (ADR 0010 item 1). Always an array, possibly empty.
+          items:
+            type: string
         assignee:
           type: string
           description: A harness id (claude_code, codex_cli) or a person's name; empty is unassigned.
@@ -1709,14 +1793,26 @@ components:
           description: Id of the knowledge action or decision the task serves; empty for none.
         status:
           type: string
-          enum: [open, running, done]
+          enum: [open, running, review, done]
           description: >
-            Computed: done when done_at is set, otherwise running when a sandbox is running,
-            otherwise open.
+            Computed: done when done_at is set, otherwise review when delivered_at is set,
+            otherwise running when a sandbox is running, otherwise open (ADR 0010 item 3).
         done_at:
           type: string
           format: date-time
           nullable: true
+          description: When the task was accepted.
+        accepted_by:
+          type: string
+          description: Who accepted the task; empty until accepted.
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the agent last delivered; null before a delivery and after a rejection.
+        summary:
+          type: string
+          description: The last delivery's summary, kept after a rejection.
         created_at:
           type: string
           format: date-time
@@ -1733,6 +1829,7 @@ components:
         - title
         - name
         - brief
+        - accept
         - assignee
         - model
         - manager
@@ -1740,6 +1837,9 @@ components:
         - for
         - status
         - done_at
+        - accepted_by
+        - delivered_at
+        - summary
         - created_at
         - updated_at
         - sandboxes
@@ -1763,6 +1863,13 @@ components:
             to the title's slug ("Review facebook ads" becomes review-facebook-ads).
         brief:
           type: string
+        accept:
+          type: array
+          description: >
+            Criteria for accepting the task, one sentence each, in order; each must be non-empty
+            after trimming. Shown in TASK.md under "Accepted when"; omitted there when empty.
+          items:
+            type: string
         assignee:
           type: string
           description: A harness id or a person's name. Defaults to the configured harness (claude_code).
@@ -1773,7 +1880,7 @@ components:
             be empty for a person.
         manager:
           type: string
-          description: The creator's messaging name, who runs the task day to day and may post /done.
+          description: The creator's messaging name, who runs the task day to day and may post /accept and /reject <why>.
         owner:
           type: string
           description: >
@@ -1783,6 +1890,31 @@ components:
           type: string
         sandbox:
           $ref: '#/components/schemas/SandboxRequest'
+    DeliverTaskRequest:
+      type: object
+      properties:
+        summary:
+          type: string
+          description: What was done and where the work is; required, non-empty after trimming.
+      required:
+        - summary
+    AcceptTaskRequest:
+      type: object
+      properties:
+        by:
+          type: string
+          description: Messaging name of who accepts. Defaults to the task's owner; 400 when it has none.
+    RejectTaskRequest:
+      type: object
+      properties:
+        by:
+          type: string
+          description: Messaging name of who rejects. Defaults to the task's owner; 400 when it has none.
+        why:
+          type: string
+          description: Why the task goes back; required, non-empty after trimming.
+      required:
+        - why
     SandboxRequest:
       description: The environment fields inline, plus the command the sandbox runs for the task.
       allOf:

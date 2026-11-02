@@ -782,6 +782,52 @@ func TestListenerServesMessagingAsTheTask(t *testing.T) {
 	}
 }
 
+func TestListenerServesDeliverForItsOwnTask(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	insertTask(t, env.db, "review-42")
+
+	_, err := env.api.Allocate(ctx, nil, &AllocateRequest{TaskName: "review-42"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.api.Wait()
+
+	client := socketClient(env.api.socketPath("review-42"))
+
+	out := map[string]string{}
+	err = client.Deliver(ctx, "posted the findings", &out)
+	if ez.ErrorCode(err) != ez.EUNAVAILABLE {
+		t.Fatalf("expected EUNAVAILABLE before OnDeliver, got %v", err)
+	}
+
+	env.api.OnDeliver(func(ctx context.Context, taskName string, summary string) (any, error) {
+		if summary == "" {
+			return nil, ez.New(ez.EINVALID, "summary is required", nil)
+		}
+		return map[string]string{"task": taskName, "summary": summary}, nil
+	})
+
+	err = client.Deliver(ctx, "posted the findings", &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out["task"] != "review-42" || out["summary"] != "posted the findings" {
+		t.Fatalf("delivered = %+v", out)
+	}
+
+	err = client.Deliver(ctx, "", &out)
+	if ez.ErrorCode(err) != ez.EINVALID {
+		t.Fatalf("expected EINVALID, got %v", err)
+	}
+
+	// The messaging routes still answer on the same socket.
+	_, err = client.Join(ctx, "reviewer")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestStartListenerLeavesASocketServedElsewhere(t *testing.T) {
 	env := newTestEnv(t)
 	other := New(context.Background(), env.db, env.api.msg, env.rt, env.api.secretsPath, env.api.socketDir)

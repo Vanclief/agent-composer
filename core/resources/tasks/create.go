@@ -24,6 +24,7 @@ type CreateRequest struct {
 	Title    string        `json:"title"`
 	Name     string        `json:"name"`
 	Brief    string        `json:"brief"`
+	Accept   []string      `json:"accept"`
 	Assignee string        `json:"assignee"`
 	Model    string        `json:"model"`
 	Manager  string        `json:"manager"`
@@ -40,6 +41,12 @@ func (r CreateRequest) Validate() error {
 
 	if r.Sandbox == nil && strings.TrimSpace(r.Brief) == "" {
 		return ez.New(ez.EINVALID, "brief is required for a task without a sandbox", nil)
+	}
+
+	for i, criterion := range r.Accept {
+		if strings.TrimSpace(criterion) == "" {
+			return ez.New(ez.EINVALID, fmt.Sprintf("accept[%d] is empty: every criterion needs text", i), nil)
+		}
 	}
 
 	manager := strings.TrimSpace(r.Manager)
@@ -153,6 +160,17 @@ func ApplyDefaults(request *CreateRequest, defaults controller.DefaultsSettings)
 	return applied, nil
 }
 
+// criteria trims each criterion. It is never nil, so accept is stored and
+// returned as an array.
+func criteria(accept []string) []string {
+	trimmed := make([]string, 0, len(accept))
+	for _, criterion := range accept {
+		trimmed = append(trimmed, strings.TrimSpace(criterion))
+	}
+
+	return trimmed
+}
+
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		trimmed := strings.TrimSpace(value)
@@ -196,6 +214,7 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 		Title:    title,
 		Name:     name,
 		Brief:    request.Brief,
+		Accept:   criteria(request.Accept),
 		Assignee: applied.Assignee,
 		Model:    applied.Model,
 		Manager:  strings.TrimSpace(request.Manager),

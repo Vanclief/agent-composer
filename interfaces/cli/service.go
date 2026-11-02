@@ -30,7 +30,9 @@ type taskService interface {
 	CreateTask(ctx context.Context, request *tasks.CreateRequest) (*tasks.TaskView, error)
 	ListTasks(ctx context.Context) (*tasks.ListResponse, error)
 	GetTask(ctx context.Context, ref string) (*tasks.TaskView, error)
-	DoneTask(ctx context.Context, ref string) (*tasks.TaskView, error)
+	DeliverTask(ctx context.Context, ref string, summary string) (*tasks.TaskView, error)
+	AcceptTask(ctx context.Context, ref string, by string) (*tasks.TaskView, error)
+	RejectTask(ctx context.Context, ref string, by string, why string) (*tasks.TaskView, error)
 	DeleteTask(ctx context.Context, ref string) (*tasks.DeleteResponse, error)
 
 	Allocate(ctx context.Context, taskRef string, sandbox task.Sandbox) (*sandboxes.SandboxView, error)
@@ -154,8 +156,16 @@ func (s localService) GetTask(ctx context.Context, ref string) (*tasks.TaskView,
 	return s.api.Get(ctx, nil, &tasks.GetRequest{Name: ref})
 }
 
-func (s localService) DoneTask(ctx context.Context, ref string) (*tasks.TaskView, error) {
-	return s.api.Done(ctx, nil, &tasks.DoneRequest{Name: ref})
+func (s localService) DeliverTask(ctx context.Context, ref string, summary string) (*tasks.TaskView, error) {
+	return s.api.Deliver(ctx, nil, &tasks.DeliverRequest{Name: ref, Summary: summary})
+}
+
+func (s localService) AcceptTask(ctx context.Context, ref string, by string) (*tasks.TaskView, error) {
+	return s.api.Accept(ctx, nil, &tasks.AcceptRequest{Name: ref, By: by})
+}
+
+func (s localService) RejectTask(ctx context.Context, ref string, by string, why string) (*tasks.TaskView, error) {
+	return s.api.Reject(ctx, nil, &tasks.RejectRequest{Name: ref, By: by, Why: why})
 }
 
 func (s localService) DeleteTask(ctx context.Context, ref string) (*tasks.DeleteResponse, error) {
