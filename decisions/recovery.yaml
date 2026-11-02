@@ -2,7 +2,7 @@
 # not collide in decisions/repo.yaml.
 decisions:
   - id: agc-recovers-after-a-restart
-    decision: "agc rest and the msb server run as systemd user units on the rig (with lingering); at startup agc restarts every sandbox that went down without being stopped while its task is not done, the watchdog restarts a crashed one at most recovery.restarts times an hour, each restart is posted as agc in #<task> and #<owner>, and the agent loop resumes its saved harness session instead of starting over on TASK.md."
+    decision: "agc rest runs as a systemd user unit on the rig (with lingering), the only thing started at boot since msb has no server and every VM is a child of agc; at startup agc restarts every sandbox that went down without being stopped while its task is not done, the watchdog restarts a crashed one at most recovery.restarts times an hour, each restart is posted as agc in #<task> and #<owner>, and the agent loop resumes its saved harness session instead of starting over on TASK.md."
     because: [mechanical-watchdog-tells-the-owner, tasks-are-done-when-accepted, llms-are-parsers-not-sensors, unread-digests-remove-the-human, agent-shells-have-no-tty-for-sudo, rig-holds-real-secrets]
     adr: docs/decisions/0017-recovery.md
     decided: { who: franco, when: 2026-11-02 }

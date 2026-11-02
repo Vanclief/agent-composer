@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Deploy the current local branch to the rig (Linux dev machine) over SSH,
 # rebuild agc there and restart `agc rest`. When `systemctl --user` works
-# on the rig it installs two user units, agc-msb (the msb server) and
-# agc-rest, so both come back after a reboot (ADR 0017).
+# on the rig it installs the user unit agc-rest, so agc comes back after a
+# reboot and starts its crashed VMs again itself (ADR 0017). There is no msb
+# server to start: every VM is an `msb machine` child process of agc.
 set -euo pipefail
 
 AGC_RIG_HOST="${AGC_RIG_HOST:-192.168.0.45}"
@@ -14,9 +15,6 @@ AGC_RIG_PORT="${AGC_RIG_PORT:-1202}"
 AGC_RIG_KNOWLEDGE="${AGC_RIG_KNOWLEDGE:-$AGC_RIG_SRC}"
 # The person tasks escalate to and are owned by when none is given (ADR 0009).
 AGC_RIG_OWNER="${AGC_RIG_OWNER:-franco}"
-# Arguments of msb that run its server in the foreground, for the agc-msb
-# unit (ADR 0017).
-AGC_RIG_MSB_SERVER="${AGC_RIG_MSB_SERVER:-server start}"
 
 usage() {
   cat <<EOF
@@ -27,8 +25,8 @@ Deploys the current local branch to the rig: fetches origin/<branch> in
 waits for http://127.0.0.1:\$AGC_RIG_PORT/api/tasks to answer.
 
 When 'systemctl --user' works on the rig it installs and enables the user
-units agc-msb.service (msb \$AGC_RIG_MSB_SERVER) and agc-rest.service
-(After=agc-msb) and restarts agc with 'systemctl --user restart'; otherwise
+unit agc-rest.service and restarts agc with 'systemctl --user restart' once
+lingering is on; otherwise
 it starts 'agc rest' with nohup as before. Starting them at boot without a
 login needs lingering, which only Franco turns on, once:
   sudo loginctl enable-linger <user>
@@ -48,7 +46,6 @@ Environment (current value):
   AGC_RIG_PORT  server port         (${AGC_RIG_PORT})
   AGC_RIG_KNOWLEDGE  knowledge dir  (${AGC_RIG_KNOWLEDGE})
   AGC_RIG_OWNER  default task owner  (${AGC_RIG_OWNER})
-  AGC_RIG_MSB_SERVER  msb arguments of the agc-msb unit (${AGC_RIG_MSB_SERVER})
 EOF
 }
 
@@ -94,7 +91,6 @@ PORT=$(printf '%q' "$AGC_RIG_PORT")
 HOST=$(printf '%q' "$AGC_RIG_HOST")
 KNOWLEDGE=$(printf '%q' "$AGC_RIG_KNOWLEDGE")
 OWNER=$(printf '%q' "$AGC_RIG_OWNER")
-MSB_SERVER=$(printf '%q' "$AGC_RIG_MSB_SERVER")
 $(
   cat <<'REMOTE'
 export PATH="$HOME/.local/bin:$HOME/go/bin:/usr/local/go/bin:$PATH"
@@ -117,40 +113,27 @@ GIT_CONFIG_GLOBAL=/dev/null git reset -q --hard "origin/$BRANCH"
 echo "==> building"
 make install
 
-# The user units of ADR 0017. They carry paths and the two settings below,
+# The user unit of ADR 0017. It carries paths and the two settings below,
 # never a secret: agc reads its secrets from its own files. KillMode=process
-# because the VMs msb starts for agc live in the starting unit's cgroup, and
-# the default control-group kill would take every running VM down with a
-# restart of agc.
+# because every VM is an `msb machine` child process of agc, in agc's
+# cgroup: the default control-group kill would take every running VM down
+# with a restart of agc. Its PATH reaches msb, which agc runs.
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNIT_PATH="$HOME/.local/bin:$HOME/go/bin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin"
-
-msb_unit() {
-  cat <<UNIT
-# Installed by scripts/rig-deploy.sh (ADR 0017). Do not edit: the next deploy rewrites it.
-[Unit]
-Description=microsandbox server for agc
-
-[Service]
-Type=simple
-ExecStart=$1 $MSB_SERVER
-Environment=PATH=$UNIT_PATH
-Restart=on-failure
-RestartSec=5
-KillMode=process
-
-[Install]
-WantedBy=default.target
-UNIT
-}
+msb_bin="$(command -v msb || true)"
+if [ -n "$msb_bin" ]; then
+  msb_dir="$(dirname "$msb_bin")"
+  case ":$UNIT_PATH:" in
+    *":$msb_dir:"*) ;;
+    *) UNIT_PATH="$msb_dir:$UNIT_PATH" ;;
+  esac
+fi
 
 agc_unit() {
   cat <<UNIT
 # Installed by scripts/rig-deploy.sh (ADR 0017). Do not edit: the next deploy rewrites it.
 [Unit]
 Description=agc rest
-After=agc-msb.service
-Wants=agc-msb.service
 
 [Service]
 Type=simple
@@ -181,10 +164,10 @@ install_unit() {
   echo "    wrote $file"
 }
 
-# Units need a user manager (systemctl --user) and, to run at boot and
+# The unit needs a user manager (systemctl --user) and, to run at boot and
 # outlive this SSH session, lingering. Without lingering the user manager
-# stops when the last session ends and takes its units along, so the units
-# are only written, not enabled, and agc starts with nohup as before.
+# stops when the last session ends and takes its units along, so the unit
+# is only written, not enabled, and agc starts with nohup as before.
 units=0
 if systemctl --user show-environment > /dev/null 2>&1; then
   units=1
@@ -198,30 +181,15 @@ mkdir -p "$RUN"
 cd "$RUN"
 
 if [ "$units" -eq 1 ]; then
-  echo "==> user units"
+  echo "==> user unit"
   mkdir -p "$UNIT_DIR"
   install_unit agc-rest.service "$(agc_unit "$(command -v agc)")"
-  msb_bin="$(command -v msb || true)"
-  if [ -n "$msb_bin" ]; then
-    install_unit agc-msb.service "$(msb_unit "$msb_bin")"
-  else
-    echo "    msb is not on PATH; agc-msb.service not written" >&2
-  fi
   systemctl --user daemon-reload
 fi
 
 # Never pkill -f: it matches and kills this SSH session's shell.
 echo "==> restarting"
 if [ "$units" -eq 1 ] && [ "$linger" -eq 1 ]; then
-  if [ -n "$msb_bin" ]; then
-    systemctl --user enable agc-msb.service 2> /dev/null
-    # Never restart msb from a deploy: its VMs would go down. Start the
-    # unit only when no msb server runs; one started by hand keeps
-    # running and the unit takes over at the next boot.
-    if ! systemctl --user is-active --quiet agc-msb.service && ! pgrep -x msb > /dev/null; then
-      systemctl --user start agc-msb.service
-    fi
-  fi
   systemctl --user enable agc-rest.service 2> /dev/null
   # An agc an earlier deploy started with nohup is not the unit's.
   if ! systemctl --user is-active --quiet agc-rest.service; then
@@ -238,7 +206,7 @@ linger_note() {
   if [ "$units" -eq 0 ]; then
     echo "==> systemctl --user does not work here: agc rest runs with nohup and nothing restarts it after a reboot."
   elif [ "$linger" -eq 0 ]; then
-    echo "==> lingering is off: the units are written but not enabled, and agc rest runs with nohup."
+    echo "==> lingering is off: agc-rest.service is written but not enabled, and agc rest runs with nohup."
     echo "    Run once, in a terminal on the rig, then deploy again: sudo loginctl enable-linger $(id -un)"
   fi
 }

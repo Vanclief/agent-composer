@@ -6,8 +6,11 @@
 
 On 2026-11-02 Franco powered the rig off and on. What came back:
 
-- Nothing restarted: neither the msb server nor `agc rest`. Both had been
-  started by hand or by `scripts/rig-deploy.sh` with `nohup`.
+- Nothing restarted: `agc rest` had been started by
+  `scripts/rig-deploy.sh` with `nohup`. There is no msb server to restart:
+  msb 0.7.13 has no server subcommand, and every VM is a child process agc
+  spawns, `msb machine --name <sandbox> …` (checked on the rig by
+  claude_mac, 2026-11-02).
 - Every VM that had been running came back as `crashed` in msb.
 - The named volumes `agc-<sandbox>`, with the harness homes and the
   transcripts (ADR 0008), were intact.
@@ -22,35 +25,34 @@ zero, although its harness session was still on the volume.
 
 ## Decision
 
-1. **agc and msb are systemd user units on the rig.**
-   `scripts/rig-deploy.sh` writes `~/.config/systemd/user/agc-msb.service`
-   (`msb $AGC_RIG_MSB_SERVER`, default `server start`, in the foreground)
-   and `agc-rest.service` (`agc rest` in `$AGC_RIG_RUN`, with the same
-   `AGC_KNOWLEDGE_DIR` and `AGC_DEFAULT_OWNER` the script passed to
-   `nohup`, `After=` and `Wants=agc-msb.service`), both
-   `Restart=on-failure` and `WantedBy=default.target`. A unit carries
-   paths and those two settings, never a secret: agc reads its secrets
-   from its own files. Both use `KillMode=process`: the VMs `msb start`
-   boots for agc stay in the cgroup of the process that started them, and
-   the default `control-group` would take every running VM down with each
-   restart of agc.
+1. **`agc rest` is a systemd user unit on the rig; it is the only thing
+   started at boot.** `scripts/rig-deploy.sh` writes
+   `~/.config/systemd/user/agc-rest.service`: `agc rest` in
+   `$AGC_RIG_RUN`, with the same `AGC_KNOWLEDGE_DIR` and
+   `AGC_DEFAULT_OWNER` the script passed to `nohup`, a `PATH` that reaches
+   `msb`, output appended to `agc-rest.log`, `Restart=on-failure` and
+   `WantedBy=default.target`. The unit carries paths and those two
+   settings, never a secret: agc reads its secrets from its own files. No
+   msb unit: msb has no server, and starting the crashed machines again is
+   agc's own recovery (item 3). The unit uses `KillMode=process`: every VM
+   is an `msb machine` child of agc, in agc's cgroup, and the default
+   `control-group` would take every running VM down with each restart of
+   agc. With `process` a deploy leaves them running, as `pkill -x agc`
+   with `nohup` did.
 
-2. **The units run only with lingering.** Without lingering the user
+2. **The unit runs only with lingering.** Without lingering the user
    manager starts at the first login and stops when the last session ends,
    taking its units along; an `agc rest` run by the unit would die when the
-   deploy's SSH session closes. So the deploy uses the units (`enable`,
+   deploy's SSH session closes. So the deploy uses the unit (`enable`,
    `systemctl --user restart agc-rest`) only when `systemctl --user` works
    and `loginctl show-user` says `Linger=yes`. Otherwise it writes the unit
-   files without enabling them, starts agc with `nohup` as before, and
+   file without enabling it, starts agc with `nohup` as before, and
    prints the one command that is left:
 
        sudo loginctl enable-linger <user>
 
    Franco runs it once in a terminal on the rig; an agent never does
-   (`rig-sudo-by-franco`). The next deploy enables the units. A deploy
-   never restarts msb (its VMs would go down); it starts `agc-msb` only
-   when no msb server runs, so one started by hand keeps running and the
-   unit takes over at the next boot.
+   (`rig-sudo-by-franco`). The next deploy enables the unit.
 
 3. **The server restarts what went down while it was off.** Only `agc
    rest` does this, in `Stack.StartScheduler` before the
@@ -163,6 +165,5 @@ zero, although its harness session was still on the volume.
   sandbox was down are not turns, and a task in review still gets the
   resume line as a turn. The persistent agents' cursor file
   (`agc-cursor.json`, ADR 0016) is the place to add it.
-- Not tested on the rig: a reboot with lingering on, whether `msb server
-  start` stays in the foreground, and whether VMs survive `systemctl
-  --user restart agc-rest` with `KillMode=process`.
+- Not tested on the rig: a reboot with lingering on, and whether VMs
+  survive `systemctl --user restart agc-rest` with `KillMode=process`.
