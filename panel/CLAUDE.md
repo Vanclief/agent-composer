@@ -93,20 +93,21 @@ its area.
 - **Statuses are verbatim:** render `<StatusPill status={task.status} />`
   or `<StatusPill status={sandbox.status} detail={sandbox.status_error} />`.
   Never derive, map or relabel a status in the UI. If a status is wrong, the
-  backend has to change. The pill's look follows the rtsdesign tiers
-  (`data-tier`): `lit` for alive (running: filled green; starting/stopping:
-  pulsing blue; review: filled amber), `off` for ended well (done, stopped:
-  the green shape turned off, a dim hollow ring), `attention` for died or
-  needs a hand (failed, crashed: lit red triangle, the only red on screen),
-  `idle` for not started (open: a hollow sky ring, `border-sky-500/70`, the
-  transition hue but empty and still, its pill a low-saturation sky so it
-  stays quieter than `starting`; open → starting → running reads hollow
-  blue → pulsing blue → lit green; Franco: open must not be grey). Done is
-  the off ring with a 7px check drawn at an absolute 1.5px stroke so it
-  stays crisp at 10px. A done thing never looks
-  as bright as a running one; a dead thing never looks like a done one. A
-  word the pill doesn't know is hollow grey, or `attention` when it has a
-  `detail`.
+  backend has to change. The pill's shape is an LED. Franco's spec,
+  2026-11-02, verbatim: "Running: green led blinking. Review: yellow led
+  blinking. Open: green led off. Done: green led on. Crashed: red dot
+  blinking. Canceled: red dot." (canceled is not a backend status yet;
+  failed is the steady red until it is). It overrides the older rtsdesign
+  tier text (open hollow blue, done green off). In the rtsdesign tiers
+  (`data-tier`): `lit` for alive (running: green blinking; review: yellow
+  blinking; starting/stopping: blue pulsing), `off` for ended well (done:
+  green on, steady; stopped: green off), `attention` for died or needs a
+  hand (crashed, or any word with a `detail`: red blinking; failed, error:
+  red on, steady; the only red on screen), `idle` for not started (open, and
+  any word the pill doesn't know: green off, grey text). Blinking means it
+  is doing something or waiting on someone; steady means it is settled:
+  running and done share the green, the blink tells them apart. A dead
+  thing never looks like a done one (red, never green).
   `statusTier`/`tierRank` from `@/components/status-pill` give a status's
   tier; the Tasks and Compute lists sort attention, lit, idle, off (rows
   carry `data-tier`; off ones are muted), and their top row has

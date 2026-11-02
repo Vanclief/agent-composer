@@ -38,37 +38,44 @@
 }
 
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.92 0.004 286.32);
-  --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  /* A step dimmer than zinc-400 so colored concepts pop; still AA on the page and cards. */
-  --muted-foreground: oklch(0.64 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.552 0.016 285.938);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.552 0.016 285.938);
+  /* Eva look (Franco, 2026-11-02): warm black ground, orange type and frames. */
+  --radius: 0;
+  --background: oklch(0.13 0.008 60);
+  --foreground: oklch(0.92 0.02 80);
+  --card: oklch(0.16 0.01 60);
+  --card-foreground: oklch(0.92 0.02 80);
+  --popover: oklch(0.16 0.01 60);
+  --popover-foreground: oklch(0.92 0.02 80);
+  --primary: oklch(0.74 0.19 48);
+  --primary-foreground: oklch(0.1 0 0);
+  --secondary: oklch(0.22 0.03 55);
+  --secondary-foreground: oklch(0.92 0.02 80);
+  --muted: oklch(0.2 0.02 55);
+  --muted-foreground: oklch(0.62 0.03 70);
+  --accent: oklch(0.24 0.04 55);
+  --accent-foreground: oklch(0.92 0.02 80);
+  --destructive: oklch(0.62 0.25 27);
+  --border: oklch(0.74 0.19 48 / 35%);
+  --input: oklch(0.74 0.19 48 / 25%);
+  --ring: oklch(0.8 0.14 200);
+  --sidebar: oklch(0.11 0.006 60);
+  --sidebar-foreground: oklch(0.92 0.02 80);
+  --sidebar-primary: oklch(0.74 0.19 48);
+  --sidebar-primary-foreground: oklch(0.1 0 0);
+  --sidebar-accent: oklch(0.22 0.03 55);
+  --sidebar-accent-foreground: oklch(0.92 0.02 80);
+  --sidebar-border: oklch(0.74 0.19 48 / 35%);
+  --sidebar-ring: oklch(0.8 0.14 200);
 }
 
 @theme inline {
-  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  /* An LED blinking: hard on and off, once a second. */
+  --animate-led-blink: led-blink 1s steps(1, end) infinite;
+  @keyframes led-blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0.2; }
+  }
+  --font-sans: 'Avenir Next Condensed', 'Helvetica Neue', 'Arial Narrow', 'Roboto Condensed', ui-sans-serif, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -114,4 +121,362 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+}
+
+/* Eva look, the Tasks page test (Franco, 2026-11-02). Unlayered on purpose:
+   these rules override Tailwind utilities on the shell and the Tasks list.
+   Palette: orange for frames, tabs and emphasis; pale text; green alive,
+   yellow review, red dead, cyan for the thing you are on. */
+.dark {
+  --eva: oklch(0.74 0.19 48);
+  --eva-dim: oklch(0.74 0.19 48 / 40%);
+  --eva-faint: oklch(0.74 0.19 48 / 12%);
+  --eva-red: oklch(0.62 0.25 27);
+  --eva-green: oklch(0.8 0.2 150);
+  --eva-yellow: oklch(0.86 0.18 92);
+  --eva-cyan: oklch(0.8 0.14 200);
+  --eva-ink: oklch(0.1 0 0);
+  --cut: 12px;
+  color-scheme: dark;
+}
+.dark body {
+  font-weight: 500;
+  background-color: var(--background);
+  background-image:
+    linear-gradient(oklch(0.74 0.19 48 / 6%) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.74 0.19 48 / 6%) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+/* Labels: condensed, uppercase, spaced. */
+.dark h1[data-testid='page-title'],
+.dark nav[aria-label='Main'] button[data-testid^='area-header-'],
+.dark nav[aria-label='Main'] a,
+.dark aside > div:first-child,
+.dark ul[aria-label='Tasks'] > li > div > a[href^='/panel/tasks/']:not([data-testid]),
+.dark button:has(> svg.lucide-plus) {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+/* Shell: black panels, orange one-pixel frames. */
+.dark aside,
+.dark aside > div,
+.dark main > header {
+  border-color: var(--eva-dim);
+  background-color: var(--sidebar);
+}
+.dark aside > div:first-child {
+  letter-spacing: 0.2em;
+}
+.dark aside > div:first-child > span {
+  background: var(--eva);
+  color: var(--eva-ink);
+  border-radius: 0;
+}
+/* The top bar ends in a ruler: a line with a tick every grid cell. */
+.dark main > header {
+  position: relative;
+}
+.dark main > header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 5px;
+  background: repeating-linear-gradient(90deg, var(--eva-dim) 0 1px, transparent 1px 24px);
+}
+/* The page title is a filled tab in the frame, cut at its top right. */
+.dark h1[data-testid='page-title'] {
+  background: var(--eva);
+  color: var(--eva-ink);
+  padding: 2px 18px 1px 12px;
+  font-size: 1rem;
+  line-height: 1.5;
+  letter-spacing: 0.18em;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+}
+.dark h1[data-testid='page-title'] > * {
+  color: oklch(0.1 0 0 / 65%);
+}
+.dark [data-testid='live-status'],
+.dark [data-testid='me'] {
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border-radius: 0;
+}
+/* Sidebar: numbered area headers as outlined blocks, the current one filled;
+   pages hang off a rail; the page you are on is cyan. */
+.dark nav[aria-label='Main'] {
+  counter-reset: area;
+  gap: 10px;
+}
+.dark nav[aria-label='Main'] button[data-testid^='area-header-'] {
+  counter-increment: area;
+  border: 1px solid var(--eva-dim);
+  border-radius: 0;
+  color: var(--eva);
+  background: transparent;
+}
+.dark nav[aria-label='Main'] button[data-testid^='area-header-']::before {
+  content: counter(area, decimal-leading-zero);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
+  margin-right: 2px;
+}
+.dark nav[aria-label='Main'] button[data-testid^='area-header-'] > svg:first-of-type {
+  display: none;
+}
+.dark nav[aria-label='Main'] button[data-testid^='area-header-']:hover {
+  background: var(--eva-faint);
+}
+.dark nav[aria-label='Main'] button[data-testid^='area-header-'][data-current='true'] {
+  background: var(--eva);
+  color: var(--eva-ink);
+  border-color: var(--eva);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+}
+.dark nav[aria-label='Main'] button[data-testid^='area-header-'][data-current='true'] svg {
+  color: var(--eva-ink);
+}
+.dark nav[aria-label='Main'] button[data-testid^='area-header-'] + ul {
+  margin-left: 10px;
+  padding-left: 8px;
+  border-left: 1px solid var(--eva-dim);
+}
+.dark nav[aria-label='Main'] a {
+  border-radius: 0;
+  border-left: 3px solid transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+.dark nav[aria-label='Main'] a:hover {
+  color: var(--foreground);
+  background: var(--accent);
+}
+.dark nav[aria-label='Main'] a[aria-current='page'] {
+  border-left-color: var(--eva-cyan);
+  color: var(--eva-cyan);
+  background: oklch(0.8 0.14 200 / 10%);
+}
+.dark nav[aria-label='Main'] a[aria-current='page'] svg {
+  color: var(--eva-cyan);
+}
+/* The list header: a strip with its own ruler; the new-task control an
+   outlined block. */
+.dark div:has(> ul[aria-label='Tasks']) > div:first-child {
+  position: relative;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--eva-dim);
+}
+.dark div:has(> ul[aria-label='Tasks']) > div:first-child::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, var(--eva-dim) 0 1px, transparent 1px 12px);
+}
+.dark [data-testid='status-counts'] {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  color: var(--muted-foreground);
+}
+.dark [data-testid='status-counts'] b {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.dark button:has(> svg.lucide-plus) {
+  border-radius: 0;
+  background: transparent;
+  border: 1px solid var(--eva);
+  color: var(--eva);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+.dark button:has(> svg.lucide-plus):hover {
+  background: var(--eva);
+  color: var(--eva-ink);
+}
+/* Rows: each task a chamfered plate. The plate is drawn by the row's own
+   background (the frame color) and a pseudo-element one pixel inside (the
+   fill), both cut at the top right and the bottom left; the content sits
+   above them. The status is a tab fused into the plate's left edge. */
+.dark ul[aria-label='Tasks'] {
+  border: 0;
+  gap: 6px;
+  counter-reset: row;
+}
+.dark ul[aria-label='Tasks'] > li {
+  position: relative;
+  isolation: isolate;
+  counter-increment: row;
+  border: 0;
+  background: var(--eva-dim);
+  padding: 10px 14px 10px calc(7.5rem + 14px);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+}
+.dark ul[aria-label='Tasks'] > li + li {
+  border-top: 0;
+}
+.dark ul[aria-label='Tasks'] > li::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  background: var(--card);
+  clip-path: polygon(0 0, calc(100% - var(--cut) + 1px) 0, 100% calc(var(--cut) - 1px), 100% 100%, calc(var(--cut) - 1px) 100%, 0 calc(100% - var(--cut) + 1px));
+}
+.dark ul[aria-label='Tasks'] > li:hover::after {
+  background: var(--secondary);
+}
+.dark ul[aria-label='Tasks'] > li > * {
+  position: relative;
+  z-index: 1;
+}
+.dark ul[aria-label='Tasks'] > li[data-attention='me'] {
+  background: var(--eva);
+}
+.dark ul[aria-label='Tasks'] > li[data-tier='attention']:not([data-attention]) {
+  background: var(--eva-red);
+}
+.dark ul[aria-label='Tasks'] > li[data-tier='off'] {
+  background: oklch(0.74 0.19 48 / 22%);
+}
+/* The row index, small, at the top right inside the cut. */
+.dark ul[aria-label='Tasks'] > li::before {
+  content: counter(row, decimal-leading-zero);
+  position: absolute;
+  z-index: 1;
+  right: 16px;
+  top: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  color: var(--eva-dim);
+}
+/* The status tab: the left edge of the plate, top to bottom, in the
+   status color for alive and dead states, outlined and dim for the rest. */
+.dark ul[aria-label='Tasks'] > li > div:first-of-type {
+  position: static;
+}
+.dark [data-testid='task-status'] {
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  bottom: 1px;
+  width: 7.5rem;
+  display: flex;
+  z-index: 1;
+  border-right: 1px solid var(--eva-dim);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, calc(var(--cut) - 1px) 100%, 0 calc(100% - var(--cut) + 1px));
+}
+.dark [data-testid='task-status'] span[data-status][data-tier] {
+  flex: 1;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  padding: 0 8px 0 14px;
+  color: var(--muted-foreground);
+  background: var(--eva-faint);
+}
+.dark [data-testid='task-status'] span[data-status][data-tier='lit'],
+.dark [data-testid='task-status'] span[data-status][data-tier='attention'] {
+  color: var(--eva-ink);
+  font-weight: 700;
+}
+.dark [data-testid='task-status'] span[data-status='running'][data-tier='lit'] {
+  background: var(--eva-green);
+}
+.dark [data-testid='task-status'] span[data-status='review'][data-tier='lit'] {
+  background: var(--eva-yellow);
+}
+.dark [data-testid='task-status'] span[data-status][data-tier='lit']:not([data-status='running']):not([data-status='review']) {
+  background: oklch(0.78 0.12 220);
+}
+.dark [data-testid='task-status'] span[data-status][data-tier='attention'] {
+  background: var(--eva-red);
+}
+.dark [data-testid='task-status'] span[data-status][data-tier='lit'] [aria-hidden] > span,
+.dark [data-testid='task-status'] span[data-status][data-tier='attention'] [aria-hidden] > span {
+  box-shadow: 0 0 0 1px oklch(0.1 0 0 / 60%);
+}
+.dark ul[aria-label='Tasks'] > li > [data-testid='attention-mark'] {
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  bottom: 1px;
+  width: 3px;
+  border-radius: 0;
+  background: var(--eva);
+  box-shadow: none;
+  z-index: 2;
+}
+/* Title, name, meta. */
+.dark ul[aria-label='Tasks'] > li > div > a[href^='/panel/tasks/']:not([data-testid]) {
+  color: var(--foreground);
+  font-size: 1rem;
+}
+.dark ul[aria-label='Tasks'] > li[data-tier='off'] > div > a[href^='/panel/tasks/']:not([data-testid]) {
+  color: var(--muted-foreground);
+}
+.dark ul[aria-label='Tasks'] > li > div > span[title] {
+  color: var(--muted-foreground);
+}
+/* Status readouts elsewhere (the compute chip, the counts): square mono. */
+.dark span[data-status][data-tier] {
+  border-radius: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+.dark a[data-testid='sandbox-summary'] {
+  border-radius: 0;
+  background: transparent;
+  border-color: oklch(0.62 0.03 70 / 50%);
+  color: var(--foreground);
+}
+.dark a[data-testid='sandbox-summary'] [data-status] {
+  background: transparent;
+}
+.dark a[data-testid='sandbox-summary'] [data-status][data-tier='lit'] {
+  color: var(--eva-green);
+  border-color: var(--eva-green);
+}
+.dark a[data-testid='sandbox-summary'] [data-status][data-tier='attention'] {
+  color: var(--eva-red);
+  border-color: var(--eva-red);
+}
+/* Acts at the far right: filled orange blocks, cut at the top right. */
+.dark [data-testid='act'] {
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--eva);
+  color: var(--eva-ink);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 10px 2px 8px;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+}
+.dark [data-testid='act']:hover {
+  background: oklch(0.85 0.17 55);
+}
+.dark [data-testid='tasks-badge'],
+.dark span[data-testid$='-badge'] {
+  border-radius: 0;
+}
+/* The meta line aligns with the title now that the status is a tab. */
+.dark ul[aria-label='Tasks'] > li > div:nth-of-type(2) {
+  padding-left: 0;
 }
