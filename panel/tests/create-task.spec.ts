@@ -9,7 +9,7 @@ async function openDialog(page: Page) {
   return dialog
 }
 
-test('the title derives the slug live and gates Create', async ({ page }) => {
+test('the title derives the name live, the name is editable, and Create says why it is off', async ({ page }) => {
   const dialog = await openDialog(page)
   const create = dialog.locator('[data-create]')
   await expect(create).toHaveText('Create: needs a title')
@@ -18,17 +18,102 @@ test('the title derives the slug live and gates Create', async ({ page }) => {
   const title = dialog.getByRole('textbox', { name: 'Title' })
   await expect(title).toBeFocused()
   await title.pressSequentially('Review facebook ads')
-  await expect(dialog.locator('[data-slug]')).toHaveText('review-facebook-ads')
+  const name = dialog.locator('[data-name]')
+  await expect(name).toHaveValue('review-facebook-ads')
   await expect(dialog.locator('[data-own-channel]')).toContainText('review-facebook-ads')
   await expect(create).toHaveText('Create task')
   await expect(create).toBeEnabled()
 
   await title.fill('42 things')
-  await expect(dialog.locator('[data-slug]')).toHaveText('task-42-things')
+  await expect(name).toHaveValue('task-42-things')
 
   await title.fill('!!!')
-  await expect(dialog.locator('[data-slug]')).toHaveCount(0)
+  await expect(name).toHaveValue('')
   await expect(create).toHaveText('Create: needs a letter or digit')
+
+  // An edited name stops following the title until reset.
+  await name.fill('my-name')
+  await title.fill('Something else')
+  await expect(name).toHaveValue('my-name')
+  await expect(dialog.locator('[data-own-channel]')).toContainText('my-name')
+  await name.fill('')
+  await expect(create).toHaveText('Create: needs a name')
+  await dialog.locator('[data-name-reset]').click()
+  await expect(name).toHaveValue('something-else')
+
+  // Without a sandbox the brief is all there is, so it is required.
+  await dialog.locator('[data-compute]').click()
+  await expect(create).toHaveText('Create: needs a brief')
+  await expect(create).toBeDisabled()
+  await dialog.locator('[data-brief]').fill('Do it.')
+  await expect(create).toHaveText('Create task')
+})
+
+test('a harness shows the server defaults as values', async ({ page }) => {
+  const dialog = await openDialog(page)
+  await expect(dialog.locator('[data-assignee="claude_code"]')).toHaveAttribute('data-state', 'on')
+  await expect(dialog.locator('[data-model]')).toHaveValue('claude-opus-5-5')
+  await expect(dialog.locator('[data-manager]')).toHaveValue('franco')
+  await expect(dialog.locator('[data-owner]')).toHaveValue('franco')
+  await dialog.getByRole('textbox', { name: 'Title' }).fill('Hint check')
+  await expect(dialog.locator('[data-agent-hint]')).toHaveText(
+    'The manager answers the agent in #hint-check; the agent escalates to #franco when only the owner can decide.',
+  )
+  await expect(dialog.locator('[data-compute]')).toHaveAttribute('aria-checked', 'true')
+  await expect(dialog.locator('[data-brief]')).toHaveAttribute('placeholder', 'What to do, and what done looks like')
+  await expect(dialog.locator('[data-command]')).toHaveAttribute('placeholder', 'empty: agc runs the agent for you')
+  const summary = dialog.locator('[data-summary]')
+  await expect(summary).toHaveText('claude_code (claude-opus-5-5) · manager franco · owner franco · 2 cpus 4 GB')
+
+  await dialog.locator('[data-repo]').fill('github.com/org/repo')
+  await expect(summary).toHaveText(
+    'claude_code (claude-opus-5-5) · manager franco · owner franco · 2 cpus 4 GB · repo github.com/org/repo',
+  )
+
+  // Another harness has no default model here: the field is empty, not hidden.
+  await dialog.locator('[data-assignee="codex_cli"]').click()
+  await expect(dialog.locator('[data-model]')).toHaveValue('')
+  await expect(summary).toHaveText('codex_cli · manager franco · owner franco · 2 cpus 4 GB · repo github.com/org/repo')
+})
+
+test('a person hides the model and turns compute off', async ({ page }) => {
+  const dialog = await openDialog(page)
+  const create = dialog.locator('[data-create]')
+  await dialog.getByRole('textbox', { name: 'Title' }).fill('Person check')
+
+  await dialog.locator('[data-assignee="person"]').click()
+  await expect(dialog.locator('[data-model]')).toHaveCount(0)
+  await expect(dialog.locator('[data-compute]')).toHaveAttribute('aria-checked', 'false')
+  await expect(dialog.locator('[data-card="compute"]')).toContainText('No sandbox: a person does this task')
+  await expect(dialog.locator('[data-repo]')).toHaveCount(0)
+  await expect(dialog.locator('[data-person]')).toBeFocused()
+  await expect(create).toHaveText("Create: needs the person's name")
+  await dialog.locator('[data-person]').fill('alice')
+  await expect(create).toHaveText('Create: needs a brief')
+  await expect(dialog.locator('[data-summary]')).toHaveText('alice · manager franco · owner franco · no sandbox')
+
+  // Back to a harness: its model and the sandbox return.
+  await dialog.locator('[data-assignee="claude_code"]').click()
+  await expect(dialog.locator('[data-model]')).toHaveValue('claude-opus-5-5')
+  await expect(dialog.locator('[data-compute]')).toHaveAttribute('aria-checked', 'true')
+  await expect(create).toHaveText('Create task')
+})
+
+test('the for picker lists open actions first, then decisions', async ({ page }) => {
+  const dialog = await openDialog(page)
+  await dialog.locator('[data-for]').click()
+  const options = dialog.locator('[data-for-option]')
+  await expect(options.first()).toHaveAttribute('data-for-option', 'attach-rulesets-to-task-specs')
+  await expect(dialog.locator('[data-for-picker]')).toContainText('Decisions')
+
+  await dialog.getByPlaceholder('action or decision id').fill('cgo')
+  await expect(options).toHaveCount(1)
+  await options.first().click()
+  await expect(dialog.locator('[data-for-picker]')).toHaveCount(0)
+  await expect(dialog.locator('[data-for="release-builds-with-cgo"]')).toContainText('Build the release binaries')
+
+  await dialog.locator('[data-for-clear]').click()
+  await expect(dialog.locator('[data-for=""]')).toBeVisible()
 })
 
 test('chips toggle and secrets show their hosts input', async ({ page }) => {
@@ -165,7 +250,13 @@ test('Create sends the spec and opens the new task', async ({ page }) => {
   await dialog.locator('[data-channel="#alerts"] [data-channel-read]').click()
   await expect(dialog.locator('[data-card="channels"] [data-count]')).toHaveText('3')
 
+  await dialog.locator('[data-brief]').fill('Ship it.')
+  await dialog.locator('[data-for]').click()
+  await dialog.locator('[data-for-option="release-builds-with-cgo"]').click()
+  await dialog.locator('[data-command]').fill('bash -l')
+
   const posted = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith('/api/tasks'))
+  const answered = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/api/tasks'))
   await dialog.locator('[data-create]').click()
   const spec = {
     image: 'agc-agent',
@@ -178,15 +269,57 @@ test('Create sends the spec and opens the new task', async ({ page }) => {
     volumes: ['data:/home/agent/data:rw'],
     channels: ['#releases', '#alerts:read'],
   }
-  // TODO(ADR 0008): the create-task feature sends a real brief, assignee and
-  // command; the foundation pass only moved the spec under sandbox.
-  expect((await posted).postData()).toBe(JSON.stringify({ title, brief: '', assignee: '', for: '', sandbox: spec }))
+  expect((await posted).postData()).toBe(
+    JSON.stringify({
+      title,
+      brief: 'Ship it.',
+      assignee: 'claude_code',
+      model: 'claude-opus-5-5',
+      manager: 'franco',
+      owner: 'franco',
+      for: 'release-builds-with-cgo',
+      sandbox: { ...spec, command: 'bash -l' },
+    }),
+  )
+  // Returns at once: the task is open and its sandbox starting.
+  const created = await (await answered).json()
+  expect(created.status).toBe('open')
+  expect(created.sandboxes[0].status).toBe('starting')
 
   await expect(page).toHaveURL(new RegExp(`/panel/tasks/${name}/brief$`))
   await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByTestId('task-header').locator('[data-status]')).toHaveText('open')
   const task = await (await page.request.get(`/api/tasks/${name}`)).json()
   expect(task.title).toBe(title)
+  expect(task.for).toBe('release-builds-with-cgo')
   expect(task.sandboxes[0].spec).toEqual(spec)
+  expect(task.sandboxes[0].command).toBe('bash -l')
+})
+
+test('a person task is created with no sandbox', async ({ page }) => {
+  const dialog = await openDialog(page)
+  const stamp = Date.now()
+  const name = `person-check-${stamp}`
+  await dialog.getByRole('textbox', { name: 'Title' }).fill(`Person check ${stamp}`)
+  await dialog.locator('[data-brief]').fill('Call the bank.')
+  await dialog.locator('[data-assignee="person"]').click()
+  await dialog.locator('[data-person]').fill('alice')
+  await expect(dialog.locator('[data-summary]')).toContainText('no sandbox')
+
+  const posted = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith('/api/tasks'))
+  await dialog.locator('[data-create]').click()
+  const body = JSON.parse((await posted).postData() ?? '{}')
+  expect(body.assignee).toBe('alice')
+  expect(body.model).toBe('')
+  expect(body.manager).toBe('franco')
+  expect(body.owner).toBe('franco')
+  expect(body.sandbox).toBeUndefined()
+
+  await expect(page).toHaveURL(new RegExp(`/panel/tasks/${name}/brief$`))
+  const task = await (await page.request.get(`/api/tasks/${name}`)).json()
+  expect(task.assignee).toBe('alice')
+  expect(task.status).toBe('open')
+  expect(task.sandboxes).toEqual([])
 })
 
 test('a backend error shows verbatim and keeps the dialog open', async ({ page }) => {
@@ -216,6 +349,11 @@ test('screenshot', async ({ page }) => {
     await shoot(`${dir}/newtask-blank-${theme}.png`)
 
     await dialog.getByRole('textbox', { name: 'Title' }).fill('Review facebook ads')
+    await dialog
+      .locator('[data-brief]')
+      .fill('Find the ads that lose money and pause them.\nDone: a list in the channel.')
+    await dialog.locator('[data-for]').click()
+    await dialog.locator('[data-for-option="attach-rulesets-to-task-specs"]').click()
     await dialog.locator('[data-tile="backend-review"]').click()
     await dialog.locator('[data-cpus]').getByRole('radio', { name: '4', exact: true }).click()
     await dialog.locator('[data-memory]').getByRole('radio', { name: '8 GB' }).click()
@@ -245,5 +383,9 @@ test('screenshot', async ({ page }) => {
 
     await dialog.getByRole('button', { name: 'YAML', exact: true }).click()
     await shoot(`${dir}/newtask-raw-${theme}.png`)
+
+    await dialog.locator('[data-assignee="person"]').click()
+    await dialog.locator('[data-person]').fill('alice')
+    await shoot(`${dir}/newtask-person-${theme}.png`)
   }
 })
