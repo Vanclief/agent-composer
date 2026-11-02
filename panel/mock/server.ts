@@ -130,6 +130,17 @@ const SECRETS = [
   { name: 'CLAUDE_CODE_OAUTH_TOKEN', hosts: ['api.anthropic.com'] },
   { name: 'CUSTOM', hosts: [] as string[] },
   { name: 'GITHUB_TOKEN', hosts: ['api.github.com', 'github.com'] },
+  // No harness reads it: a second Anthropic account, sent as one of the
+  // variables claude_code reads (ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN).
+  { name: 'ANTHROPIC_WORK', hosts: ['api.anthropic.com'] },
+]
+
+// What GET /api/secrets reports beside the secrets: the variables each
+// harness reads, preferred first.
+const SECRET_HARNESSES = [
+  { id: 'claude_code', reads: ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'] },
+  { id: 'codex_cli', reads: ['OPENAI_API_KEY'] },
+  { id: 'pi', reads: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'] },
 ]
 
 const TASK_NAME_RE = /^[a-z][a-z0-9-]{0,62}$/
@@ -914,7 +925,11 @@ function sandboxRequest(body: Record<string, unknown>) {
   const { command, ...spec } = body
   const known = new Set(SECRETS.map((s) => s.name))
   for (const entry of (spec.secrets as unknown[] | undefined) ?? []) {
-    const secret = String(entry).split('@')[0]
+    // NAME, NAME@hosts, NAME as ENV or NAME as ENV@hosts.
+    const secret = String(entry)
+      .split('@')[0]
+      .trim()
+      .split(/\s+as\s+/)[0]
     if (!known.has(secret)) {
       throw apiError(
         400,
@@ -1276,7 +1291,7 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
     } else if (parts[1] === 'specs') {
       body = await specsAPI(state, method, parts.slice(2), req)
     } else if (parts[1] === 'secrets' && parts.length === 2 && method === 'GET') {
-      body = { secrets: SECRETS }
+      body = { secrets: SECRETS, harnesses: SECRET_HARNESSES }
     } else if (parts[1] === 'msg' && parts.length === 3) {
       body = await msgAPI(state, method, parts[2], url, req)
     } else if (parts[1] === 'knowledge' && method === 'GET') {

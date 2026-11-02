@@ -413,3 +413,69 @@ test('"Accepted when" sends one criterion per line, empty lines dropped', async 
     'the Stop icon is filled',
   ])
 })
+
+test('NAME, NAME@hosts and NAME as ENV@hosts round-trip through the form unchanged', async ({ page }) => {
+  const dialog = await openDialog(page)
+  const entries = [
+    'GITHUB_TOKEN',
+    'CUSTOM@api.example.com,example.com',
+    'ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN@api.anthropic.com',
+  ]
+  const yaml = 'image: agc-agent\nsecrets:\n' + entries.map((e) => `  - ${e}\n`).join('')
+
+  await dialog.getByRole('button', { name: 'YAML', exact: true }).click()
+  const raw = dialog.locator('[data-raw]')
+  await raw.fill(yaml)
+  await dialog.getByRole('button', { name: 'YAML', exact: true }).click()
+
+  // Read into the form: all three picked, the alias lit and on the chip.
+  for (const name of ['GITHUB_TOKEN', 'CUSTOM', 'ANTHROPIC_WORK']) {
+    await expect(dialog.locator(`[data-secret="${name}"]`)).toHaveAttribute('aria-pressed', 'true')
+  }
+  await expect(dialog.locator('[data-secret-hosts="CUSTOM"]')).toHaveValue('api.example.com, example.com')
+  await expect(dialog.locator('[data-secret="ANTHROPIC_WORK"]')).toHaveText('ANTHROPIC_WORK → CLAUDE_CODE_OAUTH_TOKEN')
+  await expect(
+    dialog.locator('[data-secret-as="ANTHROPIC_WORK"] [data-env="CLAUDE_CODE_OAUTH_TOKEN"]'),
+  ).toHaveAttribute('data-state', 'on')
+
+  // Written back unchanged.
+  await dialog.getByRole('button', { name: 'YAML', exact: true }).click()
+  await expect(raw).toHaveValue(yaml)
+})
+
+test('a picked secret no harness reads offers the harness variables, and one becomes NAME as ENV', async ({ page }) => {
+  const dialog = await openDialog(page)
+  const stamp = Date.now()
+  await dialog.getByRole('textbox', { name: 'Title' }).fill(`Account check ${stamp}`)
+
+  // Read directly by a harness, or bound to a host that is no provider's
+  // API: no choice.
+  await dialog.locator('[data-secret="CLAUDE_CODE_OAUTH_TOKEN"]').click()
+  await dialog.locator('[data-secret="GITHUB_TOKEN"]').click()
+  await expect(dialog.locator('[data-secret-as="CLAUDE_CODE_OAUTH_TOKEN"]')).toHaveCount(0)
+  await expect(dialog.locator('[data-secret-as="GITHUB_TOKEN"]')).toHaveCount(0)
+  await dialog.locator('[data-secret="CLAUDE_CODE_OAUTH_TOKEN"]').click()
+
+  // Not picked: no choice yet. Picked: claude_code's variables, none lit.
+  await expect(dialog.locator('[data-secret-as]')).toHaveCount(0)
+  const work = dialog.locator('[data-secret="ANTHROPIC_WORK"]')
+  await work.click()
+  const as = dialog.locator('[data-secret-as="ANTHROPIC_WORK"] [data-env]')
+  await expect(as).toHaveText(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'])
+  await expect(as.and(page.locator('[data-state="on"]'))).toHaveCount(0)
+  await expect(work).toHaveText('ANTHROPIC_WORK')
+
+  // Another harness offers its own variables.
+  await dialog.locator('[data-card="agent"]').getByRole('radio', { name: 'codex_cli' }).click()
+  await expect(as).toHaveText(['OPENAI_API_KEY'])
+  await dialog.locator('[data-card="agent"]').getByRole('radio', { name: 'claude_code' }).click()
+
+  await dialog.locator('[data-secret-as="ANTHROPIC_WORK"] [data-env="CLAUDE_CODE_OAUTH_TOKEN"]').click()
+  await expect(dialog.locator('[data-env="CLAUDE_CODE_OAUTH_TOKEN"]')).toHaveAttribute('data-state', 'on')
+  await expect(work).toHaveText('ANTHROPIC_WORK → CLAUDE_CODE_OAUTH_TOKEN')
+
+  const posted = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith('/api/tasks'))
+  await dialog.locator('[data-create]').click()
+  const body = JSON.parse((await posted).postData() ?? '{}')
+  expect(body.sandbox.secrets).toEqual(['GITHUB_TOKEN', 'ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN'])
+})
