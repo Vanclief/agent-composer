@@ -75,8 +75,7 @@ func (api *API) sleep(ctx context.Context, record *agent.Agent) error {
 		return nil
 	}
 
-	// TODO(ADR 0011): DM channels @<owner>/<name> are not valid channels
-	// until ADR 0011 lands, so this post fails and is logged until then.
+	// TODO(ADR 0011): @<owner>/<name> is not a valid channel until ADR 0011 lands; this post fails until then.
 	// The VM is already stopped, so a failed post is logged, not returned.
 	_, err = api.msg.PostAsSystem(ctx, dm, "Asleep.")
 	if err != nil {
