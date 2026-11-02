@@ -46,15 +46,17 @@ test('the list puts open tasks first, then running, then done, newest first', as
   }
 })
 
-test('each card shows assignee, manager, for and its sandboxes', async ({ page }) => {
+test('each card shows assignee, manager, owner, for and its sandboxes', async ({ page }) => {
   await page.goto('/panel/tasks')
 
   const review = card(page, 'review-42')
   await expect(review.getByRole('link', { name: 'Review 42' })).toBeVisible()
   await expect(review.getByTestId('assignee')).toHaveText('claude_code · claude-opus-5-5')
   await expect(review.getByTestId('assignee')).toHaveAttribute('data-kind', 'harness')
-  await expect(review.getByTestId('manager')).toHaveText('@franco')
-  await expect(review.getByTestId('manager').locator('[title]')).toHaveAttribute('title', 'manager franco')
+  await expect(review.getByTestId('manager')).toHaveText('@agent-composer-da')
+  await expect(review.getByTestId('manager').locator('[title]')).toHaveAttribute('title', 'manager agent-composer-da')
+  await expect(review.getByTestId('owner')).toHaveText('@franco')
+  await expect(review.getByTestId('owner').locator('[title]')).toHaveAttribute('title', 'owner franco')
   const forLink = review.getByTestId('for')
   await expect(forLink).toHaveText('attach-rulesets-to-task-specs')
   await expect(forLink).toHaveAttribute('href', '/panel/think/actions/attach-rulesets-to-task-specs')
@@ -81,7 +83,8 @@ test('a task opens on its brief tab with its chips, and has compute and messages
   const header = page.getByTestId('task-header')
   await expect(header.locator('[data-status]')).toHaveText('running')
   await expect(header.getByTestId('assignee')).toHaveText('claude_code · claude-opus-5-5')
-  await expect(header.getByTestId('manager')).toHaveText('@franco')
+  await expect(header.getByTestId('manager')).toHaveText('@agent-composer-da')
+  await expect(header.getByTestId('owner')).toHaveText('@franco')
   await expect(header.getByTestId('for')).toHaveText('attach-rulesets-to-task-specs')
   await expect(header.getByRole('button', { name: 'Mark done' })).toBeVisible()
 
@@ -172,14 +175,21 @@ test('delete asks in a dialog, then returns to the list', async ({ page, request
   await expect(card(page, task.name)).toHaveCount(0)
 })
 
-test('the messages tab opens with agc addressing the manager, then the instructions', async ({ page, request }) => {
+test('the messages tab opens with agc addressing the manager and owner, then the instructions', async ({
+  page,
+  request,
+}) => {
   const task = await (await request.get('/api/tasks/review-42')).json()
   await page.addInitScript(() => localStorage.setItem('agc.panel.human', `t${Date.now().toString(36)}`))
   await page.goto('/panel/tasks/review-42/messages')
   const messages = page.getByTestId('message-list').getByTestId('message')
-  await expect(messages.first()).toContainText('@franco, task `review-42` is open: Review 42.')
-  await expect(messages.first()).toContainText('post /done to close the task.')
-  await expect(messages.nth(1)).toContainText(task.sandboxes[0].instructions.split('\n')[0])
+  await expect(messages.first()).toContainText(
+    '@agent-composer-da (manager), @franco (owner): task `review-42` is open: Review 42.\n' +
+      'Agent: claude_code (claude-opus-5-5) on sandbox `review-42`, starting.\n' +
+      "The agent's instructions are the next message. Reply here to talk to it; " +
+      'it escalates to #franco when only the owner can decide. Post /done to close the task.',
+  )
+  await expect(messages.nth(1)).toContainText(task.sandboxes[0].instructions)
   await expect(page.getByTestId('message-list').getByTestId('author').first()).toHaveText('@agc')
 })
 

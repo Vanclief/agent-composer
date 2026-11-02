@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/shell/page-title'
 
 import { TaskActions, useTaskActions } from './TaskActions'
-import { AssigneeChip, ForChip, ManagerChip } from './TaskChips'
+import { AssigneeChip, ForChip, ManagerChip, OwnerChip } from './TaskChips'
 
 const TABS: { to: string; label: string; concept: Concept }[] = [
   { to: 'brief', label: 'Brief', concept: 'brief' },
@@ -76,6 +76,7 @@ export function TaskPage() {
           <div data-testid="task-chips" className="flex flex-wrap items-center gap-1.5">
             <AssigneeChip task={data} />
             <ManagerChip task={data} />
+            <OwnerChip task={data} />
             <ForChip task={data} />
           </div>
         </div>

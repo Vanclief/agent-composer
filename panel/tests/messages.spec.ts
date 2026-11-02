@@ -212,6 +212,8 @@ test('the members strip lists distinct senders, humans first, with a count', asy
   await actAs(page, uniqueName())
   await page.goto('/panel/messages/review-42')
   const strip = page.getByRole('group', { name: 'Members' })
-  await expect(strip.getByTestId('members-count')).toHaveText('2 agents · 1 human')
-  await expect(strip.locator('[title]')).toHaveText(['@franco', '@reviewer', '@tester'])
+  // The reserved sender agc (ADR 0009) posts with an empty task, so the
+  // strip counts it with the humans until messages carry a human flag.
+  await expect(strip.getByTestId('members-count')).toHaveText('2 agents · 2 humans')
+  await expect(strip.locator('[title]')).toHaveText(['@agc', '@franco', '@reviewer', '@tester'])
 })

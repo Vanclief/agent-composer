@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/shell/page-title'
 
 import { shortAge, sortTasks } from './format'
-import { AssigneeChip, ForChip, ManagerChip, SandboxSummary } from './TaskChips'
+import { AssigneeChip, ForChip, ManagerChip, OwnerChip, SandboxSummary } from './TaskChips'
 
 export function TasksPage() {
   usePageTitle('Tasks')
@@ -100,6 +100,7 @@ function TaskCard({ task }: { task: TaskView }) {
       <div className="relative z-10 flex w-fit flex-wrap items-center gap-1.5 pl-[5.75rem]">
         <AssigneeChip task={task} />
         <ManagerChip task={task} />
+        <OwnerChip task={task} />
         <ForChip task={task} />
         <SandboxSummary task={task} />
       </div>

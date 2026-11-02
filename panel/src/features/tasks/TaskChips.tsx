@@ -45,15 +45,25 @@ export function AssigneeChip({ task }: { task: TaskView }) {
   )
 }
 
-// The messaging name agc addresses when the task opens (ADR 0009).
+// ADR 0009: the manager created the task and runs it day to day (an agent
+// or a person); the owner is the human it answers to. agc addresses both
+// when the task opens.
 export function ManagerChip({ task }: { task: TaskView }) {
-  if (!task.manager) {
+  return <PersonChip role="manager" name={task.manager} />
+}
+
+export function OwnerChip({ task }: { task: TaskView }) {
+  return <PersonChip role="owner" name={task.owner} />
+}
+
+function PersonChip({ role, name }: { role: 'manager' | 'owner'; name: string }) {
+  if (!name) {
     return null
   }
   return (
-    <span data-testid="manager" className="inline-flex">
-      <IconChip icon={conceptIcons.human} concept="human" title={`manager ${task.manager}`}>
-        @{task.manager}
+    <span data-testid={role} className="inline-flex">
+      <IconChip icon={conceptIcons.human} concept="human" title={`${role} ${name}`}>
+        @{name}
       </IconChip>
     </span>
   )
