@@ -16,6 +16,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
+	"github.com/vanclief/agent-composer/core/watchdog"
 	"github.com/vanclief/agent-composer/messaging"
 	"github.com/vanclief/agent-composer/runtime"
 	"github.com/vanclief/agent-composer/secrets"
@@ -39,6 +40,8 @@ type Stack struct {
 	KnowledgeAPI *knowledge.API
 	// Events is the live feed behind GET /api/events.
 	Events *events.Bus
+	// Watchdog reports stuck tasks to their owner (ADR 0013).
+	Watchdog *watchdog.Watchdog
 }
 
 type StackOptions struct {
@@ -123,10 +126,12 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		TasksAPI:     tasksAPI,
 		KnowledgeAPI: knowledgeAPI,
 		Events:       bus,
+		Watchdog:     watchdog.New(ctrl.DB, msg, sandboxesAPI, bus, watchdog.Settings(ctrl.Watchdog())),
 	}, nil
 }
 
 // StartScheduler blocks while the scheduler runs until the context is canceled.
 func (s *Stack) StartScheduler(ctx context.Context) {
+	go s.Watchdog.Run(ctx)
 	s.Scheduler.Start(ctx)
 }

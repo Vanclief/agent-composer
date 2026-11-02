@@ -1,0 +1,11 @@
+# Task watchdog (2026-11-02): Franco asked for a mechanical watchdog after
+# dms-whatsapp sat idle for 52 minutes and yc-pitch on a permission
+# prompt. Its own file so sibling branches do not collide.
+proposals:
+  - id: watchdog-code
+    proposes: code
+    proposal: "core/watchdog checks every running task each minute and posts as agc in #<task> and #<owner> when the agent is silent, has exited, or the task waits in review, derived from msb's job log and the messages table with no migration (ADR 0013)."
+    because: [mechanical-watchdog-tells-the-owner]
+    by: claude_code
+    when: 2026-11-02
+    change: agc/watchdog

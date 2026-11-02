@@ -7,6 +7,7 @@ package executor
 import (
 	"context"
 	"io"
+	"time"
 )
 
 // Command is one program invocation.
@@ -74,4 +75,34 @@ type TerminalExecutor interface {
 	ListTerminals(ctx context.Context) ([]Terminal, error)
 	// AttachTerminal replays up to replayBytes of recent output first.
 	AttachTerminal(ctx context.Context, id string, replayBytes int) (TerminalStream, error)
+}
+
+// Job is a terminal job as the runtime last saw it, finished ones included,
+// for watching it (the watchdog, ADR 0013).
+type Job struct {
+	ID      string
+	Command []string
+	Running bool
+	// ExitCode is nil while the job runs or when the runtime does not say.
+	ExitCode   *int
+	CreatedAt  time.Time
+	FinishedAt *time.Time
+}
+
+// JobOutput is the tail of a job's retained output.
+type JobOutput struct {
+	// At is when the job last wrote output. Zero when it never did.
+	At time.Time
+	// Data is the last few chunks of output, raw.
+	Data []byte
+}
+
+// JobWatcher is implemented by executors whose runtime keeps a log of
+// every job's output with timestamps, so nobody has to attach and buffer
+// it. Callers type-assert.
+type JobWatcher interface {
+	// ListJobs lists every job, finished ones included.
+	ListJobs(ctx context.Context) ([]Job, error)
+	// TailJob returns the last chunks of job id's output (up to chunks).
+	TailJob(ctx context.Context, id string, chunks int) (*JobOutput, error)
 }

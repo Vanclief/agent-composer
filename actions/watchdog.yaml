@@ -1,0 +1,30 @@
+# Open follow-ups of ADR 0013 (the watchdog). Its own file so sibling
+# branches do not collide in actions/repo.yaml.
+actions:
+  # ADR 0013 item 7: drift is a judgment, not a mechanical check.
+  - id: judge-drift-from-the-brief
+    action: "Add a judged rule (ADR 0006, judge:) asking a trusted harness whether a running task's agent is still doing what its brief asks, recorded as an opinion and never posted as a measurement."
+    because: [mechanical-watchdog-tells-the-owner]
+    opened: { who: franco, when: 2026-11-02 }
+
+  # ADR 0013, Consequences: msb does not document the unit of job log
+  # timestamps; sandbox.UnixTime guesses it by magnitude.
+  - id: check-msb-job-timestamps-on-the-rig
+    action: "On the rig, compare the watchdog's last-output time for a live sandbox with its terminal, to confirm sandbox.UnixTime reads msb's job timestamps in the right unit."
+    because: [mechanical-watchdog-tells-the-owner]
+    opened: { who: franco, when: 2026-11-02 }
+
+  # ADR 0013, Alternatives: DMs and presence are on unmerged branches.
+  - id: watchdog-posts-in-the-owners-dm
+    action: "Once direct message channels (@<human>/<task>) are merged, post the watchdog's sentence in the owner's DM with the task instead of #<owner>."
+    because: [mechanical-watchdog-tells-the-owner]
+    opened: { who: franco, when: 2026-11-02 }
+
+  # ADR 0013 item 4: watchdog.alert is published; no panel reads it, and
+  # docs/openapi.yaml does not list it yet because documenting it means
+  # regenerating the panel's types (make types), which this branch leaves
+  # to the panel's owners.
+  - id: panel-shows-watchdog-alerts
+    action: "Document watchdog.alert (WatchdogAlertEvent) under GET /events in docs/openapi.yaml, run make types, and show it on the task in the panel (a badge on a silent, exited or waiting task, cleared when the event says so)."
+    because: [mechanical-watchdog-tells-the-owner]
+    opened: { who: franco, when: 2026-11-02 }

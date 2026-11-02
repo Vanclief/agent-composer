@@ -24,4 +24,6 @@ type Config struct {
 	SQLite   sqlite.ConnectionConfig   `mapstructure:"sqlite"`
 	// Defaults fill in a task's assignee, model and owner (ADR 0009).
 	Defaults DefaultsSettings `mapstructure:"defaults"`
+	// Watchdog sets when a running task is reported (ADR 0013).
+	Watchdog WatchdogSettings `mapstructure:"watchdog"`
 }

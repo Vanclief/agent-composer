@@ -83,3 +83,11 @@ func (e *Executor) ListTerminals(ctx context.Context) ([]executor.Terminal, erro
 func (e *Executor) AttachTerminal(ctx context.Context, id string, replayBytes int) (executor.TerminalStream, error) {
 	return nil, unavailable()
 }
+
+func (e *Executor) ListJobs(ctx context.Context) ([]executor.Job, error) {
+	return nil, unavailable()
+}
+
+func (e *Executor) TailJob(ctx context.Context, id string, chunks int) (*executor.JobOutput, error) {
+	return nil, unavailable()
+}

@@ -1,0 +1,8 @@
+# ADR 0013: the watchdog. Its own file so sibling branches do not collide
+# in decisions/repo.yaml.
+decisions:
+  - id: mechanical-watchdog-tells-the-owner
+    decision: "A loop in agc checks every running task each minute from signals it already has (the agent job's last terminal output and exit, the last message in #<task>, time in review) and posts one sentence as agc in #<task> and #<owner>, at most once an hour per condition; no model is asked."
+    because: [llms-are-parsers-not-sensors, unread-digests-remove-the-human, delivery-and-acceptance-are-different-acts, messaging-over-per-task-vsock, tasks-are-done-when-accepted]
+    adr: docs/decisions/0013-watchdog.md
+    decided: { who: franco, when: 2026-11-02 }
