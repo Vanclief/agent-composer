@@ -20,6 +20,17 @@ import (
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
+	task := func(*http.Request) (messaging.Caller, error) {
+		return messaging.Caller{Task: "review-42"}, nil
+	}
+
+	return newServerAs(t, task)
+}
+
+// newServerAs serves a fresh in-memory messaging service to caller.
+func newServerAs(t *testing.T, caller func(*http.Request) (messaging.Caller, error)) *httptest.Server {
+	t.Helper()
+
 	sqldb, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -41,11 +52,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 		}
 	}
 
-	task := func(*http.Request) (messaging.Caller, error) {
-		return messaging.Caller{Task: "review-42"}, nil
-	}
-
-	server := httptest.NewServer(New(messaging.NewService(db), task))
+	server := httptest.NewServer(New(messaging.NewService(db), caller))
 	t.Cleanup(server.Close)
 
 	return server
@@ -151,5 +158,47 @@ func TestErrors(t *testing.T) {
 	status = call(t, http.MethodPost, server.URL+"/join", `{"name":"reviewer"}`, &failure)
 	if status != http.StatusConflict {
 		t.Fatalf("want 409 for a taken name, got %d %+v", status, failure)
+	}
+}
+
+func TestReadMarksHumanSeen(t *testing.T) {
+	human := func(*http.Request) (messaging.Caller, error) {
+		return messaging.Caller{Human: true}, nil
+	}
+	server := newServerAs(t, human)
+
+	var p msgmodels.Participant
+	call(t, http.MethodPost, server.URL+"/join", `{"name":"franco"}`, &p)
+
+	var view messaging.ParticipantView
+	status := call(t, http.MethodGet, server.URL+"/participants/"+p.ID, "", &view)
+	if status != http.StatusOK || view.Online || view.LastSeenAt != nil {
+		t.Fatalf("before reading: status %d, view %+v", status, view)
+	}
+
+	// A read without participant marks no one.
+	var read MessagesResponse
+	call(t, http.MethodGet, server.URL+"/read?channel=%23review-42", "", &read)
+	view = messaging.ParticipantView{}
+	call(t, http.MethodGet, server.URL+"/participants/"+p.ID, "", &view)
+	if view.Online {
+		t.Fatalf("a read naming no participant should not mark one: %+v", view)
+	}
+
+	status = call(t, http.MethodGet, server.URL+"/read?channel=%23review-42&participant="+p.ID, "", &read)
+	if status != http.StatusOK {
+		t.Fatalf("read: status %d", status)
+	}
+
+	view = messaging.ParticipantView{}
+	status = call(t, http.MethodGet, server.URL+"/participants/"+p.ID, "", &view)
+	if status != http.StatusOK || !view.Online || view.LastSeenAt == nil {
+		t.Fatalf("after reading: status %d, view %+v", status, view)
+	}
+
+	var failure ErrorResponse
+	status = call(t, http.MethodGet, server.URL+"/participants/missing", "", &failure)
+	if status != http.StatusNotFound {
+		t.Fatalf("want 404 for an unknown participant, got %d %+v", status, failure)
 	}
 }

@@ -80,6 +80,7 @@ func newTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *task
 	msg := messaging.NewService(db)
 	specs := task.Store{Dir: filepath.Join(t.TempDir(), "specs")}
 	sandboxesAPI := sandboxes.NewAPI(context.Background(), ctrl, msg, rt, secretsPath, socketDir)
+	msg.SetPresence(sandboxesAPI)
 	server := &restserver.Server{
 		Ctrl:         ctrl,
 		RateLimiter:  ratelimit.NewWindowCounter(10, 100),

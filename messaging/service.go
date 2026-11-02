@@ -56,12 +56,23 @@ type Service struct {
 	posted chan struct{}
 	hooks  []PostHook
 
+	// presence answers whether an agent's sandbox runs, nil when unwired.
+	presence Presence
+
 	// system serializes taking the reserved name agc.
 	system sync.Mutex
+
+	// seen is when each participant last read, waited or posted over
+	// HTTP, in memory only.
+	seenMu sync.Mutex
+	seen   map[string]time.Time
+
+	// now is the clock, swapped in tests.
+	now func() time.Time
 }
 
 func NewService(db bun.IDB) *Service {
-	return &Service{db: db, posted: make(chan struct{})}
+	return &Service{db: db, posted: make(chan struct{}), seen: map[string]time.Time{}, now: time.Now}
 }
 
 // TaskChannel is the channel every Task gets without declaring it.
@@ -489,8 +500,9 @@ func (s *Service) Channels(ctx context.Context, caller Caller) ([]ChannelInfo, e
 }
 
 // Participants lists everyone who has posted in channel: active ones
-// first, then those who left, each by name. Access is the same as Read.
-func (s *Service) Participants(ctx context.Context, caller Caller, channel string) ([]msgmodels.Participant, error) {
+// first, then those who left, each by name, with their presence. Access
+// is the same as Read.
+func (s *Service) Participants(ctx context.Context, caller Caller, channel string) ([]ParticipantView, error) {
 	err := checkCaller(caller)
 	if err != nil {
 		return nil, ez.Wrap(err)
@@ -523,5 +535,5 @@ func (s *Service) Participants(ctx context.Context, caller Caller, channel strin
 		return nil, ez.Wrap(err)
 	}
 
-	return participants, nil
+	return s.views(ctx, participants)
 }

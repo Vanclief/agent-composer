@@ -50,7 +50,7 @@ type ChannelsResponse struct {
 }
 
 type ParticipantsResponse struct {
-	Participants []msgmodels.Participant `json:"participants"`
+	Participants []messaging.ParticipantView `json:"participants"`
 }
 
 // DeliverPath is where a sandbox's socket takes agc task deliver (ADR
@@ -85,6 +85,7 @@ func New(svc *messaging.Service, caller func(*http.Request) (messaging.Caller, e
 	mux.HandleFunc("GET /wait", a.wait)
 	mux.HandleFunc("GET /channels", a.channels)
 	mux.HandleFunc("GET /participants", a.participants)
+	mux.HandleFunc("GET /participants/{id}", a.getParticipant)
 
 	return mux
 }
@@ -140,6 +141,8 @@ func (a *api) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	a.svc.MarkSeen(m.ParticipantID, time.Now())
+
 	WriteJSON(w, http.StatusOK, m)
 }
 
@@ -170,6 +173,8 @@ func (a *api) read(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	a.svc.Seen(r.Context(), caller, query.Get("participant"))
+
 	WriteJSON(w, http.StatusOK, newMessagesResponse(messages, after))
 }
 
@@ -197,11 +202,16 @@ func (a *api) wait(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Mark before blocking too, so a long wait counts as being here.
+	a.svc.Seen(r.Context(), caller, query.Get("participant"))
+
 	messages, err := a.svc.Wait(r.Context(), caller, query.Get("channel"), after, timeout)
 	if err != nil {
 		WriteError(w, err)
 		return
 	}
+
+	a.svc.Seen(r.Context(), caller, query.Get("participant"))
 
 	WriteJSON(w, http.StatusOK, newMessagesResponse(messages, after))
 }
@@ -236,6 +246,22 @@ func (a *api) participants(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteJSON(w, http.StatusOK, ParticipantsResponse{Participants: participants})
+}
+
+func (a *api) getParticipant(w http.ResponseWriter, r *http.Request) {
+	caller, err := a.caller(r)
+	if err != nil {
+		WriteError(w, err)
+		return
+	}
+
+	view, err := a.svc.Participant(r.Context(), caller, r.PathValue("id"))
+	if err != nil {
+		WriteError(w, err)
+		return
+	}
+
+	WriteJSON(w, http.StatusOK, view)
 }
 
 // decode resolves the caller and reads a JSON body into dst.

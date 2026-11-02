@@ -33,6 +33,10 @@ tags:
     description: >
       Evidence, beliefs, decisions and rules (ADR 0006), read only. Labels are computed on every
       request and never stored; checks are never run.
+  - name: Messaging
+    description: >
+      Channels, participants and messages (ADR 0005), served under /msg. A participant's
+      presence (online, last_seen_at) is computed on every request and never stored.
 paths:
   /agents/specs:
     get:
@@ -1170,6 +1174,53 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
+  /msg/participants:
+    get:
+      tags: [Messaging]
+      operationId: listMsgParticipants
+      summary: List the participants of a channel, with presence
+      description: >
+        Everyone who has posted in the channel: active ones first, then those who left, each by
+        name. Poll it with the channel to keep presence current; nothing is published.
+      parameters:
+        - name: channel
+          in: query
+          required: true
+          description: The channel, such as '#review-42'.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The channel's participants.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsgParticipantList'
+        '400':
+          $ref: '#/components/responses/MsgError'
+        '403':
+          $ref: '#/components/responses/MsgError'
+  /msg/participants/{id}:
+    get:
+      tags: [Messaging]
+      operationId: getMsgParticipant
+      summary: Get one participant, with presence
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The participant id agc handed out on join.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The participant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsgParticipant'
+        '404':
+          $ref: '#/components/responses/MsgError'
 components:
   parameters:
     LimitParam:
@@ -1250,6 +1301,12 @@ components:
       schema:
         type: string
   responses:
+    MsgError:
+      description: A messaging error, as the message alone.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MsgErrorResponse'
     Error:
       description: Error response with machine-readable code and request identifier.
       content:
@@ -2941,3 +2998,64 @@ components:
         - type: number
         - type: integer
         - type: boolean
+    MsgErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+    MsgParticipantList:
+      type: object
+      properties:
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/MsgParticipant'
+      required:
+        - participants
+    MsgParticipant:
+      type: object
+      description: >
+        A name agc handed out on join (ADR 0005). online and last_seen_at are computed per
+        request, never stored.
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        task:
+          type: string
+          description: The task that joined it; empty for humans and agc.
+        human:
+          type: boolean
+        joined_at:
+          type: string
+          format: date-time
+        left_at:
+          type: string
+          format: date-time
+          description: Set once the participant left; absent while active.
+        online:
+          type: boolean
+          description: >
+            Never for agc or a participant that left. An agent (human false, task set) is online
+            while the sandbox named like it is running, or, when no sandbox has its name, while
+            any sandbox of its task is; with no sandbox status wired, whenever it has not left.
+            A human is online when last_seen_at is within the last 5 minutes.
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            An agent's latest message. For a human, the later of its latest message and its
+            latest /read, /wait (with participant=<id>) or /post, the latter kept in memory and
+            lost on restart. Null when there is neither.
+      required:
+        - id
+        - name
+        - task
+        - human
+        - joined_at
+        - online
+        - last_seen_at
