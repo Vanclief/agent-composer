@@ -36,14 +36,16 @@ test('a task created through the API appears without a reload and toasts "Task s
     sandbox: { image: 'agc-agent', command: 'claude' },
   })
 
-  await expect(page.locator(`[data-task="${task.name}"]`)).toBeVisible()
+  await expect(page.locator(`li[data-task="${task.name}"]`)).toBeVisible()
   const started = toast(page, 'Task started', task.name)
   await expect(started).toBeVisible()
   await expect(started).toContainText(task.title)
   await expect(started).toContainText('claude_code (claude-opus-5-5)')
   await expect(started).toContainText(task.name)
 
-  await started.getByRole('button', { name: 'Open' }).click()
+  // Toasts from other tests' tasks stack above this one and shift it while
+  // they animate in, so a pointer click misses; fire the click directly.
+  await started.getByRole('button', { name: 'Open' }).dispatchEvent('click')
   await expect(page).toHaveURL(new RegExp(`/panel/tasks/${task.name}/brief$`))
   await expect(page.getByTestId('notify-chip')).toBeVisible()
 })
@@ -81,9 +83,9 @@ test('a task with notify false shows no toast', async ({ page, request }) => {
   const quiet = await createTask(request, unique('Live quiet'), { notify: false })
   expect(quiet.notify).toBe(false)
   // The card arriving proves the event did; no toast came with it.
-  await expect(page.locator(`[data-task="${quiet.name}"]`)).toBeVisible()
+  await expect(page.locator(`li[data-task="${quiet.name}"]`)).toBeVisible()
   await request.post(`/api/tasks/${quiet.name}/done`)
-  await expect(page.locator(`[data-task="${quiet.name}"]`).getByText('done', { exact: true })).toBeVisible()
+  await expect(page.locator(`li[data-task="${quiet.name}"]`).getByText('done', { exact: true })).toBeVisible()
   await page.waitForTimeout(500)
   await expect(page.locator(`[data-testid="toast-task"][data-task="${quiet.name}"]`)).toHaveCount(0)
 })
