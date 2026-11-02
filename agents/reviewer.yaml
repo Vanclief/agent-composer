@@ -4,6 +4,8 @@
 harness: claude_code
 # Empty takes the default model (AGC_DEFAULT_MODEL).
 model: ""
+# Reasoning effort: low, medium, high or xhigh; empty takes the harness's default.
+# effort: ""
 # How long the agent waits for a message before its home sleeps.
 idle: 15m
 # Nothing besides its DM channel and the channels of its tasks.

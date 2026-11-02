@@ -2,6 +2,8 @@
 # channel. Its instructions are a placeholder until ADR 0015 fills them in.
 harness: claude_code
 model: ""
+# Reasoning effort: low, medium, high or xhigh; empty takes the harness's default.
+# effort: ""
 idle: 15m
 reads: ["*"]
 sandbox:
