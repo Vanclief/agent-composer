@@ -151,6 +151,12 @@ func (p *Poller) Poll(ctx context.Context) {
 		}
 	}
 
+	// One line per cycle, counts only: never a token or an email.
+	failed := 0
+	defer func() {
+		log.Info().Int("accounts", len(wanted)).Int("errors", failed).Msg("accounts usage: polled")
+	}()
+
 	p.forgetExcept(wanted)
 
 	if len(wanted) == 0 {
@@ -163,6 +169,7 @@ func (p *Poller) Poll(ctx context.Context) {
 		for _, a := range wanted {
 			p.store(a.Name, Result{Usage: UsageView{Error: "secrets file unreadable"}})
 		}
+		failed = len(wanted)
 		return
 	}
 
@@ -174,6 +181,7 @@ func (p *Poller) Poll(ctx context.Context) {
 		token, ok := tokens.Lookup(a.Secret)
 		if !ok || token == "" {
 			p.store(a.Name, Result{Usage: UsageView{Error: "secret not found in secrets.env"}})
+			failed++
 			continue
 		}
 
@@ -183,6 +191,10 @@ func (p *Poller) Poll(ctx context.Context) {
 				return
 			}
 			result = Result{Usage: UsageView{Error: "fetch failed"}}
+		}
+
+		if result.Usage.Error != "" {
+			failed++
 		}
 
 		p.store(a.Name, result)

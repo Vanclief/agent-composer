@@ -55,9 +55,9 @@ type fakeUsage struct {
 	asked []string
 }
 
-func (f *fakeUsage) Usage(ctx context.Context, secretName string) (*UsageView, error) {
-	f.asked = append(f.asked, secretName)
-	if secretName == "ACCOUNT_BROKEN" {
+func (f *fakeUsage) Usage(ctx context.Context, name string) (*UsageView, error) {
+	f.asked = append(f.asked, name)
+	if name == "broken" {
 		return nil, ez.New(ez.EUNAVAILABLE, "usage endpoint is down", nil)
 	}
 

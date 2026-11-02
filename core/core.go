@@ -51,8 +51,8 @@ type Stack struct {
 	// Events is the live feed behind GET /api/events.
 	Events *events.Bus
 	// AccountsUsage keeps the latest usage of every anthropic oauth
-	// account; only agc rest starts it. Until the accounts API sets itself
-	// as the lister (SetLister) it lists no accounts.
+	// account; only agc rest starts it. It lists the accounts through
+	// AccountsAPI, which shows its readings (connectAccountsUsage).
 	AccountsUsage *usage.Poller
 }
 
@@ -149,6 +149,7 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	// Accounts are rows plus secrets.env lines; a running sandbox naming
 	// one keeps it from being deleted (ADR 0018).
 	accountsAPI := accounts.NewAPI(ctrl, secretsPath, sandboxesAPI)
+	connectAccountsUsage(accountsAPI, accountsUsage)
 
 	return &Stack{
 		Controller:    ctrl,
@@ -165,6 +166,13 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		Events:        bus,
 		AccountsUsage: accountsUsage,
 	}, nil
+}
+
+// connectAccountsUsage makes poller list the accounts through api and api
+// show poller's readings as each account's usage (ADR 0018 "Usage").
+func connectAccountsUsage(api *accounts.API, poller *usage.Poller) {
+	poller.SetLister(api)
+	api.SetUsage(accounts.PollerUsage{Poller: poller})
 }
 
 // StartScheduler blocks while the scheduler runs until the context is canceled.
