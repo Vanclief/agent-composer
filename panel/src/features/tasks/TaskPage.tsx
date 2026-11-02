@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/shell/page-title'
 
+import { ago } from './format'
 import { TaskActions, useTaskActions } from './TaskActions'
 import { AssigneeChip, ForChip, ManagerChip, OwnerChip } from './TaskChips'
 
@@ -82,6 +83,17 @@ export function TaskPage() {
               <span data-testid="notify-chip" className="inline-flex">
                 <IconChip icon={conceptIcons.notify} concept="notify" title="Notify: toast and sound on start and done">
                   notify
+                </IconChip>
+              </span>
+            ) : null}
+            {data.delivered_at ? (
+              <span data-testid="delivered-chip" className="inline-flex">
+                <IconChip
+                  icon={conceptIcons.delivery}
+                  concept="delivery"
+                  title={`Delivered ${new Date(data.delivered_at).toLocaleString()}`}
+                >
+                  Delivered {ago(data.delivered_at)}
                 </IconChip>
               </span>
             ) : null}

@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils'
 import { AgentCard, assigneeOf, blankAgent, defaultModel, PERSON, type AgentForm } from './agent'
 import { Card, chipBase, IconInput, Tip } from './bits'
 import { ChannelsCard, CodeCard, EnvCard, MachineCard, SecretsCard, VolumesCard } from './cards'
-import { blankOrder, OrderCard, type OrderForm } from './order'
+import { acceptLines, blankOrder, OrderCard, type OrderForm } from './order'
 import { blankForm, formToSpec, memoryLabel, parseSpecYAML, slugify, specYAML, type SpecForm } from './spec-form'
 
 type CreateTaskDialogProps = {
@@ -215,6 +215,7 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
       owner: agent.owner.trim(),
       for: order.for,
       notify: order.notify,
+      accept: acceptLines(order.accept),
     }
     if (compute && current) {
       request.sandbox = formToSpec(current)
