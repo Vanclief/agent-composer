@@ -52,6 +52,11 @@ tags:
   - name: Events
     description: >
       The live feed: a server-sent events stream of what changes tasks, sandboxes and channels.
+  - name: Skills
+    description: >
+      agc's skills repository (ADR 0008 "Skills"): <agc home>/skills/<name>/SKILL.md plus files
+      (AGC_SKILLS_DIR overrides), read on every request. A spec's skills are written into every
+      sandbox agc prepares.
   - name: Knowledge
     description: >
       Evidence, beliefs, decisions and rules (ADR 0006), read only. Labels are computed on every
@@ -1890,6 +1895,45 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
+  /skills:
+    get:
+      tags: [Skills]
+      operationId: listSkills
+      summary: List the skills in the skills repository
+      description: >
+        The directories of the skills directory (~/.agent_composer/skills, or AGC_SKILLS_DIR)
+        whose name is a slug, sorted, read on every request. A missing directory lists nothing.
+      responses:
+        '200':
+          description: The skills.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillList'
+        '500':
+          $ref: '#/components/responses/Error'
+  /skills/{name}:
+    get:
+      tags: [Skills]
+      operationId: getSkill
+      summary: Read a skill's SKILL.md
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The skill's SKILL.md, as it is on disk.
+          content:
+            text/markdown:
+              schema:
+                type: string
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
   /knowledge:
     get:
       tags: [Knowledge]
@@ -2862,6 +2906,15 @@ components:
           items:
             type: string
           description: '#name or #name:read.'
+        skills:
+          type: array
+          items:
+            type: string
+          description: >
+            Names of skills in agc's skills repository (GET /skills). Each is written into
+            ~/.claude/skills/<name>/ and ~/.codex/skills/<name>/ on every boot and start,
+            replacing what was there; a name that is not in the repository is refused before
+            boot (ADR 0008 "Skills").
     Task:
       type: object
       properties:
@@ -4565,6 +4618,13 @@ components:
           format: date-time
           nullable: true
           description: The newest message among its conversations, or its last wake.
+        skills:
+          type: array
+          items:
+            type: string
+          description: >
+            The template's sandbox.skills, read on every request; empty when it names none or
+            cannot be read (ADR 0016 item 2).
         created_at:
           type: string
           format: date-time
@@ -4579,8 +4639,31 @@ components:
         - home
         - tasks
         - conversations
+        - skills
         - last_active_at
         - created_at
+    Skill:
+      type: object
+      description: A skill of the skills repository (ADR 0008 "Skills").
+      properties:
+        name:
+          type: string
+          description: The directory's name, a slug such as rtsdesign.
+        description:
+          type: string
+          description: The description in the SKILL.md frontmatter; empty when absent.
+      required:
+        - name
+        - description
+    SkillList:
+      type: object
+      properties:
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/Skill'
+      required:
+        - skills
     AgentList:
       type: object
       properties:

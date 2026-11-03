@@ -38,6 +38,9 @@ that mock a backend and settles what it left open.
    a rename, so the list stays readable while the agent is on trial.
    Templates name no harness credential, only `GITHUB_TOKEN`, and rely on
    the provider's default account (ADR 0018).
+   `sandbox.skills` names skills of agc's skills repository, written into
+   the home on every boot and wake (ADR 0008 "Skills"); the agent view
+   carries them as `skills`, read from the template on every request.
 
 3. **Keeping names it.** `POST /api/agents/{name}/keep { name, role? }` sets
    `kept`, renames the row and may change the role. The home sandbox and the
