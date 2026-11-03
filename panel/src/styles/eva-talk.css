@@ -143,32 +143,32 @@
   border-left-color: var(--eva-dim);
 }
 .dark [data-slot='stamp'] {
-  width: 4.5rem;
+  width: 5.25rem;
   justify-content: flex-start;
   padding-left: 4px;
   white-space: nowrap;
 }
 .dark [data-slot='stamp'] time {
   font-family: var(--font-mono);
-  font-size: 0.65rem;
-  line-height: 1.25rem;
+  font-size: 0.75rem;
+  line-height: 1.75rem;
   color: oklch(0.62 0.03 70 / 80%);
   letter-spacing: 0.02em;
 }
 .dark [data-testid='message-group'] [data-testid='message'] + [data-testid='message'] [data-slot='stamp'] time {
-  line-height: 1.25rem;
+  line-height: 1.75rem;
 }
 /* The sender: avatar, name in condensed uppercase, kind icon, its task. */
 .dark [data-slot='header'] {
   gap: 6px;
-  min-height: 1.25rem;
+  min-height: 1.75rem;
 }
 .dark [data-slot='header'] [data-testid='author'] {
   font-family: var(--font-sans);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 600;
-  font-size: 0.8rem;
+  font-size: 0.875rem;
   color: var(--eva);
 }
 .dark [data-slot='header'] [data-testid='author'][data-kind='human'] {
@@ -195,7 +195,7 @@
   filter: none;
 }
 .dark [data-slot='header'] > time {
-  font-size: 0.65rem;
+  font-size: 0.75rem;
 }
 /* The body: pale text, plain. */
 .dark [data-testid='message-body'] {
@@ -248,7 +248,7 @@
   border-radius: 0;
   padding-left: 0;
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
 }
 .dark [data-testid='thread-footer'] > svg,
 .dark [data-testid='thread-footer'] > span:first-of-type {
@@ -333,7 +333,7 @@
 }
 .dark [data-testid='system-line'] .text-sm,
 .dark [data-testid='system-line'] .text-xs {
-  font-size: 0.7rem;
+  font-size: 0.875rem;
 }
 .dark [data-testid='system-line'] > div > button[aria-expanded] {
   text-transform: uppercase;
@@ -413,7 +413,7 @@
   text-transform: uppercase;
   letter-spacing: 0.14em;
   font-weight: 700;
-  font-size: 0.7rem;
+  font-size: 0.875rem;
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
 }
 .dark [data-testid='question-card'] [data-slot='kind'] svg {
