@@ -27,6 +27,7 @@ import { Bell } from 'lucide-react'
 import { Inbox, ListChecks, PackageCheck } from 'lucide-react'
 import { MessageCircleQuestionMark, MessageSquareReply } from 'lucide-react'
 import { Gauge, IdCard } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 
 export const conceptIcons = {
   // A Task: a VM agents work in.
@@ -88,6 +89,8 @@ export const conceptIcons = {
   // gets for its harness, and its usage windows.
   account: IdCard,
   usage: Gauge,
+  // A skill an agent has: a markdown file of know-how (sandbox-skills).
+  skill: Sparkles,
 } satisfies Record<string, LucideIcon>
 
 export type Concept = keyof typeof conceptIcons
@@ -286,4 +289,6 @@ export const conceptColors = {
   // Neutral: in the Eva look yellow means waiting on a human.
   account: zinc,
   usage: zinc,
+  // Know-how, like code: the code family's blue.
+  skill: blue,
 } satisfies Record<Concept, ConceptColor>

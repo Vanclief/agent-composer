@@ -11,6 +11,7 @@ import { knowledge } from './knowledge'
 import { keepPreviousData } from '@tanstack/react-query'
 import { livePollMs } from './live'
 import { agents, type CreateAgentRequest, type KeepAgentRequest } from './agents'
+import { skills } from './agents'
 import { defaults } from './defaults'
 import { accounts, type CreateAccountRequest } from './accounts'
 
@@ -526,4 +527,16 @@ export function useClearDefaultAccount() {
 
 export function useRemoveAccount() {
   return useAccountMutation((name: string) => accounts.remove(name))
+}
+
+// ---------- skills (sandbox-skills) ----------
+
+// One skill's markdown text, fetched when enabled (a skill tile opened).
+export function useSkillText(name: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['skills', name, 'text'] as const,
+    queryFn: ({ signal }) => skills.text(name, signal),
+    enabled: enabled && Boolean(name),
+    staleTime: 60_000,
+  })
 }

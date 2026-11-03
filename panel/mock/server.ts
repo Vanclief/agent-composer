@@ -1287,6 +1287,10 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
     streamEvents(state, req, res)
     return
   }
+  if (parts[1] === 'skills') {
+    skillsRoute(res, method, parts.slice(2))
+    return
+  }
 
   try {
     let body: unknown
@@ -2254,6 +2258,10 @@ type MockAgent = {
   conversations: { channel: string; last_at: string }[]
   last_active_at: string | null
   created_at: string
+  // What it is made of (agent-effort, sandbox-skills, agent-rules).
+  effort: string
+  skills: string[]
+  rules: { id: string; rule: string }[]
 }
 
 type MockAgents = {
@@ -2275,7 +2283,14 @@ function agentsOf(state: State): MockAgents {
 
 function agentsSeed(): MockAgents {
   const ago = (minutes: number) => iso(Date.now() - minutes * 60_000)
-  const base = { harness: 'claude_code', model: 'claude-opus-5-5', owner: 'franco' }
+  const base = {
+    harness: 'claude_code',
+    model: 'claude-opus-5-5',
+    owner: 'franco',
+    effort: '',
+    skills: [] as string[],
+    rules: [] as { id: string; rule: string }[],
+  }
   const list: MockAgent[] = [
     {
       ...base,
@@ -2285,6 +2300,12 @@ function agentsSeed(): MockAgents {
       state: 'awake',
       home: 'orchestrator-1',
       tasks: ['review-42', 'flaky-ci'],
+      effort: 'high',
+      skills: ['rtsdesign', 'go-style'],
+      rules: [
+        { id: MOCK_RULES[0].id, rule: MOCK_RULES[0].rule },
+        { id: MOCK_RULES[1].id, rule: MOCK_RULES[1].rule },
+      ],
       conversations: [
         { channel: '#orchestrator-1', last_at: ago(3) },
         { channel: '#review-42', last_at: ago(5) },
@@ -2313,6 +2334,9 @@ function agentsSeed(): MockAgents {
       state: 'asleep',
       home: 'ada',
       tasks: ['docs-pass'],
+      effort: 'medium',
+      skills: ['rtsdesign'],
+      rules: [{ id: MOCK_RULES[1].id, rule: MOCK_RULES[1].rule }],
       conversations: [
         { channel: '#ada', last_at: ago(60 * 20) },
         { channel: '#docs-pass', last_at: ago(60 * 22) },
@@ -2351,6 +2375,8 @@ function agentView(state: State, agent: MockAgent) {
       return { name, status: task ? state.taskView(task).status : 'deleted' }
     }),
     conversations: agent.conversations.map((c) => ({ ...c })),
+    skills: [...agent.skills],
+    rules: agent.rules.map((r) => ({ ...r })),
   }
 }
 
@@ -2402,6 +2428,9 @@ async function agentsAPI(state: State, method: string, rest: string[], req: Inco
       conversations: [{ channel: `#${prefix}-${n}`, last_at: now }],
       last_active_at: null,
       created_at: now,
+      effort: '',
+      skills: [],
+      rules: [],
     }
     mock.list.push(agent)
     return new Created(agentView(state, agent))
@@ -2808,4 +2837,56 @@ function runCommand(state: State, m: Message) {
     }
   }
   state.emit('task.done', { task: state.taskView(task), summary: task.summary || state.summary(task) })
+}
+
+// ---------- skills (ahead of sandbox-skills) ----------
+//
+// GET /api/skills {skills: [{name, description}]} and GET /api/skills/:name,
+// the skill's markdown as text/markdown. The seeded agents name these.
+
+const MOCK_RULES = [
+  {
+    id: 'panel-follows-the-design-system',
+    rule: 'A change to the panel follows docs/design/panel.md and the rtsdesign skill.',
+  },
+  {
+    id: 'no-explicit-semicolons-in-go',
+    rule: 'Go code has no explicit semicolon outside a three-clause for header.',
+  },
+]
+
+const MOCK_SKILLS: { name: string; description: string; text: string }[] = [
+  {
+    name: 'rtsdesign',
+    description: 'Icons, slots and chips instead of sentences.',
+    text:
+      '---\nname: rtsdesign\ndescription: Icons, slots and chips instead of sentences.\n---\n\n' +
+      '# rtsdesign\n\n1. One icon per concept.\n2. Empty slots say why in place.\n3. Lists are rows, not cards.\n',
+  },
+  {
+    name: 'go-style',
+    description: 'The repository Go style.',
+    text: '# go-style\n\n- One statement per line.\n- No if init; move it above.\n',
+  },
+]
+
+function skillsRoute(res: ServerResponse, method: string, rest: string[]) {
+  if (method !== 'GET') {
+    send(res, 404, apiError(404, 'no such endpoint').body)
+    return
+  }
+  if (rest.length === 0) {
+    send(res, 200, { skills: MOCK_SKILLS.map(({ name, description }) => ({ name, description })) })
+    return
+  }
+  const skill = rest.length === 1 ? MOCK_SKILLS.find((s) => s.name === rest[0]) : undefined
+  if (!skill) {
+    send(res, 404, apiError(404, `skill ${rest[0]} not found`).body)
+    return
+  }
+  res.writeHead(200, {
+    'Content-Type': 'text/markdown; charset=utf-8',
+    'Content-Length': Buffer.byteLength(skill.text),
+  })
+  res.end(skill.text)
 }
