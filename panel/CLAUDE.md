@@ -570,6 +570,14 @@ Messages tab) provides the channel context (`context.ts`) every piece reads.
   thread". Both open `?thread=<id>`: a pane on the right from `lg` up, a
   full sheet below (`thread-pane`), with the replies oldest first and a
   composer ("Reply in thread") posting with `reply_to`.
+- **Who will answer** (`WillAnswer.tsx`): under a message with `turn_for`
+  (set by the server, never re-derived), one row per agent
+  (`will-answer`, `data-agent`): reply icon, avatar and name linking to
+  `/agents/<name>`, WILL ANSWER, and its `state` from `useAgents()` in a
+  `StatusPill` (none when the agent is not listed). A row goes once that
+  agent posts in the same thread with a greater id. In the feed a
+  top-level message also shows its replies' rows (each agent once); in the
+  thread pane each message shows only its own.
 - **Questions** (`questions.ts`): kind `question` renders as a card
   (`question-card`, `data-state` `open`/`answered`) with the question icon,
   the asker and an inline Answer box that posts a `reply_to` to it. The
@@ -673,7 +681,10 @@ message), a code block, an answered question (@tester, answered by franco)
 and an open one from @reviewer to @franco; `#flaky-ci` has an open question
 from its agent @fixer. `#designer-1`, the inbox of the seeded agent
 `designer-1` (awake), has franco's request and its unread answer, so
-Talk's DMs section shows `@designer-1`. Posts take `kind`; `GET /api/msg/questions` ignores
+Talk's DMs section shows `@designer-1`. `#talk-who-answers` (posted by the human
+@sam, so franco does not follow it) carries `turn_for`: `orchestrator-1`
+(awake) waits on a top-level message, `designer-1` already answered in a
+thread, `writer-1` (waking) waits on a later reply in that thread. Posts take `kind`; `GET /api/msg/questions` ignores
 `for`, so every open question is the signed-in person's (on the task list
 `review-42` and `flaky-ci` show `answer` for anyone).
 `GET /api/defaults` answers `{ harness: claude_code, model:
