@@ -44,7 +44,11 @@ type Message struct {
 	Kind string `bun:"kind,notnull,default:'message'" json:"kind"`
 	// Images are the images the message carries (ADR 0005 "Images"),
 	// kept under the agc home; each URL is filled in from the id.
-	Images    []Image   `bun:"images,type:jsonb,nullzero" json:"images,omitempty"`
+	Images []Image `bun:"images,type:jsonb,nullzero" json:"images,omitempty"`
+	// TurnFor names the persistent agents this message is a turn for
+	// (ADR 0016 item 6), asleep or awake, in name order; set by the wake
+	// hook's turn computation before the message is published.
+	TurnFor   []string  `bun:"turn_for,type:jsonb,nullzero" json:"turn_for,omitempty"`
 	CreatedAt time.Time `bun:"created_at,notnull" json:"created_at"`
 }
 

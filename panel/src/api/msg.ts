@@ -36,6 +36,9 @@ export type Message = {
   body: string
   // The images it carries (ADR 0005 "Images"); absent when text only.
   images?: MessageImage[]
+  // The persistent agents it is a turn for (ADR 0016 item 6), set by agc's
+  // wake hook; absent when none.
+  turn_for?: string[]
   created_at: string
   // A person posted it (not an agent, not agc). Absent on servers that
   // predate it.

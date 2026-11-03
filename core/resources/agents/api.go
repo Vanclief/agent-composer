@@ -98,6 +98,7 @@ func New(db bun.IDB, tasksAPI *tasks.API, msg *messaging.Service, defaults contr
 		dir:      dir,
 	}
 
+	msg.SetTurns(api.turnNames)
 	msg.OnPost(api.onPost)
 	msg.SetMainAgent(api.isMain)
 	api.sbx.SetHomes(homes{api: api})

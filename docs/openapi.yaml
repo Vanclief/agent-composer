@@ -3433,6 +3433,13 @@ components:
           description: The images the message carries (ADR 0005 "Images"); absent for a text-only message.
           items:
             $ref: '#/components/schemas/MsgImage'
+        turn_for:
+          type: array
+          description: >
+            The persistent agents this message is a turn for (ADR 0016 item 6), asleep or awake,
+            in name order; set by the wake hook before the message is published, absent when none.
+          items:
+            type: string
         created_at:
           type: string
           format: date-time
@@ -5367,6 +5374,13 @@ components:
           description: The images the message carries; absent for a text-only message.
           items:
             $ref: '#/components/schemas/MsgImage'
+        turn_for:
+          type: array
+          description: >
+            The persistent agents this message is a turn for (ADR 0016 item 6), asleep or awake,
+            in name order; set by the wake hook before the message is published, absent when none.
+          items:
+            type: string
         created_at:
           type: string
           format: date-time

@@ -35,13 +35,17 @@ VALUES (?, ?, ?, ?, ?, ?)`, "#stop-icon", "franco", "p1", "", "hello", now)
 		}
 	}
 
-	// The later columns too (createAgents, messageImages), so the current model can read
+	// The later columns too (createAgents, messageImages, messageTurnFor), so the current model can read
 	// the rows.
 	err = addColumn(ctx, db, "messaging_messages", "agent", "TEXT NOT NULL DEFAULT ''")
 	if err != nil {
 		t.Fatal(err)
 	}
 	err = messageImages(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = messageTurnFor(ctx, db)
 	if err != nil {
 		t.Fatal(err)
 	}

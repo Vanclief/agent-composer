@@ -64,6 +64,10 @@ type ChannelInfo struct {
 // PostHook runs after every message is stored, with the stored message.
 type PostHook func(ctx context.Context, m *msgmodels.Message)
 
+// TurnsFunc names the persistent agents a stored message is a turn for
+// (ADR 0016 item 6), in name order.
+type TurnsFunc func(ctx context.Context, m *msgmodels.Message) []string
+
 type Service struct {
 	db bun.IDB
 
@@ -71,6 +75,9 @@ type Service struct {
 	mu     sync.Mutex
 	posted chan struct{}
 	hooks  []PostHook
+
+	// turns fills in turn_for before a message is published, nil for none.
+	turns TurnsFunc
 
 	// presence answers whether an agent's sandbox runs, nil when unwired.
 	presence Presence
@@ -105,7 +112,7 @@ type PostedEvent struct {
 }
 
 // SetEvents publishes message.posted on bus for every message stored from
-// now on, before the post hooks run.
+// now on, after turn_for is filled in and before the post hooks run.
 func (s *Service) SetEvents(bus *events.Bus) {
 	s.mu.Lock()
 	s.events = bus
@@ -544,8 +551,11 @@ func (s *Service) insert(ctx context.Context, p *msgmodels.Participant, channel,
 	close(s.posted)
 	s.posted = make(chan struct{})
 	hooks := s.hooks
+	turns := s.turns
 	bus := s.events
 	s.mu.Unlock()
+
+	s.fillTurnFor(ctx, m, turns)
 
 	bus.Publish(events.Event{Type: events.MessagePosted, Data: PostedEvent{Message: m}})
 
@@ -582,6 +592,55 @@ func (s *Service) Archive(ctx context.Context, channel string, at time.Time) (bo
 	bus.Publish(events.Event{Type: events.ChannelArchived, Data: ArchivedEvent{Channel: channel, ArchivedAt: at.UTC()}})
 
 	return true, nil
+}
+
+// fillTurnFor stores turns' answer for m as turn_for and sets it on m, so
+// the published message and every later read carry the same names. It
+// runs before message.posted and the post hooks: the hooks may post agc's
+// own replies, whose events must not overtake m's. A failed update is
+// logged and the post stands: m keeps the names, so the wake hook still
+// wakes them, and later reads lack turn_for.
+func (s *Service) fillTurnFor(ctx context.Context, m *msgmodels.Message, turns TurnsFunc) {
+	if turns == nil {
+		return
+	}
+
+	names := turns(ctx, m)
+	if len(names) == 0 {
+		return
+	}
+
+	m.TurnFor = names
+
+	err := s.SetTurnFor(ctx, m.ID, names)
+	if err != nil {
+		log.Warn().Err(err).Int64("message", m.ID).Msg("cannot store the agents a message is a turn for")
+	}
+}
+
+// SetTurnFor stores names as the turn_for of message id in one update; no
+// names, nothing.
+func (s *Service) SetTurnFor(ctx context.Context, id int64, names []string) error {
+	if len(names) == 0 {
+		return nil
+	}
+
+	m := &msgmodels.Message{ID: id, TurnFor: names}
+
+	_, err := s.db.NewUpdate().Model(m).Column("turn_for").WherePK().Exec(ctx)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// SetTurns fills in every stored message's turn_for with fn from now on,
+// before message.posted and the post hooks.
+func (s *Service) SetTurns(fn TurnsFunc) {
+	s.mu.Lock()
+	s.turns = fn
+	s.mu.Unlock()
 }
 
 // OnPost registers hook to run after every stored message, in the
