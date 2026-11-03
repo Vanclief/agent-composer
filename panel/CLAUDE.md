@@ -305,7 +305,7 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   Sleep (awake; disabled as "Waking…" while waking), Keep…/Rename…, and the
   cards Home (`/compute/<home>`, or "Not woken yet"), Tasks
   (`/tasks/<name>`, status verbatim), Conversations (`/messages/<channel>`,
-  the DM `#<owner>` first) and Identity.
+  the agent's inbox `#<name>` first) and Identity.
 
 ## Accounts (ahead of accounts-model and accounts-usage)
 
@@ -653,7 +653,7 @@ starts its `command` as the job `agent`. `POST /api/tasks/{id}/deliver
 and acknowledges resize frames.
 
 Agents: `orchestrator-1` awake (home `orchestrator-1`, manages
-`review-42` and `flaky-ci`, reads `#franco`, `#review-42`, `#flaky-ci`),
+`review-42` and `flaky-ci`, reads `#orchestrator-1`, `#review-42`, `#flaky-ci`),
 `reviewer-2` asleep and numbered, `ada` kept (role Reviewer, asleep,
 manages `docs-pass`) and `writer-1` waking (stays waking: the mock only
 finishes wakes it starts). Create names `<role slug>-<n>`, n one past the

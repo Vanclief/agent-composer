@@ -304,8 +304,9 @@ function createState() {
       `  \`agc msg post '#${task.name}' <text>\`; your manager reads that channel and\n` +
       `  answers there. Ask your manager there too, then keep working on what\n` +
       `  does not depend on the answer.\n` +
-      `- If something needs a decision only ${task.owner} can make, post it in\n` +
-      `  \`#${task.owner}\` (their inbox) and say so in \`#${task.name}\`; do not wait idle.\n` +
+      `- If something needs a decision only ${task.owner} can make, ask your manager\n` +
+      `  in \`#${task.name}\` and say it is for the owner; your manager raises it.\n` +
+      `  Keep working on what does not depend on the answer.\n` +
       `- Do not modify files outside the repository, and never print secret values.\n`
     )
   }
@@ -635,8 +636,9 @@ function createState() {
       agc,
       '@agent-composer-da (manager), @franco (owner): task `review-42` is open: Review 42.\n' +
         'Agent: claude_code (claude-opus-5-5) on sandbox `review-42`, starting.\n' +
-        "The agent's instructions are the next message. Reply here to talk to it; " +
-        'it escalates to #franco when only the owner can decide. Post /accept to accept the task, /reject <why> to send it back.',
+        "The agent's instructions are the next message. Reply here to talk to it;\n" +
+        'its manager raises to franco what only the owner can decide.\n' +
+        'Post /accept to accept the task, /reject <why> to send it back.',
     ).created_at = opened
     post('#review-42', agc, sandboxes.get('review-42')?.instructions ?? '').created_at = opened
     const first = post('#review-42', reviewer, 'Cloned the repo and ran the tests. 3 failures in workflow/.')
@@ -2284,7 +2286,7 @@ function agentsSeed(): MockAgents {
       home: 'orchestrator-1',
       tasks: ['review-42', 'flaky-ci'],
       conversations: [
-        { channel: '#franco', last_at: ago(3) },
+        { channel: '#orchestrator-1', last_at: ago(3) },
         { channel: '#review-42', last_at: ago(5) },
         { channel: '#flaky-ci', last_at: ago(40) },
       ],
@@ -2299,7 +2301,7 @@ function agentsSeed(): MockAgents {
       state: 'asleep',
       home: 'reviewer-2',
       tasks: [],
-      conversations: [{ channel: '#franco', last_at: ago(60 * 5) }],
+      conversations: [{ channel: '#reviewer-2', last_at: ago(60 * 5) }],
       last_active_at: ago(60 * 5),
       created_at: ago(60 * 30),
     },
@@ -2312,7 +2314,7 @@ function agentsSeed(): MockAgents {
       home: 'ada',
       tasks: ['docs-pass'],
       conversations: [
-        { channel: '#franco', last_at: ago(60 * 20) },
+        { channel: '#ada', last_at: ago(60 * 20) },
         { channel: '#docs-pass', last_at: ago(60 * 22) },
       ],
       last_active_at: ago(60 * 20),
@@ -2327,7 +2329,7 @@ function agentsSeed(): MockAgents {
       state: 'waking',
       home: 'writer-1',
       tasks: [],
-      conversations: [{ channel: '#franco', last_at: ago(1) }],
+      conversations: [{ channel: '#writer-1', last_at: ago(1) }],
       last_active_at: ago(1),
       created_at: ago(2),
     },
@@ -2397,7 +2399,7 @@ async function agentsAPI(state: State, method: string, rest: string[], req: Inco
       state: 'asleep',
       home: null,
       tasks: [],
-      conversations: [{ channel: '#franco', last_at: now }],
+      conversations: [{ channel: `#${prefix}-${n}`, last_at: now }],
       last_active_at: null,
       created_at: now,
     }
@@ -2419,6 +2421,12 @@ async function agentsAPI(state: State, method: string, rest: string[], req: Inco
       throw apiError(409, `agent ${name} already exists`)
     }
     const role = str(body.role).trim()
+    // The inbox #<name> follows the name, as on the server (ADR 0016).
+    for (const c of agent.conversations) {
+      if (c.channel === `#${agent.name}`) {
+        c.channel = `#${name}`
+      }
+    }
     agent.name = name
     if (role) {
       agent.role = role

@@ -70,8 +70,8 @@ that mock a backend and settles what it left open.
    sandbox, never stored: `asleep` when there is no home or it is `stopped`,
    `waking` while it is `starting`, `awake` while it is `running`, and the
    sandbox's own `failed` when it died. `POST /api/agents/{name}/wake` and
-   `/sleep` do what the names say, `sleep` posts "Asleep." in the agent's DM
-   channel so the thread shows where the VM stopped.
+   `/sleep` do what the names say, `sleep` posts "Asleep." in the agent's inbox
+   `#<name>` so the thread shows where the VM stopped.
 
 5. **Memory is the volume, and the transcript is the record.** The home
    sandbox gets the named volume `agc-<name>` of ADR 0008 "Disk and
@@ -94,8 +94,10 @@ that mock a backend and settles what it left open.
    tab.
 
 6. **A message wakes the agent; silence puts it to sleep.** An `OnPost` hook
-   (ADR 0005) matches each message against every agent's channels: its DM
-   channel `@<owner>/<name>` (the naming of ADR 0011), `#<task>` for every
+   (ADR 0005) matches each message against every agent's channels: its inbox
+   `#<name>`, like a person's (ADR 0005 "Inbox"), where its owner talks to
+   it (amended 2026-11-03, task `agent-inbox-channel`: an agent with no task
+   and `reads: []` had no channel at all), `#<task>` for every
    task whose `manager` is the agent, done ones included (a task stays in
    its manager's channels for good), and the template's `reads`. A match
    is a turn for the agent only by who posted it (`msgmodels.TurnFor`, the
@@ -119,9 +121,7 @@ that mock a backend and settles what it left open.
    `Accepted by <someone else>.` (the owner accepted what the manager
    asked about, so the manager merges it; the reviewer template); an awake
    home also takes `Rejected by` and an agc question naming it, and the
-   task loop takes only `Rejected by`. The DM channel joins the list only when
-   messaging knows direct-message channels (ADR 0011); until then messaging
-   rejects `@` names and the list leaves it out. A match on
+   task loop takes only `Rejected by`. A match on
    an `asleep` agent starts the home (item 4); on an `awake` one it is picked
    up by the running loop. The loop is `agc agent run --agent <name>` inside
    the home, the job `agent` of ADR 0009. It joins messaging as the
@@ -147,7 +147,7 @@ that mock a backend and settles what it left open.
    asking the agent to check its work against them before it answers or
    delivers.
 
-7. **A thread is a session.** For an agent talked to in a DM, each thread
+7. **A thread is a session.** For an agent talked to in its inbox `#<name>`, each thread
    root (ADR 0011) is one harness session, resumed by root id on every turn
    in that thread, so a long conversation keeps its context and two
    conversations do not bleed into each other. A message with no thread
@@ -162,7 +162,7 @@ that mock a backend and settles what it left open.
    with `agc task create` from its home, and shown on the agent page. The work
    still runs in task sandboxes with task agents; a persistent agent is the
    one who briefs, answers questions, accepts or rejects (ADR 0010), and
-   talks to Franco about it. Like a task sandbox (ADR 0009 item 5), a home
+   talks to Franco about it. Unlike a task sandbox (ADR 0009 item 5), a home
    may post in its owner's inbox `#<owner>`, to ask there; the inbox is not
    in its channels, so a post there does not wake it. Whether an act needs
    a human yes is a gate of ADR 0007, settled per role in ADR 0015 for
@@ -170,7 +170,7 @@ that mock a backend and settles what it left open.
 
 9. **`main` reads everything.** One clause in `authorize` (ADR 0005): the
    participant whose agent has role `main` may read, wait on and post in
-   every channel. Other agents follow the existing rules: their DM, the
+   every channel. Other agents follow the existing rules: their inbox `#<name>`, the
    channels of their tasks, what `reads` lists.
 
 ## Notes on item 5 (task `agents-turns`, 2026-11-02)
@@ -196,7 +196,7 @@ that mock a backend and settles what it left open.
   sandbox), so the user-turn and context-message handling is tested on a
   real file and the tool call, answer and token lines of the fixture are
   written from the format, untested against a real Codex run.
-- `n` needs every session's turns (DM threads are concurrent sessions), so
+- `n` needs every session's turns (inbox threads are concurrent sessions), so
   every file gets a light parse of line envelopes on each request and only
   the files holding the requested page are parsed in full.
 

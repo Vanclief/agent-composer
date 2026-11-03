@@ -109,7 +109,7 @@ func TestClientAgentAndSleep(t *testing.T) {
 	mux.HandleFunc("GET "+httpapi.AgentPath, func(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"agent":    map[string]any{"name": "reviewer-1", "role": "reviewer", "owner": "franco", "kept": false},
-			"channels": []string{"@franco/reviewer-1", "#fix-login"},
+			"channels": []string{"#reviewer-1", "#fix-login"},
 			"idle":     "15m",
 		})
 	})

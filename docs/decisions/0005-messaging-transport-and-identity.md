@@ -148,6 +148,8 @@ It takes from the person anything, and from agc its own posts; from an agent or 
 or a reply in a thread there, such as the answer to that person's question or a follow-up in it.
 Any other post by an agent is refused with "only questions and answers go in a person's inbox; post notes in #<task>"
 (`messaging.Service.Post`, next to `authorize`). DMs and every other channel are unchanged.
+A persistent agent (ADR 0016) has an inbox as well, `#<name>` for its name, where its owner talks to it: the agent, any person and agc post there freely,
+anyone else only a question or a thread reply (amended 2026-11-03, task `agent-inbox-channel`).
 Why: the inbox is what the person reads to find what waits on them, and notes ("merged", "never mind", "conflicts")
 drowned the questions there (22 unread, 12 of them notes). Notes go in `#<task>`, which the manager and the owner read anyway.
 The rule `inbox-holds-only-questions` covers what the server cannot see: whether a question really needs that person.

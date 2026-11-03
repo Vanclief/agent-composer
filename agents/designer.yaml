@@ -1,5 +1,5 @@
 # The Designer role (ADR 0016): a persistent UI/UX designer for agc's
-# control panel (panel/). Franco talks to it in its DM channel; it proposes
+# control panel (panel/). Franco talks to it in its inbox #<name>; it proposes
 # changes in a few lines and turns an agreed one into a task it manages,
 # then asks Franco before merging, since every change of its is a UI change.
 # agc reads this file on every request, so an edit applies to the next wake.
@@ -10,7 +10,7 @@ model: claude-opus-5-5
 effort: high
 # How long the agent waits for a message before its home sleeps.
 idle: 15m
-# Nothing besides its DM channel and the channels of its tasks.
+# Nothing besides its inbox #<name> and the channels of its tasks.
 reads: []
 # Rule ids whose text the agent gets with its instructions (sibling task agent-rules).
 rules:

@@ -9,7 +9,10 @@ import (
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 )
 
-func TestQuestionsForManagerAndOwner(t *testing.T) {
+// Questions for a person are the ones in their inbox and in #<task> of
+// the tasks they manage; a task they only own is its manager's to answer,
+// who raises to the owner in their inbox (ADR 0009 item 5).
+func TestQuestionsForManagerNotOwner(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := context.Background()
 	human := messaging.Caller{Human: true}
@@ -50,7 +53,7 @@ func TestQuestionsForManagerAndOwner(t *testing.T) {
 		ids = append(ids, q.ID)
 	}
 
-	want := []int64{asked["#lead"], asked["#owned"], asked["#managed"]}
+	want := []int64{asked["#lead"], asked["#managed"]}
 	if fmt.Sprint(ids) != fmt.Sprint(want) {
 		t.Fatalf("questions for lead = %v, want %v", ids, want)
 	}

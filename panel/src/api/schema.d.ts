@@ -752,7 +752,7 @@ export interface paths {
         put?: never;
         /**
          * Put an agent to sleep
-         * @description Stops the awake agent's home and posts "Asleep." as agc in its DM channel @<owner>/<name>. 409 when the agent is not awake.
+         * @description Stops the awake agent's home and posts "Asleep." as agc in its inbox #<name>. 409 when the agent is not awake.
          */
         post: operations["sleepAgent"];
         delete?: never;
@@ -1577,7 +1577,7 @@ export interface components {
             model?: string;
             /** @description The creator's messaging name, who runs the task day to day and may post /accept and /reject <why>. */
             manager: string;
-            /** @description The human the task answers to, a messaging name. Defaults to the configured owner; its sandboxes may post in #<owner>. */
+            /** @description The human the task answers to, a messaging name. Defaults to the configured owner; the task's manager, not its sandboxes, raises to them what only they can decide. */
             owner?: string;
             for?: string;
             /**
@@ -2238,7 +2238,7 @@ export interface components {
             rules: components["schemas"]["AgentRule"][];
             /** @description The tasks whose manager is the agent. */
             tasks: components["schemas"]["AgentTask"][];
-            /** @description The DM channel @<owner>/<name> first, then #<task> for each of its tasks, then any other channel the agent has posted in, newest first. */
+            /** @description The agent's inbox #<name> first, then #<task> for each of its tasks, then any other channel the agent has posted in, newest first. */
             conversations: components["schemas"]["AgentConversation"][];
             /**
              * Format: date-time
@@ -4776,7 +4776,7 @@ export interface operations {
                 channel?: string;
                 /** @description `1` keeps only unanswered questions; `0` or absent keeps all. */
                 open?: "0" | "1" | "true" | "false";
-                /** @description Only questions in the channels this person reads: their inbox `#<name>` and `#<task>` for every task they manage or own. */
+                /** @description Only questions in the channels this person reads: their inbox `#<name>` and `#<task>` for every task they manage (not those they only own; a task's manager raises to its owner in their inbox). */
                 for?: string;
             };
             header?: never;

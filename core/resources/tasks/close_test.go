@@ -37,7 +37,8 @@ func ask(t *testing.T, env *testEnv, a asker, channel, body string) int64 {
 	return m.ID
 }
 
-// openIDs is the ids of the open questions for name.
+// openIDs is the ids of the open questions for name, every channel
+// when name is empty.
 func openIDs(t *testing.T, env *testEnv, name string) map[int64]bool {
 	t.Helper()
 
@@ -84,7 +85,7 @@ func TestAcceptClosesTheTasksAgentQuestions(t *testing.T) {
 		ask(t, env, lead, "#other", "Done yet?"),
 	}
 
-	before := openIDs(t, env, "franco")
+	before := openIDs(t, env, "")
 	for _, id := range append(append([]int64{}, closes...), keeps...) {
 		if !before[id] {
 			t.Fatalf("question %d not open before the accept", id)
@@ -96,11 +97,18 @@ func TestAcceptClosesTheTasksAgentQuestions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	after := openIDs(t, env, "franco")
+	after := openIDs(t, env, "")
 	for _, id := range closes {
 		if after[id] {
 			t.Fatalf("question %d still open after the accept", id)
 		}
+	}
+
+	// The owner's inbox, ?for=franco&open=1, no longer lists the
+	// manager's accept questions and still lists the others there.
+	inbox := openIDs(t, env, "franco")
+	if inbox[closes[2]] || inbox[closes[3]] || !inbox[keeps[1]] || !inbox[keeps[3]] {
+		t.Fatalf("open for franco = %v", inbox)
 	}
 	for _, id := range keeps {
 		if !after[id] {
@@ -157,7 +165,7 @@ func TestRejectClosesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !openIDs(t, env, "franco")[id] {
+	if !openIDs(t, env, "")[id] {
 		t.Fatalf("question %d closed by a reject", id)
 	}
 }

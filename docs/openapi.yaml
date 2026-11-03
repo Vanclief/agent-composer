@@ -1398,8 +1398,8 @@ paths:
       operationId: sleepAgent
       summary: Put an agent to sleep
       description: >
-        Stops the awake agent's home and posts "Asleep." as agc in its DM channel
-        @<owner>/<name>. 409 when the agent is not awake.
+        Stops the awake agent's home and posts "Asleep." as agc in its inbox
+        #<name>. 409 when the agent is not awake.
       responses:
         '200':
           description: The agent, asleep.
@@ -2184,7 +2184,8 @@ paths:
           in: query
           description: >
             Only questions in the channels this person reads: their inbox `#<name>` and `#<task>`
-            for every task they manage or own.
+            for every task they manage (not those they only own; a task's manager raises to its
+            owner in their inbox).
           schema:
             type: string
       responses:
@@ -3059,8 +3060,8 @@ components:
         owner:
           type: string
           description: >
-            The human the task answers to, a messaging name. Defaults to the configured owner; its
-            sandboxes may post in #<owner>.
+            The human the task answers to, a messaging name. Defaults to the configured owner; the
+            task's manager, not its sandboxes, raises to them what only they can decide.
         for:
           type: string
         notify:
@@ -4636,7 +4637,7 @@ components:
         conversations:
           type: array
           description: >
-            The DM channel @<owner>/<name> first, then #<task> for each of its tasks, then any
+            The agent's inbox #<name> first, then #<task> for each of its tasks, then any
             other channel the agent has posted in, newest first.
           items:
             $ref: '#/components/schemas/AgentConversation'

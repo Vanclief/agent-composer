@@ -453,15 +453,14 @@ test('messages open with agc addressing the manager and owner, then the instruct
   await page.addInitScript(() => localStorage.setItem('agc.panel.human', `t${Date.now().toString(36)}`))
   await page.goto('/panel/tasks/review-42/messages')
   const messages = page.getByTestId('message-list').getByTestId('message')
-  // Bodies render as markdown: `code` loses its backticks and #franco is a
-  // channel chip (the # is its icon).
+  // Bodies render as markdown: `code` loses its backticks.
   await expect(messages.first()).toContainText(
     '@agent-composer-da (manager), @franco (owner): task review-42 is open: Review 42.\n' +
       'Agent: claude_code (claude-opus-5-5) on sandbox review-42, starting.\n' +
-      "The agent's instructions are the next message. Reply here to talk to it; " +
-      'it escalates to franco when only the owner can decide. Post /accept to accept the task, /reject <why> to send it back.',
+      "The agent's instructions are the next message. Reply here to talk to it;\n" +
+      'its manager raises to franco what only the owner can decide.\n' +
+      'Post /accept to accept the task, /reject <why> to send it back.',
   )
-  await expect(messages.first().getByTestId('channel-chip')).toHaveAttribute('href', '/panel/messages/franco')
   // The instructions collapse to one line until expanded.
   await messages.nth(1).getByRole('button', { name: 'Instructions' }).click()
   await expect(messages.nth(1)).toContainText(`You are ${task.assignee} (${task.model}) working for the task`)

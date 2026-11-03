@@ -274,8 +274,8 @@ func msgArgs(c *cli.Context, min int) ([]string, error) {
 }
 
 // msgChannel adds the leading # when it was left off, since an unquoted
-// #name starts a comment in most shells. A DM channel (`@<owner>/<name>`)
-// is left as it is.
+// #name starts a comment in most shells. A DM channel (`@<human>/<task>`,
+// ADR 0011) is left as it is.
 func msgChannel(channel string) string {
 	if strings.HasPrefix(channel, "#") || strings.HasPrefix(channel, "@") {
 		return channel

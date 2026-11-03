@@ -100,7 +100,7 @@ func TestAgentRoutes(t *testing.T) {
 		{http.MethodGet, "/api/agents/reviewer-1", "", http.StatusOK, `"last_active_at":null`},
 		// The rules its template names, read from the knowledge dir now.
 		{http.MethodGet, "/api/agents/reviewer-1", "", http.StatusOK, `{"id":"merge-needs-franco-for-ui-or-breaking","rule":"A delivered branch is merged into its base`},
-		{http.MethodGet, "/api/agents/reviewer-1", "", http.StatusOK, `"tasks":[],"conversations":[{"channel":"@franco/reviewer-1"`},
+		{http.MethodGet, "/api/agents/reviewer-1", "", http.StatusOK, `"tasks":[],"conversations":[{"channel":"#reviewer-1"`},
 		{http.MethodGet, "/api/agents", "", http.StatusOK, `"rules":[{"id":"go-no-explicit-semicolons"`},
 		{http.MethodGet, "/api/agents/nobody", "", http.StatusNotFound, "agent nobody not found"},
 

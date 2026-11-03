@@ -474,7 +474,7 @@ func TestHomeLoopBacksOffAndDropsAnInvalidChannel(t *testing.T) {
 		cancel:   cancel,
 		nextID:   100,
 		strict:   true,
-		agent:    msgclient.AgentResponse{Agent: msgclient.AgentView{Name: "reviewer-1", Role: "reviewer"}, Channels: []string{"@franco/reviewer-1", "#b"}, Idle: "15m"},
+		agent:    msgclient.AgentResponse{Agent: msgclient.AgentView{Name: "reviewer-1", Role: "reviewer"}, Channels: []string{"#Not-A-Channel", "#b"}, Idle: "15m"},
 		failures: []error{down, down, down, down, down, down},
 		script: [][]msgmodels.Message{
 			{homeMsg(10, "#b", "agc", 0, "Delivered: fix-login")},
@@ -502,8 +502,8 @@ func TestHomeLoopBacksOffAndDropsAnInvalidChannel(t *testing.T) {
 
 	// The invalid channel is dropped and the wait asked again at once
 	// without it, in every cycle; it never costs a back-off.
-	both := "@franco/reviewer-1,#b after 0"
-	wantWaits := []string{both, both, both, both, both, both, both, "#b after 0", "@franco/reviewer-1,#b after 10", "#b after 10"}
+	both := "#Not-A-Channel,#b after 0"
+	wantWaits := []string{both, both, both, both, both, both, both, "#b after 0", "#Not-A-Channel,#b after 10", "#b after 10"}
 	if !reflect.DeepEqual(msg.waits, wantWaits) {
 		t.Fatalf("waits = %q, want %q", msg.waits, wantWaits)
 	}
@@ -516,7 +516,7 @@ func TestHomeLoopBacksOffAndDropsAnInvalidChannel(t *testing.T) {
 	if strings.Count(out, "wait failed") != 1 || !strings.Contains(out, "unreachable") {
 		t.Fatalf("the failure is not logged once:\n%s", out)
 	}
-	if strings.Count(out, "leaving @franco/reviewer-1 out of the wait") != 1 {
+	if strings.Count(out, "leaving #Not-A-Channel out of the wait") != 1 {
 		t.Fatalf("the dropped channel is not logged once:\n%s", out)
 	}
 	if strings.Count(out, "wait works again") != 1 {

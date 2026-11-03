@@ -57,7 +57,7 @@ test('a harness shows the server defaults as values', async ({ page }) => {
   await expect(dialog.locator('[data-owner]')).toHaveValue('franco')
   await dialog.getByRole('textbox', { name: 'Title' }).fill('Hint check')
   await expect(dialog.locator('[data-agent-hint]')).toHaveText(
-    'The manager answers the agent in #hint-check; the agent escalates to #franco when only the owner can decide.',
+    'The manager answers the agent in #hint-check and raises to franco what only the owner can decide.',
   )
   await expect(dialog.locator('[data-compute]')).toHaveAttribute('aria-checked', 'true')
   await expect(dialog.locator('[data-brief]')).toHaveAttribute('placeholder', 'What to do, and what done looks like')

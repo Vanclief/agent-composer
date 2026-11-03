@@ -2,9 +2,11 @@ package sandboxes
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"testing"
 
+	"github.com/vanclief/agent-composer/messaging"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/task"
 )
@@ -47,9 +49,9 @@ func TestInstructions(t *testing.T) {
 				"  `agc msg ask '#fix-login' <question>` (or start your answer with\n" +
 				"  `QUESTION:`) so the question shows up as waiting on them, then keep\n" +
 				"  working on what does not depend on the answer.\n" +
-				"- If something needs a decision only franco can make, ask it in\n" +
-				"  `#franco` (their inbox) with `agc msg ask '#franco' <question>` so it\n" +
-				"  shows up as waiting on them, and say so in `#fix-login`; do not wait idle.\n" +
+				"- If something needs a decision only franco can make, ask your manager\n" +
+				"  in `#fix-login` and say it is for the owner; your manager raises it.\n" +
+				"  Keep working on what does not depend on the answer.\n" +
 				"- Do not modify files outside the repository, and never print secret values.\n" +
 				"- When the work is finished, deliver it as \"Delivering\" below says. The\n" +
 				"  task is done only when your manager or franco accepts it; a rejection comes\n" +
@@ -112,9 +114,9 @@ func TestInstructions(t *testing.T) {
 				"  `agc msg ask '#call-the-bank' <question>` (or start your answer with\n" +
 				"  `QUESTION:`) so the question shows up as waiting on them, then keep\n" +
 				"  working on what does not depend on the answer.\n" +
-				"- If something needs a decision only franco can make, ask it in\n" +
-				"  `#franco` (their inbox) with `agc msg ask '#franco' <question>` so it\n" +
-				"  shows up as waiting on them, and say so in `#call-the-bank`; do not wait idle.\n" +
+				"- If something needs a decision only franco can make, ask your manager\n" +
+				"  in `#call-the-bank` and say it is for the owner; your manager raises it.\n" +
+				"  Keep working on what does not depend on the answer.\n" +
 				"- Do not modify files outside the repository, and never print secret values.\n" +
 				"- When the work is finished, deliver it as \"Delivering\" below says. The\n" +
 				"  task is done only when your manager accepts it; a rejection comes\n" +
@@ -287,27 +289,32 @@ func TestAllocateStoresInstructionsAndRunsTheAgent(t *testing.T) {
 	}
 }
 
-func TestGrantsAddTheOwnerInbox(t *testing.T) {
-	spec := task.Spec{Channels: []string{"#releases", "#franco:read"}}
+func TestGrantsAreTheSpecsOnly(t *testing.T) {
+	// The owner's inbox is not added: a task's agent asks its manager in
+	// #<task>, and the manager raises to the owner (ADR 0009 item 5).
+	spec := task.Spec{Channels: []string{"#releases", "#alerts:read"}}
 
-	grants, err := Grants(&taskmodels.Task{Name: "fix-login", Owner: "franco"}, spec)
+	grants, err := Grants(spec)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(grants) != 2 || grants[1].Channel != "#franco" || grants[1].ReadOnly {
+	want := []messaging.Grant{{Channel: "#releases"}, {Channel: "#alerts", ReadOnly: true}}
+	if !reflect.DeepEqual(grants, want) {
 		t.Fatalf("grants = %+v", grants)
 	}
 
-	grants, err = Grants(&taskmodels.Task{Name: "fix-login", Owner: "ana"}, task.Spec{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(grants) != 1 || grants[0].Channel != "#ana" || grants[0].ReadOnly {
-		t.Fatalf("grants = %+v", grants)
-	}
-
-	grants, err = Grants(&taskmodels.Task{Name: "fix-login"}, task.Spec{})
+	grants, err = Grants(task.Spec{})
 	if err != nil || len(grants) != 0 {
-		t.Fatalf("grants without an owner = %+v, err %v", grants, err)
+		t.Fatalf("grants of an empty spec = %+v, err %v", grants, err)
+	}
+
+	// A spec that names an inbox keeps what it says.
+	grants, err = Grants(task.Spec{Channels: []string{"#franco:read"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = []messaging.Grant{{Channel: "#franco", ReadOnly: true}}
+	if !reflect.DeepEqual(grants, want) {
+		t.Fatalf("grants naming #franco:read = %+v", grants)
 	}
 }
