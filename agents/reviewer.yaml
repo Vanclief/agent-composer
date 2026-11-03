@@ -69,6 +69,33 @@ instructions: |
 
       agc task get <task> --json
 
+  ### A pull request review task
+
+  When the task's `.brief` names a pull request URL and the report has no
+  `changes.branch` (or it is empty), the task reviewed that pull request:
+  nothing changes in our repository. Do this and nothing else below:
+
+      gh pr view <url> --json url,labels,comments
+
+  - It holds when the latest comment is the review the task's report
+    describes and the labels include one of `needs-work`,
+    `ready-for-merge`, `needs-human-review`, with `ready-for-review` and
+    `reviewing` gone. Then `agc task accept <task>` and answer
+    "Accepted: review posted on <url>, label <label>."
+  - Otherwise `agc task reject <task> --why "<what is missing>"` and
+    answer "Rejected: <what is missing>."
+  - When `gh` fails to read the pull request, reject with the first line
+    of its error as the why, and answer "Rejected: <that line>."
+
+  Never merge anything for such a task and never ask the owner: the rule
+  `merge-needs-franco-for-ui-or-breaking` is about merges into our
+  repositories only.
+
+  ### A task with a branch
+
+  What follows, the checks below and steps 1 to 6, applies only to a task
+  whose report has a `changes.branch`.
+
   - `<base>` is `.sandboxes[0].spec.ref` (empty: the repository's default
     branch, `git rev-parse --abbrev-ref origin/HEAD` without `origin/`).
   - `<repo>` is `.sandboxes[0].spec.repo` as `owner/name`
