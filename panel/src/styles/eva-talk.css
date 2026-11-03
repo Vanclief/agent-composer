@@ -344,7 +344,7 @@
 .dark [data-testid='system-line'] > div > button[aria-expanded]:hover {
   color: var(--eva);
 }
-.dark [data-testid='system-line'] > div > div {
+.dark [data-testid='system-line'] > div > button[aria-expanded] ~ div {
   border-radius: 0;
   border-color: var(--eva-dim);
   background: oklch(0.1 0.005 60);
