@@ -56,10 +56,17 @@ Basename `/panel`. Defined in `src/App.tsx` (foundation).
 | `/messages`, `/messages/:channel`                        | Talk: `MessagesPage`; `:channel` has no `#` (`/messages/review-42` is `#review-42`); a DM keeps its `@`, encoded (`/messages/%40franco%2Fyc-pitch`)              |
 | `/messages/browse`                                       | `BrowsePage`: every channel, with Follow / Following (so a channel named `#browse` has no URL)                                                                   |
 
-Each page sets the top bar title with `usePageTitle('…')` from
-`@/shell/page-title`; the shell puts the page's area before it as a dim
-prefix (`Work / Tasks`, `data-testid="page-area"`), so a title never names
-its area.
+Each page sets the top bar title with `usePageTitle(title, id?)` from
+`@/shell/page-title`: `title` is the page word (Messages, Direct, Asks,
+Tasks…), uppercase condensed in the filled orange title tab; `id` is the
+identifier the page is about (`#designer-1`, `@franco/yc-pitch`, a task or
+sandbox name), a `.page-id` span in the tab, monospace, lowercase as sent, a
+step smaller. `page-title`'s text reads `Messages #designer-1`, and so does
+the browser tab (`… · agc`). The shell puts the page's area before it as an
+outlined orange cut-corner tab (`data-testid="page-area"`), a link to the
+area's `home` in `AREAS` (Think → `/think/beliefs`, Work → `/tasks`, Talk →
+`/messages/browse`; hover tints it, keyboard focus rings it cyan), then a
+dim orange chevron (`page-area-chevron`), so a title never names its area.
 
 ## Design rules
 
