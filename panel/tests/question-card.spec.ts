@@ -281,3 +281,25 @@ test('a question for a task I do not own shows no buttons', async ({ page, reque
   await expect(card.getByRole('button', { name: /^Accept/ })).toHaveCount(0)
   await expect(card.getByRole('button', { name: 'Send back…' })).toHaveCount(0)
 })
+
+test('a question with root-relative /api/ shot urls shows them as images', async ({ page, request }) => {
+  const me = uniqueName()
+  const reviewer = await joinAs(request)
+  const before = '/api/tasks/made-up-task/shots/before.png'
+  const after = '/api/tasks/made-up-task/shots/after.png'
+  await ask(
+    request,
+    reviewer.id,
+    `#${me}`,
+    ['Accept made-up-task?', 'Shows shots.', 'Changes: UI: shots', `Before: ${before}`, `After: ${after}`].join('\n'),
+  )
+  await page.route('**/api/tasks/made-up-task/shots/*.png', (route) =>
+    route.fulfill({ status: 200, contentType: 'image/png', body: PNG }),
+  )
+  await actAs(page, me)
+  await page.goto(`/panel/messages/${me}`)
+  const images = page.getByTestId('question-card').getByTestId('question-images')
+  await expect(images.getByRole('img', { name: 'Before' })).toHaveAttribute('src', before)
+  await expect(images.getByRole('img', { name: 'After' })).toHaveAttribute('src', after)
+  await expect(page.getByTestId('question-card').locator('[data-row="Before"]')).toHaveCount(0)
+})

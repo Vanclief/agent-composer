@@ -13,6 +13,7 @@ import { queryKeys, useTasks } from '@/api/hooks'
 import type { Message } from '@/api/msg'
 import { conceptIcons } from '@/components/concept-icons'
 import { ErrorText } from '@/components/error-text'
+import { ShotImages } from '@/components/shot-images'
 import { StatusPill } from '@/components/status-pill'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -45,28 +46,6 @@ function DiffLink({ url }: { url: string }) {
 
 type ImageRow = Extract<QuestionPart, { type: 'row' }>
 
-// Before and After side by side, each at most half the card; a click opens
-// the image full size in a new tab.
-function Images({ rows }: { rows: ImageRow[] }) {
-  return (
-    <div data-testid="question-images" className="grid grid-cols-2 gap-3">
-      {rows.map((row) => (
-        <figure key={row.label} data-image={row.label} className="flex min-w-0 flex-col gap-1">
-          <figcaption className={LABEL}>{row.label}</figcaption>
-          <a href={row.url} target="_blank" rel="noreferrer" title={`Open ${row.label} full size`}>
-            <img
-              src={row.url}
-              alt={row.label}
-              loading="lazy"
-              className="max-h-72 w-full rounded-md border border-border bg-zinc-900 object-contain"
-            />
-          </a>
-        </figure>
-      ))}
-    </div>
-  )
-}
-
 export function QuestionBody({ shape }: { shape: QuestionShape }) {
   const images = shape.parts.filter((p): p is ImageRow => p.type === 'row' && Boolean(p.image))
   let diff = ''
@@ -89,7 +68,13 @@ export function QuestionBody({ shape }: { shape: QuestionShape }) {
     }
     if (part.image) {
       if (part === images[0]) {
-        items.push(<Images key={i} rows={images} />)
+        items.push(
+          <ShotImages
+            key={i}
+            testId="question-images"
+            shots={images.map((row) => ({ label: row.label, url: row.url ?? '' }))}
+          />,
+        )
         lastRow = items.length - 1
       }
       return
