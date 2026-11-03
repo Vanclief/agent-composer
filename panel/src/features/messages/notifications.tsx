@@ -25,7 +25,10 @@ const MESSAGE_MS = 10_000
 
 function MessageBody({ message }: { message: Message }) {
   const long = message.body.length > MESSAGE_PREVIEW
-  const shown = long ? message.body.slice(0, MESSAGE_PREVIEW).trimEnd() + '…' : message.body
+  const count = message.images?.length ?? 0
+  const pictures = count > 0 ? `[${count} ${count === 1 ? 'image' : 'images'}]` : ''
+  const text = long ? message.body.slice(0, MESSAGE_PREVIEW).trimEnd() + '…' : message.body
+  const shown = [text.trim(), pictures].filter(Boolean).join(' ')
   return (
     <div
       data-testid="toast-message"

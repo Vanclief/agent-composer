@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils'
 
 import { useChannel } from './context'
 import { MarkdownText, MessageBody } from './MessageBody'
+import { MessageImages } from './MessageImages'
 import { answerOf } from './questions'
 import { AcceptActions, QuestionBody } from './QuestionParts'
 import { parseQuestion } from './questionShape'
@@ -149,7 +150,8 @@ export function MessageRow({ message, first, inThread }: { message: Message; fir
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5" title={`#${message.id}`}>
         {first && <Header message={message} time={false} />}
-        <MessageBody body={message.body} />
+        {message.body.trim() !== '' && <MessageBody body={message.body} />}
+        <MessageImages images={message.images} />
         {replies.length > 0 && <ThreadFooter message={message} replies={replies} />}
       </div>
       {!inThread && <ReplyAction id={message.id} />}

@@ -119,9 +119,40 @@ type Message = {
   reply_to?: number
   kind: 'message' | 'question'
   body: string
+  // The images it carries (ADR 0005 "Images"); absent when text only.
+  images?: MessageImage[]
   created_at: string
   // A person posted it, as models/messaging.Message.Human.
   human: boolean
+}
+
+type MessageImage = { name: string; type: string; size: number; url: string }
+
+// Image limits and types, as models/messaging/image.go.
+const MAX_IMAGES = 4
+const MAX_IMAGE_BYTES = 5 << 20
+const IMAGE_EXT: Record<string, string> = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+}
+
+// The type an image's bytes say, as http.DetectContentType does for these.
+function sniffImage(data: Buffer) {
+  if (data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return 'image/png'
+  }
+  if (data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) {
+    return 'image/jpeg'
+  }
+  if (data.subarray(0, 6).toString('latin1') === 'GIF87a' || data.subarray(0, 6).toString('latin1') === 'GIF89a') {
+    return 'image/gif'
+  }
+  if (data.subarray(0, 4).toString('latin1') === 'RIFF' && data.subarray(8, 12).toString('latin1') === 'WEBP') {
+    return 'image/webp'
+  }
+  return ''
 }
 
 type Waiter = { channel: string; after: number; wake: () => void }
@@ -242,6 +273,8 @@ function createState() {
   const specs = new Map<string, string>()
   const participants = new Map<string, Participant>()
   const messages: Message[] = []
+  // Posted images under <message id>/<name>, as the agc home keeps them.
+  const imageFiles = new Map<string, { type: string; data: Buffer }>()
   let waiters: Waiter[] = []
   let nextMessageId = 1
   // GET /api/events listeners, each handed ready-to-write SSE frames.
@@ -469,7 +502,14 @@ function createState() {
     return p
   }
 
-  function post(channel: string, p: Participant, body: string, replyTo?: number, kind: Message['kind'] = 'message') {
+  function post(
+    channel: string,
+    p: Participant,
+    body: string,
+    replyTo?: number,
+    kind: Message['kind'] = 'message',
+    images?: { name: string; type: string; data: Buffer }[],
+  ) {
     const m: Message = {
       id: nextMessageId,
       channel,
@@ -483,6 +523,17 @@ function createState() {
     }
     if (replyTo !== undefined) {
       m.reply_to = replyTo
+    }
+    if (images && images.length > 0) {
+      m.images = images.map((image) => {
+        imageFiles.set(`${m.id}/${image.name}`, { type: image.type, data: image.data })
+        return {
+          name: image.name,
+          type: image.type,
+          size: image.data.length,
+          url: `/api/msg/images/${m.id}/${encodeURIComponent(image.name)}`,
+        }
+      })
     }
     nextMessageId += 1
     messages.push(m)
@@ -762,6 +813,7 @@ function createState() {
     specs,
     participants,
     messages,
+    imageFiles,
     taskView,
     sandboxView,
     sandboxesOf,
@@ -1256,9 +1308,37 @@ async function msgAPI(state: State, method: string, verb: string, url: URL, req:
       throw msgError(400, `participant @${p.name} has left, join again`)
     }
     const text = str(body.body)
-    if (!text.trim()) {
+    const uploads = Array.isArray(body.images) ? (body.images as { name?: unknown; data?: unknown }[]) : []
+    if (!text.trim() && uploads.length === 0) {
       throw msgError(400, 'body is required')
     }
+    if (uploads.length > MAX_IMAGES) {
+      throw msgError(400, `a message carries at most ${MAX_IMAGES} images, this one has ${uploads.length}`)
+    }
+    const taken = new Set<string>()
+    const images = uploads.map((upload) => {
+      const sent = str(upload.name)
+      const data = Buffer.from(str(upload.data), 'base64')
+      if (data.length > MAX_IMAGE_BYTES) {
+        throw msgError(400, `image "${sent}" is ${data.length} bytes, at most ${MAX_IMAGE_BYTES} (5 MB)`)
+      }
+      const type = sniffImage(data)
+      if (!type) {
+        throw msgError(400, `image "${sent}" is not an image: send a PNG, JPEG, GIF or WebP`)
+      }
+      const base =
+        (sent.split(/[\\/]/).pop() ?? '')
+          .replace(/\.[^.]*$/, '')
+          .replace(/[^A-Za-z0-9._-]+/g, '-')
+          .replace(/^[.-]+|[.-]+$/g, '')
+          .slice(0, 56) || 'image'
+      let name = base + IMAGE_EXT[type]
+      for (let n = 2; taken.has(name); n++) {
+        name = `${base}-${n}${IMAGE_EXT[type]}`
+      }
+      taken.add(name)
+      return { name, type, data }
+    })
     let replyTo: number | undefined
     if (body.reply_to !== undefined && body.reply_to !== null) {
       replyTo = Number(body.reply_to)
@@ -1271,7 +1351,7 @@ async function msgAPI(state: State, method: string, verb: string, url: URL, req:
     if (kind !== 'message' && kind !== 'question') {
       throw msgError(400, `kind "${kind}" is invalid: use message or question`)
     }
-    const posted = state.post(channel, p, text, replyTo, kind)
+    const posted = state.post(channel, p, text, replyTo, kind, images)
     runCommand(state, posted)
     return posted
   }
@@ -1294,6 +1374,17 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
   }
   if (parts[1] === 'skills') {
     skillsRoute(res, method, parts.slice(2))
+    return
+  }
+  // GET /api/msg/images/{id}/{name}: a message's image as posted.
+  if (parts[1] === 'msg' && parts[2] === 'images' && parts.length === 5 && method === 'GET') {
+    const file = state.imageFiles.get(`${parts[3]}/${parts[4]}`)
+    if (!file) {
+      send(res, 404, { error: `message ${parts[3]} has no image ${parts[4]}` })
+      return
+    }
+    res.writeHead(200, { 'Content-Type': file.type, 'Content-Length': file.data.length })
+    res.end(file.data)
     return
   }
 

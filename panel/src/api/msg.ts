@@ -34,11 +34,32 @@ export type Message = {
   // Absent on servers that predate kinds; treat it as 'message'.
   kind?: MessageKind
   body: string
+  // The images it carries (ADR 0005 "Images"); absent when text only.
+  images?: MessageImage[]
   created_at: string
   // A person posted it (not an agent, not agc). Absent on servers that
   // predate it.
   human?: boolean
 }
+
+// An image a message carries, served at url (GET /api/msg/images/{id}/{name}).
+export type MessageImage = {
+  name: string
+  type: string
+  size: number
+  url: string
+}
+
+// An image as a post sends it: the file name and the bytes, base64.
+export type ImageUpload = {
+  name: string
+  data: string
+}
+
+// What a post may carry, as models/messaging/image.go.
+export const MAX_IMAGES = 4
+export const MAX_IMAGE_BYTES = 5 << 20
+export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
 
 export type MessageKind = 'message' | 'question'
 
@@ -80,6 +101,8 @@ export type PostRequest = {
   body: string
   reply_to?: number
   kind?: MessageKind
+  // Up to MAX_IMAGES; body may then be empty.
+  images?: ImageUpload[]
 }
 
 export type ReadParams = {

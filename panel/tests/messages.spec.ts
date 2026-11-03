@@ -1,4 +1,5 @@
 // Owned by the messages feature (MessagesTab, MessagesPage).
+/// <reference lib="dom" />
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 
 // Every test shares one mock, and a joined name stays held, so each test
@@ -452,4 +453,151 @@ test('day separators, relative times, and the unread line at the read cursor', a
   expect(at).toBeGreaterThan(0)
   expect(texts[at + 1]).toContain('new one')
   expect(texts[at - 1]).toContain('already read')
+})
+
+// ---------- images (ADR 0005 "Images") ----------
+
+// A 2x2 PNG, base64.
+const PNG_2X2 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP4z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg=='
+
+// Puts files in a DataTransfer in the page: name and either the 2x2 PNG
+// or, with size, a PNG header padded to size bytes.
+function transfer(page: Page, files: { name: string; size?: number }[]) {
+  return page.evaluateHandle(
+    ({ files, png }) => {
+      const dt = new DataTransfer()
+      const bytes = Uint8Array.from(atob(png), (c) => c.charCodeAt(0))
+      for (const f of files) {
+        const data = f.size ? new Uint8Array(f.size) : bytes
+        if (f.size) {
+          data.set(bytes.slice(0, 16))
+        }
+        dt.items.add(new File([data], f.name, { type: 'image/png' }))
+      }
+      return dt
+    },
+    { files, png: PNG_2X2 },
+  )
+}
+
+async function dropImages(page: Page, files: { name: string; size?: number }[]) {
+  const composer = page.locator('[data-slot="composer"]').last()
+  const dataTransfer = await transfer(page, files)
+  await composer.dispatchEvent('dragenter', { dataTransfer })
+  await composer.dispatchEvent('dragover', { dataTransfer })
+  await expect(composer).toHaveAttribute('data-dragging', 'true')
+  await expect(composer.getByTestId('drop-label')).toHaveText('Drop image')
+  await composer.dispatchEvent('drop', { dataTransfer })
+  await expect(composer).not.toHaveAttribute('data-dragging', 'true')
+}
+
+test('a dragged file frames the post box with DROP IMAGE until it leaves', async ({ page }) => {
+  await actAs(page, uniqueName())
+  await page.goto(`/panel/messages/${uniqueName('c')}`)
+  const composer = page.locator('[data-slot="composer"]')
+  const dataTransfer = await transfer(page, [{ name: 'a.png' }])
+  await composer.dispatchEvent('dragenter', { dataTransfer })
+  const label = composer.getByTestId('drop-label')
+  await expect(label).toBeVisible()
+  await expect(label).toHaveCSS('text-transform', 'uppercase')
+  await expect(composer).toHaveCSS('border-top-color', /oklch\(0\.74 0\.19 48/)
+  await composer.dispatchEvent('dragleave', { dataTransfer })
+  await expect(label).toHaveCount(0)
+  await expect(composer.getByTestId('composer-image')).toHaveCount(0)
+})
+
+test('dropped and pasted images show with ✕, and Send posts them with the text', async ({ page }) => {
+  const name = uniqueName()
+  const slug = uniqueName('c')
+  await actAs(page, name)
+  await page.goto(`/panel/messages/${slug}`)
+  await expect(page.getByRole('button', { name: `Identity @${name}` })).toHaveAttribute('data-joined', 'true')
+
+  await dropImages(page, [{ name: 'before.png' }, { name: 'after.png' }])
+  const thumbs = page.getByTestId('composer-image')
+  await expect(thumbs).toHaveCount(2)
+
+  // A pasted image joins them; ✕ removes one.
+  const box = page.getByRole('textbox', { name: `Message #${slug}` })
+  const clipboardData = await transfer(page, [{ name: 'pasted.png' }])
+  await box.evaluate((el, dt) => {
+    el.dispatchEvent(
+      new ClipboardEvent('paste', { clipboardData: dt as DataTransfer, bubbles: true, cancelable: true }),
+    )
+  }, clipboardData)
+  await expect(thumbs).toHaveCount(3)
+  await page.getByRole('button', { name: 'Remove pasted.png' }).click()
+  await expect(thumbs).toHaveCount(2)
+
+  // Images alone are enough to send.
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled()
+  await box.fill('the two states')
+  await box.press('Enter')
+
+  const list = page.getByTestId('message-list')
+  const message = list.getByTestId('message').filter({ hasText: 'the two states' })
+  const images = message.getByTestId('message-image')
+  await expect(images).toHaveCount(2)
+  await expect(images.first()).toHaveAttribute('href', /\/api\/msg\/images\/\d+\/before\.png$/)
+  await expect(images.first()).toHaveAttribute('target', '_blank')
+  await expect(thumbs).toHaveCount(0)
+  await expect(box).toHaveValue('')
+
+  // The link serves the image full size.
+  const href = await images.nth(1).getAttribute('href')
+  const response = await page.request.get(href ?? '')
+  expect(response.headers()['content-type']).toBe('image/png')
+  // And the image renders (it loaded, so it has a natural width).
+  await expect
+    .poll(() =>
+      images
+        .nth(1)
+        .locator('img')
+        .evaluate((img) => (img as HTMLImageElement).naturalWidth),
+    )
+    .toBe(2)
+})
+
+test('more than 4 images or one over 5 MB disables Send with the reason', async ({ page }) => {
+  const name = uniqueName()
+  await actAs(page, name)
+  await page.goto(`/panel/messages/${uniqueName('c')}`)
+  await expect(page.getByRole('button', { name: `Identity @${name}` })).toHaveAttribute('data-joined', 'true')
+
+  await dropImages(page, [
+    { name: '1.png' },
+    { name: '2.png' },
+    { name: '3.png' },
+    { name: '4.png' },
+    { name: '5.png' },
+  ])
+  await expect(page.getByRole('button', { name: '4 images max' })).toBeDisabled()
+  await page.getByRole('button', { name: 'Remove 5.png' }).click()
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled()
+
+  await dropImages(page, [{ name: 'big.png', size: 5 * 1024 * 1024 + 1 }])
+  await expect(page.getByRole('button', { name: '4 images max' })).toBeDisabled()
+  for (const n of ['1', '2', '3', '4']) {
+    await page.getByRole('button', { name: `Remove ${n}.png` }).click()
+  }
+  await expect(page.getByRole('button', { name: '5 MB max' })).toBeDisabled()
+  await page.getByRole('button', { name: 'Remove big.png' }).click()
+  await expect(page.getByRole('button', { name: 'Send: empty' })).toBeDisabled()
+})
+
+test('a text-only message renders no image strip', async ({ page, request }) => {
+  const join = await request.post('/api/msg/join', { data: { name: uniqueName('bot'), task: 'review-42' } })
+  const bot = (await join.json()) as { id: string }
+  const slug = uniqueName('c')
+  const body = `plain ${uniqueName()}`
+  const posted = await request.post('/api/msg/post', { data: { participant_id: bot.id, channel: `#${slug}`, body } })
+  expect(posted.ok()).toBe(true)
+  expect((await posted.json()).images).toBeUndefined()
+
+  await actAs(page, uniqueName())
+  await page.goto(`/panel/messages/${slug}`)
+  const message = page.getByTestId('message').filter({ hasText: body })
+  await expect(message).toBeVisible()
+  await expect(message.getByTestId('message-images')).toHaveCount(0)
 })
