@@ -116,6 +116,9 @@ its area.
   lists sort attention, lit, idle, off (rows carry `data-tier`; off ones
   are muted). `Led({color})` is a small steady light for facts that are not
   a status (the rail's criteria and checks).
+  `StatusLed({status})` is a status where a pill does not fit (the Talk
+  sidebar's agent DMs): the pill's colors as a dot, the word verbatim as
+  its label and tooltip.
 - **Attention is personal (rtsdesign rule 14):** a task in `review` waits on
   its manager first (ADR 0010: the manager or the owner accepts); it waits on
   the owner when the owner is the manager or the manager never joined
@@ -401,7 +404,7 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   criteria, brief, received and summary fold behind "Details"; in review or
   done the Review section and the summary stay out of the fold.
 
-## Talk: inbox, unread, notifications
+## Talk: Asks, DMs, Channels, unread, notifications
 
 - **Me:** the signed-in name is `useMyName()` (`src/features/messages/identity.ts`,
   localStorage `agc.panel.human`; with none stored, the server's owner from
@@ -416,17 +419,26 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   shows a join error in place). When the stored name differs from the
   server's owner the chip has an amber ring (`data-mismatch`) and the title
   "You are @test here, the server's owner is @franco".
-- **Sidebar** (`ChannelRows`), followed channels only: a pinned first row
-  "Inbox" (inbox icon, `data-testid="inbox-row"`) for `#<me>`, shown even
-  before it has a message, its badges every open question for me wherever
-  it was asked plus the inbox's unread; then the groups "Direct" (my DMs, `data-testid="dm-row"`,
-  each `@<other>` with the task name dim; `<other>` is the newest participant
-  neither me nor `agc`, else the task), "Tasks" (channels named after a task
-  from `useTasks`) and "Other" (`role="group"`, `aria-label` the group name);
-  Tasks and Other list newest activity first (highest `last_id`), at most 8
-  (`ROW_LIMIT`), then one dim "N more…" row (`data-testid="more-row"`) to
-  Browse; last a dim "Browse channels…" row (`data-testid="browse-link"`) to
-  `/messages/browse`. Each row has an
+- **Sidebar** (`ChannelRows`), followed channels only, in three parts
+  (Franco, 2026-11-03: his conversations apart from channels, and "Inbox"
+  said nothing). First a pinned row "Asks" (question icon,
+  `data-testid="inbox-row"`) for `#<me>`, where questions waiting on me
+  arrive, shown even before it has a message, its badges every open
+  question for me wherever it was asked plus the inbox's unread. Then
+  "DMs": each followed agent inbox `#<agent>` (an agent from `useAgents`)
+  as `@<agent>` after its state light (`agent-dm-row`, `data-agent`;
+  `StatusLed` from `@/components/status-pill`: the pill's colors, filled
+  while lit, the word verbatim as its label and tooltip, `data-status`),
+  and my DMs (`data-testid="dm-row"`, each `@<other>` with the task name
+  dim; `<other>` is the newest participant neither me nor `agc`, else the
+  task), together newest activity first (highest `last_id`); an agent
+  inbox is never under Channels. Then "Channels": the task channels (named
+  after a task from `useTasks`) newest first, then the other channels
+  newest first, at most 8 in all (`ROW_LIMIT`), then one dim "N more…" row
+  (`data-testid="more-row"`) to Browse, and last a dim "Browse channels…"
+  row (`data-testid="browse-link"`) to `/messages/browse`. DMs and
+  Channels are `role="group"` with `aria-label` the section name (DMs only
+  while it has a row). Each row has an
   `UnreadBadge` (`data-testid="unread-badge"`, `data-mention`) and is bold
   while unread (`data-unread`); the badge is pink when an unread message
   mentions `@<me>` (whole word). The Talk group header (`area-badge-talk`)
@@ -496,9 +508,11 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   member as an avatar with its dot and the tooltip `@name · online` or
   `@name · last seen 3 min ago`. Not yet in the message headers
   (`MessageList`) or the sidebar rows (`ChannelRows`).
-- **Inbox page:** `/messages/<me>` is the ordinary channel view titled
-  "Inbox #<me>", with the line "Your inbox: agents and tasks escalate here"
-  (`data-testid="inbox-header"`) and, when empty, an empty slot saying so.
+- **Asks page:** `/messages/<me>` is the ordinary channel view titled
+  "Asks #<me>", with the question icon and the line "Asks: questions and
+  escalations waiting on you" (`data-testid="inbox-header"`) and, when
+  empty, an empty slot saying so. The toast for a message there still
+  reads "Inbox", and Browse still says "Inbox: always" on its row.
 
 ## Talk: messages, threads, questions
 
@@ -634,7 +648,9 @@ who has left so you can join as franco), `#releases`, and franco's inbox
 decision. `#review-42` has a thread (franco's reply to @reviewer's first
 message), a code block, an answered question (@tester, answered by franco)
 and an open one from @reviewer to @franco; `#flaky-ci` has an open question
-from its agent @fixer. Posts take `kind`; `GET /api/msg/questions` ignores
+from its agent @fixer. `#designer-1`, the inbox of the seeded agent
+`designer-1` (awake), has franco's request and its unread answer, so
+Talk's DMs section shows `@designer-1`. Posts take `kind`; `GET /api/msg/questions` ignores
 `for`, so every open question is the signed-in person's (on the task list
 `review-42` and `flaky-ci` show `answer` for anyone).
 `GET /api/defaults` answers `{ harness: claude_code, model:
@@ -655,7 +671,8 @@ and acknowledges resize frames.
 Agents: `orchestrator-1` awake (home `orchestrator-1`, manages
 `review-42` and `flaky-ci`, reads `#orchestrator-1`, `#review-42`, `#flaky-ci`),
 `reviewer-2` asleep and numbered, `ada` kept (role Reviewer, asleep,
-manages `docs-pass`) and `writer-1` waking (stays waking: the mock only
+manages `docs-pass`), `designer-1` awake (role Designer, inbox
+`#designer-1` seeded) and `writer-1` waking (stays waking: the mock only
 finishes wakes it starts). Create names `<role slug>-<n>`, n one past the
 highest ever given for that role (so the first `Reviewer` is `reviewer-3`);
 keep validates the name (lowercase letters, digits, dashes; 409 when
