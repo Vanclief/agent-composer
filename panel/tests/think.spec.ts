@@ -10,7 +10,7 @@ function card(page: Page, id: string) {
 test('/ opens the last Think page visited and /think goes to beliefs', async ({ page }) => {
   await page.goto('/panel/think/rules')
   await expect(page.getByTestId('page-title')).toHaveText('Rules')
-  await expect(page.getByTestId('page-area')).toHaveText('Think /')
+  await expect(page.getByTestId('page-area')).toHaveText('Think')
   await page.goto('/panel/')
   await expect(page).toHaveURL(/\/panel\/think\/rules$/)
   await page.goto('/panel/think')

@@ -67,7 +67,11 @@ outlined and dim. Every text color meets AA on its ground.
   its orange mark and acts, not with its frame.
 - Frames are one pixel. Rulers (a line with a tick every 24px, or every
   12px for a finer one) close the top bar and a list's header strip.
-- The page title and the current area header are filled orange tabs. Pages
+- The page title and the current area header are filled orange tabs. In
+  the top bar the area comes first as an outlined tab (one-pixel frame
+  following a cut at the top right and bottom left) linking to the area,
+  then a dim chevron, then the title tab; an identifier in the title is
+  monospace, lowercase, a step smaller. Pages
   hang off a rail under their area header; the page you are on is cyan with
   a cyan left bar.
 - Acts (accept, answer, restart) are filled orange blocks at the far right
