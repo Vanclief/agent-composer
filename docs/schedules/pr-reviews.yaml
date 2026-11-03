@@ -1,7 +1,8 @@
 # agc schedule create -f docs/schedules/pr-reviews.yaml
 #
-# Every two minutes, list the open pull requests labeled ready-for-review
-# and create one review task per pull request and head commit (ADR 0012).
+# Every two minutes, gh pr list prints one JSON line per open pull request
+# of Vanclief/compose labeled ready-for-review, keyed url@headRefOid, and agc
+# creates one review task per pull request and head commit (ADR 0012).
 # A new push is a new key, so it gets a new review; a key already seen
 # creates nothing. The poll runs on the agc host with sh -c, PATH, HOME and
 # GITHUB_TOKEN from the secrets file, nothing else.
@@ -9,7 +10,7 @@ name: pr-reviews
 every: 2m
 poll:
   command: >-
-    gh search prs --label ready-for-review --state open --repo Vanclief/compose
+    gh pr list --repo Vanclief/compose --label ready-for-review --state open
     --json url,title,headRefOid
     --jq '.[] | {key: (.url + "@" + .headRefOid), url, title}'
   secrets: [GITHUB_TOKEN]
