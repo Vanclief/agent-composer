@@ -66,12 +66,17 @@ func Start(ctx context.Context, s *server.Server, log zerolog.Logger) error {
 
 	// Config
 	e.HideBanner = true
+	e.HidePort = true
+
+	addr := s.Ctrl.ListenAddress()
 
 	serverErr := make(chan error, 1)
 
 	// Start the server
 	go func() {
-		err := e.Start(":" + s.Ctrl.Config.App.Port)
+		log.Info().Str("addr", addr).Msg("agc rest listening on " + addr)
+
+		err := e.Start(addr)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 			return

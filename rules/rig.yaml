@@ -4,6 +4,8 @@
 # diff cannot see (ADR 0006).
 subject: the Linux rig
 rules:
+  # agc rest follows it by default: app.host (AGC_APP_HOST) defaults to
+  # 127.0.0.1 (core/controller/app.go).
   - id: rig-services-bind-localhost
     rule: Services on the rig bind to 127.0.0.1 and are reached over an SSH tunnel, never on 0.0.0.0.
     judge:
