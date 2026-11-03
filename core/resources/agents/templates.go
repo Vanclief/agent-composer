@@ -13,7 +13,9 @@ import (
 	"github.com/vanclief/ez"
 	"gopkg.in/yaml.v3"
 
+	"github.com/vanclief/agent-composer/core/resources/knowledge"
 	"github.com/vanclief/agent-composer/models/agent"
+	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 	"github.com/vanclief/agent-composer/task"
 )
 
@@ -28,6 +30,9 @@ var roleRegex = regexp.MustCompile(`^[A-Za-z0-9]+([_-][A-Za-z0-9]+)*$`)
 type Template struct {
 	Harness string `yaml:"harness"`
 	Model   string `yaml:"model"`
+	// Effort is the harness's reasoning effort, one of
+	// runtimetypes.ReasoningEffort; empty keeps the harness's default.
+	Effort string `yaml:"effort"`
 	// Sandbox is the home's spec (ADR 0008), disk included. A command is
 	// ignored: the home runs the agent loop.
 	Sandbox task.Sandbox `yaml:"sandbox"`
@@ -36,8 +41,50 @@ type Template struct {
 	// Reads are channel patterns the agent watches besides its own: a
 	// channel name, a glob on it, or * for every channel.
 	Reads []string `yaml:"reads"`
+	// Rules are ids of rules in the knowledge directory (ADR 0006) the
+	// agent follows; AGENT.md lists them after the instructions.
+	Rules []string `yaml:"rules"`
 	// Instructions are the agent's AGENT.md.
 	Instructions string `yaml:"instructions"`
+
+	// Followed is Rules read from the knowledge directory by LoadTemplate,
+	// in template order.
+	Followed []knowledge.RuleSentence `yaml:"-"`
+}
+
+// RuleSource reads rules from the knowledge directory on every call; the
+// knowledge API is one.
+type RuleSource interface {
+	RuleSentences(ids []string) ([]knowledge.RuleSentence, error)
+}
+
+// RulesHeading opens the section of AGENT.md listing the rules the agent
+// follows.
+const RulesHeading = "## Rules you follow"
+
+// rulesFooter closes that section.
+const rulesFooter = "Check your work against these before you answer or deliver; `agc rules show` prints every rule of the repository."
+
+// AgentMD is the AGENT.md written into the home: the instructions, ending
+// with the rules the agent follows when the template names any.
+func (t Template) AgentMD() string {
+	if len(t.Followed) == 0 {
+		return t.Instructions
+	}
+
+	var b strings.Builder
+	instructions := strings.TrimRight(t.Instructions, "\n")
+	if instructions != "" {
+		b.WriteString(instructions)
+		b.WriteString("\n\n")
+	}
+	b.WriteString(RulesHeading + "\n\n")
+	for _, rule := range t.Followed {
+		b.WriteString("- " + rule.Sentence + " (" + rule.ID + ")\n")
+	}
+	b.WriteString("\n" + rulesFooter + "\n")
+
+	return b.String()
 }
 
 // IdleDuration is the template's idle, DefaultIdle when empty.
@@ -63,9 +110,20 @@ func (t Template) Validate() error {
 		}
 	}
 
-	_, err := t.IdleDuration()
+	err := ValidateEffort(t.Effort)
 	if err != nil {
 		return ez.Wrap(err)
+	}
+
+	_, err = t.IdleDuration()
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	for _, id := range t.Rules {
+		if strings.TrimSpace(id) == "" {
+			return ez.New(ez.EINVALID, "rules names an empty id", nil)
+		}
 	}
 
 	for _, pattern := range t.Reads {
@@ -78,6 +136,21 @@ func (t Template) Validate() error {
 	err = t.Sandbox.Validate()
 	if err != nil {
 		return ez.Wrap(err)
+	}
+
+	return nil
+}
+
+// ValidateEffort checks effort is empty or a runtimetypes.ReasoningEffort.
+func ValidateEffort(effort string) error {
+	trimmed := strings.TrimSpace(effort)
+	if trimmed == "" {
+		return nil
+	}
+
+	err := runtimetypes.ReasoningEffort(trimmed).Validate()
+	if err != nil {
+		return ez.New(ez.EINVALID, "effort "+trimmed+" is not one of low, medium, high, xhigh", err)
 	}
 
 	return nil
@@ -100,8 +173,9 @@ func TemplatePath(dir string, role string) string {
 }
 
 // LoadTemplate reads role's template from dir, on every call so edits show
-// at once.
-func LoadTemplate(dir string, role string) (*Template, error) {
+// at once, and its rules from rules, so a rule id the knowledge directory
+// does not hold fails here. A nil rules fails any template naming rules.
+func LoadTemplate(dir string, role string, rules RuleSource) (*Template, error) {
 	err := ValidateRole(role)
 	if err != nil {
 		return nil, ez.Wrap(err)
@@ -129,6 +203,20 @@ func LoadTemplate(dir string, role string) (*Template, error) {
 	if err != nil {
 		return nil, ez.New(ez.ErrorCode(err), "template "+path+": "+ez.ErrorMessage(err), err)
 	}
+
+	tmpl.Followed = []knowledge.RuleSentence{}
+	if len(tmpl.Rules) == 0 {
+		return tmpl, nil
+	}
+	if rules == nil {
+		return nil, ez.New(ez.EINTERNAL, "template "+path+" names rules but agc has no knowledge directory wired", nil)
+	}
+
+	followed, err := rules.RuleSentences(tmpl.Rules)
+	if err != nil {
+		return nil, ez.New(ez.ErrorCode(err), "template "+path+": "+ez.ErrorMessage(err), err)
+	}
+	tmpl.Followed = followed
 
 	return tmpl, nil
 }

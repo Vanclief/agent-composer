@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -19,12 +20,14 @@ import (
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/events"
+	"github.com/vanclief/agent-composer/core/resources/knowledge"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	"github.com/vanclief/agent-composer/executor"
 	"github.com/vanclief/agent-composer/executor/sandbox"
 	"github.com/vanclief/agent-composer/messaging"
 	msgclient "github.com/vanclief/agent-composer/messaging/client"
+	accountmodels "github.com/vanclief/agent-composer/models/account"
 	"github.com/vanclief/agent-composer/models/agent"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
@@ -127,6 +130,11 @@ func (s *fakeSandbox) StartTerminal(ctx context.Context, cmd executor.Command) (
 	return &executor.Terminal{ID: "job_1", Running: true}, nil
 }
 
+// ListTerminals lists nothing: a home only starts from stopped.
+func (s *fakeSandbox) ListTerminals(ctx context.Context) ([]executor.Terminal, error) {
+	return nil, nil
+}
+
 func (s *fakeSandbox) Detach(ctx context.Context) error {
 	return nil
 }
@@ -147,8 +155,10 @@ const testSandbox = `sandbox:
 `
 
 // templates are the roles the tests use: reviewer reads nothing extra,
-// watcher reads #ci-*, main reads every channel.
+// watcher reads #ci-*, main reads every channel, designer runs at high
+// effort.
 var templates = map[string]string{
+	"designer.yaml": "harness: claude_code\nmodel: claude-opus-5-5\neffort: high\nreads: []\n" + testSandbox + "instructions: Design.\n",
 	"reviewer.yaml": "harness: claude_code\nidle: 20m\nreads: []\n" + testSandbox + "instructions: |\n  Review.\n",
 	"watcher.yaml":  "harness: codex_cli\nmodel: gpt-5\nreads: ['#ci-*']\n" + testSandbox + "instructions: Watch CI.\n",
 	"main.yaml":     "harness: claude_code\nreads: ['*']\n" + testSandbox + "instructions: Route.\n",
@@ -171,8 +181,10 @@ func newTestEnv(t *testing.T) *testEnv {
 	tables := []interface{}{
 		(*taskmodels.Task)(nil),
 		(*taskmodels.Sandbox)(nil),
+		(*accountmodels.Account)(nil),
 		(*msgmodels.Participant)(nil),
 		(*msgmodels.Message)(nil),
+		(*msgmodels.ChannelArchive)(nil),
 		(*agent.Agent)(nil),
 	}
 	for _, table := range tables {
@@ -252,6 +264,72 @@ func (env *testEnv) wake(t *testing.T, name string) *AgentView {
 	return env.get(t, name)
 }
 
+func TestEffortFromTemplateToHomeCommand(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+
+	designer := env.create(t, "designer")
+	if designer.Effort != "high" {
+		t.Fatalf("view effort = %q, want high", designer.Effort)
+	}
+
+	record, err := agent.GetAgentByName(ctx, env.db, designer.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Effort != "high" {
+		t.Fatalf("row effort = %q, want high", record.Effort)
+	}
+
+	want := "/usr/local/bin/agc agent run --agent designer-1 --harness claude_code --model claude-opus-5-5 --effort high --brief /home/agent/AGENT.md"
+	if Command(record) != want {
+		t.Fatalf("command = %q, want %q", Command(record), want)
+	}
+
+	env.wake(t, designer.Name)
+	calls := env.rt.Calls()
+	if len(calls) == 0 || calls[len(calls)-1] != "terminal "+want {
+		t.Fatalf("calls = %q, want the home job %q", calls, want)
+	}
+
+	// The request overrides the template; the default leaves no flag.
+	low, err := env.api.Create(ctx, nil, &CreateRequest{Role: "designer", Effort: "low"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if low.Effort != "low" {
+		t.Fatalf("override effort = %q, want low", low.Effort)
+	}
+
+	reviewer := env.create(t, "reviewer")
+	record, err = agent.GetAgentByName(ctx, env.db, reviewer.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reviewer.Effort != "" || strings.Contains(Command(record), "--effort") {
+		t.Fatalf("reviewer effort = %q, command %q: want none", reviewer.Effort, Command(record))
+	}
+
+	_, err = env.api.Create(ctx, nil, &CreateRequest{Role: "designer", Effort: "huge"})
+	if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), "low, medium, high, xhigh") {
+		t.Fatalf("invalid request effort: %v, want EINVALID naming the allowed values", err)
+	}
+
+	err = Template{Effort: "huge"}.Validate()
+	if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), "low, medium, high, xhigh") {
+		t.Fatalf("invalid template effort: %v, want EINVALID naming the allowed values", err)
+	}
+
+	err = os.WriteFile(filepath.Join(env.api.dir, "loud.yaml"), []byte("harness: claude_code\neffort: huge\n"+testSandbox), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = env.api.Create(ctx, nil, &CreateRequest{Role: "loud"})
+	if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), "low, medium, high, xhigh") {
+		t.Fatalf("template with an invalid effort: %v, want EINVALID naming the allowed values", err)
+	}
+}
+
 func TestCreateNumbersPerRoleAndNeverReuses(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := context.Background()
@@ -266,7 +344,7 @@ func TestCreateNumbersPerRoleAndNeverReuses(t *testing.T) {
 	if !reflect.DeepEqual(first.Tasks, []AgentTask{}) {
 		t.Fatalf("tasks = %#v, want empty and not nil", first.Tasks)
 	}
-	if len(first.Conversations) != 1 || first.Conversations[0].Channel != "@franco/reviewer-1" || first.LastActiveAt != nil {
+	if len(first.Conversations) != 1 || first.Conversations[0].Channel != "#reviewer-1" || first.LastActiveAt != nil {
 		t.Fatalf("conversations = %+v, last_active_at = %v: want the DM only, never active", first.Conversations, first.LastActiveAt)
 	}
 
@@ -379,7 +457,7 @@ func TestKeepRenamesAndRefusesTakenNames(t *testing.T) {
 	if !reflect.DeepEqual(kept.Tasks, []AgentTask{{Name: "review-42", Status: "open"}}) {
 		t.Fatalf("kept tasks = %+v", kept.Tasks)
 	}
-	if kept.Conversations[0].Channel != "@franco/ada" {
+	if kept.Conversations[0].Channel != "#ada" {
 		t.Fatalf("conversations = %+v, want the DM under the new name first", kept.Conversations)
 	}
 
@@ -500,14 +578,16 @@ func TestStateFollowsTheHomeSandbox(t *testing.T) {
 		t.Fatalf("sleep while asleep: %v, want ECONFLICT", err)
 	}
 
-	// A stopped home is started, not allocated again.
+	// A stopped home is started, not allocated again, and its agent loop
+	// runs again.
 	again := env.wake(t, "reviewer-1")
 	if again.State != StateAwake {
 		t.Fatalf("state = %s, want awake", again.State)
 	}
 	calls := env.rt.Calls()
-	if calls[len(calls)-1] != "start reviewer-1" {
-		t.Fatalf("calls = %q, want a start last", calls)
+	wantLast := []string{"start reviewer-1", wantCalls[2]}
+	if len(calls) < 2 || !reflect.DeepEqual(calls[len(calls)-2:], wantLast) {
+		t.Fatalf("calls = %q, want %q last", calls, wantLast)
 	}
 
 	// Any other status of the home is the agent's state, verbatim.
@@ -620,6 +700,13 @@ func TestDeleteRemovesTheHomeAndKeepsTheVolume(t *testing.T) {
 // postAs joins name with caller and posts body in channel.
 func (env *testEnv) postAs(t *testing.T, caller messaging.Caller, name string, channel string, body string) {
 	t.Helper()
+
+	env.postKindAs(t, caller, name, channel, body, "")
+}
+
+// postKindAs is postAs with a kind: question asks.
+func (env *testEnv) postKindAs(t *testing.T, caller messaging.Caller, name string, channel string, body string, kind string) {
+	t.Helper()
 	ctx := context.Background()
 
 	p, err := env.msg.Join(ctx, caller, name)
@@ -627,7 +714,7 @@ func (env *testEnv) postAs(t *testing.T, caller messaging.Caller, name string, c
 		t.Fatal(err)
 	}
 
-	_, err = env.msg.Post(ctx, caller, p.ID, channel, body, nil, "")
+	_, err = env.msg.Post(ctx, caller, p.ID, channel, body, nil, kind)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -663,7 +750,7 @@ func TestChannelsOfAnAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tmpl, err := LoadTemplate(env.api.dir, record.Role)
+	tmpl, err := env.api.template(record.Role)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -672,7 +759,7 @@ func TestChannelsOfAnAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantReads := []string{"@franco/watcher-1", "#fix-ci", "#bump-deps", "#ci-*"}
+	wantReads := []string{"#watcher-1", "#fix-ci", "#bump-deps", "#ci-*"}
 	if !reflect.DeepEqual(reads, wantReads) {
 		t.Fatalf("reads = %q, want %q", reads, wantReads)
 	}
@@ -681,7 +768,7 @@ func TestChannelsOfAnAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantChannels := []string{"@franco/watcher-1", "#fix-ci", "#bump-deps", "#ci-main", "#ci-nightly"}
+	wantChannels := []string{"#watcher-1", "#fix-ci", "#bump-deps", "#ci-main", "#ci-nightly"}
 	if !reflect.DeepEqual(channels, wantChannels) {
 		t.Fatalf("channels = %q, want %q", channels, wantChannels)
 	}
@@ -692,13 +779,13 @@ func TestChannelsOfAnAgent(t *testing.T) {
 		t.Fatalf("tasks = %+v, want %+v", view.Tasks, wantTasks)
 	}
 
-	// Conversations: the DM, then the tasks' channels (each with the
+	// Conversations: the inbox, then the tasks' channels (each with the
 	// opening agc posted), then where the agent posted itself.
 	got := []string{}
 	for _, c := range view.Conversations {
 		got = append(got, c.Channel)
 	}
-	if !reflect.DeepEqual(got, []string{"@franco/watcher-1", "#fix-ci", "#bump-deps"}) {
+	if !reflect.DeepEqual(got, []string{"#watcher-1", "#fix-ci", "#bump-deps"}) {
 		t.Fatalf("conversations = %q", got)
 	}
 	if view.LastActiveAt == nil || !view.LastActiveAt.Equal(view.Conversations[2].LastAt) {
@@ -714,7 +801,7 @@ func TestChannelsOfAnAgent(t *testing.T) {
 		t.Fatalf("conversations = %+v, last_active_at = %v", view.Conversations, view.LastActiveAt)
 	}
 
-	if !MatchChannel("*", "@franco/x") || MatchChannel("#ci-*", "#cd-main") || !MatchChannel("#fix-ci", "#fix-ci") {
+	if !MatchChannel("*", "#x") || MatchChannel("#ci-*", "#cd-main") || !MatchChannel("#fix-ci", "#fix-ci") {
 		t.Fatal("MatchChannel")
 	}
 }
@@ -743,9 +830,16 @@ func TestWakeHookWakesOnlyMatchingAsleepAgents(t *testing.T) {
 		env.create(t, "reviewer")
 		env.create(t, "watcher")
 
+		// Another agent's plain post is no turn (ADR 0016 item 6).
 		env.postAs(t, messaging.Caller{Task: "ci-main"}, "builder", "#ci-main", "red")
-
 		woken := env.woken("reviewer-1", "watcher-1")
+		if len(woken) != 0 {
+			t.Fatalf("an agent's plain post woke %q", woken)
+		}
+
+		env.postAs(t, messaging.Caller{Human: true}, "franco", "#ci-main", "red again")
+
+		woken = env.woken("reviewer-1", "watcher-1")
 		if !reflect.DeepEqual(woken, []string{"watcher-1"}) {
 			t.Fatalf("woken = %q, want watcher-1 only", woken)
 		}
@@ -768,7 +862,15 @@ func TestWakeHookWakesOnlyMatchingAsleepAgents(t *testing.T) {
 			t.Fatalf("agc's post woke %q", woken)
 		}
 
-		env.postAs(t, task42, "review-42", "#review-42", "QUESTION: which branch?")
+		// The task agent's plain post does not wake its manager.
+		env.postAs(t, task42, "review-42", "#review-42", "I fixed the tests.")
+		woken = env.woken("reviewer-1", "reviewer-2")
+		if len(woken) != 0 {
+			t.Fatalf("the task agent's plain post woke %q", woken)
+		}
+
+		// Its question does.
+		env.postKindAs(t, task42, "review-42b", "#review-42", "which branch?", msgmodels.KindQuestion)
 
 		woken = env.woken("reviewer-1", "reviewer-2")
 		if !reflect.DeepEqual(woken, []string{"reviewer-2"}) {
@@ -799,14 +901,135 @@ func TestWakeHookWakesOnlyMatchingAsleepAgents(t *testing.T) {
 			t.Fatalf("calls after = %q, want none past %d", calls, before)
 		}
 
-		// Another agent's post does wake it.
+		// Another agent's post naming it does wake it.
 		env.create(t, "reviewer")
 		env.wake(t, "reviewer-1")
-		env.postAs(t, messaging.Caller{Agent: "reviewer-1", Grants: []messaging.Grant{{Channel: "#ci-main"}}}, "reviewer-1", "#ci-main", "looked at it")
+		env.postAs(t, messaging.Caller{Agent: "reviewer-1", Grants: []messaging.Grant{{Channel: "#ci-main"}}}, "reviewer-1", "#ci-main", "@watcher-1 looked at it")
 
 		calls = env.rt.Calls()
-		if calls[len(calls)-1] != "start watcher-1" {
+		if !slices.Contains(calls[before:], "start watcher-1") {
 			t.Fatalf("calls = %q, want watcher-1 started", calls)
+		}
+	})
+
+	t.Run("agc's delivery and accept wake the task's manager", func(t *testing.T) {
+		env := newTestEnv(t)
+		env.create(t, "reviewer")
+		env.create(t, "reviewer")
+
+		_, err := env.tasks.Create(ctx, nil, &tasks.CreateRequest{Name: "review-42", Brief: "Review it.", Manager: "reviewer-2"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.api.Wait()
+
+		_, err = env.tasks.Deliver(ctx, nil, &tasks.DeliverRequest{Name: "review-42", Summary: "Reviewed."})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The wake allocates the manager's first home, whose runtime
+		// create runs in the sandbox boot: wait for the hook's wakes,
+		// then for the boots they started.
+		env.api.Wait()
+		env.sbx.Wait()
+
+		woken := env.woken("reviewer-1", "reviewer-2")
+		if !reflect.DeepEqual(woken, []string{"reviewer-2"}) {
+			t.Fatalf("woken by the delivery = %q, want reviewer-2 only", woken)
+		}
+
+		// The owner accepts while the manager sleeps: the task is done,
+		// still in the manager's Reads, and "Accepted by franco." wakes it.
+		_, err = env.api.Sleep(ctx, nil, &SleepRequest{Name: "reviewer-2"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.sbx.Wait()
+		before := len(env.rt.Calls())
+
+		_, err = env.tasks.Accept(ctx, nil, &tasks.AcceptRequest{Name: "review-42", By: "franco"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.api.Wait()
+		env.sbx.Wait()
+
+		calls := env.rt.Calls()[before:]
+		if !slices.Contains(calls, "start reviewer-2") || slices.Contains(calls, "create reviewer-1") {
+			t.Fatalf("calls after the accept = %q, want reviewer-2 started only", calls)
+		}
+
+		// The manager's own accept wakes nobody.
+		record, err := agent.GetAgentByName(ctx, env.db, "reviewer-2")
+		if err != nil {
+			t.Fatal(err)
+		}
+		own := &msgmodels.Message{From: msgmodels.SystemName, Channel: "#review-42", Body: "Accepted by reviewer-2."}
+		if msgmodels.TurnFor(own, &msgmodels.Participant{Name: record.Name, Agent: record.Home}) {
+			t.Fatal("the manager's own accept is a turn for it")
+		}
+	})
+
+	t.Run("a reply to an agent's question in a channel it does not read", func(t *testing.T) {
+		env := newTestEnv(t)
+		env.create(t, "reviewer")
+		env.create(t, "watcher")
+		env.wake(t, "reviewer-1")
+
+		// The reviewer asks franco in #franco, its owner's inbox, which
+		// is not in its Reads, then goes to sleep.
+		home := messaging.Caller{Agent: "reviewer-1", Grants: []messaging.Grant{{Channel: "#franco"}}}
+		me, err := env.msg.Join(ctx, home, "reviewer-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		question, err := env.msg.Post(ctx, home, me.ID, "#franco", "Merge it?", nil, msgmodels.KindQuestion)
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.api.Wait()
+
+		_, err = env.api.Sleep(ctx, nil, &SleepRequest{Name: "reviewer-1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.sbx.Wait()
+		before := len(env.rt.Calls())
+
+		franco, err := env.msg.Join(ctx, messaging.Caller{Human: true}, "franco")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// franco's own post in his inbox, and the agent's own reply in its
+		// thread, wake nobody.
+		_, err = env.msg.Post(ctx, messaging.Caller{Human: true}, franco.ID, "#franco", "note to self", nil, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = env.msg.Post(ctx, home, me.ID, "#franco", "Still there?", &question.ID, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.api.Wait()
+		env.sbx.Wait()
+
+		calls := env.rt.Calls()
+		if len(calls) != before {
+			t.Fatalf("calls = %q, want none past %d", calls, before)
+		}
+
+		// franco's answer in the thread wakes the asker, and only it.
+		_, err = env.msg.Post(ctx, messaging.Caller{Human: true}, franco.ID, "#franco", "Yes do it", &question.ID, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.api.Wait()
+		env.sbx.Wait()
+
+		calls = env.rt.Calls()[before:]
+		if !slices.Contains(calls, "start reviewer-1") || slices.Contains(calls, "create watcher-1") {
+			t.Fatalf("calls after the answer = %q, want reviewer-1 started only", calls)
 		}
 	})
 
@@ -858,7 +1081,7 @@ func TestHomeSocketServesTheAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Agent.Name != "reviewer-1" || got.Idle != "20m" || !reflect.DeepEqual(got.Channels, []string{"@franco/reviewer-1", "#review-42"}) {
+	if got.Agent.Name != "reviewer-1" || got.Idle != "20m" || !reflect.DeepEqual(got.Channels, []string{"#reviewer-1", "#review-42"}) || len(got.Asked) != 0 {
 		t.Fatalf("GET /agent = %+v", got)
 	}
 
@@ -882,6 +1105,25 @@ func TestHomeSocketServesTheAgent(t *testing.T) {
 	_, err = client.Post(ctx, p.ID, "#general", "hi", nil)
 	if ez.ErrorCode(err) != ez.ENOTAUTHORIZED {
 		t.Fatalf("post outside its channels: %v, want ENOTAUTHORIZED", err)
+	}
+
+	// Its owner's inbox is granted, so it can ask the owner there.
+	asked, err := client.Ask(ctx, p.ID, "#franco", "Merge review-42?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asked.Kind != msgmodels.KindQuestion || asked.Agent != "reviewer-1" {
+		t.Fatalf("question in #franco = %+v", asked)
+	}
+
+	// Having started a thread there, it waits on #franco for the answer
+	// (ADR 0016 item 6), which it does not read.
+	got, err = client.Agent(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.Channels, []string{"#reviewer-1", "#review-42"}) || !reflect.DeepEqual(got.Asked, []string{"#franco"}) {
+		t.Fatalf("GET /agent after asking = %+v, want #franco asked", got)
 	}
 
 	_, err = env.tasks.Create(ctx, nil, &tasks.CreateRequest{Title: "Not mine", Brief: "b", Manager: "franco"})
@@ -936,7 +1178,16 @@ func TestHomeSocketServesTheAgent(t *testing.T) {
 		t.Fatalf("accepted = %+v", accepted)
 	}
 
-	err = client.Deliver(ctx, "done", nil, &tasks.TaskView{})
+	// A done task stays in its manager's channels.
+	got, err = client.Agent(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.Channels, []string{"#reviewer-1", "#review-42"}) {
+		t.Fatalf("channels after accept = %q, want #review-42 kept", got.Channels)
+	}
+
+	err = client.Deliver(ctx, "done", nil, nil, &tasks.TaskView{})
 	if ez.ErrorCode(err) != ez.EINVALID {
 		t.Fatalf("deliver from a home: %v, want EINVALID", err)
 	}
@@ -998,7 +1249,9 @@ func TestMainReadsEveryChannel(t *testing.T) {
 func TestShippedTemplatesLoad(t *testing.T) {
 	dir := filepath.Join("..", "..", "..", "agents")
 
-	reviewer, err := LoadTemplate(dir, "Reviewer")
+	rules := knowledge.NewAPI(filepath.Join("..", "..", ".."))
+
+	reviewer, err := LoadTemplate(dir, "Reviewer", rules)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1006,11 +1259,26 @@ func TestShippedTemplatesLoad(t *testing.T) {
 		t.Fatalf("reviewer = %+v", reviewer)
 	}
 
-	main, err := LoadTemplate(dir, "main")
+	if len(reviewer.Followed) == 0 || len(reviewer.Followed) != len(reviewer.Rules) {
+		t.Fatalf("reviewer rules = %q, followed %+v", reviewer.Rules, reviewer.Followed)
+	}
+
+	main, err := LoadTemplate(dir, "main", rules)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(main.Reads, []string{"*"}) || main.Instructions == "" {
 		t.Fatalf("main = %+v", main)
+	}
+
+	designer, err := LoadTemplate(dir, "designer", rules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if designer.Harness != "claude_code" || designer.Model != "claude-opus-5-5" || len(designer.Reads) != 0 || designer.Sandbox.Disk != "20G" {
+		t.Fatalf("designer = %+v", designer)
+	}
+	if !reflect.DeepEqual(designer.Sandbox.Secrets, []string{"GITHUB_TOKEN"}) || !strings.Contains(designer.Instructions, "## When a task you manage delivers") {
+		t.Fatalf("designer = %+v", designer)
 	}
 }

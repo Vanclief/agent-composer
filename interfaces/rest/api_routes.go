@@ -64,11 +64,13 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	tasks.POST("/:id/deliver", h.DeliverTask)
 	tasks.POST("/:id/accept", h.AcceptTask)
 	tasks.POST("/:id/reject", h.RejectTask)
+	tasks.GET("/:id/shots/:file", h.GetTaskShot)
 	tasks.POST("/:id/sandboxes", h.AllocateSandbox)
 	tasks.DELETE("/:id", h.DeleteTask)
 
 	sandboxes := api.Group("/sandboxes")
 	sandboxes.GET("", h.ListSandboxes)
+	sandboxes.POST("/gc", h.GCSandboxes)
 	sandboxes.GET("/:id", h.GetSandbox)
 	sandboxes.POST("/:id/stop", h.StopSandbox)
 	sandboxes.POST("/:id/start", h.StartSandbox)
@@ -95,6 +97,17 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	agents.POST("/:name/sleep", h.SleepAgent)
 	agents.DELETE("/:name", h.DeleteAgent)
 
+	// Accounts (ADR 0018); :name is the account's name.
+	accounts := api.Group("/accounts")
+	accounts.GET("", h.ListAccounts)
+	accounts.POST("", h.CreateAccount)
+	accounts.DELETE("/:name", h.DeleteAccount)
+	accounts.POST("/:name/default", h.SetDefaultAccount)
+	accounts.DELETE("/:name/default", h.ClearDefaultAccount)
+	accounts.POST("/:name/signin", h.SigninAccount)
+	accounts.POST("/:name/signin/complete", h.CompleteSigninAccount)
+	accounts.DELETE("/:name/signin", h.SignoutAccount)
+
 	schedules := api.Group("/schedules")
 	schedules.GET("", h.ListSchedules)
 	schedules.POST("", h.CreateSchedule)
@@ -117,6 +130,10 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	knowledge.GET("/why/:id", h.KnowledgeWhy)
 	knowledge.GET("/doubt/:id", h.KnowledgeDoubt)
 	knowledge.GET("/conflicts", h.KnowledgeConflicts)
+
+	skills := api.Group("/skills")
+	skills.GET("", h.ListSkills)
+	skills.GET("/:name", h.GetSkill)
 
 	api.Any("/msg/*", echo.WrapHandler(h.Messaging()))
 }

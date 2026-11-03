@@ -109,4 +109,5 @@ sandbox:
   memory: 4096
   repo: https://github.com/vanclief/agent-composer
   ref: feat/tasks-microsandbox
-  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
+  # The Claude credential comes from the provider's default account (ADR 0018) unless the spec names one.
+  secrets: [GITHUB_TOKEN]

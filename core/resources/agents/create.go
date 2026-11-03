@@ -12,11 +12,12 @@ import (
 
 // CreateRequest makes a numbered agent from the template of role. An
 // empty harness or model takes the template's, then the defaults (ADR
-// 0009).
+// 0009); an empty effort takes the template's.
 type CreateRequest struct {
 	Role    string `json:"role"`
 	Harness string `json:"harness"`
 	Model   string `json:"model"`
+	Effort  string `json:"effort"`
 }
 
 func (r CreateRequest) Validate() error {
@@ -38,6 +39,11 @@ func (r CreateRequest) Validate() error {
 		}
 	}
 
+	err = ValidateEffort(r.Effort)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
 	return nil
 }
 
@@ -52,7 +58,7 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 
 	role := strings.TrimSpace(request.Role)
 
-	tmpl, err := LoadTemplate(api.dir, role)
+	tmpl, err := api.template(role)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -66,6 +72,8 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 	if model == "" && harness == api.defaults.Harness {
 		model = api.defaults.Model
 	}
+
+	effort := firstNonEmpty(request.Effort, tmpl.Effort)
 
 	idle := strings.TrimSpace(tmpl.Idle)
 	if idle == "" {
@@ -108,6 +116,7 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 			Series:  series,
 			Harness: agent.Harness(harness),
 			Model:   model,
+			Effort:  effort,
 			Owner:   api.defaults.Owner,
 			Idle:    idle,
 		}

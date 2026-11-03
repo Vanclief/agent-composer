@@ -20,13 +20,16 @@ import (
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/events"
+	"github.com/vanclief/agent-composer/core/resources/accounts"
 	"github.com/vanclief/agent-composer/core/resources/agents"
+	"github.com/vanclief/agent-composer/core/resources/knowledge"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/schedules"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	"github.com/vanclief/agent-composer/interfaces/rest/handler"
 	restserver "github.com/vanclief/agent-composer/interfaces/rest/server"
 	"github.com/vanclief/agent-composer/messaging"
+	accountmodels "github.com/vanclief/agent-composer/models/account"
 	agentmodels "github.com/vanclief/agent-composer/models/agent"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 	schedulemodels "github.com/vanclief/agent-composer/models/schedule"
@@ -79,9 +82,11 @@ func serveTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *ta
 		(*taskmodels.Sandbox)(nil),
 		(*msgmodels.Participant)(nil),
 		(*msgmodels.Message)(nil),
+		(*msgmodels.ChannelArchive)(nil),
 		(*schedulemodels.Schedule)(nil),
 		(*schedulemodels.Item)(nil),
 		(*agentmodels.Agent)(nil),
+		(*accountmodels.Account)(nil),
 	}
 	for _, table := range tables {
 		_, err = db.NewCreateTable().Model(table).Exec(context.Background())
@@ -106,11 +111,14 @@ func serveTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *ta
 	msg.SetPresence(sandboxesAPI)
 	tasksAPI := tasks.NewAPI(ctrl, sandboxesAPI, msg, secretsPath, specs)
 	tasksAPI.SetEvents(bus)
+	tasksAPI.SetShotsDir(filepath.Join(t.TempDir(), "shots"))
 	schedulesAPI := schedules.NewAPI(ctrl, tasksAPI, secretsPath)
 	schedulesAPI.SetEvents(bus)
 	// The templates the repo ships, agents/ at its root.
 	agentsAPI := agents.NewAPI(ctrl, tasksAPI, msg, filepath.Join("..", "..", "agents"))
 	agentsAPI.SetEvents(bus)
+	// The rules templates name come from the repo's own knowledge dir.
+	agentsAPI.SetRules(knowledge.NewAPI(filepath.Join("..", "..")))
 	server := &restserver.Server{
 		Ctrl:         ctrl,
 		RateLimiter:  ratelimit.NewWindowCounter(10, 100),
@@ -119,6 +127,7 @@ func serveTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *ta
 		SchedulesAPI: schedulesAPI,
 		TurnsAPI:     agents.NewTurnsAPI(volumes, sandboxesAPI),
 		AgentsAPI:    agentsAPI,
+		AccountsAPI:  accounts.New(db, secretsPath, sandboxesAPI),
 		Messaging:    msg,
 		Events:       bus,
 	}
@@ -314,7 +323,8 @@ func TestListSecretsRoute(t *testing.T) {
 		t.Fatalf("status %d, body %s", status, body)
 	}
 
-	want := `{"secrets":[{"name":"CUSTOM","hosts":[]},{"name":"GITHUB_TOKEN","hosts":["api.github.com","github.com"]}]}`
+	want := `{"secrets":[{"name":"CUSTOM","hosts":[]},{"name":"GITHUB_TOKEN","hosts":["api.github.com","github.com"]}],` +
+		`"harnesses":[{"id":"codex_cli","reads":["CODEX_API_KEY"]},{"id":"claude_code","reads":["CLAUDE_CODE_OAUTH_TOKEN","ANTHROPIC_API_KEY"]},{"id":"pi","reads":[]}]}`
 	body = strings.TrimSpace(body)
 	if body != want {
 		t.Fatalf("body %s, want %s", body, want)

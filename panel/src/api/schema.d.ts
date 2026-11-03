@@ -283,9 +283,29 @@ export interface paths {
         put?: never;
         /**
          * Deliver a task for review
-         * @description Sets `delivered_at`, `summary` and `report` and posts "Delivered: <summary>" in #<task> as agc, followed by the report rendered as markdown when there is one (ADR 0010 item 2, "Delivery report"). The sandboxes are left as they are; the agent keeps waiting for review. A task can be delivered more than once; the last summary and report win, and a delivery without a report stores null. Inside a sandbox `agc task deliver` reaches the same call over the sandbox's messaging socket, which passes `report` through unchanged. 400 when the report breaks a rule, including a `criteria` count that does not match the task's `accept`; 409 when the task is done.
+         * @description Sets `delivered_at`, `summary` and `report` and posts "Delivered: <summary>" in #<task> as agc, followed by the report rendered as markdown when there is one (ADR 0010 item 2, "Delivery report"). The sandboxes are left as they are; the agent keeps waiting for review. A task can be delivered more than once; the last summary and report win, and a delivery without a report stores null. Inside a sandbox `agc task deliver` reaches the same call over the sandbox's messaging socket, which passes `report` through unchanged. `files` carries the PNG of each of the report's `shots` under its label; agc keeps them under its home, served by GET /tasks/{id}/shots/{label}.png, and a delivery without shots removes the earlier ones. 400 when the report breaks a rule, including a `criteria` count that does not match the task's `accept`; 409 when the task is done.
          */
         post: operations["deliverTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/shots/{label}.png": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a delivered screenshot
+         * @description The PNG a delivery sent for the report's shot `label`, kept on the agc host under `<agc home>/shots/<task>/<label>.png` (ADR 0010, "Delivery report"). Each delivery replaces the task's shots; a reject or an accept keeps them. 404 when the task or the shot is absent.
+         */
+        get: operations["getTaskShot"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -366,6 +386,26 @@ export interface paths {
         get: operations["listSandboxes"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandboxes/gc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Collect the sandboxes of done tasks
+         * @description Deletes, through the same path as DELETE /sandboxes/{id}, every sandbox that is stopped, is not an agent's home and belongs to a task done longer than keep ago; with dry_run only lists them. Volumes and messages are kept. agc rest runs the same collection every 10 minutes with keep_done (ADR 0008 "Garbage collection"). A failed delete is listed with its error and the rest go on.
+         */
+        post: operations["gcSandboxes"];
         delete?: never;
         options?: never;
         head?: never;
@@ -480,6 +520,130 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List accounts and providers
+         * @description Every account by provider, then name, with its usage (null until the usage fetcher is wired, and for every account that is not anthropic oauth), and every provider with the harnesses it serves and the variable each kind of account is handed to. Values are never returned.
+         */
+        get: operations["listAccounts"];
+        put?: never;
+        /**
+         * Add an account
+         * @description Writes ACCOUNT_<NAME>=<value> (name upper-cased, dashes as underscores) to secrets.env, mode 0600, created when missing, and inserts the row, not as the default. The value is trimmed, quoted as secrets.env reads it, and never returned or logged. 400 for a bad name, provider or kind (openai has no oauth kind yet) or an empty value; 409 when the name is taken or its secret is already set in secrets.env.
+         */
+        post: operations["createAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accounts/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete an account
+         * @description Removes the row and its secrets.env line. 409 while a running or booting sandbox's spec names its secret (a default bound at allocation is recorded in the spec); stop the sandbox first.
+         */
+        delete: operations["deleteAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accounts/{name}/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make an account its provider's default
+         * @description The provider's previous default loses the flag in the same transaction. From now on a sandbox allocated or started for a harness of this provider, whose spec sets none of the variables the harness reads, gets `<secret> as <variable>`.
+         */
+        post: operations["setDefaultAccount"];
+        /**
+         * Take the default flag off an account
+         * @description The provider is left with no default; sandboxes get no credential from it.
+         */
+        delete: operations["clearDefaultAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accounts/{name}/signin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Begin signing an account in
+         * @description ADR 0018 "Sign-in". Starts the OAuth login Claude Code runs, for an anthropic oauth account: a random state and a PKCE S256 verifier, kept in memory for 10 minutes, one per account (a new one replaces the last). Open `url`; after signing in, the page shows `code#state` to paste into `signin/complete`. The login is used only to read usage and identity; sandboxes keep the account's own token.
+         */
+        post: operations["beginAccountSignin"];
+        /**
+         * Sign an account out
+         * @description Removes the account's login line (ACCOUNT_<NAME>_LOGIN) from secrets.env, forgets its access token and clears `signed_in_at`; usage is read with the account's own token again.
+         */
+        delete: operations["signoutAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accounts/{name}/signin/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish signing an account in with the pasted code
+         * @description Exchanges the pasted code for tokens, writes the refresh token to secrets.env as ACCOUNT_<NAME>_LOGIN, keeps the access token in memory, sets `signed_in_at`, reads the account's usage at once and sets `email` from the profile when it was empty. Neither token nor the code is ever returned or logged. 400 when nothing is pending ("no sign-in pending for this account; start again"), when the state does not match, or when the token endpoint refuses the code (its HTTP status, never its body).
+         */
+        post: operations["completeAccountSignin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents": {
         parameters: {
             query?: never;
@@ -588,7 +752,7 @@ export interface paths {
         put?: never;
         /**
          * Put an agent to sleep
-         * @description Stops the awake agent's home and posts "Asleep." as agc in its DM channel @<owner>/<name>. 409 when the agent is not awake.
+         * @description Stops the awake agent's home and posts "Asleep." as agc in its inbox #<name>. 409 when the agent is not awake.
          */
         post: operations["sleepAgent"];
         delete?: never;
@@ -857,9 +1021,46 @@ export interface paths {
         };
         /**
          * List secret names
-         * @description Names in ~/.agent_composer/config/secrets.env, sorted, each with the hosts it is bound to by default (empty for names agc does not know, which a spec must bind as NAME@host). Values are never returned (ADR 0004). A missing file lists nothing; a file readable by anyone but its owner is refused.
+         * @description Names in ~/.agent_composer/config/secrets.env, sorted, each with the hosts it is bound to by default (empty for names agc does not know, which a spec must bind as NAME@host). Values are never returned (ADR 0004). A missing file lists nothing; a file readable by anyone but its owner is refused. harnesses lists the variables each harness reads, the ENV side of a NAME as ENV account entry.
          */
         get: operations["listSecrets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the skills in the skills repository
+         * @description The directories of the skills directory (~/.agent_composer/skills, or AGC_SKILLS_DIR) whose name is a slug, sorted, read on every request. A missing directory lists nothing.
+         */
+        get: operations["listSkills"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/skills/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a skill's SKILL.md */
+        get: operations["getSkill"];
         put?: never;
         post?: never;
         delete?: never;
@@ -954,7 +1155,7 @@ export interface paths {
         };
         /**
          * Stream live events
-         * @description Server-sent events (`text/event-stream`, `Cache-Control: no-cache`) until the client goes away. Each event is `id: <n>` (the event number), `event: <type>` and `data: <json>`; the server sends the comment `: ping` every 20 seconds as a heartbeat. Missed events are never replayed: after a reconnect, refetch. A client that falls too far behind is disconnected. Types and their data: `task.created` (TaskCreatedEvent) when a task is created, after its sandbox, if any, is allocated; `task.done` (TaskDoneEvent) when a task is accepted, the first time only; `sandbox.status` (SandboxStatusEvent) on every status change: allocated (starting), booted, failed, stopped (by POST /sandboxes/{id}/stop or by the task's accept, also right after a boot that finished once the task was accepted), started, and deleted (status `deleted`); `message.posted` (MessagePostedEvent) for every message stored in any channel, agc's included; `schedule.ran` (ScheduleRanEvent) after every tick of a schedule, by the scheduler or POST /schedules/{id}/run, failed ones included (see the schedule's last_error); `agent.state` (AgentStateEvent) on every status change of a persistent agent's home (as its sandbox.status), and when the agent is created, kept, woken for the first time and deleted (state `deleted`).
+         * @description Server-sent events (`text/event-stream`, `Cache-Control: no-cache`) until the client goes away. Each event is `id: <n>` (the event number), `event: <type>` and `data: <json>`; the server sends the comment `: ping` every 20 seconds as a heartbeat. Missed events are never replayed: after a reconnect, refetch. A client that falls too far behind is disconnected. Types and their data: `task.created` (TaskCreatedEvent) when a task is created, after its sandbox, if any, is allocated; `task.done` (TaskDoneEvent) when a task is accepted, the first time only; `sandbox.status` (SandboxStatusEvent) on every status change: allocated (starting), booted, failed, stopped (by POST /sandboxes/{id}/stop or by the task's accept, also right after a boot that finished once the task was accepted), started, and deleted (status `deleted`); `message.posted` (MessagePostedEvent) for every message stored in any channel, agc's included; `schedule.ran` (ScheduleRanEvent) after every tick of a schedule, by the scheduler or POST /schedules/{id}/run, failed ones included (see the schedule's last_error); `agent.state` (AgentStateEvent) on every status change of a persistent agent's home (as its sandbox.status), and when the agent is created, kept, woken for the first time and deleted (state `deleted`); `channel.archived` (ChannelArchivedEvent) when agc rest archives the channel of a task done longer than archive_done ago (ADR 0005 "Archived channels").
          */
         get: operations["streamEvents"];
         put?: never;
@@ -1298,7 +1499,7 @@ export interface components {
             ref?: string;
             /** @description Bash script run once after the clone, in the repo. Before it runs, agc marks the Claude Code and Codex first-run prompts (onboarding, theme, folder trust, bypass permissions) as answered. */
             setup?: string;
-            /** @description NAME or NAME@host1,host2. */
+            /** @description NAME, NAME@host1,host2, or an account, NAME as ENV[@host1,host2]: NAME is the entry in secrets.env and ENV ([A-Z_][A-Z0-9_]*) the guest variable it is handed to, such as ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN. Without as, ENV is NAME. Hosts come from the entry, else the hosts agc knows for ENV, else those for NAME. An account may not share its ENV with another entry. The guest holds a placeholder, never the value (ADR 0004). */
             secrets?: string[];
             env?: {
                 [key: string]: string;
@@ -1307,6 +1508,8 @@ export interface components {
             volumes?: string[];
             /** @description #name or #name:read. */
             channels?: string[];
+            /** @description Names of skills in agc's skills repository (GET /skills). Each is written into ~/.claude/skills/<name>/ and ~/.codex/skills/<name>/ on every boot and start, replacing what was there; a name that is not in the repository is refused before boot (ADR 0008 "Skills"). */
+            skills?: string[];
         };
         Task: {
             /** Format: uuid */
@@ -1374,7 +1577,7 @@ export interface components {
             model?: string;
             /** @description The creator's messaging name, who runs the task day to day and may post /accept and /reject <why>. */
             manager: string;
-            /** @description The human the task answers to, a messaging name. Defaults to the configured owner; its sandboxes may post in #<owner>. */
+            /** @description The human the task answers to, a messaging name. Defaults to the configured owner; the task's manager, not its sandboxes, raises to them what only they can decide. */
             owner?: string;
             for?: string;
             /**
@@ -1389,6 +1592,10 @@ export interface components {
             summary: string;
             /** @description Optional. In a request any list and `changes` may be left out; they read as empty and absent. 400 when it breaks a rule of ADR 0010 "Delivery report". */
             report?: components["schemas"]["DeliveryReport"];
+            /** @description The PNG of each of the report's `shots`, base64, under the shot's label: one per shot and no other, each a PNG of at most 2 MB (2097152 bytes); 400 otherwise. */
+            files?: {
+                [key: string]: string;
+            };
         };
         /** @description What a delivery says against the task's criteria, what the reviewer judges (ADR 0010, "Delivery report"). Strings are trimmed; every list holds at most 50 entries. On a task the lists are always arrays. */
         DeliveryReport: {
@@ -1400,6 +1607,16 @@ export interface components {
             left_out: components["schemas"]["DeliveryLeftOut"][];
             /** @description What the agent needs the reviewer to decide; non-empty strings. */
             needs: string[];
+            /** @description Screenshots of what the change looks like, `before` and `after` for a change a person sees; absent when the delivery has none. Labels are unique. */
+            shots?: components["schemas"]["DeliveryShot"][];
+        };
+        DeliveryShot: {
+            /** @description A slug, `before` or `after` for a UI change. */
+            label: string;
+            /** @description In a request, the PNG's path where the agent took it (ends in .png); on a task, `<label>.png`, the name agc keeps it under. */
+            file: string;
+            /** @description Set by agc on a task, never sent: where the shot is served, under `AGC_PUBLIC_URL` when agc has one, else the root-relative path /api/tasks/<task>/shots/<label>.png. */
+            url?: string;
         };
         DeliveryCriterion: {
             /** @enum {string} */
@@ -1452,6 +1669,13 @@ export interface components {
             /** @description The runtime's sandbox name, also its socket file. <task>, then <task>-2, <task>-3; an agent's home is named after the agent the same way and keeps its name when the agent is renamed. */
             name: string;
             spec: components["schemas"]["TaskSpec"];
+            /** @description The size of the sandbox's private /home/agent disk, the spec's disk or the default 20G, such as 20G or 512M. */
+            disk: string;
+            /**
+             * Format: int64
+             * @description The same size in MiB, to sum across sandboxes.
+             */
+            disk_mib: number;
             command: string;
             /** @description The TASK.md written into the sandbox at /home/agent/TASK.md, byte for byte (ADR 0009); for an agent's home, its template's instructions, written as /home/agent/AGENT.md. */
             instructions: string;
@@ -1498,6 +1722,13 @@ export interface components {
         /** @description Data of `agent.state`. */
         AgentStateEvent: {
             agent: components["schemas"]["Agent"];
+        };
+        /** @description Data of `channel.archived`. */
+        ChannelArchivedEvent: {
+            /** @example #fix-login */
+            channel: string;
+            /** Format: date-time */
+            archived_at: string;
         };
         /** @description Data of `schedule.ran`. */
         ScheduleRanEvent: {
@@ -1609,6 +1840,34 @@ export interface components {
             /** Format: date-time */
             checked_at: string;
         };
+        SandboxGCRequest: {
+            /** @description Only list what would be deleted. */
+            dry_run?: boolean;
+            /** @description Grace period after the task is done, a Go duration such as 48h, or 0. Empty is the configured keep_done, or 24h when keep_done is 0 (the collector off). */
+            keep?: string;
+        };
+        SandboxGCItem: {
+            name: string;
+            task: string;
+            /** @description How long ago the task was done, such as 26h3m0s. */
+            done_for: string;
+            disk: string;
+            /** Format: int64 */
+            disk_mib: number;
+            /** @description Why the delete failed; absent when it did not. */
+            error?: string;
+        };
+        SandboxGCResponse: {
+            dry_run: boolean;
+            /** @description The grace period applied, such as 24h0m0s. */
+            keep: string;
+            /** @description What was deleted (or, on a dry run, would be), with any failed delete. */
+            sandboxes: components["schemas"]["SandboxGCItem"][];
+            /** @description How many sandboxes were deleted; 0 on a dry run. */
+            freed: number;
+            /** @description The disk of the deleted sandboxes, such as 40G. */
+            freed_disk: string;
+        };
         DeleteSandboxResponse: {
             deleted: boolean;
             name: string;
@@ -1629,6 +1888,12 @@ export interface components {
             name: string;
             /** @description The sandbox spec YAML, verbatim. */
             yaml: string;
+        };
+        HarnessReads: {
+            /** @description Harness id, as in runtime/harnesses/catalog.go (codex_cli, claude_code, pi). */
+            id: string;
+            /** @description Variables the harness takes its credentials from, in order of preference; empty when none is fixed. */
+            reads: string[];
         };
         Secret: {
             name: string;
@@ -1919,12 +2184,23 @@ export interface components {
             harness?: string;
             /** @description Empty takes the template's (for its harness), then the default. */
             model?: string;
+            /**
+             * @description Reasoning effort; empty takes the template's, else the harness's default.
+             * @enum {string}
+             */
+            effort?: "" | "low" | "medium" | "high" | "xhigh";
         };
         KeepAgentRequest: {
             /** @description Up to 32 lowercase letters, digits and dashes. */
             name: string;
             /** @description Omitted keeps the role. */
             role?: string;
+        };
+        /** @description A rule an agent follows, from the knowledge directory (ADR 0006). */
+        AgentRule: {
+            id: string;
+            /** @description The rule's text as written. */
+            rule: string;
         };
         AgentTask: {
             /** @description The task's name, also its channel. */
@@ -1948,22 +2224,41 @@ export interface components {
             kept: boolean;
             harness: string;
             model: string;
+            /**
+             * @description The harness's reasoning effort, from the template or the create request; empty for the harness's default.
+             * @enum {string}
+             */
+            effort: "" | "low" | "medium" | "high" | "xhigh";
             owner: string;
             /** @description Computed from the home sandbox, never stored: asleep (no home, or stopped), waking (starting), awake (running), otherwise the sandbox's own status verbatim (failed, stopping, unknown). In an agent.state event, deleted once it is gone. */
             state: string;
             /** @description The home sandbox's name; null before the first wake. */
             home: string | null;
+            /** @description The rules its template names (ADR 0016 item 2), in template order, read from the knowledge directory on the request; [] when it names none or they cannot be read. */
+            rules: components["schemas"]["AgentRule"][];
             /** @description The tasks whose manager is the agent. */
             tasks: components["schemas"]["AgentTask"][];
-            /** @description The DM channel @<owner>/<name> first, then #<task> for each of its tasks, then any other channel the agent has posted in, newest first. */
+            /** @description The agent's inbox #<name> first, then #<task> for each of its tasks, then any other channel the agent has posted in, newest first. */
             conversations: components["schemas"]["AgentConversation"][];
             /**
              * Format: date-time
              * @description The newest message among its conversations, or its last wake.
              */
             last_active_at: string | null;
+            /** @description The template's sandbox.skills, read on every request; empty when it names none or cannot be read (ADR 0016 item 2). */
+            skills: string[];
             /** Format: date-time */
             created_at: string;
+        };
+        /** @description A skill of the skills repository (ADR 0008 "Skills"). */
+        Skill: {
+            /** @description The directory's name, a slug such as rtsdesign. */
+            name: string;
+            /** @description The description in the SKILL.md frontmatter; empty when absent. */
+            description: string;
+        };
+        SkillList: {
+            skills: components["schemas"]["Skill"][];
         };
         AgentList: {
             agents: components["schemas"]["Agent"][];
@@ -2006,6 +2301,83 @@ export interface components {
             enabled?: boolean;
             task: components["schemas"]["ScheduleTemplate"];
             poll?: components["schemas"]["SchedulePoll"];
+        };
+        /** @description An account, never its value (ADR 0018). */
+        Account: {
+            name: string;
+            provider: components["schemas"]["AccountProvider"];
+            kind: components["schemas"]["AccountKind"];
+            /** @description The secrets.env name holding the value, ACCOUNT_<NAME>. */
+            secret: string;
+            /** @description The account's email, empty when not given. */
+            email: string;
+            /** @description Whether this is its provider's default account. */
+            default: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description When the account last signed in through agc (ADR 0018 "Sign-in"), null when it has no login.
+             */
+            signed_in_at: string | null;
+            /** @description Usage for anthropic oauth accounts once the usage fetcher is wired, else null. `error` starts with "inference-only token" when the account's own token cannot read usage, and with "sign-in expired" when its login was refused: both ask for a sign-in. */
+            usage: components["schemas"]["AccountUsage"] | null;
+        };
+        /** @enum {string} */
+        AccountProvider: "anthropic" | "openai";
+        /** @enum {string} */
+        AccountKind: "oauth" | "api_key";
+        AccountUsage: {
+            /** Format: date-time */
+            updated_at: string;
+            windows: components["schemas"]["AccountUsageWindow"][];
+            /** @description Why usage could not be read, empty when it was. */
+            error: string;
+        };
+        AccountUsageWindow: {
+            /** @description session, weekly or a model's slug. */
+            id: string;
+            label: string;
+            /** @description The share used. */
+            used: number;
+            /** Format: date-time */
+            resets_at: string | null;
+        };
+        AccountProviderView: {
+            id: components["schemas"]["AccountProvider"];
+            /** @description The harnesses its accounts serve. */
+            harnesses: string[];
+            /** @description The guest variable each kind of account is handed to; oauth is absent for a provider without that kind. */
+            variables: {
+                oauth?: string;
+                api_key: string;
+            };
+        };
+        AccountList: {
+            accounts: components["schemas"]["Account"][];
+            providers: components["schemas"]["AccountProviderView"][];
+        };
+        CreateAccountRequest: {
+            name: string;
+            provider: components["schemas"]["AccountProvider"];
+            kind: components["schemas"]["AccountKind"];
+            /** @description The token or key, written to secrets.env and never returned. */
+            value: string;
+            email?: string;
+        };
+        /** @description A begun sign-in. */
+        AccountSignin: {
+            /** @description The authorize page to open. */
+            url: string;
+            /**
+             * Format: date-time
+             * @description When the sign-in lapses and must be begun again.
+             */
+            expires_at: string;
+        };
+        CompleteAccountSigninRequest: {
+            /** @description What the page showed after signing in, `code#state`; a bare code is accepted while one sign-in is pending. Never returned or logged. */
+            code: string;
         };
         Schedule: {
             /** Format: uuid */
@@ -2213,6 +2585,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Account name, e.g. work. */
+        AccountNameParam: string;
         /** @description Agent name, e.g. reviewer-1. */
         AgentNameParam: string;
         /** @description Turn number, from 1. */
@@ -2933,6 +3307,33 @@ export interface operations {
             500: components["responses"]["Error"];
         };
     };
+    getTaskShot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Task UUID or task name. A value that parses as a UUID is looked up by id. */
+                id: components["parameters"]["TaskIdParam"];
+                /** @description The shot's label, a slug such as `before` or `after`. */
+                label: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The screenshot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                };
+            };
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
     acceptTask: {
         parameters: {
             query?: never;
@@ -3047,6 +3448,32 @@ export interface operations {
                     };
                 };
             };
+            500: components["responses"]["Error"];
+        };
+    };
+    gcSandboxes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SandboxGCRequest"];
+            };
+        };
+        responses: {
+            /** @description What was deleted, or would be. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxGCResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };
     };
@@ -3237,6 +3664,210 @@ export interface operations {
                 content?: never;
             };
             404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    listAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accounts and providers. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountList"];
+                };
+            };
+            500: components["responses"]["Error"];
+        };
+    };
+    createAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description The account. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
+            };
+            400: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    deleteAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    setDefaultAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
+            };
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    clearDefaultAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
+            };
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    beginAccountSignin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page to open. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountSignin"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    signoutAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
+            };
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    completeAccountSignin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account name, e.g. work. */
+                name: components["parameters"]["AccountNameParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteAccountSigninRequest"];
+            };
+        };
+        responses: {
+            /** @description The account. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };
     };
@@ -3900,11 +4531,58 @@ export interface operations {
                 content: {
                     "application/json": {
                         secrets: components["schemas"]["Secret"][];
+                        /** @description Every harness in the catalog with the environment variables it takes its credentials from, in order of preference, so a client can offer "use this secret as the variable claude_code reads" (a NAME as ENV entry, ADR 0004 "Accounts"). */
+                        harnesses: components["schemas"]["HarnessReads"][];
                     };
                 };
             };
             400: components["responses"]["Error"];
             403: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    listSkills: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The skills. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillList"];
+                };
+            };
+            500: components["responses"]["Error"];
+        };
+    };
+    getSkill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The skill's SKILL.md, as it is on disk. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/markdown": string;
+                };
+            };
+            404: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };
     };
@@ -4098,7 +4776,7 @@ export interface operations {
                 channel?: string;
                 /** @description `1` keeps only unanswered questions; `0` or absent keeps all. */
                 open?: "0" | "1" | "true" | "false";
-                /** @description Only questions in the channels this person reads: their inbox `#<name>` and `#<task>` for every task they manage or own. */
+                /** @description Only questions in the channels this person reads: their inbox `#<name>` and `#<task>` for every task they manage (not those they only own; a task's manager raises to its owner in their inbox). */
                 for?: string;
             };
             header?: never;

@@ -33,6 +33,7 @@ func TestClientRoundTrip(t *testing.T) {
 	tables := []interface{}{
 		(*msgmodels.Participant)(nil),
 		(*msgmodels.Message)(nil),
+		(*msgmodels.ChannelArchive)(nil),
 	}
 	for _, table := range tables {
 		_, err = db.NewCreateTable().Model(table).Exec(ctx)
@@ -80,7 +81,7 @@ func TestClientRoundTrip(t *testing.T) {
 		t.Fatalf("want empty wait, got %+v", waited)
 	}
 
-	channels, err := c.Channels(ctx)
+	channels, err := c.Channels(ctx, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +109,7 @@ func TestClientAgentAndSleep(t *testing.T) {
 	mux.HandleFunc("GET "+httpapi.AgentPath, func(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"agent":    map[string]any{"name": "reviewer-1", "role": "reviewer", "owner": "franco", "kept": false},
-			"channels": []string{"@franco/reviewer-1", "#fix-login"},
+			"channels": []string{"#reviewer-1", "#fix-login"},
 			"idle":     "15m",
 		})
 	})

@@ -37,7 +37,7 @@ func (api *API) startSandboxListener(record *taskmodels.Sandbox, owner *taskmode
 		return api.startHomeListener(record.Name)
 	}
 
-	grants, err := Grants(owner, spec)
+	grants, err := Grants(spec)
 	if err != nil {
 		return ez.Wrap(err)
 	}
@@ -51,28 +51,17 @@ func (api *API) startSandboxListener(record *taskmodels.Sandbox, owner *taskmode
 	})
 }
 
-// Grants are the channels a sandbox of owner may use besides #<task>: the
-// spec's, and the task owner's inbox #<owner> read-write when the task has
-// an owner (ADR 0009 item 5).
-func Grants(owner *taskmodels.Task, spec task.Spec) ([]messaging.Grant, error) {
+// Grants are the channels a sandbox may use besides #<task>: the spec's,
+// as the spec says, and nothing else. The task's owner hears from its
+// manager, not from its agent, so their inbox #<owner> is not granted
+// unless the spec names it (ADR 0009 item 5).
+func Grants(spec task.Spec) ([]messaging.Grant, error) {
 	grants, err := spec.Grants()
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	if owner.Owner == "" {
-		return grants, nil
-	}
-
-	inbox := "#" + owner.Owner
-	for i := range grants {
-		if grants[i].Channel == inbox {
-			grants[i].ReadOnly = false
-			return grants, nil
-		}
-	}
-
-	return append(grants, messaging.Grant{Channel: inbox}), nil
+	return grants, nil
 }
 
 // startListener serves messaging for the sandbox called name, as caller
@@ -130,10 +119,11 @@ func (api *API) startListener(name string, caller func(*http.Request) (messaging
 }
 
 // DeliverFunc delivers the task called taskName with summary and report,
-// the request's report JSON as sent (nil when absent), for agc task
+// the request's report JSON as sent (nil when absent), and files, the
+// PNGs of the report's shots under their labels, for agc task
 // deliver inside one of its sandboxes (ADR 0010 item 2, "Delivery
 // report"), and returns the task's view.
-type DeliverFunc func(ctx context.Context, taskName string, summary string, report json.RawMessage) (any, error)
+type DeliverFunc func(ctx context.Context, taskName string, summary string, report json.RawMessage, files map[string][]byte) (any, error)
 
 // OnDeliver sets what agc task deliver calls on every sandbox's socket.
 // The socket speaks for its own task only, so a sandbox delivers no other.
@@ -156,13 +146,13 @@ func (api *API) serveDeliver(taskName string) http.HandlerFunc {
 
 		var req httpapi.DeliverRequest
 
-		err := httpapi.DecodeBody(w, r, &req)
+		err := httpapi.DecodeBodyLimit(w, r, &req, httpapi.MaxDeliverBytes)
 		if err != nil {
 			httpapi.WriteError(w, err)
 			return
 		}
 
-		view, err := deliver(r.Context(), taskName, req.Summary, req.Report)
+		view, err := deliver(r.Context(), taskName, req.Summary, req.Report, req.Files)
 		if err != nil {
 			httpapi.WriteError(w, err)
 			return

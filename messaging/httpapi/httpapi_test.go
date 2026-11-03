@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
@@ -46,6 +47,7 @@ func newServerAs(t *testing.T, caller func(*http.Request) (messaging.Caller, err
 	tables := []interface{}{
 		(*msgmodels.Participant)(nil),
 		(*msgmodels.Message)(nil),
+		(*msgmodels.ChannelArchive)(nil),
 	}
 	for _, table := range tables {
 		_, err = db.NewCreateTable().Model(table).IfNotExists().Exec(context.Background())
@@ -271,5 +273,58 @@ func TestParticipantsAll(t *testing.T) {
 	status = call(t, http.MethodGet, task.URL+"/participants?all=1", "", &failure)
 	if status != http.StatusForbidden {
 		t.Fatalf("want 403 for a task listing everyone, got %d %+v", status, failure)
+	}
+}
+
+// GET /channels leaves archived channels out unless ?archived=1, which
+// lists them with archived_at; reading one works, posting in it is 403.
+func TestChannelsArchived(t *testing.T) {
+	human := func(*http.Request) (messaging.Caller, error) {
+		return messaging.Caller{Human: true}, nil
+	}
+	server, svc := newServerAs(t, human)
+	ctx := context.Background()
+
+	for _, channel := range []string{"#old-done", "#open-task"} {
+		_, err := svc.PostAsSystem(ctx, channel, "Opening")
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	at := time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)
+	_, err := svc.Archive(ctx, "#old-done", at)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var listed ChannelsResponse
+	status := call(t, http.MethodGet, server.URL+"/channels", "", &listed)
+	if status != http.StatusOK || len(listed.Channels) != 1 || listed.Channels[0].Channel != "#open-task" {
+		t.Fatalf("channels: status %d, response %+v", status, listed)
+	}
+
+	var all ChannelsResponse
+	status = call(t, http.MethodGet, server.URL+"/channels?archived=1", "", &all)
+	if status != http.StatusOK || len(all.Channels) != 2 || all.Channels[0].Channel != "#old-done" || all.Channels[0].ArchivedAt == nil || !all.Channels[0].ArchivedAt.Equal(at) {
+		t.Fatalf("channels?archived=1: status %d, response %+v", status, all)
+	}
+
+	var read MessagesResponse
+	status = call(t, http.MethodGet, server.URL+"/read?channel=%23old-done", "", &read)
+	if status != http.StatusOK || len(read.Messages) != 1 {
+		t.Fatalf("read: status %d, response %+v", status, read)
+	}
+
+	var p msgmodels.Participant
+	status = call(t, http.MethodPost, server.URL+"/join", `{"name":"franco"}`, &p)
+	if status != http.StatusOK {
+		t.Fatalf("join: status %d", status)
+	}
+
+	var refused map[string]string
+	status = call(t, http.MethodPost, server.URL+"/post", `{"participant_id":"`+p.ID+`","channel":"#old-done","body":"hi"}`, &refused)
+	if status != http.StatusForbidden || refused["error"] != "channel archived" {
+		t.Fatalf("post: status %d, response %+v", status, refused)
 	}
 }

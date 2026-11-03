@@ -29,6 +29,9 @@ type DeliverRequest struct {
 	// criterion, the changes, the checks run, what was left out and what
 	// the reviewer must decide (ADR 0010, "Delivery report").
 	Report *taskmodels.Report `json:"report"`
+	// Files holds the PNG of each of the report's shots under its label,
+	// base64 in JSON.
+	Files map[string][]byte `json:"files,omitempty"`
 }
 
 func (r DeliverRequest) Validate() error {
@@ -52,6 +55,10 @@ func (r DeliverRequest) Validate() error {
 		if err != nil {
 			return ez.Wrap(err)
 		}
+	}
+
+	if len(r.Files) > taskmodels.MaxShots {
+		return ez.New(ez.EINVALID, fmt.Sprintf("files has %d entries, at most %d", len(r.Files), taskmodels.MaxShots), nil)
 	}
 
 	return nil
@@ -87,7 +94,12 @@ func (api *API) Deliver(ctx context.Context, requester interface{}, request *Del
 		}
 	}
 
-	err = record.MarkDelivered(ctx, api.db, summary, request.Report)
+	report, err := api.storeShots(record.Name, request.Report, request.Files)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	err = record.MarkDelivered(ctx, api.db, summary, report)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -98,14 +110,15 @@ func (api *API) Deliver(ctx context.Context, requester interface{}, request *Del
 }
 
 // deliverFromSandbox is agc task deliver on a sandbox's socket, which
-// speaks for its own task only. report is the request's report as sent.
-func (api *API) deliverFromSandbox(ctx context.Context, taskName string, summary string, report json.RawMessage) (any, error) {
+// speaks for its own task only. report is the request's report as sent,
+// files the PNGs of its shots under their labels.
+func (api *API) deliverFromSandbox(ctx context.Context, taskName string, summary string, report json.RawMessage, files map[string][]byte) (any, error) {
 	decoded, err := DecodeReport(report)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	return api.Deliver(ctx, nil, &DeliverRequest{Name: taskName, Summary: summary, Report: decoded})
+	return api.Deliver(ctx, nil, &DeliverRequest{Name: taskName, Summary: summary, Report: decoded, Files: files})
 }
 
 // DecodeReport reads a delivery report from JSON; absent or null is nil.
@@ -127,7 +140,8 @@ func DecodeReport(raw json.RawMessage) (*taskmodels.Report, error) {
 // DeliveredMessage is what a delivery posts in #<task>: "Delivered:
 // <summary>", then the report, when there is one, as markdown: a checklist
 // line per criterion, the changes, the checks, what was left out and what
-// the reviewer is asked to decide. Empty sections are left out. A message
+// the reviewer is asked to decide, with a "<Label>: <url>" line per shot
+// after the checks. Empty sections are left out. A message
 // too long for a body is cut; the task keeps the whole report.
 func DeliveredMessage(record *taskmodels.Task) string {
 	body := deliveredPrefix + record.Summary
@@ -191,6 +205,14 @@ func renderReport(report taskmodels.Report, accept []string) string {
 		sections = append(sections, strings.Join(lines, "\n"))
 	}
 
+	if len(report.Shots) > 0 {
+		lines := []string{}
+		for _, shot := range report.Shots {
+			lines = append(lines, shotLabel(shot.Label)+": "+shot.URL)
+		}
+		sections = append(sections, strings.Join(lines, "\n"))
+	}
+
 	if len(report.LeftOut) > 0 {
 		lines := []string{"Left out:"}
 		for _, left := range report.LeftOut {
@@ -208,6 +230,15 @@ func renderReport(report taskmodels.Report, accept []string) string {
 	}
 
 	return strings.Join(sections, "\n\n")
+}
+
+// shotLabel is a shot's label as a line starts it: before is "Before".
+func shotLabel(label string) string {
+	if label == "" {
+		return label
+	}
+
+	return strings.ToUpper(label[:1]) + label[1:]
 }
 
 func withNote(text string, note string) string {

@@ -2,9 +2,11 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/vanclief/ez"
 
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
@@ -61,6 +63,40 @@ func (h *Handler) DeliverTask(c echo.Context) error {
 	return h.taskBodyResponse(c, "Handler.DeliverTask", body, func(id uuid.UUID, name string) {
 		body.ID, body.Name = id, name
 	})
+}
+
+// GET /tasks/:id/shots/:label.png
+//
+// Serves a delivered screenshot, read from the agc home (ADR 0010,
+// "Delivery report"). A plain echo handler, not the request dispatch, so
+// the PNG goes out as it is.
+func (h *Handler) GetTaskShot(c echo.Context) error {
+	const op = "Handler.GetTaskShot"
+
+	request := requests.New(c.Request().Header, c.RealIP())
+	id, name := taskRef(c)
+
+	file := c.Param("file")
+	label, isPNG := strings.CutSuffix(file, ".png")
+	if !isPNG {
+		return h.ManageError(c, op, request, ez.New(ez.ENOTFOUND, "no shot "+file+": shots are served as <label>.png", nil))
+	}
+
+	shot, err := h.server.TasksAPI.OpenShot(c.Request().Context(), nil, &tasks.GetShotRequest{ID: id, Name: name, Label: label})
+	if err != nil {
+		return h.ManageError(c, op, request, err)
+	}
+	defer shot.Close()
+
+	info, err := shot.Stat()
+	if err != nil {
+		return h.ManageError(c, op, request, ez.Wrap(err))
+	}
+
+	c.Response().Header().Set(echo.HeaderContentType, "image/png")
+	http.ServeContent(c.Response(), c.Request(), file, info.ModTime(), shot)
+
+	return nil
 }
 
 // POST /tasks/:id/accept

@@ -1,24 +1,41 @@
 // Which channels the signed-in person follows, kept in the browser like the
-// read cursors (unread.ts). Only followed channels are in the Talk sidebar.
-// localStorage agc.panel.follow maps "#name" to { on, at }: on is whether it
-// is followed, at the newest message id that decision covers. A message
-// newer than at that is addressed to me (it mentions @<me>, or it is in one
-// of my DMs) or that I posted follows the channel again, so unfollowing a
-// channel I am mentioned in lasts until the next mention. Opening a channel
-// follows it. My inbox #<me> is always followed; a DM of mine (@<me>/<task>)
-// is followed until I unfollow it.
+// read cursors (unread.ts). Only followed channels are in the Talk sidebar;
+// every channel is in Browse.
+//
+// localStorage agc.panel.follow maps "#name" to { on, at, done }: on is
+// whether it is followed, at the newest message id that decision covers,
+// done that the channel already fell away once because its task is done.
+//
+// The rule, in plain words. A channel follows itself only when:
+//   - I open it, or I post in it;
+//   - a person posts in it and mentions @<me>;
+//   - an agent asks me a question there: a message of kind question that
+//     mentions @<me>, or is in my inbox #<me> or one of my DMs @<me>/<task>.
+// Nothing agc posts ever follows a channel, even when it names me (every
+// task's opening message names its owner); an agent's plain message does
+// not either, even one that mentions me: it still toasts, but only a
+// question asks for me. Only messages newer than at count, so unfollowing
+// lasts until the next one of these.
+//
+// My inbox #<me> is always followed; a DM of mine is followed until I
+// unfollow it. When a task is done its channel is unfollowed once (done),
+// unless an open question there still waits for me; opening it follows it
+// again, and it stays until I unfollow it.
 import { useEffect, useSyncExternalStore } from 'react'
 
 import type { LiveEvent } from '@/api/events'
+import { useTasks } from '@/api/hooks'
+import type { Message } from '@/api/msg'
 
 import { useMyName } from './identity'
-import { addressesMe, isDMOf, useUnread, type Unread } from './unread'
+import { useOpenQuestions } from './questions'
+import { isDMOf, mentions, useUnread, type Unread } from './unread'
 
 export { isDMOf }
 
 export const FOLLOW_KEY = 'agc.panel.follow'
 
-export type FollowEntry = { on: boolean; at: number }
+export type FollowEntry = { on: boolean; at: number; done?: boolean }
 type FollowMap = Record<string, FollowEntry>
 
 function load(): FollowMap {
@@ -99,23 +116,59 @@ export function follow(channel: string, at = 0) {
   if (entry?.on) {
     return
   }
-  save(channel, { on: true, at: Math.max(at, entry?.at ?? 0) })
+  save(channel, { ...entry, on: true, at: Math.max(at, entry?.at ?? 0) })
 }
 
 // The header and Browse toggle. at is the channel's newest message id, so
 // only a newer mention follows it again.
 export function unfollow(channel: string, at: number) {
-  save(channel, { on: false, at: Math.max(at, followMap[channel]?.at ?? 0) })
+  const entry = followMap[channel]
+  save(channel, { ...entry, on: false, at: Math.max(at, entry?.at ?? 0) })
 }
 
-// A message with this id addressed to me, or mine, arrived in channel.
+// The participant agc posts as (msgmodels.SystemName).
+export const SYSTEM = 'agc'
+
+type Followable = Pick<Message, 'channel' | 'from' | 'body' | 'kind' | 'human' | 'task'>
+
+// A person posted it. Servers that predate human: no task and not agc.
+function byPerson(message: Followable) {
+  return message.human ?? (message.task === '' && message.from !== SYSTEM)
+}
+
+// Whether message follows its channel for me: the rule at the top.
+export function followsMe(message: Followable, me: string) {
+  if (message.from === me) {
+    return true
+  }
+  if (message.from === SYSTEM && !message.human) {
+    return false
+  }
+  if (byPerson(message)) {
+    return mentions(message.body, me)
+  }
+  const toMe = mentions(message.body, me) || message.channel === `#${me}` || isDMOf(message.channel, me)
+  return message.kind === 'question' && toMe
+}
+
+// A message with this id that follows the channel for me arrived in it.
 // Nothing changes for one an unfollow already covered.
 export function autoFollow(channel: string, id: number) {
   const entry = followMap[channel]
   if (entry && (entry.on || entry.at >= id)) {
     return
   }
-  save(channel, { on: true, at: id })
+  save(channel, { ...entry, on: true, at: id })
+}
+
+// A done task's channel falls away, once: at covers every message so far,
+// so only a newer one that follows (or opening it) brings it back.
+export function dropDone(channel: string, at: number) {
+  const entry = followMap[channel]
+  if (entry?.done) {
+    return
+  }
+  save(channel, { on: false, at: Math.max(at, entry?.at ?? 0), done: true })
 }
 
 // The message.posted half, wired next to the notifications in the shell.
@@ -123,7 +176,7 @@ export function followFromEvent(event: LiveEvent, me: string) {
   if (event.type !== 'message.posted') {
     return
   }
-  if (addressesMe(event.message, me)) {
+  if (followsMe(event.message, me)) {
     autoFollow(event.message.channel, event.message.id)
   }
 }
@@ -135,33 +188,53 @@ export function useFollowMap() {
 export type Follow = {
   unread: Unread
   following: (channel: string) => boolean
-  // Unread across followed channels plus my inbox, my DMs and anything
-  // mentioning me: the Talk group badge.
+  // Unread messages in the channels I follow (my inbox and DMs included):
+  // the Talk group badge, next to the open questions for me.
   total: number
   mention: boolean
 }
 
-// Following plus the unread state it filters. Every channel the unread scan
-// found addressed to me past its cursor is followed (autoFollow keeps it
-// idempotent, so several mounts are harmless).
+// Following plus the unread state it filters. Every channel whose unread
+// scan holds a message that follows it for me is followed (autoFollow keeps
+// it idempotent, so several mounts are harmless), and every done task's
+// channel without an open question for me falls away once.
 export function useFollow(): Follow {
   const me = useMyName()
   const map = useFollowMap()
   const unread = useUnread()
-  const { addressed } = unread
+  const tasks = useTasks()
+  const questions = useOpenQuestions()
+  const { scanned, channels, channelsQuery } = unread
 
   useEffect(() => {
-    for (const [channel, id] of addressed) {
-      autoFollow(channel, id)
+    for (const [channel, messages] of scanned) {
+      const last = messages.filter((m) => followsMe(m, me)).at(-1)
+      if (last) {
+        autoFollow(channel, last.id)
+      }
     }
-  }, [addressed])
+  }, [scanned, me])
+
+  const done = (tasks.data ?? []).filter((t) => t.status === 'done').map((t) => `#${t.name}`)
+  const ready = questions.loaded && channelsQuery.isSuccess
+  useEffect(() => {
+    if (!ready) {
+      return
+    }
+    for (const channel of done) {
+      if (questions.of(channel).length > 0) {
+        continue
+      }
+      dropDone(channel, channels.find((c) => c.channel === channel)?.last_id ?? 0)
+    }
+  })
 
   const following = (channel: string) => isFollowing(map, channel, me)
   let total = 0
   let mention = false
-  for (const c of unread.channels) {
+  for (const c of channels) {
     const u = unread.of(c.channel)
-    if (u.count > 0 && (following(c.channel) || u.mention || isDMOf(c.channel, me))) {
+    if (u.count > 0 && following(c.channel)) {
       total += u.count
       mention ||= u.mention
     }

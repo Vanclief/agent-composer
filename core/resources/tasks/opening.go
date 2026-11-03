@@ -44,8 +44,8 @@ func OpeningMessage(record *taskmodels.Task, allocated *sandboxes.SandboxView) s
 	}
 
 	b.WriteString("The agent's instructions are the next message. Reply here to talk to it;\n")
-	b.WriteString("it escalates to #" + record.Owner + " when only the owner can decide. Post /accept\n")
-	b.WriteString("to accept the task, /reject <why> to send it back.")
+	b.WriteString("its manager raises to " + record.Owner + " what only the owner can decide.\n")
+	b.WriteString("Post /accept to accept the task, /reject <why> to send it back.")
 
 	return b.String()
 }

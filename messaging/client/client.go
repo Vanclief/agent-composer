@@ -110,10 +110,17 @@ func (c *Client) WaitChannels(ctx context.Context, channels []string, after int6
 	return res, nil
 }
 
-func (c *Client) Channels(ctx context.Context) (*httpapi.ChannelsResponse, error) {
+// Channels lists the channels the caller may read; archived adds the
+// archived ones (ADR 0005 "Archived channels").
+func (c *Client) Channels(ctx context.Context, archived bool) (*httpapi.ChannelsResponse, error) {
+	var query url.Values
+	if archived {
+		query = url.Values{"archived": {"1"}}
+	}
+
 	res := &httpapi.ChannelsResponse{}
 
-	err := c.do(ctx, http.MethodGet, "/channels", nil, nil, res)
+	err := c.do(ctx, http.MethodGet, "/channels", query, nil, res)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -146,10 +153,11 @@ func (c *Client) Questions(ctx context.Context, channel string, open bool, forNa
 }
 
 // Deliver posts the task's delivery with summary and report, the report
-// JSON as is (nil for none), on a sandbox's socket (agc task deliver, ADR
-// 0010 item 2, "Delivery report") and decodes the task's view into out.
-func (c *Client) Deliver(ctx context.Context, summary string, report json.RawMessage, out any) error {
-	err := c.do(ctx, http.MethodPost, httpapi.DeliverPath, nil, httpapi.DeliverRequest{Summary: summary, Report: report}, out)
+// JSON as is (nil for none), and files, the PNGs of its shots under their
+// labels, on a sandbox's socket (agc task deliver, ADR 0010 item 2,
+// "Delivery report") and decodes the task's view into out.
+func (c *Client) Deliver(ctx context.Context, summary string, report json.RawMessage, files map[string][]byte, out any) error {
+	err := c.do(ctx, http.MethodPost, httpapi.DeliverPath, nil, httpapi.DeliverRequest{Summary: summary, Report: report, Files: files}, out)
 	if err != nil {
 		return ez.Wrap(err)
 	}
@@ -166,10 +174,13 @@ type AgentView struct {
 }
 
 // AgentResponse is GET /agent on a home sandbox's socket: the agent, the
-// channels it reads right now and how long it may sit idle ("15m").
+// channels it reads right now, the channels outside those where it
+// started a thread (only the replies in its threads there are its turns)
+// and how long it may sit idle ("15m").
 type AgentResponse struct {
 	Agent    AgentView `json:"agent"`
 	Channels []string  `json:"channels"`
+	Asked    []string  `json:"asked"`
 	Idle     string    `json:"idle"`
 }
 

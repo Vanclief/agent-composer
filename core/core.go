@@ -11,11 +11,14 @@ import (
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/events"
+	"github.com/vanclief/agent-composer/core/resources/accounts"
+	"github.com/vanclief/agent-composer/core/resources/accounts/usage"
 	"github.com/vanclief/agent-composer/core/resources/agents"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
 	"github.com/vanclief/agent-composer/core/resources/knowledge"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/schedules"
+	"github.com/vanclief/agent-composer/core/resources/skills"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	"github.com/vanclief/agent-composer/core/resources/triggers"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
@@ -43,12 +46,20 @@ type Stack struct {
 	// scheduler (ADR 0012).
 	SchedulesAPI *schedules.API
 	KnowledgeAPI *knowledge.API
+	// SkillsAPI is the skills repository (ADR 0008 "Skills").
+	SkillsAPI *skills.API
 	// AgentsAPI is persistent agents (ADR 0016).
 	AgentsAPI *agents.API
+	// AccountsAPI is provider accounts and their defaults (ADR 0018).
+	AccountsAPI *accounts.API
 	// Events is the live feed behind GET /api/events.
 	Events *events.Bus
 	// TriggersAPI posts outside events as messages (ADR 0014).
 	TriggersAPI *triggers.API
+	// AccountsUsage keeps the latest usage of every anthropic oauth
+	// account; only agc rest starts it. It lists the accounts through
+	// AccountsAPI, which shows its readings (connectAccountsUsage).
+	AccountsUsage *usage.Poller
 }
 
 type StackOptions struct {
@@ -107,6 +118,8 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	sandboxesAPI := sandboxes.NewAPI(rootCtx, ctrl, msg, sandboxes.SandboxRuntime{}, secretsPath, filepath.Join(home, "tasks"))
 	tasksAPI := tasks.NewAPI(ctrl, sandboxesAPI, msg, secretsPath, specs)
 	tasksAPI.SetEvents(bus)
+	// Delivered screenshots, <home>/shots/<task>/<label>.png (ADR 0010).
+	tasksAPI.SetShotsDir(filepath.Join(home, "shots"))
 	schedulesAPI := schedules.NewAPI(ctrl, tasksAPI, secretsPath)
 	schedulesAPI.SetEvents(bus)
 
@@ -138,21 +151,61 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	}
 	agentsAPI := agents.NewAPI(ctrl, tasksAPI, msg, agentsDir)
 	agentsAPI.SetEvents(bus)
+	// Templates name rules from the knowledge directory; AGENT.md lists
+	// them (ADR 0016 item 2).
+	agentsAPI.SetRules(knowledgeAPI)
+
+	// The skills directory holds <name>/SKILL.md, the skills a spec names
+	// and agc writes into every sandbox it prepares (ADR 0008 "Skills").
+	skillsAPI := skills.NewAPI(SkillsDir(home))
+	sandboxesAPI.SetSkillsDir(skillsAPI.Dir())
+
+	accountsUsage := usage.NewPoller(usage.NoAccounts{}, secretsPath)
+
+	// Accounts are rows plus secrets.env lines; a running sandbox naming
+	// one keeps it from being deleted (ADR 0018).
+	accountsAPI := accounts.NewAPI(ctrl, secretsPath, sandboxesAPI)
+	connectAccountsUsage(accountsAPI, accountsUsage)
 
 	return &Stack{
-		Controller:   ctrl,
-		Scheduler:    sch,
-		Runtime:      rt,
-		HooksAPI:     hooksAPI,
-		WorkflowAPI:  workflowAPI,
-		Messaging:    msg,
-		TasksAPI:     tasksAPI,
-		SchedulesAPI: schedulesAPI,
-		KnowledgeAPI: knowledgeAPI,
-		AgentsAPI:    agentsAPI,
-		Events:       bus,
-		TriggersAPI:  triggers.NewAPI(ctrl, msg, secretsPath, home),
+		Controller:    ctrl,
+		Scheduler:     sch,
+		Runtime:       rt,
+		HooksAPI:      hooksAPI,
+		WorkflowAPI:   workflowAPI,
+		Messaging:     msg,
+		TasksAPI:      tasksAPI,
+		SchedulesAPI:  schedulesAPI,
+		KnowledgeAPI:  knowledgeAPI,
+		SkillsAPI:     skillsAPI,
+		AgentsAPI:     agentsAPI,
+		AccountsAPI:   accountsAPI,
+		Events:        bus,
+		AccountsUsage: accountsUsage,
+		TriggersAPI:   triggers.NewAPI(ctrl, msg, secretsPath, home),
 	}, nil
+}
+
+// SkillsDir is the skills repository: AGC_SKILLS_DIR, else <home>/skills.
+func SkillsDir(home string) string {
+	dir := os.Getenv("AGC_SKILLS_DIR")
+	if dir == "" {
+		dir = filepath.Join(home, "skills")
+	}
+
+	return dir
+}
+
+// connectAccountsUsage makes poller list the accounts through api and read
+// signed-in ones with their login, and api show poller's readings as each
+// account's usage and poll an account at once on sign-in and sign-out
+// (ADR 0018 "Usage", "Sign-in").
+func connectAccountsUsage(api *accounts.API, poller *usage.Poller) {
+	poller.SetLister(api)
+	poller.SetLogins(api)
+	source := accounts.PollerUsage{Poller: poller}
+	api.SetUsage(source)
+	api.SetPoller(source)
 }
 
 // StartScheduler blocks while the scheduler runs until the context is canceled.

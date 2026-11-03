@@ -433,3 +433,11 @@
   font-size: 0.75rem;
   color: var(--foreground);
 }
+
+/* Skills: a tile row, not indexed rows; tiles square like the other plates. */
+.dark [data-agent-page] section[data-card='skills'] ul > li::before {
+  content: none;
+}
+.dark [data-agent-page] section[data-card='skills'] ul > li > button {
+  border-radius: 0;
+}

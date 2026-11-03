@@ -120,6 +120,8 @@ type Message = {
   kind: 'message' | 'question'
   body: string
   created_at: string
+  // A person posted it, as models/messaging.Message.Human.
+  human: boolean
 }
 
 type Waiter = { channel: string; after: number; wake: () => void }
@@ -130,6 +132,17 @@ const SECRETS = [
   { name: 'CLAUDE_CODE_OAUTH_TOKEN', hosts: ['api.anthropic.com'] },
   { name: 'CUSTOM', hosts: [] as string[] },
   { name: 'GITHUB_TOKEN', hosts: ['api.github.com', 'github.com'] },
+  // No harness reads it: a second Anthropic account, sent as one of the
+  // variables claude_code reads (ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN).
+  { name: 'ANTHROPIC_WORK', hosts: ['api.anthropic.com'] },
+]
+
+// What GET /api/secrets reports beside the secrets: the variables each
+// harness reads, preferred first.
+const SECRET_HARNESSES = [
+  { id: 'claude_code', reads: ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'] },
+  { id: 'codex_cli', reads: ['CODEX_API_KEY'] },
+  { id: 'pi', reads: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'] },
 ]
 
 const TASK_NAME_RE = /^[a-z][a-z0-9-]{0,62}$/
@@ -291,8 +304,9 @@ function createState() {
       `  \`agc msg post '#${task.name}' <text>\`; your manager reads that channel and\n` +
       `  answers there. Ask your manager there too, then keep working on what\n` +
       `  does not depend on the answer.\n` +
-      `- If something needs a decision only ${task.owner} can make, post it in\n` +
-      `  \`#${task.owner}\` (their inbox) and say so in \`#${task.name}\`; do not wait idle.\n` +
+      `- If something needs a decision only ${task.owner} can make, ask your manager\n` +
+      `  in \`#${task.name}\` and say it is for the owner; your manager raises it.\n` +
+      `  Keep working on what does not depend on the answer.\n` +
       `- Do not modify files outside the repository, and never print secret values.\n`
     )
   }
@@ -465,6 +479,7 @@ function createState() {
       kind,
       body,
       created_at: iso(),
+      human: p.human,
     }
     if (replyTo !== undefined) {
       m.reply_to = replyTo
@@ -621,8 +636,9 @@ function createState() {
       agc,
       '@agent-composer-da (manager), @franco (owner): task `review-42` is open: Review 42.\n' +
         'Agent: claude_code (claude-opus-5-5) on sandbox `review-42`, starting.\n' +
-        "The agent's instructions are the next message. Reply here to talk to it; " +
-        'it escalates to #franco when only the owner can decide. Post /accept to accept the task, /reject <why> to send it back.',
+        "The agent's instructions are the next message. Reply here to talk to it;\n" +
+        'its manager raises to franco what only the owner can decide.\n' +
+        'Post /accept to accept the task, /reject <why> to send it back.',
     ).created_at = opened
     post('#review-42', agc, sandboxes.get('review-42')?.instructions ?? '').created_at = opened
     const first = post('#review-42', reviewer, 'Cloned the repo and ran the tests. 3 failures in workflow/.')
@@ -699,6 +715,11 @@ function createState() {
     post('@franco/review-42', reviewer, 'PR 42 is ready for your eyes when you have a minute.')
     post('@franco/review-42', franco, 'Thanks, looking after lunch.')
     post('@franco/yc-pitch', pitcher, 'Draft 3 of the YC pitch is up: should the demo lead or close?')
+    // The persistent agent designer-1's inbox #designer-1 (ADR 0016): franco
+    // asked, so it is followed, and its answer is unread.
+    const designer = join('designer-1', '', false)
+    post('#designer-1', franco, '@designer-1 can you sketch the Talk sidebar split into Asks, DMs and Channels?')
+    post('#designer-1', designer, 'Sketch is up: Asks first, then DMs with each agent, then Channels.')
     // The seeded human has left, so the panel can join as @franco.
     franco.left_at = iso()
   }
@@ -914,7 +935,11 @@ function sandboxRequest(body: Record<string, unknown>) {
   const { command, ...spec } = body
   const known = new Set(SECRETS.map((s) => s.name))
   for (const entry of (spec.secrets as unknown[] | undefined) ?? []) {
-    const secret = String(entry).split('@')[0]
+    // NAME, NAME@hosts, NAME as ENV or NAME as ENV@hosts.
+    const secret = String(entry)
+      .split('@')[0]
+      .trim()
+      .split(/\s+as\s+/)[0]
     if (!known.has(secret)) {
       throw apiError(
         400,
@@ -1246,7 +1271,9 @@ async function msgAPI(state: State, method: string, verb: string, url: URL, req:
     if (kind !== 'message' && kind !== 'question') {
       throw msgError(400, `kind "${kind}" is invalid: use message or question`)
     }
-    return state.post(channel, p, text, replyTo, kind)
+    const posted = state.post(channel, p, text, replyTo, kind)
+    runCommand(state, posted)
+    return posted
   }
 
   throw msgError(404, 'no such endpoint')
@@ -1265,6 +1292,10 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
     streamEvents(state, req, res)
     return
   }
+  if (parts[1] === 'skills') {
+    skillsRoute(res, method, parts.slice(2))
+    return
+  }
 
   try {
     let body: unknown
@@ -1276,7 +1307,7 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
     } else if (parts[1] === 'specs') {
       body = await specsAPI(state, method, parts.slice(2), req)
     } else if (parts[1] === 'secrets' && parts.length === 2 && method === 'GET') {
-      body = { secrets: SECRETS }
+      body = { secrets: SECRETS, harnesses: SECRET_HARNESSES }
     } else if (parts[1] === 'msg' && parts.length === 3) {
       body = await msgAPI(state, method, parts[2], url, req)
     } else if (parts[1] === 'knowledge' && method === 'GET') {
@@ -1285,6 +1316,8 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
       body = await agentsAPI(state, method, parts.slice(2), req)
     } else if (parts[1] === 'defaults' && parts.length === 2 && method === 'GET') {
       body = DEFAULTS
+    } else if (parts[1] === 'accounts') {
+      body = await accountsAPI(state, method, parts.slice(2), req)
     } else {
       throw apiError(404, 'no such endpoint')
     }
@@ -1293,6 +1326,11 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
     }
     if (body instanceof Created) {
       send(res, 201, body.body)
+      return
+    }
+    if (body === NO_CONTENT) {
+      res.writeHead(204)
+      res.end()
       return
     }
     send(res, 200, body)
@@ -2225,6 +2263,10 @@ type MockAgent = {
   conversations: { channel: string; last_at: string }[]
   last_active_at: string | null
   created_at: string
+  // What it is made of (agent-effort, sandbox-skills, agent-rules).
+  effort: string
+  skills: string[]
+  rules: { id: string; rule: string }[]
 }
 
 type MockAgents = {
@@ -2246,7 +2288,14 @@ function agentsOf(state: State): MockAgents {
 
 function agentsSeed(): MockAgents {
   const ago = (minutes: number) => iso(Date.now() - minutes * 60_000)
-  const base = { harness: 'claude_code', model: 'claude-opus-5-5', owner: 'franco' }
+  const base = {
+    harness: 'claude_code',
+    model: 'claude-opus-5-5',
+    owner: 'franco',
+    effort: '',
+    skills: [] as string[],
+    rules: [] as { id: string; rule: string }[],
+  }
   const list: MockAgent[] = [
     {
       ...base,
@@ -2256,8 +2305,14 @@ function agentsSeed(): MockAgents {
       state: 'awake',
       home: 'orchestrator-1',
       tasks: ['review-42', 'flaky-ci'],
+      effort: 'high',
+      skills: ['rtsdesign', 'go-style'],
+      rules: [
+        { id: MOCK_RULES[0].id, rule: MOCK_RULES[0].rule },
+        { id: MOCK_RULES[1].id, rule: MOCK_RULES[1].rule },
+      ],
       conversations: [
-        { channel: '#franco', last_at: ago(3) },
+        { channel: '#orchestrator-1', last_at: ago(3) },
         { channel: '#review-42', last_at: ago(5) },
         { channel: '#flaky-ci', last_at: ago(40) },
       ],
@@ -2272,7 +2327,7 @@ function agentsSeed(): MockAgents {
       state: 'asleep',
       home: 'reviewer-2',
       tasks: [],
-      conversations: [{ channel: '#franco', last_at: ago(60 * 5) }],
+      conversations: [{ channel: '#reviewer-2', last_at: ago(60 * 5) }],
       last_active_at: ago(60 * 5),
       created_at: ago(60 * 30),
     },
@@ -2284,8 +2339,11 @@ function agentsSeed(): MockAgents {
       state: 'asleep',
       home: 'ada',
       tasks: ['docs-pass'],
+      effort: 'medium',
+      skills: ['rtsdesign'],
+      rules: [{ id: MOCK_RULES[1].id, rule: MOCK_RULES[1].rule }],
       conversations: [
-        { channel: '#franco', last_at: ago(60 * 20) },
+        { channel: '#ada', last_at: ago(60 * 20) },
         { channel: '#docs-pass', last_at: ago(60 * 22) },
       ],
       last_active_at: ago(60 * 20),
@@ -2300,9 +2358,22 @@ function agentsSeed(): MockAgents {
       state: 'waking',
       home: 'writer-1',
       tasks: [],
-      conversations: [{ channel: '#franco', last_at: ago(1) }],
+      conversations: [{ channel: '#writer-1', last_at: ago(1) }],
       last_active_at: ago(1),
       created_at: ago(2),
+    },
+    {
+      // An inbox with messages (#designer-1), so Talk's DMs section shows.
+      ...base,
+      name: 'designer-1',
+      role: 'Designer',
+      kept: false,
+      state: 'awake',
+      home: 'designer-1',
+      tasks: [],
+      conversations: [{ channel: '#designer-1', last_at: ago(0) }],
+      last_active_at: ago(0),
+      created_at: ago(60 * 3),
     },
   ]
   // ada was reviewer-1.
@@ -2310,6 +2381,7 @@ function agentsSeed(): MockAgents {
     ['orchestrator', 1],
     ['reviewer', 2],
     ['writer', 1],
+    ['designer', 1],
   ])
   return { list, numbers }
 }
@@ -2322,6 +2394,8 @@ function agentView(state: State, agent: MockAgent) {
       return { name, status: task ? state.taskView(task).status : 'deleted' }
     }),
     conversations: agent.conversations.map((c) => ({ ...c })),
+    skills: [...agent.skills],
+    rules: agent.rules.map((r) => ({ ...r })),
   }
 }
 
@@ -2370,9 +2444,12 @@ async function agentsAPI(state: State, method: string, rest: string[], req: Inco
       state: 'asleep',
       home: null,
       tasks: [],
-      conversations: [{ channel: '#franco', last_at: now }],
+      conversations: [{ channel: `#${prefix}-${n}`, last_at: now }],
       last_active_at: null,
       created_at: now,
+      effort: '',
+      skills: [],
+      rules: [],
     }
     mock.list.push(agent)
     return new Created(agentView(state, agent))
@@ -2392,6 +2469,12 @@ async function agentsAPI(state: State, method: string, rest: string[], req: Inco
       throw apiError(409, `agent ${name} already exists`)
     }
     const role = str(body.role).trim()
+    // The inbox #<name> follows the name, as on the server (ADR 0016).
+    for (const c of agent.conversations) {
+      if (c.channel === `#${agent.name}`) {
+        c.channel = `#${name}`
+      }
+    }
     agent.name = name
     if (role) {
       agent.role = role
@@ -2440,4 +2523,389 @@ function allParticipants(state: State) {
   return [...state.participants.values()]
     .sort((a, b) => Number(Boolean(a.left_at)) - Number(Boolean(b.left_at)) || a.name.localeCompare(b.name))
     .map((p) => ({ ...p, ...presenceOf(state, p) }))
+}
+
+// ---------- accounts (ahead of accounts-model and accounts-usage) ----------
+//
+// GET /api/accounts → { accounts, providers }; POST /api/accounts {name,
+// provider, kind, value, email?} (201; the value is dropped, never stored
+// or echoed), POST|DELETE /api/accounts/:name/default (at most one default
+// per provider) and DELETE /api/accounts/:name (204; 409 ECONFLICT while a
+// running sandbox's spec names its secret). Seeds: anthropic franco-max
+// (oauth, default, usage with session, weekly and opus windows), work-api
+// (api_key, usage null) and old-max (oauth, its token rejected); openai has
+// none. Function declarations only, like the sections above.
+
+type MockAccount = {
+  name: string
+  provider: 'anthropic' | 'openai'
+  kind: 'oauth' | 'api_key'
+  secret: string
+  email: string
+  default: boolean
+  created_at: string
+  usage: {
+    updated_at: string
+    windows: { id: string; label: string; used: number; resets_at: string }[]
+    error: string
+  } | null
+  // Account sign-in (contract of accounts-signin); absent reads as null.
+  signed_in_at?: string | null
+}
+
+const ACCOUNT_NAME_RE = /^[a-z0-9-]{1,32}$/
+
+// Answers 204 with no body (DELETE /api/accounts/:name).
+const NO_CONTENT = Symbol('no content')
+
+const ACCOUNT_PROVIDERS = [
+  {
+    id: 'anthropic',
+    harnesses: ['claude_code'],
+    variables: { oauth: 'CLAUDE_CODE_OAUTH_TOKEN', api_key: 'ANTHROPIC_API_KEY' },
+  },
+  { id: 'openai', harnesses: ['codex_cli'], variables: { api_key: 'CODEX_API_KEY' } },
+]
+
+function accountSecret(name: string) {
+  return 'ACCOUNT_' + name.toUpperCase().replace(/-/g, '_')
+}
+
+function accountsOf(state: State): MockAccount[] {
+  const holder = state as State & { accountsMock?: MockAccount[] }
+  if (!holder.accountsMock) {
+    holder.accountsMock = accountsSeed()
+  }
+  return holder.accountsMock
+}
+
+function accountsSeed(): MockAccount[] {
+  const now = Date.now()
+  const min = 60_000
+  const hour = 60 * min
+  const day = 24 * hour
+  return [
+    {
+      name: 'franco-max',
+      provider: 'anthropic',
+      kind: 'oauth',
+      secret: accountSecret('franco-max'),
+      email: 'franco@example.com',
+      default: true,
+      created_at: iso(now - 30 * day),
+      usage: {
+        updated_at: iso(now - 20_000),
+        windows: [
+          { id: 'session', label: 'Session', used: 0.16, resets_at: iso(now + 4 * hour + 11 * min + 30_000) },
+          { id: 'weekly', label: 'Weekly', used: 0.17, resets_at: iso(now + day + 19 * hour + 30 * min) },
+          { id: 'opus', label: 'Opus', used: 0.2, resets_at: iso(now + day + 19 * hour + 30 * min) },
+        ],
+        error: '',
+      },
+    },
+    {
+      name: 'work-api',
+      provider: 'anthropic',
+      kind: 'api_key',
+      secret: accountSecret('work-api'),
+      email: '',
+      default: false,
+      created_at: iso(now - 10 * day),
+      usage: null,
+    },
+    {
+      name: 'old-max',
+      provider: 'anthropic',
+      kind: 'oauth',
+      secret: accountSecret('old-max'),
+      email: 'old@example.com',
+      default: false,
+      created_at: iso(now - 90 * day),
+      usage: {
+        updated_at: iso(now - 5 * min),
+        windows: [],
+        error: 'token rejected: 401 invalid authentication credentials',
+      },
+    },
+    {
+      name: 'plain-max',
+      provider: 'anthropic',
+      kind: 'oauth',
+      secret: accountSecret('plain-max'),
+      email: 'plain@example.com',
+      default: false,
+      created_at: iso(now - 2 * day),
+      usage: {
+        updated_at: iso(now - 2 * min),
+        windows: [],
+        error: 'inference-only token: sign in for usage',
+      },
+      signed_in_at: null,
+    },
+  ]
+}
+
+function findAccount(state: State, name: string) {
+  const account = accountsOf(state).find((a) => a.name === name)
+  if (!account) {
+    throw apiError(404, `account ${name} not found`)
+  }
+  return account
+}
+
+async function accountsAPI(state: State, method: string, rest: string[], req: IncomingMessage) {
+  const list = accountsOf(state)
+  if (rest.length === 0 && method === 'GET') {
+    return { accounts: list, providers: ACCOUNT_PROVIDERS }
+  }
+  if (rest.length === 0 && method === 'POST') {
+    const body = await readJSON(req, apiError)
+    const name = str(body.name).trim()
+    const provider = str(body.provider)
+    const kind = str(body.kind)
+    if (!ACCOUNT_NAME_RE.test(name)) {
+      throw apiError(400, 'name must be 1 to 32 lowercase letters, digits or dashes')
+    }
+    const known = ACCOUNT_PROVIDERS.find((p) => p.id === provider)
+    if (!known) {
+      throw apiError(400, `unknown provider ${provider}`)
+    }
+    if (kind !== 'oauth' && kind !== 'api_key') {
+      throw apiError(400, `unknown kind ${kind}`)
+    }
+    if (!(kind in known.variables)) {
+      throw apiError(400, `provider ${provider} has no ${kind} kind`)
+    }
+    if (!str(body.value).trim()) {
+      throw apiError(400, 'value is required')
+    }
+    if (list.some((a) => a.name === name)) {
+      throw apiError(409, `account ${name} already exists`)
+    }
+    const account: MockAccount = {
+      name,
+      provider: provider as MockAccount['provider'],
+      kind,
+      secret: accountSecret(name),
+      email: str(body.email).trim(),
+      default: false,
+      created_at: iso(),
+      usage: null,
+    }
+    list.push(account)
+    return new Created(account)
+  }
+  const account = findAccount(state, rest[0])
+  if (rest.length === 2 && rest[1] === 'default' && method === 'POST') {
+    for (const a of list) {
+      if (a.provider === account.provider) {
+        a.default = false
+      }
+    }
+    account.default = true
+    return account
+  }
+  if (rest.length === 2 && rest[1] === 'default' && method === 'DELETE') {
+    account.default = false
+    return account
+  }
+  if (rest.length === 1 && method === 'DELETE') {
+    for (const sandbox of state.sandboxes.values()) {
+      const names = (sandbox.spec.secrets ?? []).map(
+        (entry) =>
+          String(entry)
+            .split('@')[0]
+            .trim()
+            .split(/\s+as\s+/)[0],
+      )
+      if (state.sandboxView(sandbox).status === 'running' && names.includes(account.secret)) {
+        throw apiError(409, `account ${account.name} is in use by running sandbox ${sandbox.name}`)
+      }
+    }
+    list.splice(list.indexOf(account), 1)
+    return NO_CONTENT
+  }
+  if (rest[1] === 'signin') {
+    return accountSigninAPI(state, method, rest, req, account)
+  }
+  throw apiError(404, 'no such endpoint')
+}
+
+// ---------- account sign-in (ahead of accounts-signin) ----------
+//
+// POST /api/accounts/:name/signin → { url, expires_at } (10 minutes, a new
+// state each time); POST …/signin/complete { code } takes `code#state` (the
+// state must match) or a bare code while one sign-in is pending: the code
+// `made-up-bad` fails as the exchange would (400 EBADREQUEST "token
+// exchange failed: HTTP 400"), anything else signs in (signed_in_at now,
+// usage error cleared). DELETE …/signin clears signed_in_at. The code is
+// never stored or echoed.
+
+type MockSignin = { state: string; expires: number }
+
+function signinsOf(state: State): Map<string, MockSignin> {
+  const holder = state as State & { signinsMock?: Map<string, MockSignin> }
+  if (!holder.signinsMock) {
+    holder.signinsMock = new Map()
+  }
+  return holder.signinsMock
+}
+
+async function accountSigninAPI(
+  state: State,
+  method: string,
+  rest: string[],
+  req: IncomingMessage,
+  account: MockAccount,
+) {
+  const pending = signinsOf(state)
+  if (rest.length === 2 && method === 'POST') {
+    const signin = { state: hex(16), expires: Date.now() + 10 * 60_000 }
+    pending.set(account.name, signin)
+    const url =
+      'https://claude.ai/oauth/authorize?code=true&client_id=made-up-client&response_type=code' +
+      '&redirect_uri=' +
+      encodeURIComponent('https://platform.claude.com/oauth/code/callback') +
+      '&scope=' +
+      encodeURIComponent('user:profile user:inference') +
+      '&code_challenge=made-up-challenge&code_challenge_method=S256&state=' +
+      signin.state
+    return { url, expires_at: iso(signin.expires) }
+  }
+  if (rest.length === 3 && rest[2] === 'complete' && method === 'POST') {
+    const body = await readJSON(req, apiError)
+    const pasted = str(body.code).trim()
+    const signin = pending.get(account.name)
+    if (!signin || signin.expires < Date.now()) {
+      pending.delete(account.name)
+      throw apiError(400, 'no sign-in pending for this account; start again')
+    }
+    const hash = pasted.indexOf('#')
+    const code = hash < 0 ? pasted : pasted.slice(0, hash)
+    if (hash >= 0 && pasted.slice(hash + 1) !== signin.state) {
+      throw apiError(400, 'state does not match the pending sign-in; start again')
+    }
+    if (!code) {
+      throw apiError(400, 'code is required')
+    }
+    pending.delete(account.name)
+    if (code === 'made-up-bad') {
+      throw new HttpError(400, {
+        error: { code: 'EBADREQUEST', message: 'token exchange failed: HTTP 400', request_id: 'mock-' + hex(4) },
+      })
+    }
+    account.signed_in_at = iso()
+    if (account.usage) {
+      account.usage.error = ''
+      account.usage.updated_at = iso()
+    }
+    return account
+  }
+  if (rest.length === 2 && method === 'DELETE') {
+    pending.delete(account.name)
+    account.signed_in_at = null
+    return account
+  }
+  throw apiError(404, 'no such endpoint')
+}
+
+// The channel commands of ADR 0010 (core/resources/tasks/commands.go):
+// "/accept" and "/reject <why>" in #<task> from its manager or owner, and
+// "/accept <task>" from the owner in their inbox #<owner>. Never from a
+// task's sandbox or agc; anything else is an ordinary message.
+function runCommand(state: State, m: Message) {
+  if (m.task || m.from === 'agc') {
+    return
+  }
+  const trimmed = m.body.trim()
+  const space = trimmed.search(/\s/)
+  const verb = space < 0 ? trimmed : trimmed.slice(0, space)
+  const arg = space < 0 ? '' : trimmed.slice(space).trim()
+  if (verb !== '/accept' && !(verb === '/reject' && arg)) {
+    return
+  }
+  const channel = m.channel.replace(/^#/, '')
+  let task: Task | undefined
+  if (verb === '/accept' && arg) {
+    task = channel === m.from ? state.tasks.get(arg.replace(/^#/, '')) : undefined
+    if (!task || task.owner !== m.from) {
+      return
+    }
+  } else {
+    task = state.tasks.get(channel)
+    if (!task || (m.from !== task.manager && m.from !== task.owner)) {
+      return
+    }
+  }
+  if (task.done_at) {
+    return
+  }
+  if (verb === '/reject') {
+    task.delivered_at = null
+    task.updated_at = iso()
+    state.post('#' + task.name, state.agc(), `Rejected by ${m.from}: ${arg}`)
+    return
+  }
+  task.done_at = iso()
+  task.accepted_by = m.from
+  task.updated_at = task.done_at
+  state.post('#' + task.name, state.agc(), `Accepted by ${m.from}.`)
+  for (const view of state.sandboxesOf(task)) {
+    if (view.status === 'running' || view.status === 'starting') {
+      state.stopSandbox(state.findSandbox(view.name))
+    }
+  }
+  state.emit('task.done', { task: state.taskView(task), summary: task.summary || state.summary(task) })
+}
+
+// ---------- skills (ahead of sandbox-skills) ----------
+//
+// GET /api/skills {skills: [{name, description}]} and GET /api/skills/:name,
+// the skill's markdown as text/markdown. The seeded agents name these.
+
+const MOCK_RULES = [
+  {
+    id: 'panel-follows-the-design-system',
+    rule: 'A change to the panel follows docs/design/panel.md and the rtsdesign skill.',
+  },
+  {
+    id: 'no-explicit-semicolons-in-go',
+    rule: 'Go code has no explicit semicolon outside a three-clause for header.',
+  },
+]
+
+const MOCK_SKILLS: { name: string; description: string; text: string }[] = [
+  {
+    name: 'rtsdesign',
+    description: 'Icons, slots and chips instead of sentences.',
+    text:
+      '---\nname: rtsdesign\ndescription: Icons, slots and chips instead of sentences.\n---\n\n' +
+      '# rtsdesign\n\n1. One icon per concept.\n2. Empty slots say why in place.\n3. Lists are rows, not cards.\n',
+  },
+  {
+    name: 'go-style',
+    description: 'The repository Go style.',
+    text: '# go-style\n\n- One statement per line.\n- No if init; move it above.\n',
+  },
+]
+
+function skillsRoute(res: ServerResponse, method: string, rest: string[]) {
+  if (method !== 'GET') {
+    send(res, 404, apiError(404, 'no such endpoint').body)
+    return
+  }
+  if (rest.length === 0) {
+    send(res, 200, { skills: MOCK_SKILLS.map(({ name, description }) => ({ name, description })) })
+    return
+  }
+  const skill = rest.length === 1 ? MOCK_SKILLS.find((s) => s.name === rest[0]) : undefined
+  if (!skill) {
+    send(res, 404, apiError(404, `skill ${rest[0]} not found`).body)
+    return
+  }
+  res.writeHead(200, {
+    'Content-Type': 'text/markdown; charset=utf-8',
+    'Content-Length': Buffer.byteLength(skill.text),
+  })
+  res.end(skill.text)
 }

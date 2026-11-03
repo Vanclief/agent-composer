@@ -238,7 +238,7 @@ func TestListTurnsSkipsCorruptLines(t *testing.T) {
 
 func TestTurnsThreadLabels(t *testing.T) {
 	root, dir := newVolumes(t)
-	putFile(t, dir, SessionsFile, `{"@franco/reviewer-1:0190a7c2-root":"`+claudeSession+`","main":"`+codexSession+`","odd":42}`)
+	putFile(t, dir, SessionsFile, `{"#reviewer-1:0190a7c2-root":"`+claudeSession+`","main":"`+codexSession+`","odd":42}`)
 
 	list, err := NewTurnsAPI(root, nil).ListTurns(context.Background(), nil, &ListTurnsRequest{Name: "reviewer-1"})
 	if err != nil {
@@ -250,7 +250,7 @@ func TestTurnsThreadLabels(t *testing.T) {
 	if codex.Channel != "" || codex.Thread != "main" {
 		t.Fatalf("codex label %q %q", codex.Channel, codex.Thread)
 	}
-	if claude.Channel != "@franco/reviewer-1" || claude.Thread != "0190a7c2-root" {
+	if claude.Channel != "#reviewer-1" || claude.Thread != "0190a7c2-root" {
 		t.Fatalf("claude label %q %q", claude.Channel, claude.Thread)
 	}
 }

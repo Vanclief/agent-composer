@@ -58,6 +58,10 @@ type API struct {
 
 	// events gets agent.state, nil drops them.
 	events *events.Bus
+
+	// rules reads the rules templates name from the knowledge directory;
+	// nil fails a template naming rules.
+	rules RuleSource
 }
 
 // StateEvent is the data of agent.state.
@@ -107,6 +111,17 @@ func (api *API) SetEvents(bus *events.Bus) {
 	api.events = bus
 }
 
+// SetRules reads the rules templates name through source from now on
+// (ADR 0016 item 2).
+func (api *API) SetRules(source RuleSource) {
+	api.rules = source
+}
+
+// template reads role's template and the rules it names, now.
+func (api *API) template(role string) (*Template, error) {
+	return LoadTemplate(api.dir, role, api.rules)
+}
+
 // Wait blocks until every wake the hook started has returned.
 func (api *API) Wait() {
 	api.wakes.Wait()
@@ -125,6 +140,13 @@ type Conversation struct {
 	LastAt  time.Time `json:"last_at"`
 }
 
+// AgentRule is a rule an agent follows: its id in the knowledge directory
+// and its text as written.
+type AgentRule struct {
+	ID   string `json:"id"`
+	Rule string `json:"rule"`
+}
+
 // AgentView is an agent with its computed state, tasks and conversations,
 // the shape of panel/src/api/agents.ts.
 type AgentView struct {
@@ -133,29 +155,38 @@ type AgentView struct {
 	Kept    bool   `json:"kept"`
 	Harness string `json:"harness"`
 	Model   string `json:"model"`
-	Owner   string `json:"owner"`
+	// Effort is the harness's reasoning effort, empty for its default.
+	Effort string `json:"effort"`
+	Owner  string `json:"owner"`
 	// State is asleep, waking or awake, or the home sandbox's own status
 	// when it is anything else.
 	State string `json:"state"`
 	// Home is the home sandbox's name, null before the first wake.
 	Home *string `json:"home"`
+	// Rules are the rules its template names, read from the knowledge
+	// directory now; [] when it names none or cannot be read.
+	Rules []AgentRule `json:"rules"`
 	// Tasks are the tasks whose manager is the agent.
 	Tasks []AgentTask `json:"tasks"`
-	// Conversations are the DM with the owner, then #<task> for each
+	// Conversations are the agent's inbox #<name>, then #<task> for each
 	// task, then any other channel the agent has posted in.
 	Conversations []Conversation `json:"conversations"`
-	LastActiveAt  *time.Time     `json:"last_active_at"`
-	CreatedAt     time.Time      `json:"created_at"`
+	// Skills are the template's sandbox.skills, read on every request;
+	// empty when the template names none or cannot be read.
+	Skills       []string   `json:"skills"`
+	LastActiveAt *time.Time `json:"last_active_at"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
-// DMChannel is the agent's direct message channel with its owner,
-// @<owner>/<name> (ADR 0011), empty when it has no owner.
+// DMChannel is the agent's inbox #<name>, where its owner talks to it,
+// an inbox like a person's (ADR 0005 "Inbox", ADR 0016 item 6); empty when
+// it has no owner.
 func DMChannel(record *agent.Agent) string {
 	if record.Owner == "" {
 		return ""
 	}
 
-	return "@" + record.Owner + "/" + record.Name
+	return "#" + record.Name
 }
 
 // stateOf maps the home sandbox's status to the agent's state.
@@ -211,7 +242,10 @@ func (api *API) find(ctx context.Context, name string) (*agent.Agent, error) {
 	return agent.GetAgentByName(ctx, api.db, name)
 }
 
-// managed returns the tasks whose manager is the agent, oldest first.
+// managed returns the tasks whose manager is the agent, oldest first,
+// done ones included: a task stays in its manager's Reads for good, so the
+// "Accepted by" agc posts when the owner accepts wakes the manager (the
+// reviewer merges then), and a later message in #<task> still reaches it.
 func (api *API) managed(ctx context.Context, record *agent.Agent) ([]taskmodels.Task, error) {
 	records := []taskmodels.Task{}
 
@@ -265,20 +299,49 @@ func (api *API) viewWith(ctx context.Context, record *agent.Agent, state string)
 		home = &name
 	}
 
+	skills := []string{}
+
+	tmpl, err := LoadTemplate(api.dir, record.Role, api.rules)
+	if err == nil && len(tmpl.Sandbox.Skills) > 0 {
+		skills = tmpl.Sandbox.Skills
+	}
+
 	return &AgentView{
 		Name:          record.Name,
 		Role:          record.Role,
 		Kept:          record.Kept,
 		Harness:       string(record.Harness),
 		Model:         record.Model,
+		Effort:        record.Effort,
 		Owner:         record.Owner,
 		State:         state,
 		Home:          home,
+		Rules:         api.followed(record),
 		Tasks:         agentTasks,
 		Conversations: conversations,
+		Skills:        skills,
 		LastActiveAt:  lastActive,
 		CreatedAt:     record.CreatedAt,
 	}, nil
+}
+
+// followed is the rules the agent's template names, [] when it names none
+// or the template or a rule cannot be read: the view still shows the agent,
+// and a wake reports the error.
+func (api *API) followed(record *agent.Agent) []AgentRule {
+	rules := []AgentRule{}
+
+	tmpl, err := api.template(record.Role)
+	if err != nil {
+		log.Debug().Err(err).Str("agent", record.Name).Msg("agent rules not read")
+		return rules
+	}
+
+	for _, rule := range tmpl.Followed {
+		rules = append(rules, AgentRule{ID: rule.ID, Rule: rule.Rule})
+	}
+
+	return rules
 }
 
 // channelStat is a channel's last message time.

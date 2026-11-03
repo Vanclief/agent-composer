@@ -26,4 +26,10 @@ type Config struct {
 	Defaults DefaultsSettings `mapstructure:"defaults"`
 	// Triggers are outside events posted as messages (ADR 0014).
 	Triggers TriggersSettings `mapstructure:"triggers"`
+	// Sandboxes holds keep_done, the grace period before a done task's
+	// stopped sandbox is collected (ADR 0008).
+	Sandboxes SandboxesSettings `mapstructure:"sandboxes"`
+	// Messaging holds archive_done, the grace period before a done task's
+	// channel is archived (ADR 0005 "Archived channels").
+	Messaging MessagingSettings `mapstructure:"messaging"`
 }

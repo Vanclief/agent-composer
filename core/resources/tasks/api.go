@@ -35,6 +35,9 @@ type API struct {
 	defaults    controller.DefaultsSettings
 	secretsPath string
 	specs       task.Store
+	// shotsDir keeps delivered screenshots, <shotsDir>/<task>/<label>.png;
+	// empty refuses them.
+	shotsDir string
 	// events gets task.created and task.done, nil drops them.
 	events *events.Bus
 }

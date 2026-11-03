@@ -90,16 +90,17 @@ func (api *API) wake(ctx context.Context, record *agent.Agent) error {
 // allocate boots the agent's first home (or a new one when the old one is
 // gone) from its template, and records it.
 func (api *API) allocate(ctx context.Context, record *agent.Agent) error {
-	tmpl, err := LoadTemplate(api.dir, record.Role)
+	tmpl, err := api.template(record.Role)
 	if err != nil {
 		return ez.Wrap(err)
 	}
 
 	view, err := api.sbx.AllocateHome(ctx, sandboxes.HomeRequest{
 		Agent:        record.Name,
+		Harness:      record.Harness,
 		Sandbox:      tmpl.Sandbox,
 		Command:      Command(record),
-		Instructions: tmpl.Instructions,
+		Instructions: tmpl.AgentMD(),
 	})
 	if err != nil {
 		return ez.Wrap(err)
@@ -153,6 +154,9 @@ func Command(record *agent.Agent) string {
 	fields := []string{sandboxes.GuestAgc, "agent", "run", "--agent", record.Name, "--harness", string(record.Harness)}
 	if record.Model != "" {
 		fields = append(fields, "--model", record.Model)
+	}
+	if record.Effort != "" {
+		fields = append(fields, "--effort", record.Effort)
 	}
 	fields = append(fields, "--brief", sandboxes.AgentBriefPath)
 

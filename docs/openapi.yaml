@@ -29,6 +29,12 @@ tags:
     description: >
       A schedule creates a task from a template every interval, or one task per new item its poll
       command lists (ADR 0012). agc rest runs the scheduler; next_run_at is computed, never stored.
+  - name: Accounts
+    description: >
+      An account is a credential for one provider (ADR 0018), kept as a line of secrets.env
+      (ACCOUNT_<NAME>) and described by a row. At most one account per provider is the default,
+      bound to a sandbox whose spec names no credential variable of its harness. No route returns
+      a value.
   - name: Agents
     description: >
       A persistent agent (ADR 0016) is a row, not a process: born numbered from a role template
@@ -46,6 +52,11 @@ tags:
   - name: Events
     description: >
       The live feed: a server-sent events stream of what changes tasks, sandboxes and channels.
+  - name: Skills
+    description: >
+      agc's skills repository (ADR 0008 "Skills"): <agc home>/skills/<name>/SKILL.md plus files
+      (AGC_SKILLS_DIR overrides), read on every request. A spec's skills are written into every
+      sandbox agc prepares.
   - name: Knowledge
     description: >
       Evidence, beliefs, decisions and rules (ADR 0006), read only. Labels are computed on every
@@ -658,7 +669,9 @@ paths:
         review. A task can be delivered more than once; the last summary and report win, and a
         delivery without a report stores null. Inside a sandbox `agc task deliver` reaches the
         same call over the sandbox's messaging socket, which passes `report` through unchanged.
-        400 when the report breaks a rule, including a `criteria` count that does not match the
+        `files` carries the PNG of each of the report's `shots` under its label; agc keeps them
+        under its home, served by GET /tasks/{id}/shots/{label}.png, and a delivery without
+        shots removes the earlier ones. 400 when the report breaks a rule, including a `criteria` count that does not match the
         task's `accept`; 409 when the task is done.
       parameters:
         - $ref: '#/components/parameters/TaskIdParam'
@@ -680,6 +693,37 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
         '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /tasks/{id}/shots/{label}.png:
+    get:
+      tags: [Tasks]
+      operationId: getTaskShot
+      summary: Get a delivered screenshot
+      description: >
+        The PNG a delivery sent for the report's shot `label`, kept on the agc host under
+        `<agc home>/shots/<task>/<label>.png` (ADR 0010, "Delivery report"). Each delivery
+        replaces the task's shots; a reject or an accept keeps them. 404 when the task or the
+        shot is absent.
+      parameters:
+        - $ref: '#/components/parameters/TaskIdParam'
+        - name: label
+          in: path
+          required: true
+          description: The shot's label, a slug such as `before` or `after`.
+          schema:
+            type: string
+            pattern: '^[a-z][a-z0-9-]{0,62}$'
+      responses:
+        '200':
+          description: The screenshot.
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '404':
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
@@ -814,6 +858,34 @@ paths:
                       $ref: '#/components/schemas/Sandbox'
                 required:
                   - sandboxes
+        '500':
+          $ref: '#/components/responses/Error'
+  /sandboxes/gc:
+    post:
+      tags: [Sandboxes]
+      operationId: gcSandboxes
+      summary: Collect the sandboxes of done tasks
+      description: >
+        Deletes, through the same path as DELETE /sandboxes/{id}, every sandbox that is stopped,
+        is not an agent's home and belongs to a task done longer than keep ago; with dry_run only
+        lists them. Volumes and messages are kept. agc rest runs the same collection every 10
+        minutes with keep_done (ADR 0008 "Garbage collection"). A failed delete is listed with
+        its error and the rest go on.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SandboxGCRequest'
+      responses:
+        '200':
+          description: What was deleted, or would be.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxGCResponse'
+        '400':
+          $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
   /sandboxes/{id}:
@@ -992,6 +1064,191 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
+  /accounts:
+    get:
+      tags: [Accounts]
+      operationId: listAccounts
+      summary: List accounts and providers
+      description: >
+        Every account by provider, then name, with its usage (null until the usage fetcher is
+        wired, and for every account that is not anthropic oauth), and every provider with the
+        harnesses it serves and the variable each kind of account is handed to. Values are never
+        returned.
+      responses:
+        '200':
+          description: Accounts and providers.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountList'
+        '500':
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [Accounts]
+      operationId: createAccount
+      summary: Add an account
+      description: >
+        Writes ACCOUNT_<NAME>=<value> (name upper-cased, dashes as underscores) to secrets.env,
+        mode 0600, created when missing, and inserts the row, not as the default. The value is
+        trimmed, quoted as secrets.env reads it, and never returned or logged. 400 for a bad name,
+        provider or kind (openai has no oauth kind yet) or an empty value; 409 when the name is
+        taken or its secret is already set in secrets.env.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountRequest'
+      responses:
+        '201':
+          description: The account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /accounts/{name}:
+    parameters:
+      - $ref: '#/components/parameters/AccountNameParam'
+    delete:
+      tags: [Accounts]
+      operationId: deleteAccount
+      summary: Delete an account
+      description: >
+        Removes the row and its secrets.env line. 409 while a running or booting sandbox's spec
+        names its secret (a default bound at allocation is recorded in the spec); stop the
+        sandbox first.
+      responses:
+        '204':
+          description: Deleted.
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /accounts/{name}/default:
+    parameters:
+      - $ref: '#/components/parameters/AccountNameParam'
+    post:
+      tags: [Accounts]
+      operationId: setDefaultAccount
+      summary: Make an account its provider's default
+      description: >
+        The provider's previous default loses the flag in the same transaction. From now on a
+        sandbox allocated or started for a harness of this provider, whose spec sets none of the
+        variables the harness reads, gets `<secret> as <variable>`.
+      responses:
+        '200':
+          description: The account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Accounts]
+      operationId: clearDefaultAccount
+      summary: Take the default flag off an account
+      description: The provider is left with no default; sandboxes get no credential from it.
+      responses:
+        '200':
+          description: The account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /accounts/{name}/signin:
+    parameters:
+      - $ref: '#/components/parameters/AccountNameParam'
+    post:
+      tags: [Accounts]
+      operationId: beginAccountSignin
+      summary: Begin signing an account in
+      description: >
+        ADR 0018 "Sign-in". Starts the OAuth login Claude Code runs, for an anthropic oauth
+        account: a random state and a PKCE S256 verifier, kept in memory for 10 minutes, one per
+        account (a new one replaces the last). Open `url`; after signing in, the page shows
+        `code#state` to paste into `signin/complete`. The login is used only to read usage and
+        identity; sandboxes keep the account's own token.
+      responses:
+        '200':
+          description: The page to open.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSignin'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Accounts]
+      operationId: signoutAccount
+      summary: Sign an account out
+      description: >
+        Removes the account's login line (ACCOUNT_<NAME>_LOGIN) from secrets.env, forgets its access
+        token and clears `signed_in_at`; usage is read with the account's own token again.
+      responses:
+        '200':
+          description: The account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /accounts/{name}/signin/complete:
+    parameters:
+      - $ref: '#/components/parameters/AccountNameParam'
+    post:
+      tags: [Accounts]
+      operationId: completeAccountSignin
+      summary: Finish signing an account in with the pasted code
+      description: >
+        Exchanges the pasted code for tokens, writes the refresh token to secrets.env as
+        ACCOUNT_<NAME>_LOGIN, keeps the access token in memory, sets `signed_in_at`, reads the
+        account's usage at once and sets `email` from the profile when it was empty. Neither token
+        nor the code is ever returned or logged. 400 when nothing is pending ("no sign-in pending
+        for this account; start again"), when the state does not match, or when the token endpoint
+        refuses the code (its HTTP status, never its body).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteAccountSigninRequest'
+      responses:
+        '200':
+          description: The account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
   /agents:
     get:
       tags: [Agents]
@@ -1141,8 +1398,8 @@ paths:
       operationId: sleepAgent
       summary: Put an agent to sleep
       description: >
-        Stops the awake agent's home and posts "Asleep." as agc in its DM channel
-        @<owner>/<name>. 409 when the agent is not awake.
+        Stops the awake agent's home and posts "Asleep." as agc in its inbox
+        #<name>. 409 when the agent is not awake.
       responses:
         '200':
           description: The agent, asleep.
@@ -1606,7 +1863,8 @@ paths:
         Names in ~/.agent_composer/config/secrets.env, sorted, each with the hosts it is bound to
         by default (empty for names agc does not know, which a spec must bind as NAME@host).
         Values are never returned (ADR 0004). A missing file lists nothing; a file readable by
-        anyone but its owner is refused.
+        anyone but its owner is refused. harnesses lists the variables each harness reads, the
+        ENV side of a NAME as ENV account entry.
       responses:
         '200':
           description: Secret names.
@@ -1619,11 +1877,60 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Secret'
+                  harnesses:
+                    type: array
+                    description: >
+                      Every harness in the catalog with the environment variables it takes its
+                      credentials from, in order of preference, so a client can offer "use this
+                      secret as the variable claude_code reads" (a NAME as ENV entry, ADR 0004
+                      "Accounts").
+                    items:
+                      $ref: '#/components/schemas/HarnessReads'
                 required:
                   - secrets
+                  - harnesses
         '400':
           $ref: '#/components/responses/Error'
         '403':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /skills:
+    get:
+      tags: [Skills]
+      operationId: listSkills
+      summary: List the skills in the skills repository
+      description: >
+        The directories of the skills directory (~/.agent_composer/skills, or AGC_SKILLS_DIR)
+        whose name is a slug, sorted, read on every request. A missing directory lists nothing.
+      responses:
+        '200':
+          description: The skills.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillList'
+        '500':
+          $ref: '#/components/responses/Error'
+  /skills/{name}:
+    get:
+      tags: [Skills]
+      operationId: getSkill
+      summary: Read a skill's SKILL.md
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The skill's SKILL.md, as it is on disk.
+          content:
+            text/markdown:
+              schema:
+                type: string
+        '404':
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
@@ -1750,7 +2057,9 @@ paths:
         POST /schedules/{id}/run, failed ones included (see the schedule's last_error);
         `agent.state` (AgentStateEvent) on every status change of a persistent agent's home
         (as its sandbox.status), and when the agent is created, kept, woken for the first time
-        and deleted (state `deleted`).
+        and deleted (state `deleted`);
+        `channel.archived` (ChannelArchivedEvent) when agc rest archives the channel of a task
+        done longer than archive_done ago (ADR 0005 "Archived channels").
       responses:
         '200':
           description: The stream.
@@ -1761,7 +2070,7 @@ paths:
                 description: >
                   Frames as described above; each data is one of the event schemas
                   (TaskCreatedEvent, TaskDoneEvent, SandboxStatusEvent, MessagePostedEvent, ScheduleRanEvent,
-                  AgentStateEvent).
+                  AgentStateEvent, ChannelArchivedEvent).
         '500':
           $ref: '#/components/responses/Error'
   /msg/post:
@@ -1875,7 +2184,8 @@ paths:
           in: query
           description: >
             Only questions in the channels this person reads: their inbox `#<name>` and `#<task>`
-            for every task they manage or own.
+            for every task they manage (not those they only own; a task's manager raises to its
+            owner in their inbox).
           schema:
             type: string
       responses:
@@ -1949,6 +2259,13 @@ paths:
           $ref: '#/components/responses/MsgError'
 components:
   parameters:
+    AccountNameParam:
+      name: name
+      in: path
+      required: true
+      description: Account name, e.g. work.
+      schema:
+        type: string
     AgentNameParam:
       name: name
       in: path
@@ -2570,7 +2887,12 @@ components:
           type: array
           items:
             type: string
-          description: NAME or NAME@host1,host2.
+          description: >
+            NAME, NAME@host1,host2, or an account, NAME as ENV[@host1,host2]: NAME is the entry
+            in secrets.env and ENV ([A-Z_][A-Z0-9_]*) the guest variable it is handed to, such as
+            ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN. Without as, ENV is NAME. Hosts come from the
+            entry, else the hosts agc knows for ENV, else those for NAME. An account may not share
+            its ENV with another entry. The guest holds a placeholder, never the value (ADR 0004).
         env:
           type: object
           additionalProperties:
@@ -2585,6 +2907,15 @@ components:
           items:
             type: string
           description: '#name or #name:read.'
+        skills:
+          type: array
+          items:
+            type: string
+          description: >
+            Names of skills in agc's skills repository (GET /skills). Each is written into
+            ~/.claude/skills/<name>/ and ~/.codex/skills/<name>/ on every boot and start,
+            replacing what was there; a name that is not in the repository is refused before
+            boot (ADR 0008 "Skills").
     Task:
       type: object
       properties:
@@ -2729,8 +3060,8 @@ components:
         owner:
           type: string
           description: >
-            The human the task answers to, a messaging name. Defaults to the configured owner; its
-            sandboxes may post in #<owner>.
+            The human the task answers to, a messaging name. Defaults to the configured owner; the
+            task's manager, not its sandboxes, raises to them what only they can decide.
         for:
           type: string
         notify:
@@ -2753,6 +3084,15 @@ components:
           description: >
             Optional. In a request any list and `changes` may be left out; they read as empty
             and absent. 400 when it breaks a rule of ADR 0010 "Delivery report".
+        files:
+          type: object
+          maxProperties: 8
+          description: >
+            The PNG of each of the report's `shots`, base64, under the shot's label: one per
+            shot and no other, each a PNG of at most 2 MB (2097152 bytes); 400 otherwise.
+          additionalProperties:
+            type: string
+            format: byte
       required:
         - summary
     DeliveryReport:
@@ -2792,12 +3132,40 @@ components:
           items:
             type: string
             minLength: 1
+        shots:
+          type: array
+          maxItems: 8
+          description: >
+            Screenshots of what the change looks like, `before` and `after` for a change a person
+            sees; absent when the delivery has none. Labels are unique.
+          items:
+            $ref: '#/components/schemas/DeliveryShot'
       required:
         - criteria
         - changes
         - checks
         - left_out
         - needs
+    DeliveryShot:
+      type: object
+      properties:
+        label:
+          type: string
+          pattern: '^[a-z][a-z0-9-]{0,62}$'
+          description: A slug, `before` or `after` for a UI change.
+        file:
+          type: string
+          description: >
+            In a request, the PNG's path where the agent took it (ends in .png); on a task,
+            `<label>.png`, the name agc keeps it under.
+        url:
+          type: string
+          description: >
+            Set by agc on a task, never sent: where the shot is served, under `AGC_PUBLIC_URL`
+            when agc has one, else the root-relative path /api/tasks/<task>/shots/<label>.png.
+      required:
+        - label
+        - file
     DeliveryCriterion:
       type: object
       properties:
@@ -2911,6 +3279,15 @@ components:
             is renamed.
         spec:
           $ref: '#/components/schemas/TaskSpec'
+        disk:
+          type: string
+          description: >
+            The size of the sandbox's private /home/agent disk, the spec's disk or the default 20G,
+            such as 20G or 512M.
+        disk_mib:
+          type: integer
+          format: int64
+          description: The same size in MiB, to sum across sandboxes.
         command:
           type: string
         instructions:
@@ -2959,6 +3336,8 @@ components:
         - agent
         - name
         - spec
+        - disk
+        - disk_mib
         - command
         - instructions
         - volume
@@ -3025,6 +3404,19 @@ components:
           $ref: '#/components/schemas/Agent'
       required:
         - agent
+    ChannelArchivedEvent:
+      type: object
+      description: Data of `channel.archived`.
+      properties:
+        channel:
+          type: string
+          example: '#fix-login'
+        archived_at:
+          type: string
+          format: date-time
+      required:
+        - channel
+        - archived_at
     ScheduleRanEvent:
       type: object
       description: Data of `schedule.ran`.
@@ -3228,6 +3620,66 @@ components:
         - dirty
         - unpushed
         - checked_at
+    SandboxGCRequest:
+      type: object
+      properties:
+        dry_run:
+          type: boolean
+          description: Only list what would be deleted.
+        keep:
+          type: string
+          description: >
+            Grace period after the task is done, a Go duration such as 48h, or 0. Empty is the
+            configured keep_done, or 24h when keep_done is 0 (the collector off).
+    SandboxGCItem:
+      type: object
+      properties:
+        name:
+          type: string
+        task:
+          type: string
+        done_for:
+          type: string
+          description: How long ago the task was done, such as 26h3m0s.
+        disk:
+          type: string
+        disk_mib:
+          type: integer
+          format: int64
+        error:
+          type: string
+          description: Why the delete failed; absent when it did not.
+      required:
+        - name
+        - task
+        - done_for
+        - disk
+        - disk_mib
+    SandboxGCResponse:
+      type: object
+      properties:
+        dry_run:
+          type: boolean
+        keep:
+          type: string
+          description: The grace period applied, such as 24h0m0s.
+        sandboxes:
+          type: array
+          description: What was deleted (or, on a dry run, would be), with any failed delete.
+          items:
+            $ref: '#/components/schemas/SandboxGCItem'
+        freed:
+          type: integer
+          description: How many sandboxes were deleted; 0 on a dry run.
+        freed_disk:
+          type: string
+          description: The disk of the deleted sandboxes, such as 40G.
+      required:
+        - dry_run
+        - keep
+        - sandboxes
+        - freed
+        - freed_disk
     DeleteSandboxResponse:
       type: object
       properties:
@@ -3276,6 +3728,20 @@ components:
       required:
         - name
         - yaml
+    HarnessReads:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Harness id, as in runtime/harnesses/catalog.go (codex_cli, claude_code, pi).
+        reads:
+          type: array
+          description: Variables the harness takes its credentials from, in order of preference; empty when none is fixed.
+          items:
+            type: string
+      required:
+        - id
+        - reads
     Secret:
       type: object
       properties:
@@ -4072,6 +4538,10 @@ components:
         model:
           type: string
           description: Empty takes the template's (for its harness), then the default.
+        effort:
+          type: string
+          enum: ['', low, medium, high, xhigh]
+          description: Reasoning effort; empty takes the template's, else the harness's default.
       required:
         - role
     KeepAgentRequest:
@@ -4085,6 +4555,18 @@ components:
           description: Omitted keeps the role.
       required:
         - name
+    AgentRule:
+      type: object
+      description: A rule an agent follows, from the knowledge directory (ADR 0006).
+      properties:
+        id:
+          type: string
+        rule:
+          type: string
+          description: The rule's text as written.
+      required:
+        - id
+        - rule
     AgentTask:
       type: object
       properties:
@@ -4124,6 +4606,10 @@ components:
           type: string
         model:
           type: string
+        effort:
+          type: string
+          enum: ['', low, medium, high, xhigh]
+          description: The harness's reasoning effort, from the template or the create request; empty for the harness's default.
         owner:
           type: string
         state:
@@ -4136,6 +4622,13 @@ components:
           type: string
           nullable: true
           description: The home sandbox's name; null before the first wake.
+        rules:
+          type: array
+          description: >
+            The rules its template names (ADR 0016 item 2), in template order, read from the
+            knowledge directory on the request; [] when it names none or they cannot be read.
+          items:
+            $ref: '#/components/schemas/AgentRule'
         tasks:
           type: array
           description: The tasks whose manager is the agent.
@@ -4144,7 +4637,7 @@ components:
         conversations:
           type: array
           description: >
-            The DM channel @<owner>/<name> first, then #<task> for each of its tasks, then any
+            The agent's inbox #<name> first, then #<task> for each of its tasks, then any
             other channel the agent has posted in, newest first.
           items:
             $ref: '#/components/schemas/AgentConversation'
@@ -4153,6 +4646,13 @@ components:
           format: date-time
           nullable: true
           description: The newest message among its conversations, or its last wake.
+        skills:
+          type: array
+          items:
+            type: string
+          description: >
+            The template's sandbox.skills, read on every request; empty when it names none or
+            cannot be read (ADR 0016 item 2).
         created_at:
           type: string
           format: date-time
@@ -4162,13 +4662,38 @@ components:
         - kept
         - harness
         - model
+        - effort
         - owner
         - state
         - home
+        - rules
         - tasks
         - conversations
+        - skills
         - last_active_at
         - created_at
+    Skill:
+      type: object
+      description: A skill of the skills repository (ADR 0008 "Skills").
+      properties:
+        name:
+          type: string
+          description: The directory's name, a slug such as rtsdesign.
+        description:
+          type: string
+          description: The description in the SKILL.md frontmatter; empty when absent.
+      required:
+        - name
+        - description
+    SkillList:
+      type: object
+      properties:
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/Skill'
+      required:
+        - skills
     AgentList:
       type: object
       properties:
@@ -4270,6 +4795,181 @@ components:
           $ref: '#/components/schemas/ScheduleTemplate'
         poll:
           $ref: '#/components/schemas/SchedulePoll'
+    Account:
+      type: object
+      description: An account, never its value (ADR 0018).
+      properties:
+        name:
+          type: string
+          pattern: '^[a-z0-9-]{1,32}$'
+        provider:
+          $ref: '#/components/schemas/AccountProvider'
+        kind:
+          $ref: '#/components/schemas/AccountKind'
+        secret:
+          type: string
+          description: The secrets.env name holding the value, ACCOUNT_<NAME>.
+        email:
+          type: string
+          description: The account's email, empty when not given.
+        default:
+          type: boolean
+          description: Whether this is its provider's default account.
+        created_at:
+          type: string
+          format: date-time
+        signed_in_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the account last signed in through agc (ADR 0018 "Sign-in"), null when it has no login.
+        usage:
+          allOf:
+            - $ref: '#/components/schemas/AccountUsage'
+          nullable: true
+          description: >
+            Usage for anthropic oauth accounts once the usage fetcher is wired, else null. `error`
+            starts with "inference-only token" when the account's own token cannot read usage, and
+            with "sign-in expired" when its login was refused: both ask for a sign-in.
+      required:
+        - name
+        - provider
+        - kind
+        - secret
+        - email
+        - default
+        - created_at
+        - signed_in_at
+        - usage
+    AccountProvider:
+      type: string
+      enum: [anthropic, openai]
+    AccountKind:
+      type: string
+      enum: [oauth, api_key]
+    AccountUsage:
+      type: object
+      properties:
+        updated_at:
+          type: string
+          format: date-time
+        windows:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountUsageWindow'
+        error:
+          type: string
+          description: Why usage could not be read, empty when it was.
+      required:
+        - updated_at
+        - windows
+        - error
+    AccountUsageWindow:
+      type: object
+      properties:
+        id:
+          type: string
+          description: session, weekly or a model's slug.
+        label:
+          type: string
+        used:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: The share used.
+        resets_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - id
+        - label
+        - used
+        - resets_at
+    AccountProviderView:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/AccountProvider'
+        harnesses:
+          type: array
+          description: The harnesses its accounts serve.
+          items:
+            type: string
+        variables:
+          type: object
+          description: The guest variable each kind of account is handed to; oauth is absent for a provider without that kind.
+          properties:
+            oauth:
+              type: string
+            api_key:
+              type: string
+          required:
+            - api_key
+      required:
+        - id
+        - harnesses
+        - variables
+    AccountList:
+      type: object
+      properties:
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Account'
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountProviderView'
+      required:
+        - accounts
+        - providers
+    CreateAccountRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          pattern: '^[a-z0-9-]{1,32}$'
+        provider:
+          $ref: '#/components/schemas/AccountProvider'
+        kind:
+          $ref: '#/components/schemas/AccountKind'
+        value:
+          type: string
+          writeOnly: true
+          description: The token or key, written to secrets.env and never returned.
+        email:
+          type: string
+      required:
+        - name
+        - provider
+        - kind
+        - value
+    AccountSignin:
+      type: object
+      description: A begun sign-in.
+      properties:
+        url:
+          type: string
+          description: The authorize page to open.
+        expires_at:
+          type: string
+          format: date-time
+          description: When the sign-in lapses and must be begun again.
+      required:
+        - url
+        - expires_at
+    CompleteAccountSigninRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          writeOnly: true
+          description: >
+            What the page showed after signing in, `code#state`; a bare code is accepted while one
+            sign-in is pending. Never returned or logged.
+      required:
+        - code
     Schedule:
       type: object
       properties:

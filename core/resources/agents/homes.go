@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	"github.com/vanclief/ez"
 
@@ -20,10 +21,13 @@ type homes struct {
 var _ sandboxes.Homes = homes{}
 
 // HomeAgent answers GET /agent on a home's socket: the agent, the channels
-// it reads now, and how long it may be idle before it sleeps.
+// it reads now, the channels outside those where it started a thread
+// (Asked: only the replies in its threads there are turns), and how long
+// it may be idle before it sleeps.
 type HomeAgent struct {
 	Agent    *AgentView `json:"agent"`
 	Channels []string   `json:"channels"`
+	Asked    []string   `json:"asked"`
 	Idle     string     `json:"idle"`
 }
 
@@ -35,7 +39,7 @@ func (h homes) agentOf(ctx context.Context, home string) (*agent.Agent, *Templat
 		return nil, nil, ez.Wrap(err)
 	}
 
-	tmpl, err := LoadTemplate(h.api.dir, record.Role)
+	tmpl, err := h.api.template(record.Role)
 	if err != nil {
 		return record, nil, nil
 	}
@@ -44,8 +48,12 @@ func (h homes) agentOf(ctx context.Context, home string) (*agent.Agent, *Templat
 }
 
 // Caller is who a home speaks as in messaging: its agent, by the home's
-// name, granted the channels it reads now (Channels). The main role needs
-// no grants: messaging lets it in everywhere.
+// name, granted the channels it reads now (Channels) and, like a task
+// sandbox (ADR 0009 item 5), its owner's inbox #<owner>, so it can ask the
+// owner there, and the channels where it started a thread (Asked), so it
+// reads the replies and answers in the thread. The inbox is not in Reads:
+// only a reply in a thread the agent started there wakes it. The main
+// role needs no grants: messaging lets it in everywhere.
 func (h homes) Caller(ctx context.Context, home string) (messaging.Caller, error) {
 	record, tmpl, err := h.agentOf(ctx, home)
 	if err != nil {
@@ -57,9 +65,19 @@ func (h homes) Caller(ctx context.Context, home string) (messaging.Caller, error
 		return messaging.Caller{}, ez.Wrap(err)
 	}
 
+	asked, err := h.api.Asked(ctx, record, channels)
+	if err != nil {
+		return messaging.Caller{}, ez.Wrap(err)
+	}
+	channels = append(channels, asked...)
+
 	grants := []messaging.Grant{}
 	for _, channel := range channels {
 		grants = append(grants, messaging.Grant{Channel: channel})
+	}
+
+	if record.Owner != "" && !slices.Contains(channels, "#"+record.Owner) {
+		grants = append(grants, messaging.Grant{Channel: "#" + record.Owner})
 	}
 
 	return messaging.Caller{Agent: home, Grants: grants}, nil
@@ -81,12 +99,17 @@ func (h homes) Agent(ctx context.Context, home string) (any, error) {
 		return nil, ez.Wrap(err)
 	}
 
+	asked, err := h.api.Asked(ctx, record, channels)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
 	idle := record.Idle
 	if idle == "" {
 		idle = "15m"
 	}
 
-	return &HomeAgent{Agent: view, Channels: channels, Idle: idle}, nil
+	return &HomeAgent{Agent: view, Channels: channels, Asked: asked, Idle: idle}, nil
 }
 
 func (h homes) Sleep(ctx context.Context, home string) error {

@@ -1,7 +1,9 @@
 package task
 
 import (
+	"bytes"
 	"fmt"
+	"path"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -13,6 +15,10 @@ import (
 const (
 	MaxReportEntries = 50
 	MaxReportNote    = 500
+	// MaxShots is how many screenshots a delivery may carry, and
+	// MaxShotBytes how large each PNG may be.
+	MaxShots     = 8
+	MaxShotBytes = 2 << 20
 )
 
 // Values of Criterion.Met.
@@ -22,7 +28,13 @@ const (
 	MetPartly = "partly"
 )
 
-var shaRegex = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
+var (
+	shaRegex   = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
+	labelRegex = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
+)
+
+// pngSignature starts every PNG file.
+var pngSignature = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
 
 // Report is what a delivery says against the task's criteria, so the
 // reviewer judges without reading the channel (ADR 0010, "Delivery
@@ -36,6 +48,22 @@ type Report struct {
 	LeftOut []LeftOut `json:"left_out"`
 	// Needs is what the agent needs the reviewer to decide.
 	Needs []string `json:"needs"`
+	// Shots are screenshots of what the change looks like, before and
+	// after; a UI change carries them (ADR 0010, "Delivery report").
+	Shots []Shot `json:"shots,omitempty"`
+}
+
+// Shot is one screenshot of a delivery. When sent, File is the PNG's path
+// where the agent took it; the PNG itself travels next to the report, in
+// the delivery's files under Label. On the stored report File is the name
+// agc keeps it under and URL where it is served.
+type Shot struct {
+	// Label is a slug, unique per report: before and after for a UI
+	// change.
+	Label string `json:"label"`
+	File  string `json:"file"`
+	// URL is set by agc on the stored report, never sent.
+	URL string `json:"url,omitempty"`
 }
 
 // Criterion is the agent's verdict on one accept criterion.
@@ -103,6 +131,13 @@ func (r Report) Normalized() Report {
 
 	for _, n := range r.Needs {
 		out.Needs = append(out.Needs, strings.TrimSpace(n))
+	}
+
+	for _, shot := range r.Shots {
+		if out.Shots == nil {
+			out.Shots = make([]Shot, 0, len(r.Shots))
+		}
+		out.Shots = append(out.Shots, Shot{Label: strings.TrimSpace(shot.Label), File: strings.TrimSpace(shot.File), URL: strings.TrimSpace(shot.URL)})
 	}
 
 	return out
@@ -175,7 +210,71 @@ func (r Report) Validate() error {
 		}
 	}
 
+	return validateShots(n.Shots)
+}
+
+func validateShots(shots []Shot) error {
+	if len(shots) > MaxShots {
+		return invalid("report shots has %d entries, at most %d", len(shots), MaxShots)
+	}
+
+	seen := map[string]bool{}
+	for i, shot := range shots {
+		if !labelRegex.MatchString(shot.Label) {
+			return invalid("report shots[%d].label is %q: use a slug such as before or after (lowercase letters, digits and dashes)", i, shot.Label)
+		}
+		if seen[shot.Label] {
+			return invalid("report shots[%d].label %q is used twice: give each shot its own label", i, shot.Label)
+		}
+		seen[shot.Label] = true
+
+		if !strings.EqualFold(path.Ext(shot.File), ".png") {
+			return invalid("report shots[%d].file is %q: a shot is a PNG file (.png)", i, shot.File)
+		}
+	}
+
 	return nil
+}
+
+// ValidateShotFiles checks the files a delivery carries against the
+// report's shots: one PNG of at most MaxShotBytes per shot, under its
+// label, and nothing else.
+func (r Report) ValidateShotFiles(files map[string][]byte) error {
+	shots := r.Normalized().Shots
+	labels := map[string]bool{}
+
+	for _, shot := range shots {
+		labels[shot.Label] = true
+
+		data, ok := files[shot.Label]
+		if !ok {
+			return invalid("shot %q has no file: send the PNG under files.%s", shot.Label, shot.Label)
+		}
+		if len(data) > MaxShotBytes {
+			return invalid("shot %q is %d bytes, at most %d (2 MB): take a smaller screenshot", shot.Label, len(data), MaxShotBytes)
+		}
+		if !IsPNG(data) {
+			return invalid("shot %q is not a PNG: send a .png screenshot", shot.Label)
+		}
+	}
+
+	for label := range files {
+		if !labels[label] {
+			return invalid("files has %q, which no shot in the report names", label)
+		}
+	}
+
+	return nil
+}
+
+// IsShotLabel reports whether label is a valid shot label, a slug.
+func IsShotLabel(label string) bool {
+	return labelRegex.MatchString(label)
+}
+
+// IsPNG reports whether data starts with the PNG signature.
+func IsPNG(data []byte) bool {
+	return bytes.HasPrefix(data, pngSignature)
 }
 
 // ValidateFor checks the report against the task's accept criteria: one

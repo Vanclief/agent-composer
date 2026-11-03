@@ -35,6 +35,9 @@ export type Message = {
   kind?: MessageKind
   body: string
   created_at: string
+  // A person posted it (not an agent, not agc). Absent on servers that
+  // predate it.
+  human?: boolean
 }
 
 export type MessageKind = 'message' | 'question'
@@ -53,7 +56,7 @@ export type QuestionsParams = {
   // 1: only questions nobody answered yet.
   open?: 1
   // Only questions addressed to this person: in their inbox, or in task
-  // channels they manage or own.
+  // channels they manage (not those they only own).
   for?: string
 }
 

@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -53,6 +54,10 @@ type ChannelInfo struct {
 	ReadOnly bool   `json:"read_only"`
 	LastID   int64  `json:"last_id"`
 	Count    int    `json:"count"`
+	// ArchivedAt is when the channel was archived (ADR 0005 "Archived
+	// channels"); only archived channels have it, and they are listed only
+	// when asked for.
+	ArchivedAt *time.Time `json:"archived_at,omitempty"`
 }
 
 // PostHook runs after every message is stored, with the stored message.
@@ -227,11 +232,72 @@ func (s *Service) Join(ctx context.Context, caller Caller, name string) (*msgmod
 	}
 
 	err = p.Insert(ctx, s.db)
+	if err == nil {
+		return p, nil
+	}
+
+	joinErr := s.joinError(ctx, name, err)
+	if caller.Human || caller.Agent == "" || ez.ErrorCode(joinErr) != ez.ECONFLICT {
+		return nil, joinErr
+	}
+
+	// A persistent agent's home joins as the agent's name whatever the
+	// home is called (ADR 0016 item 6), so it takes the name over from a
+	// participant left behind by a home that is gone or stopped.
+	took, err := s.takeStale(ctx, name)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+	if !took {
+		return nil, joinErr
+	}
+
+	err = p.Insert(ctx, s.db)
 	if err != nil {
 		return nil, s.joinError(ctx, name, err)
 	}
 
 	return p, nil
+}
+
+// takeStale releases name from the active participant holding it when
+// that participant is an agent presence says is absent: its sandbox is
+// gone or not running. A human's name, agc's and a running agent's are
+// never taken; without presence nothing is.
+func (s *Service) takeStale(ctx context.Context, name string) (bool, error) {
+	s.mu.Lock()
+	presence := s.presence
+	s.mu.Unlock()
+
+	if presence == nil {
+		return false, nil
+	}
+
+	holder := &msgmodels.Participant{}
+
+	err := s.db.NewSelect().Model(holder).Where("active_name = ?", name).Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, ez.Wrap(err)
+	}
+
+	if holder.Human || isSystem(holder) {
+		return false, nil
+	}
+
+	now := s.now()
+	if s.online(ctx, presence, holder, now, now) {
+		return false, nil
+	}
+
+	err = holder.Leave(ctx, s.db)
+	if err != nil {
+		return false, ez.Wrap(err)
+	}
+
+	return true, nil
 }
 
 // joinError tells a taken name from any other insert failure. The
@@ -330,8 +396,24 @@ func (s *Service) Post(ctx context.Context, caller Caller, participantID, channe
 		return nil, ez.New(ez.ENOTAUTHORIZED, fmt.Sprintf("participant %s does not belong to this caller", participantID), nil)
 	}
 
+	err = s.inboxPost(ctx, caller, p, channel, replyTo, kind)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
 	if p.LeftAt != nil {
 		return nil, ez.New(ez.EINVALID, fmt.Sprintf("participant @%s has left, join again", p.Name), nil)
+	}
+
+	if !isSystem(p) {
+		archived, err := msgmodels.ChannelArchived(ctx, s.db, channel)
+		if err != nil {
+			return nil, ez.Wrap(err)
+		}
+
+		if archived {
+			return nil, ez.New(ez.ENOTAUTHORIZED, "channel archived", nil)
+		}
 	}
 
 	if replyTo != nil {
@@ -346,6 +428,58 @@ func (s *Service) Post(ctx context.Context, caller Caller, participantID, channe
 	}
 
 	return s.insert(ctx, p, channel, body, replyTo, kind)
+}
+
+// inboxPost is the inbox rule (ADR 0005 "Inbox"): in an inbox #<name>, a
+// channel named after a human participant or a persistent agent (ADR
+// 0016), a caller other than a person or that agent may post only a
+// question or a reply in a thread. Notes go in #<task>, so the inbox holds
+// only what needs its holder. A person's posts and agc's (PostAsSystem)
+// never come here.
+func (s *Service) inboxPost(ctx context.Context, caller Caller, p *msgmodels.Participant, channel string, replyTo *int64, kind string) error {
+	if caller.Human {
+		return nil
+	}
+
+	if p.Agent != "" && channel == "#"+p.Name {
+		return nil
+	}
+
+	if kind == msgmodels.KindQuestion || replyTo != nil {
+		return nil
+	}
+
+	inbox, err := s.isInbox(ctx, channel)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	if !inbox {
+		return nil
+	}
+
+	return ez.New(ez.ENOTAUTHORIZED, "only questions and answers go in a person's inbox; post notes in #<task>", nil)
+}
+
+// isInbox reports whether channel is #<name> for a human participant or a
+// persistent agent's (agent set), present or departed. A task's
+// participant has task set and agent empty, so #<task> is never an inbox.
+func (s *Service) isInbox(ctx context.Context, channel string) (bool, error) {
+	name, found := strings.CutPrefix(channel, "#")
+	if !found {
+		return false, nil
+	}
+
+	exists, err := s.db.NewSelect().Model((*msgmodels.Participant)(nil)).Where("name = ?", name).
+		WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Where("human = ?", true).WhereOr("agent <> ''")
+		}).
+		Exists(ctx)
+	if err != nil {
+		return false, ez.Wrap(err)
+	}
+
+	return exists, nil
 }
 
 // insert stores a message from p, wakes the waiters and runs the hooks.
@@ -381,6 +515,34 @@ func (s *Service) insert(ctx context.Context, p *msgmodels.Participant, channel,
 	}
 
 	return m, nil
+}
+
+// ArchivedEvent is the data of channel.archived.
+type ArchivedEvent struct {
+	Channel    string    `json:"channel"`
+	ArchivedAt time.Time `json:"archived_at"`
+}
+
+// Archive archives channel at at (ADR 0005 "Archived channels") and
+// publishes channel.archived. It answers false, publishing nothing, when
+// the channel was already archived. Nothing un-archives a channel.
+func (s *Service) Archive(ctx context.Context, channel string, at time.Time) (bool, error) {
+	added, err := msgmodels.ArchiveChannel(ctx, s.db, channel, at)
+	if err != nil {
+		return false, ez.Wrap(err)
+	}
+
+	if !added {
+		return false, nil
+	}
+
+	s.mu.Lock()
+	bus := s.events
+	s.mu.Unlock()
+
+	bus.Publish(events.Event{Type: events.ChannelArchived, Data: ArchivedEvent{Channel: channel, ArchivedAt: at.UTC()}})
+
+	return true, nil
 }
 
 // OnPost registers hook to run after every stored message, in the
@@ -575,8 +737,38 @@ func (s *Service) WaitChannels(ctx context.Context, caller Caller, channels []st
 
 // Channels lists the channels the caller may read. A Task sees its own
 // channel and its grants, even before anyone posts. A human sees every
-// channel that has messages.
-func (s *Service) Channels(ctx context.Context, caller Caller) ([]ChannelInfo, error) {
+// channel that has messages. Archived channels are left out unless
+// archived, then they carry ArchivedAt.
+func (s *Service) Channels(ctx context.Context, caller Caller, archived bool) ([]ChannelInfo, error) {
+	channels, err := s.channels(ctx, caller)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	archives, err := msgmodels.ArchivedChannels(ctx, s.db)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	listed := []ChannelInfo{}
+	for _, channel := range channels {
+		at, ok := archives[channel.Channel]
+		if ok && !archived {
+			continue
+		}
+
+		if ok {
+			channel.ArchivedAt = &at
+		}
+
+		listed = append(listed, channel)
+	}
+
+	return listed, nil
+}
+
+// channels is Channels before archived channels are marked or left out.
+func (s *Service) channels(ctx context.Context, caller Caller) ([]ChannelInfo, error) {
 	err := checkCaller(caller)
 	if err != nil {
 		return nil, ez.Wrap(err)

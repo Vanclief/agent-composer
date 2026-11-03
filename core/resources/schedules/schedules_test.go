@@ -20,6 +20,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	"github.com/vanclief/agent-composer/messaging"
+	accountmodels "github.com/vanclief/agent-composer/models/account"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 	schedulemodels "github.com/vanclief/agent-composer/models/schedule"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
@@ -53,8 +54,10 @@ func newTestEnv(t *testing.T) *testEnv {
 	tables := []interface{}{
 		(*taskmodels.Task)(nil),
 		(*taskmodels.Sandbox)(nil),
+		(*accountmodels.Account)(nil),
 		(*msgmodels.Participant)(nil),
 		(*msgmodels.Message)(nil),
+		(*msgmodels.ChannelArchive)(nil),
 		(*schedulemodels.Schedule)(nil),
 		(*schedulemodels.Item)(nil),
 	}
@@ -438,6 +441,7 @@ func TestCreateRejects(t *testing.T) {
 		{"command", func(r *CreateRequest) { r.Poll.Command = " " }, "poll.command is required"},
 		{"secret", func(r *CreateRequest) { r.Poll.Secrets = []string{"github_token"} }, "secret name"},
 		{"secret-hosts", func(r *CreateRequest) { r.Poll.Secrets = []string{"GITHUB_TOKEN@api.github.com"} }, "runs on the host"},
+		{"secret-as", func(r *CreateRequest) { r.Poll.Secrets = []string{"GITHUB_BOT as GITHUB_TOKEN"} }, `"GITHUB_BOT as GITHUB_TOKEN" renames the secret`},
 		{"syntax", func(r *CreateRequest) { r.Task.Brief = "Review {{.url" }, "task.brief is not a valid template"},
 		{"manager", func(r *CreateRequest) { r.Task.Manager = "" }, "manager is required"},
 		{"brief", func(r *CreateRequest) { r.Task.Brief = "" }, "brief is required"},

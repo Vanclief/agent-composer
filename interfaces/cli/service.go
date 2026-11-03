@@ -31,7 +31,7 @@ type taskService interface {
 	CreateTask(ctx context.Context, request *tasks.CreateRequest) (*tasks.TaskView, error)
 	ListTasks(ctx context.Context) (*tasks.ListResponse, error)
 	GetTask(ctx context.Context, ref string) (*tasks.TaskView, error)
-	DeliverTask(ctx context.Context, ref string, summary string, report *taskmodels.Report) (*tasks.TaskView, error)
+	DeliverTask(ctx context.Context, ref string, summary string, report *taskmodels.Report, files map[string][]byte) (*tasks.TaskView, error)
 	AcceptTask(ctx context.Context, ref string, by string) (*tasks.TaskView, error)
 	RejectTask(ctx context.Context, ref string, by string, why string) (*tasks.TaskView, error)
 	DeleteTask(ctx context.Context, ref string) (*tasks.DeleteResponse, error)
@@ -42,6 +42,9 @@ type taskService interface {
 	StopSandbox(ctx context.Context, ref string) (*sandboxes.SandboxView, error)
 	StartSandbox(ctx context.Context, ref string) (*sandboxes.SandboxView, error)
 	DeleteSandbox(ctx context.Context, ref string) (*sandboxes.DeleteResponse, error)
+	// GCSandboxes deletes, or with DryRun lists, the stopped sandboxes of
+	// tasks done longer than Keep ago (ADR 0008).
+	GCSandboxes(ctx context.Context, request *sandboxes.GCRequest) (*sandboxes.GCResponse, error)
 
 	ListSpecs(ctx context.Context) (*tasks.ListSpecsResponse, error)
 	GetSpec(ctx context.Context, name string) (*task.Saved, error)
@@ -169,8 +172,8 @@ func (s localService) GetTask(ctx context.Context, ref string) (*tasks.TaskView,
 	return s.api.Get(ctx, nil, &tasks.GetRequest{Name: ref})
 }
 
-func (s localService) DeliverTask(ctx context.Context, ref string, summary string, report *taskmodels.Report) (*tasks.TaskView, error) {
-	return s.api.Deliver(ctx, nil, &tasks.DeliverRequest{Name: ref, Summary: summary, Report: report})
+func (s localService) DeliverTask(ctx context.Context, ref string, summary string, report *taskmodels.Report, files map[string][]byte) (*tasks.TaskView, error) {
+	return s.api.Deliver(ctx, nil, &tasks.DeliverRequest{Name: ref, Summary: summary, Report: report, Files: files})
 }
 
 func (s localService) AcceptTask(ctx context.Context, ref string, by string) (*tasks.TaskView, error) {
@@ -207,6 +210,10 @@ func (s localService) StartSandbox(ctx context.Context, ref string) (*sandboxes.
 
 func (s localService) DeleteSandbox(ctx context.Context, ref string) (*sandboxes.DeleteResponse, error) {
 	return s.api.Sandboxes.Delete(ctx, nil, &sandboxes.DeleteRequest{Name: ref})
+}
+
+func (s localService) GCSandboxes(ctx context.Context, request *sandboxes.GCRequest) (*sandboxes.GCResponse, error) {
+	return s.api.Sandboxes.GC(ctx, nil, request)
 }
 
 func (s localService) ListSpecs(ctx context.Context) (*tasks.ListSpecsResponse, error) {

@@ -48,11 +48,11 @@ func TestTurnsRoutes(t *testing.T) {
 		writeVolumeFile(t, dir, ".claude/projects/-home-agent-project/11111111-2222-4333-8444-555555555555.jsonl", claude, modified)
 		writeVolumeFile(t, dir, ".codex/sessions/2026/11/02/rollout-2026-11-02T11-00-00-019a0000-0000-7000-8000-000000000001.jsonl", codex, modified)
 	}
-	writeVolumeFile(t, filepath.Join(routes.volumes, "agc-reviewer-1"), "agc-sessions.json", `{"@franco/reviewer-1:root-1":"11111111-2222-4333-8444-555555555555"}`, modified)
+	writeVolumeFile(t, filepath.Join(routes.volumes, "agc-reviewer-1"), "agc-sessions.json", `{"#reviewer-1:root-1":"11111111-2222-4333-8444-555555555555"}`, modified)
 
 	routes.check(t, []routeCase{
 		{http.MethodGet, "/api/agents/reviewer-1/turns", "", http.StatusOK, `{"turns":[{"n":3,"started_at":"2026-11-02T11:00:02Z","ended_at":"2026-11-02T11:00:06Z","session":"019a0000-0000-7000-8000-000000000001","harness":"codex_cli","channel":"","thread":"","tool_calls":1,"answer":"hi","tokens":{"input":2100,"output":45,"cache_read":8000,"cache_write":0}},{"n":2,`},
-		{http.MethodGet, "/api/agents/reviewer-1/turns", "", http.StatusOK, `"channel":"@franco/reviewer-1","thread":"root-1","tool_calls":0,"answer":"0002-storage.md is newer."`},
+		{http.MethodGet, "/api/agents/reviewer-1/turns", "", http.StatusOK, `"channel":"#reviewer-1","thread":"root-1","tool_calls":0,"answer":"0002-storage.md is newer."`},
 		{http.MethodGet, "/api/agents/reviewer-1/turns", "", http.StatusOK, `"skipped":0}`},
 		{http.MethodGet, "/api/agents/reviewer-1/turns?limit=1&before=3", "", http.StatusOK, `{"turns":[{"n":2,`},
 		{http.MethodGet, "/api/agents/reviewer-1/turns/1", "", http.StatusOK, `"injected":"List the ADRs in docs/decisions.","tool_calls":[{"name":"Bash","args":{"command":"ls docs/decisions","description":"List ADRs"},"result":"0001-git.md\n0002-storage.md","truncated":false}],"answer":"There are two ADRs: 0001 and 0002.\nBoth are accepted."`},

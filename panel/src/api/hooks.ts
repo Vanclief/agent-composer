@@ -11,7 +11,9 @@ import { knowledge } from './knowledge'
 import { keepPreviousData } from '@tanstack/react-query'
 import { livePollMs } from './live'
 import { agents, type CreateAgentRequest, type KeepAgentRequest } from './agents'
+import { skills } from './agents'
 import { defaults } from './defaults'
+import { accounts, type CreateAccountRequest } from './accounts'
 
 // How often tasks, sandboxes and terminals refetch, so statuses stay live.
 export const TASKS_POLL_MS = 5000
@@ -55,6 +57,7 @@ export const queryKeys = {
   defaults: ['defaults'] as const,
   // Everyone who ever joined (?all=1), under the participants root.
   allParticipants: ['msg', 'participants', '*all'] as const,
+  accounts: ['accounts'] as const,
 }
 
 // ---------- tasks and sandboxes (ADR 0008) ----------
@@ -468,5 +471,72 @@ export function useAllParticipants() {
     queryFn: async ({ signal }) => (await msg.allParticipants(signal)).participants,
     refetchInterval: livePollMs,
     retry: false,
+  })
+}
+
+// ---------- secret accounts ----------
+
+// GET /api/secrets' harnesses: the variables each harness reads, preferred
+// first, so a secret no harness reads can stand in for one (NAME as ENV).
+// Typed here until docs/openapi.yaml has it; then schema.d.ts does.
+export type SecretHarness = { id: string; reads: string[] }
+
+export function useSecretHarnesses() {
+  return useQuery({
+    queryKey: [...queryKeys.secrets, 'harnesses'] as const,
+    queryFn: async () => {
+      const body = (await unwrap(api.GET('/secrets'))) as { harnesses?: SecretHarness[] }
+      return body.harnesses ?? []
+    },
+  })
+}
+
+// ---------- accounts (hand-typed in ./accounts) ----------
+
+// Every account and the providers they serve; usage changes slowly, so it
+// polls like the rest.
+export function useAccounts() {
+  return useQuery({
+    queryKey: queryKeys.accounts,
+    queryFn: ({ signal }) => accounts.list(signal),
+    refetchInterval: livePollMs,
+  })
+}
+
+function useAccountMutation<TVariables, TData>(mutationFn: (variables: TVariables) => Promise<TData>) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn,
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.accounts }),
+  })
+}
+
+// 201 with the account; the request carries the value once.
+export function useCreateAccount() {
+  return useAccountMutation((request: CreateAccountRequest) => accounts.create(request))
+}
+
+export function useMakeDefaultAccount() {
+  return useAccountMutation((name: string) => accounts.makeDefault(name))
+}
+
+// "System default": the provider has no default account.
+export function useClearDefaultAccount() {
+  return useAccountMutation((name: string) => accounts.clearDefault(name))
+}
+
+export function useRemoveAccount() {
+  return useAccountMutation((name: string) => accounts.remove(name))
+}
+
+// ---------- skills (sandbox-skills) ----------
+
+// One skill's markdown text, fetched when enabled (a skill tile opened).
+export function useSkillText(name: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['skills', name, 'text'] as const,
+    queryFn: ({ signal }) => skills.text(name, signal),
+    enabled: enabled && Boolean(name),
+    staleTime: 60_000,
   })
 }

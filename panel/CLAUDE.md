@@ -17,6 +17,7 @@ the panel stays conflict-free.
 | `src/features/terminals/` (`TerminalsTab`, `TerminalPane`, mounted by `SandboxPage`) + `tests/terminals.spec.ts`                                                                               | terminals feature   |
 | `src/features/messages/` (`MessagesTab`, `MessagesPage`, `ChannelRows`, `BrowsePage`, unread, follow, message toasts) + `tests/messages.spec.ts`, `tests/talk.spec.ts`, `tests/follow.spec.ts` | messages feature    |
 | `src/features/agents/` (`AgentsPage`, `AgentPage`, the New agent and Keep… dialogs) + `tests/agents.spec.ts`                                                                                   | agents feature      |
+| `src/features/accounts/` (`AccountsPage`, `ProviderCard`, the Add account and Manage Accounts… dialogs) + `tests/accounts.spec.ts`                                                             | accounts feature    |
 | everything else: `src/api/`, `src/components/`, `src/shell/`, `src/App.tsx`, `src/main.tsx`, `mock/`, `scripts/`, `tests/shell.spec.ts`, `tests/presence.spec.ts`, configs, `package.json`     | foundation (shared) |
 
 - The files in `src/features/` are placeholders. Replace them freely, but keep
@@ -51,6 +52,7 @@ Basename `/panel`. Defined in `src/App.tsx` (foundation).
 | `/compute/:name`                                         | `SandboxPage`: one sandbox (`:name` is the sandbox) with its terminals                                                                                           |
 | `/agents`                                                | `AgentsPage`: every persistent agent (Work); "New agent" makes a numbered one                                                                                    |
 | `/agents/:name`                                          | `AgentPage`: one agent, its home sandbox, tasks, conversations and identity                                                                                      |
+| `/accounts`                                              | `AccountsPage`: one card per provider (Work), its default account's usage, the switcher, Add and Manage                                                          |
 | `/messages`, `/messages/:channel`                        | Talk: `MessagesPage`; `:channel` has no `#` (`/messages/review-42` is `#review-42`); a DM keeps its `@`, encoded (`/messages/%40franco%2Fyc-pitch`)              |
 | `/messages/browse`                                       | `BrowsePage`: every channel, with Follow / Following (so a channel named `#browse` has no URL)                                                                   |
 
@@ -114,6 +116,9 @@ its area.
   lists sort attention, lit, idle, off (rows carry `data-tier`; off ones
   are muted). `Led({color})` is a small steady light for facts that are not
   a status (the rail's criteria and checks).
+  `StatusLed({status})` is a status where a pill does not fit (the Talk
+  sidebar's agent DMs): the pill's colors as a dot, the word verbatim as
+  its label and tooltip.
 - **Attention is personal (rtsdesign rule 14):** a task in `review` waits on
   its manager first (ADR 0010: the manager or the owner accepts); it waits on
   the owner when the owner is the manager or the manager never joined
@@ -303,7 +308,62 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   Sleep (awake; disabled as "Waking…" while waking), Keep…/Rename…, and the
   cards Home (`/compute/<home>`, or "Not woken yet"), Tasks
   (`/tasks/<name>`, status verbatim), Conversations (`/messages/<channel>`,
-  the DM `#<owner>` first) and Identity.
+  the agent's inbox `#<name>` first) and Identity.
+- What an agent is made of (agent-effort, sandbox-skills and agent-rules;
+  optional on `AgentView` so an older server still renders): `effort` (`low medium high xhigh max`, empty for the harness
+  default), `skills` (names) and `rules` (`{id, rule}`). Identity shows the
+  model with the effort as a dim mono chip (`agent-model`, `agent-effort`,
+  none when empty); the list's model readout adds `· <effort>` and nothing
+  else. The Skills card is a tile row (`button[data-skill]`, concept
+  `skill`) or "no skills"; a tile opens the skill's markdown as plain text
+  in a dialog (`skill-text`, `skills.text` / `useSkillText`,
+  `GET /api/skills/{name}`, never parsed). The Rules card is a row per rule
+  (`li[data-rule]`, the sentence, then the id dim mono), not clickable, or
+  "no rules". Mock: `orchestrator-1` has effort `high`, skills `rtsdesign`
+  and `go-style` and two rules; `ada` effort `medium`, one skill, one rule;
+  the others none. `GET /api/skills` lists both skills.
+
+## Accounts (ahead of accounts-model and accounts-usage)
+
+- `@/api/accounts`: `AccountView` (`name`, `provider` anthropic|openai,
+  `kind` oauth|api_key, `secret`, `email`, `default`, `created_at`, `usage`
+  (`{updated_at, windows, error}` or `null`; a window is `{id, label, used, resets_at}`, `used` 0..1),
+  `ProviderView` (`id`, `harnesses`, `variables`), hand-typed from the
+  accounts contract. Hooks: `useAccounts` (`{accounts, providers}`),
+  `useCreateAccount` (201; the request carries the value once),
+  `useMakeDefaultAccount` / `useClearDefaultAccount` (POST and DELETE
+  `/api/accounts/{name}/default`), `useRemoveAccount` (204; 409 while a
+  running sandbox's spec names it). No route returns a value.
+- `/accounts`: a card per provider (`data-card="<provider>"`), Claude for
+  anthropic, Codex for openai: "Updated <ago>" and one bar per window of the
+  default account (`used` as a whole percent, "Resets in 4h 11m" / "1d
+  19h"), "Usage not available for this account" when `usage` is null,
+  `usage.error` verbatim; the "<Provider> Account" dropdown (label: the
+  default's email, else its name, else "System default"; "Switch to":
+  System default, then each account, the active one disabled "Active", a
+  `token rejected…` one "Sign in again to use this account"), the switch
+  error verbatim under it; Add account and Manage Accounts… (Make default,
+  Remove with a confirm, refusals verbatim). Sign in opens Add pre-filled
+  and replaces the account (DELETE, then POST, then the default back if it
+  had it); the device-flow sign-in is a follow-up. The value field is a
+  password field cleared when the request goes, success or failure. The Eva look
+  for the page is `src/styles/eva-accounts.css` (keyed on `data-accounts-page`):
+  each card a cut plate with a ruled header strip, meters square and ticked,
+  filled with the system orange (a readout, not a status).
+- Sign-in (contract of accounts-signin, hand-typed in
+  `src/features/accounts/signin.ts` until the routes reach the OpenAPI spec:
+  `POST /api/accounts/{name}/signin` → `{url, expires_at}`,
+  `POST …/signin/complete {code}` and `DELETE …/signin` → the account with
+  `signed_in_at`). A default account whose `usage.error` starts with
+  `inference-only token` or `sign-in expired` shows "Sign in for usage" /
+  "Sign in again to use this account" with Sign in (`sign-in-line`,
+  `data-need` `usage`/`expired`) in place of the error; "Signed in <ago>"
+  (`signed-in`) under the bars. The dialog (`sign-in-dialog`) begins on
+  open, "Open the sign-in page" links to `url` in a new tab, the pasted
+  code (password field) goes to complete and is cleared either way; errors
+  verbatim with Start again; an `expires_at` passed says so. Manage
+  Accounts… rows of anthropic accounts show "Signed in <ago>" / "Not signed
+  in" (`sign-in-state`), Sign in and Sign out (confirm).
 
 ## Task page (`/tasks/:name`)
 
@@ -357,7 +417,7 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   criteria, brief, received and summary fold behind "Details"; in review or
   done the Review section and the summary stay out of the fold.
 
-## Talk: inbox, unread, notifications
+## Talk: Asks, DMs, Channels, unread, notifications
 
 - **Me:** the signed-in name is `useMyName()` (`src/features/messages/identity.ts`,
   localStorage `agc.panel.human`; with none stored, the server's owner from
@@ -372,40 +432,68 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   shows a join error in place). When the stored name differs from the
   server's owner the chip has an amber ring (`data-mismatch`) and the title
   "You are @test here, the server's owner is @franco".
-- **Sidebar** (`ChannelRows`), followed channels only: a pinned first row
-  "Inbox" (inbox icon, `data-testid="inbox-row"`) for `#<me>`, shown even
-  before it has a message; then the groups "Direct" (my DMs, `data-testid="dm-row"`,
-  each `@<other>` with the task name dim; `<other>` is the newest participant
-  neither me nor `agc`, else the task), "Tasks" (channels named after a task
-  from `useTasks`) and "Other" (`role="group"`, `aria-label` the group name);
-  last a dim "Browse channels…" row (`data-testid="browse-link"`) to
-  `/messages/browse`. Each row has an
+- **Sidebar** (`ChannelRows`), followed channels only, in three parts
+  (Franco, 2026-11-03: his conversations apart from channels, and "Inbox"
+  said nothing). First a pinned row "Asks" (question icon,
+  `data-testid="inbox-row"`) for `#<me>`, where questions waiting on me
+  arrive, shown even before it has a message, its badges every open
+  question for me wherever it was asked plus the inbox's unread. Then
+  "DMs": each followed agent inbox `#<agent>` (an agent from `useAgents`)
+  as `@<agent>` after its state light (`agent-dm-row`, `data-agent`;
+  `StatusLed` from `@/components/status-pill`: the pill's colors, filled
+  while lit, the word verbatim as its label and tooltip, `data-status`),
+  and my DMs (`data-testid="dm-row"`, each `@<other>` with the task name
+  dim; `<other>` is the newest participant neither me nor `agc`, else the
+  task), together newest activity first (highest `last_id`); an agent
+  inbox is never under Channels. Then "Channels": the task channels (named
+  after a task from `useTasks`) newest first, then the other channels
+  newest first, at most 8 in all (`ROW_LIMIT`), then one dim "N more…" row
+  (`data-testid="more-row"`) to Browse, and last a dim "Browse channels…"
+  row (`data-testid="browse-link"`) to `/messages/browse`. DMs and
+  Channels are `role="group"` with `aria-label` the section name (DMs only
+  while it has a row). Each row has an
   `UnreadBadge` (`data-testid="unread-badge"`, `data-mention`) and is bold
   while unread (`data-unread`); the badge is pink when an unread message
-  mentions `@<me>` (whole word). The Talk group header shows the total
-  (`area-badge-talk`), pink when any unread message mentions me, also
-  while Talk is collapsed.
+  mentions `@<me>` (whole word). The Talk group header (`area-badge-talk`)
+  shows only two counts, also while Talk is collapsed: the open questions
+  for me (`question-badge`) and the unread messages in the channels I follow
+  (inbox and DMs included; `unread-badge`). Never a channel's total
+  message count, never unread of an unfollowed channel.
 - **DMs:** a channel named `@<me>/<task>` is a direct message of mine (the
   backend's DM channels, `isDMOf` in `unread.ts`). Its page is titled
   "Direct @<me>/<task>". The mock seeds `@franco/yc-pitch` (one unread
   message from @pitcher) and `@franco/review-42` (read: franco answered last)
   and accepts `@<human>/<task>` names.
-- **Following** (`src/features/messages/follow.ts`, `useFollow()`):
-  localStorage `agc.panel.follow` maps a channel to `{ on, at }`, `at` being
-  the newest message id the decision covers. A channel is followed when I
-  opened it (`MessagesPage` and a task's Messages tab), or a message newer
-  than `at` is mine, is in my inbox or a DM of mine, or mentions `@<me>`
-  (`addressesMe` in `unread.ts`); those follow from `message.posted` (wired
-  in the shell) and from the unread scan. `#<me>` is always followed; a DM
-  is followed until unfollowed. Unfollow with the outlined "Following"
-  toggle (`FollowToggle`, `data-testid="follow-toggle"`) on the channel
-  header (`data-testid="channel-header"`) or a Browse row; it sets `at` to
-  the channel's last id, so only a newer mention or DM follows it again.
+- **Following** (`src/features/messages/follow.ts`, `useFollow()`, the
+  rule commented at its top): localStorage `agc.panel.follow` maps a
+  channel to `{ on, at, done }`, `at` being the newest message id the
+  decision covers. A channel follows itself only when I open it
+  (`MessagesPage` and a task's Messages tab) or post in it, a person
+  (`human`) posts there mentioning `@<me>`, or an agent asks me a question
+  (`kind: question` mentioning `@<me>`, or in my inbox or a DM of mine),
+  newer than `at` (`followsMe`); from `message.posted` (wired in the shell)
+  and from the unread scan. Nothing `agc` posts follows a channel (every
+  task's opening message names its owner), nor an agent's plain mention
+  (it still toasts). `#<me>` is always followed; a DM is followed until
+  unfollowed. When a task's status is `done` (tasks query, refreshed by
+  `task.done`) its channel is unfollowed once (`done: true`), unless an
+  open question for me waits there; opening it follows it again. Unfollow
+  with the outlined "Following" toggle (`FollowToggle`,
+  `data-testid="follow-toggle"`) on the channel header
+  (`data-testid="channel-header"`) or a Browse row; it sets `at` to the
+  channel's last id.
 - **Browse** (`BrowsePage`, `/messages/browse`): every channel as a flat row
-  (`data-testid="browse-row"`, `data-channel`): kind icon (inbox, DM,
-  task, other), name, kind, last activity (`browse-last`, from the newest
-  message, `queryKeys.lastMessage`) and the toggle ("Inbox: always",
-  disabled, on `#<me>`). The filter box filters by name as you type.
+  (`data-testid="browse-row"`, `data-channel`) in groups (`role="group"`,
+  `data-testid="browse-group"`, `data-group`): "Questions for you" (an open
+  question for me there), "Running tasks" (a task not `done`), "Done tasks"
+  (collapsed by default, `browse-group-toggle` with `aria-expanded`) and
+  "Other"; each header counts its rows, each group newest activity first.
+  A row: kind icon (inbox, DM, task, other), name, the task's `StatusPill`
+  (else the kind), last activity (`browse-last`, from the newest message,
+  `queryKeys.lastMessage`), unread and open-question badges and the toggle
+  ("Inbox: always", disabled, on `#<me>`). The filter box filters by name
+  as you type. Archived channels get their own group behind a toggle once
+  `GET /api/msg/channels` offers them; it does not yet.
 - **Read state** (`src/features/messages/unread.ts`, `useUnread()`,
   `markRead`): localStorage `agc.panel.read` maps `#channel` → last read
   message id. `ChannelView` (Talk page and a task's Messages tab) marks every
@@ -414,7 +502,7 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   `message.posted` (which refreshes channels) bumps counts without a reload.
   A message of mine reads everything before it in that channel. A
   never-opened channel counts all its messages after my last one. The Talk
-  badge counts only followed channels, my DMs and unread mentions of me.
+  badge counts only followed channels (my inbox and DMs are followed).
 - **Notifications** (`src/features/messages/notifications.tsx`, wired next
   to the task ones in the shell): a top-right toast "Inbox" or "Mentioned
   you" or "Direct" (`data-testid="toast-message"`, `data-id`, `data-channel`) with the
@@ -433,9 +521,11 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   member as an avatar with its dot and the tooltip `@name · online` or
   `@name · last seen 3 min ago`. Not yet in the message headers
   (`MessageList`) or the sidebar rows (`ChannelRows`).
-- **Inbox page:** `/messages/<me>` is the ordinary channel view titled
-  "Inbox #<me>", with the line "Your inbox: agents and tasks escalate here"
-  (`data-testid="inbox-header"`) and, when empty, an empty slot saying so.
+- **Asks page:** `/messages/<me>` is the ordinary channel view titled
+  "Asks #<me>", with the question icon and the line "Asks: questions and
+  escalations waiting on you" (`data-testid="inbox-header"`) and, when
+  empty, an empty slot saying so. The toast for a message there still
+  reads "Inbox", and Browse still says "Inbox: always" on its row.
 
 ## Talk: messages, threads, questions
 
@@ -483,21 +573,40 @@ Messages tab) provides the channel context (`context.ts`) every piece reads.
   `QuestionBadge.tsx`) beside the unread badge on the channel row and the
   Talk group header. Unread counting is unchanged. The questions query key
   includes the channels' last ids, so `message.posted` refreshes it.
+- **Question shape** (`questionShape.ts`, `QuestionParts.tsx`): the card is
+  at most 72ch wide, body `text-base leading-7`. The first line is the title
+  (bold, larger); `Changes:`, `Asks:`, `Before:`, `After:` lines are
+  labelled rows (`question-row`, `data-row`); a `Before:`/`After:` value
+  that is an image URL is an image instead, the two side by side, each at
+  most half the card, a click opens it full size (`question-images`,
+  `data-image`). The diff (the value of `Diff:`, or a line that is only a
+  URL) is a small muted "Diff" link after the rows (`diff-link`, new tab),
+  never a button and never the raw URL: Franco does not read code
+  (2026-11-02). Lines in a code fence and the rest render as markdown. A
+  title `Accept <task>?` on a task in `review` I own adds Accept (posts
+  `/accept <task>` as a reply in my inbox, else `/accept` in `#<task>`) and
+  Send back… (required feedback, "Send back: write feedback" while empty;
+  posts `/reject <feedback>` in `#<task>`, the backend has no inbox form of
+  reject, then the same feedback as a reply to the question so it reads
+  answered), errors verbatim under them (`accept-actions`); otherwise, or
+  once agc answered, the task's pill verbatim and "Accepted by @name"
+  (`accept-state`). The mock runs `/accept` and `/reject` posted in
+  channels like `core/resources/tasks/commands.go`.
 
 ## Commands (run in `panel/`)
 
 First time: `npm ci && npx playwright install chromium`.
 
-| Command                  | What it does                                                                                                                                                                                                                                                               |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run mock`           | Mock API on http://127.0.0.1:8790 (`-- --port N`)                                                                                                                                                                                                                          |
-| `npm run dev`            | Vite dev server at http://localhost:5173/panel/, `/api` proxied to `VITE_API_TARGET` (default the mock on 8790; a real agc is `http://127.0.0.1:1202`)                                                                                                                     |
+| Command                  | What it does                                                                                                                                                                                                                                              |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run mock`           | Mock API on http://127.0.0.1:8790 (`-- --port N`)                                                                                                                                                                                                         |
+| `npm run dev`            | Vite dev server at http://localhost:5173/panel/, `/api` proxied to `VITE_API_TARGET` (default the mock on 8790; a real agc is `http://127.0.0.1:1202`)                                                                                                    |
 | `npm run shot -- /tasks` | Screenshot a route at 1440x900 against its own fresh mock and dev server, writes and prints `/tmp/agc-panel/<route>.png`. Flags: `--out <path>`, `--wait <ms>`, `--width <px>`, `--height <px>`, `--storage key=value` (repeatable), `--click <selector>` |
-| `npm run check`          | Types drift, `tsc -b`, eslint, Playwright. Must be green before you finish                                                                                                                                                                                                 |
-| `npm run test`           | Playwright only                                                                                                                                                                                                                                                            |
-| `npm run types`          | Regenerate `src/api/schema.d.ts` from `../docs/openapi.yaml`                                                                                                                                                                                                               |
-| `npm run build`          | Typecheck and build `dist/` (what agc embeds)                                                                                                                                                                                                                              |
-| `npm run format`         | Prettier (no semicolons, single quotes, width 120)                                                                                                                                                                                                                         |
+| `npm run check`          | Types drift, `tsc -b`, eslint, Playwright. Must be green before you finish                                                                                                                                                                                |
+| `npm run test`           | Playwright only                                                                                                                                                                                                                                           |
+| `npm run types`          | Regenerate `src/api/schema.d.ts` from `../docs/openapi.yaml`                                                                                                                                                                                              |
+| `npm run build`          | Typecheck and build `dist/` (what agc embeds)                                                                                                                                                                                                             |
+| `npm run format`         | Prettier (no semicolons, single quotes, width 120)                                                                                                                                                                                                        |
 
 Look at your screen with `npm run shot` and read the PNG before you report.
 
@@ -535,15 +644,26 @@ Tasks (each with a brief and assignee):
   `status_error: clone failed: repository not found`.
 
 Saved spec `backend-review`. Secrets
-`CLAUDE_CODE_OAUTH_TOKEN`, `GITHUB_TOKEN` (with hosts) and `CUSTOM` (no
-hosts). Messages in `#review-42` (from @reviewer, @tester and human @franco,
+`CLAUDE_CODE_OAUTH_TOKEN`, `GITHUB_TOKEN` (with hosts), `CUSTOM` (no
+hosts) and `ANTHROPIC_WORK` (`api.anthropic.com`, read by no harness);
+`GET /api/secrets` also answers `harnesses: [{ id, reads }]` (claude_code
+reads `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`; codex_cli
+`CODEX_API_KEY`; pi both API keys), typed ahead of the Go side as
+`SecretHarness` with `useSecretHarnesses()` in `@/api/hooks`. In the create
+dialog a picked secret no harness reads, bound to no host or only to a
+provider's API, offers the task harness's variables as toggle chips
+(`data-secret-as`, `data-env`); picking one writes `NAME as ENV[@hosts]`
+and the chip reads `NAME → ENV`, as does the secret chip
+(`data-spec-secret`) in a sandbox's parts on the task's Compute view. Messages in `#review-42` (from @reviewer, @tester and human @franco,
 who has left so you can join as franco), `#releases`, and franco's inbox
 `#franco`: agc's two opening messages for `review-42` (the first mentions
 `@franco`) and an escalation from the review-42 agent @reviewer asking a
 decision. `#review-42` has a thread (franco's reply to @reviewer's first
 message), a code block, an answered question (@tester, answered by franco)
 and an open one from @reviewer to @franco; `#flaky-ci` has an open question
-from its agent @fixer. Posts take `kind`; `GET /api/msg/questions` ignores
+from its agent @fixer. `#designer-1`, the inbox of the seeded agent
+`designer-1` (awake), has franco's request and its unread answer, so
+Talk's DMs section shows `@designer-1`. Posts take `kind`; `GET /api/msg/questions` ignores
 `for`, so every open question is the signed-in person's (on the task list
 `review-42` and `flaky-ci` show `answer` for anyone).
 `GET /api/defaults` answers `{ harness: claude_code, model:
@@ -562,14 +682,29 @@ starts its `command` as the job `agent`. `POST /api/tasks/{id}/deliver
 and acknowledges resize frames.
 
 Agents: `orchestrator-1` awake (home `orchestrator-1`, manages
-`review-42` and `flaky-ci`, reads `#franco`, `#review-42`, `#flaky-ci`),
+`review-42` and `flaky-ci`, reads `#orchestrator-1`, `#review-42`, `#flaky-ci`),
 `reviewer-2` asleep and numbered, `ada` kept (role Reviewer, asleep,
-manages `docs-pass`) and `writer-1` waking (stays waking: the mock only
+manages `docs-pass`), `designer-1` awake (role Designer, inbox
+`#designer-1` seeded) and `writer-1` waking (stays waking: the mock only
 finishes wakes it starts). Create names `<role slug>-<n>`, n one past the
 highest ever given for that role (so the first `Reviewer` is `reviewer-3`);
 keep validates the name (lowercase letters, digits, dashes; 409 when
 taken); wake is asleep→waking and 2s later awake, sleep awake→asleep (409
 otherwise). Agent homes are not mock sandboxes, so `/compute/<home>` 404s.
+
+Accounts (`GET /api/accounts`): anthropic `franco-max` (oauth,
+`franco@example.com`, default, Session 16% resets in 4h 11m, Weekly 17%
+and Opus 20% in 1d 19h), `work-api` (api_key, usage null), `old-max`
+(oauth, usage error `token rejected: 401 …`) and `plain-max` (oauth,
+`plain@example.com`, usage error `inference-only token: sign in for
+usage`); openai has none. Sign-in: begin answers a claude.ai authorize URL
+with a fresh `state` for 10 minutes, complete takes `code#state` (400
+when the state differs or nothing is pending; the code `made-up-bad`
+fails as `token exchange failed: HTTP 400`), sets `signed_in_at` and clears
+the usage error; sign-out clears `signed_in_at`. Create
+validates like the contract (409 `account <name> already exists`), drops
+the value; delete answers 204, or 409 while a running sandbox's spec names
+the account's secret.
 
 `GET /api/events` streams the live events from the mock's own
 operations (create, boot, stop/start/delete, accept, post, wake, sleep) with the 20s

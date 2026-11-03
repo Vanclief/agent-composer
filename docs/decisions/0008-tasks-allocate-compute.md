@@ -60,7 +60,10 @@ is allocated, compute to get done. The VM is not the task.
    writes `/home/agent/TASK.md` (the task's title and brief) and the
    harness pre-acceptance config, runs `setup`, sets `booted_at`, then, if
    `command` is set, starts it as a TTY job named `agent`. A failure sets
-   `boot_error` and discards the sandbox. `POST /api/tasks` accepts an
+   `boot_error` and discards the sandbox. `start` boots a stopped sandbox
+   from its disk and starts `command` again as the job, unless a running
+   job already runs it; a job that cannot start fails the start and leaves
+   the sandbox stopped, its disk kept. `POST /api/tasks` accepts an
    optional `sandbox` object and allocates it the same way after the insert, so
    one call still makes a working task.
 
@@ -129,6 +132,63 @@ did, were lost with the sandbox.
 - The fresh disk hides the image's `/home/agent`, so the git credential
   helper is in `/etc/gitconfig`, and the boot seeds `/etc/skel` and hands
   the disk to the sandbox user (as root) before cloning.
+
+## Garbage collection
+
+Added 2026-11-02 (task `sandbox-gc`). That day the rig's disk filled up:
+178G of stopped sandbox disks, 52 of them belonging to done tasks. Every
+running VM then hit I/O errors on its own disk, three tasks lost their work
+and the image rebuild failed. Once a task is done its stopped sandbox is
+worth little: the work is on its branch and the transcripts on the kept
+volume.
+
+- What is collected: a sandbox that is `stopped` (the runtime's word),
+  belongs to a task whose `done_at` is older than `keep_done`, and is not an
+  agent's home. Never a home, a running, starting or failed sandbox, or a
+  sandbox of a task that is not done.
+- How: through `Remove`, the same path as `DELETE /api/sandboxes/{id}`: the
+  VM and its disk go, `sandbox.status` `deleted` is published. The volume
+  `agc-<sandbox>` (transcripts) and the task's channel are kept.
+- When: only `agc rest` runs the collector (`sandboxes.API.StartGC`, next to
+  the schedules' scheduler), at start and then every 10 minutes, one run at
+  a time; it logs a line per deletion (name, task, how long done, disk).
+- The setting: `sandboxes: { keep_done: 24h }` in the config file, env
+  `AGC_SANDBOX_KEEP_DONE` overriding it, a Go duration, default 24h; `0`
+  turns the collector off.
+- By hand: `agc sandbox gc [--dry-run] [--keep <duration>]`, through
+  `POST /api/sandboxes/gc` (`{ dry_run, keep }`) with `--server` or
+  `AGC_SERVER`, else in process. It answers the sandboxes it deleted (or
+  would) and `freed`, the count deleted, with `freed_disk`. Without `--keep`
+  it uses `keep_done`, or 24h when the collector is off.
+- To see what the disks add up to, `GET /api/sandboxes` carries `disk` (the
+  spec's, default 20G) and `disk_mib` per sandbox, and `agc sandbox list`
+  prints a DISK column and the total.
+
+## Skills
+
+Added 2026-11-03 (task `sandbox-skills`). A skill (a Claude Code `SKILL.md`
+folder) lived only on one person's machine, so no agent in a sandbox had
+it, and a copy an agent kept on its own volume would drift from the source.
+
+- agc owns a skills repository: `<agc home>/skills/<name>/SKILL.md` plus
+  any files beside it (`AGC_SKILLS_DIR` overrides, like `AGC_AGENTS_DIR`;
+  the rig points it at the checkout's `skills/`). `<name>` is a slug
+  (`[a-z0-9]+(-[a-z0-9]+)*`). The repo ships `skills/rtsdesign`. It is
+  files on disk read on every request: no table, no cache.
+- The spec gains `skills` (task.yaml `skills:`, the REST `sandbox` block,
+  a template's `sandbox.skills`): names of skills. Allocate, home allocate
+  and start refuse, before booting, a name that is not a directory of the
+  repository, naming it and the known skills.
+- `prepare` writes each named skill's files to
+  `/home/agent/.claude/skills/<name>/` and `/home/agent/.codex/skills/<name>/`
+  after the agent config and before TASK.md (or AGENT.md), removing what
+  was there first: both links point into the kept harness volume, so an
+  earlier copy is there and is never the source. `start` writes them again,
+  so an edit to a skill reaches the next sandbox and the next wake.
+- `GET /api/skills` answers `{ skills: [ { name, description } ] }`,
+  `description` from the `SKILL.md` frontmatter (empty when absent);
+  `GET /api/skills/{name}` answers the `SKILL.md` as `text/markdown`, 404
+  when absent. `agc skill list|show <name>`, in process or with `--server`.
 
 ## Rationale
 

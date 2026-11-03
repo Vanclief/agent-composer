@@ -55,6 +55,18 @@ task itself persists so what happened can be read later and a VM revived.
    accepted without having been delivered (the owner closing it by hand);
    `delivered_at` stays null then.
 
+   Accepting also closes the task's questions (added 2026-11-03, task
+   `close-done-questions`): agc replies `Closed: <task> accepted by <who>.`
+   in the thread of every open question in `#<task>` and of every open
+   question in `#<owner>` from the task's manager whose body starts with
+   `Accept <task>?` or `<task>:`, which answers each for
+   `GET /api/msg/questions` (`messaging.Service.CloseQuestions`); no column
+   or state is added. A question a person asked is never closed, and
+   rejecting closes nothing. The collector's tick in `agc rest` (ADR 0008
+   "Garbage collection") does the same for every done task, logging a line
+   per question, so questions left open by an accept before this change,
+   or by a failed reply, close on the next tick.
+
 5. **Rejecting sends it back.** `POST /api/tasks/{id}/reject` with
    `{ "by", "why" }`, or `/reject <why>` in `#<task>` by the manager or the
    owner, clears `delivered_at`, posts "Rejected by <name>: <why>" in the
@@ -145,3 +157,67 @@ sections omitted. TASK.md's "Delivering" section tells the agent to write
 `report.json` and run `agc task deliver "<summary>" --report report.json`;
 an answer starting `DONE:` still delivers the summary alone, the fallback
 when no report can be written.
+
+Shots, added 2026-11-02: the owner judges a UI change by looking at it, not
+by reading code. A report may carry `shots`, at most 8 of
+`{ label, file }`: `label` a slug unique in the report (`before` and
+`after` for a UI change), `file` the PNG's path where the agent took it.
+The PNG travels with the delivery in `files`, base64 under its label, in
+the same JSON body on `POST /api/tasks/{id}/deliver` and on the socket's
+`POST /task/deliver` (whose body cap is raised to 24 MB for it); `agc task
+deliver --report` reads each file and sends it. Each must be a PNG (by its
+signature) of at most 2 MB, one per shot and no other, else `EINVALID`.
+agc keeps them on the host under `<agc home>/shots/<task>/<label>.png`
+(files 0600, directories 0700), never reads them through the VM again,
+serves them at `GET /api/tasks/{name}/shots/{label}.png` (`image/png`, 404
+when absent), and stores the shot on the report with `file` set to
+`<label>.png` and `url` to that route, under `AGC_PUBLIC_URL` when set,
+else root-relative. No table holds them: the report names them. Each
+delivery replaces the task's shots (one without shots removes them); a
+reject or an accept keeps them. The Delivered message adds a
+`<Label>: <url>` line per shot after the checks. TASK.md's "Delivering"
+asks for `before` and `after` on a change a person sees; the reviewer adds
+`Before:` and `After:` lines to its question to the owner, which the panel
+renders as images, and rejects a UI change that has no shots.
+
+## Who merges
+
+Added 2026-11-02. A delivery that carries a branch (`changes.branch` and
+`changes.sha` in the report) is merged by the task's manager, not by the
+owner, unless the rule `merge-needs-franco-for-ui-or-breaking`
+(`rules/repo.yaml`) fails:
+
+1. **The manager judges and checks.** On delivery the manager judges the
+   rules on the diff from the task's base to the delivered sha,
+   `git diff <base>...<sha> | agc rules judge --as claude_code --on -`, and
+   runs the repository checks (`go build ./... && go vet ./... &&
+   go test ./...`, `gofmt -l .`, `go run . rules check rules/`, and
+   `make panel-check` when `panel/` changed).
+2. **Nothing to show, nothing broken: the manager merges.** When every
+   check passes, no judged rule fails and
+   `merge-needs-franco-for-ui-or-breaking` holds, the manager merges the
+   branch into the base, pushes the base and accepts the task. A failing
+   check or another failing rule is a rejection with the reason, as in
+   item 5.
+3. **A UI or breaking change: the owner is asked.** When that rule fails
+   or its verdict is unclear (unclear counts as "needs Franco", never as a
+   pass), the manager posts one question in `#<owner>` with the judge's
+   reason and the compare link for `<base>...<sha>`, and the task waits on
+   the owner in `review`.
+4. **The owner's verdict.** There, the owner's accept (any of item 4's
+   doors) means approved: the manager merges the branch and pushes after
+   it. The owner's reject sends the task back to the agent with the reason,
+   as in item 5, and nothing is merged.
+
+The manager is the owner's only interlocutor for a task: the task's agent
+is not granted `#<owner>` (ADR 0009 item 5), so a question it has for the
+owner goes to its manager in `#<task>`, and the manager raises it in
+`#<owner>` as item 3 does.
+
+`accept` itself is unchanged: it still only sets `done_at` and
+`accepted_by` and stops the task's sandboxes; merging is the manager's act
+around it, and deploying to the rig stays a hand step (`make rig-deploy`).
+The owner is asked only for UI and breaking changes because his review time
+goes to what he can see and to what can break others, while style and
+correctness are covered by the mechanical rules and the tests (belief
+`franco-reviews-what-he-sees-and-what-breaks`).

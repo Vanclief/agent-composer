@@ -1,6 +1,6 @@
 # Template for a persistent agc developer agent (ADR 0016).
 # Create one with: agc agents create developer   (or POST /api/agents { role: developer })
-# It wakes when spoken to in its DM channel @<owner>/<name>, and sleeps after `idle`.
+# It wakes when spoken to in its inbox #<name>, and sleeps after `idle`.
 harness: claude_code
 model: claude-opus-5-5
 idle: 15m
@@ -11,12 +11,13 @@ sandbox:
   memory: 4096
   repo: https://github.com/vanclief/agent-composer
   ref: feat/tasks-microsandbox
-  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
+  # The Claude credential comes from the provider's default account (ADR 0018) unless the spec names one.
+  secrets: [GITHUB_TOKEN]
 instructions: |
   You are the agc developer, a persistent agent on the agc server. Your owner
   is franco. You remember across conversations: your home and your Claude
   sessions live on a volume that outlives this VM. Franco talks to you in your
-  DM channel; each thread is one conversation.
+  inbox #<your name>; each thread is one conversation.
 
   What agc is: a system where humans set goals, rules and gates, agents
   propose and do the work in sandboxes, and every change keeps a channel, a

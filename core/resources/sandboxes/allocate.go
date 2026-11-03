@@ -17,6 +17,7 @@ import (
 	"github.com/vanclief/agent-composer/models/agent"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/secrets"
+	"github.com/vanclief/agent-composer/skills"
 	"github.com/vanclief/agent-composer/task"
 )
 
@@ -81,9 +82,12 @@ func (api *API) AllocateFor(ctx context.Context, owner *taskmodels.Task, request
 		return nil, ez.Wrap(err)
 	}
 
-	spec := request.Spec
+	err = api.skillsRepo().Check(request.Skills)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
 
-	bindings, err := api.resolveSecrets(spec)
+	spec, bindings, err := api.resolveSecrets(ctx, request.Spec, taskHarness(owner))
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -151,7 +155,9 @@ func (api *API) startBoot(ctx context.Context, record *taskmodels.Sandbox, owner
 // (or the home of an agent) is named after base, later ones <base>-2,
 // <base>-3: the first free name. A name is taken while a sandbox has it or
 // while a deleted sandbox's volume (task.VolumeName) is still on the host,
-// so a new sandbox never inherits another's transcripts.
+// so a new sandbox never inherits another's transcripts. The sandbox's
+// volume is task.VolumeName of its name, unless record.Volume is already
+// set (an agent's home keeps the agent's volume across homes).
 func (api *API) insert(ctx context.Context, base string, record *taskmodels.Sandbox) error {
 	api.naming.Lock()
 	defer api.naming.Unlock()
@@ -181,7 +187,9 @@ func (api *API) insert(ctx context.Context, base string, record *taskmodels.Sand
 	}
 
 	record.Name = name
-	record.Volume = task.VolumeName(name)
+	if record.Volume == "" {
+		record.Volume = task.VolumeName(name)
+	}
 
 	err := record.Insert(ctx, api.db)
 	if err != nil {
@@ -252,7 +260,7 @@ func (api *API) boot(ctx context.Context, record *taskmodels.Sandbox, owner *tas
 func (api *API) bootSandbox(ctx context.Context, record *taskmodels.Sandbox, owner *taskmodels.Task, spec task.Spec, bindings []secrets.Binding) error {
 	name := record.Name
 
-	sandboxSpec, err := spec.SandboxSpec(owner.Name, name, bindings, api.socketPath(name), msgVsockPort)
+	sandboxSpec, err := spec.SandboxSpec(owner.Name, name, record.Volume, bindings, api.socketPath(name), msgVsockPort)
 	if err != nil {
 		return ez.Wrap(err)
 	}
@@ -269,7 +277,7 @@ func (api *API) bootSandbox(ctx context.Context, record *taskmodels.Sandbox, own
 		return ez.Wrap(err)
 	}
 
-	err = prepare(ctx, sb, spec, briefPath(record), record.Instructions)
+	err = prepare(ctx, sb, spec, briefPath(record), record.Instructions, api.skillsRepo())
 	if err != nil {
 		return api.discard(ctx, name, sb, err)
 	}
@@ -283,12 +291,9 @@ func (api *API) bootSandbox(ctx context.Context, record *taskmodels.Sandbox, own
 	}
 
 	if record.Command != "" {
-		fields := strings.Fields(record.Command)
-
-		_, err = sb.StartTerminal(ctx, executor.Command{Name: fields[0], Args: fields[1:], Dir: workDir(spec)})
+		_, err = sb.StartTerminal(ctx, jobCommand(record, spec))
 		if err != nil {
-			cause := ez.New(ez.ErrorCode(err), "cannot start "+record.Command+": "+ez.ErrorMessage(err), err)
-			return api.discard(ctx, name, sb, cause)
+			return api.discard(ctx, name, sb, jobError(record, err))
 		}
 	}
 
@@ -298,6 +303,18 @@ func (api *API) bootSandbox(ctx context.Context, record *taskmodels.Sandbox, own
 	}
 
 	return nil
+}
+
+// jobCommand is the sandbox's job: its command, run in workDir.
+func jobCommand(record *taskmodels.Sandbox, spec task.Spec) executor.Command {
+	fields := strings.Fields(record.Command)
+
+	return executor.Command{Name: fields[0], Args: fields[1:], Dir: workDir(spec)}
+}
+
+// jobError says the sandbox's job could not start.
+func jobError(record *taskmodels.Sandbox, err error) error {
+	return ez.New(ez.ErrorCode(err), "cannot start "+record.Command+": "+ez.ErrorMessage(err), err)
 }
 
 // workDir is where setup and the command run: the repo, or the home
@@ -320,7 +337,7 @@ func workDir(spec task.Spec) string {
 // with one bullet per criterion when it has any (ADR 0010 item 1), then
 // the standing instructions of ADR 0009 item 3 filled in, ending with how
 // to deliver. Without an owner it says "no owner is set" and drops the
-// escalation line; without a repo it says so.
+// line on decisions only the owner can make (asked of the manager); without a repo it says so.
 func Instructions(owner *taskmodels.Task, spec task.Spec) string {
 	var b strings.Builder
 
@@ -372,9 +389,9 @@ func Instructions(owner *taskmodels.Task, spec task.Spec) string {
 	b.WriteString("  working on what does not depend on the answer.\n")
 
 	if owner.Owner != "" {
-		b.WriteString("- If something needs a decision only " + owner.Owner + " can make, ask it in\n")
-		b.WriteString("  `#" + owner.Owner + "` (their inbox) with `agc msg ask '#" + owner.Owner + "' <question>` so it\n")
-		b.WriteString("  shows up as waiting on them, and say so in `#" + name + "`; do not wait idle.\n")
+		b.WriteString("- If something needs a decision only " + owner.Owner + " can make, ask your manager\n")
+		b.WriteString("  in `#" + name + "` and say it is for the owner; your manager raises it.\n")
+		b.WriteString("  Keep working on what does not depend on the answer.\n")
 	}
 
 	b.WriteString("- Do not modify files outside the repository, and never print secret values.\n")
@@ -422,7 +439,12 @@ func writeDelivering(b *strings.Builder, owner *taskmodels.Task) {
 	b.WriteString("- `changes`: the branch you pushed and its commit (7 to 40 hex characters).\n")
 	b.WriteString("- `checks`: what you ran and whether it passed.\n")
 	b.WriteString("- `left_out`: what you did not do and why; `needs`: what you need the\n")
-	b.WriteString("  reviewer to decide. `[]` when there is nothing.\n\n")
+	b.WriteString("  reviewer to decide. `[]` when there is nothing.\n")
+	b.WriteString("- `shots`: add it when the change alters what a person sees: deliver `before`\n")
+	b.WriteString("  and `after` PNGs of the affected screen, as\n")
+	b.WriteString("  `[ { \"label\": \"before\", \"file\": \"/tmp/before.png\" }, { \"label\": \"after\", \"file\": \"/tmp/after.png\" } ]`\n")
+	b.WriteString("  (Playwright can take them: `page.screenshot`, base branch vs yours, same\n")
+	b.WriteString("  size, same route); each under 2 MB, at most 8.\n\n")
 	b.WriteString("Then run `agc task deliver \"<one or two sentences>\" --report report.json`.\n")
 	b.WriteString("The summary is what the reviewer reads first; the report is what they\n")
 	b.WriteString("judge. A report that breaks these rules is refused with the reason: fix it\n")
@@ -466,11 +488,12 @@ func AgentCommand(owner *taskmodels.Task) string {
 
 // prepare gives the sandbox user the home disk (a fresh ext4 disk belongs
 // to root), lays out the home (homeScript), clones the repo, writes the
-// agent config and the instructions at brief (TASK.md, or AGENT.md in an
-// agent's home), and runs the setup script,
-// as the sandbox user. Setup runs in the repo, or in the home directory
-// when there is no repo, and can still change the agent config.
-func prepare(ctx context.Context, sb Sandbox, spec task.Spec, brief string, instructions string) error {
+// agent config, the spec's skills from repo (writeSkills) and the
+// instructions at brief (TASK.md, or AGENT.md in an agent's home), and
+// runs the setup script, as the sandbox user. Setup runs in the repo, or
+// in the home directory when there is no repo, and can still change the
+// agent config.
+func prepare(ctx context.Context, sb Sandbox, spec task.Spec, brief string, instructions string, repo skills.Repo) error {
 	err := run(ctx, sb, executor.Command{Name: "chown", Args: []string{guestUser + ":" + guestUser, task.HomeDir}, User: "root"}, "chown "+task.HomeDir)
 	if err != nil {
 		return ez.Wrap(err)
@@ -520,6 +543,11 @@ func prepare(ctx context.Context, sb Sandbox, spec task.Spec, brief string, inst
 		return ez.Wrap(err)
 	}
 
+	err = writeSkills(ctx, sb, repo, spec.Skills)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
 	err = sb.WriteFile(ctx, brief, []byte(instructions))
 	if err != nil {
 		return ez.Wrap(err)
@@ -529,6 +557,76 @@ func prepare(ctx context.Context, sb Sandbox, spec task.Spec, brief string, inst
 		err = run(ctx, sb, executor.Command{Name: "bash", Args: []string{"-lc", spec.Setup}, Dir: dir}, "setup")
 		if err != nil {
 			return ez.Wrap(err)
+		}
+	}
+
+	return nil
+}
+
+// SkillDirs are where a skill is written in a sandbox, <dir>/<name>: the
+// skills directories of Claude Code and Codex. Both are under the links
+// into the harness volume, so a copy from an earlier home is there and is
+// replaced.
+var SkillDirs = []string{task.HomeDir + "/.claude/skills", task.HomeDir + "/.codex/skills"}
+
+// writeSkills writes each named skill's files from repo into every one of
+// SkillDirs, after removing what the directory held: agc's repository is
+// the source, never the copy on the volume (ADR 0008 "Skills").
+func writeSkills(ctx context.Context, sb Sandbox, repo skills.Repo, names []string) error {
+	for _, name := range names {
+		files, err := repo.Files(name)
+		if err != nil {
+			return ez.Wrap(err)
+		}
+
+		roots := []string{}
+		for _, dir := range SkillDirs {
+			roots = append(roots, path.Join(dir, name))
+		}
+
+		err = run(ctx, sb, executor.Command{Name: "rm", Args: append([]string{"-rf"}, roots...)}, "remove skill "+name)
+		if err != nil {
+			return ez.Wrap(err)
+		}
+
+		dirs := []string{}
+		seen := map[string]bool{}
+		for _, root := range roots {
+			for _, file := range files {
+				dir := path.Dir(path.Join(root, file.Path))
+				if !seen[dir] {
+					seen[dir] = true
+					dirs = append(dirs, dir)
+				}
+			}
+		}
+
+		err = run(ctx, sb, executor.Command{Name: "mkdir", Args: append([]string{"-p"}, dirs...)}, "skill "+name+" directories")
+		if err != nil {
+			return ez.Wrap(err)
+		}
+
+		executables := []string{}
+		for _, root := range roots {
+			for _, file := range files {
+				target := path.Join(root, file.Path)
+
+				err = sb.WriteFile(ctx, target, file.Data)
+				if err != nil {
+					return ez.Wrap(err)
+				}
+
+				if file.Executable {
+					executables = append(executables, target)
+				}
+			}
+		}
+
+		if len(executables) > 0 {
+			err = run(ctx, sb, executor.Command{Name: "chmod", Args: append([]string{"+x"}, executables...)}, "skill "+name+" executables")
+			if err != nil {
+				return ez.Wrap(err)
+			}
 		}
 	}
 

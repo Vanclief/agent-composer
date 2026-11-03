@@ -88,7 +88,7 @@ func (m *fakeMessenger) Ask(ctx context.Context, participantID, channel, body st
 	return &msgmodels.Message{ID: m.nextID, Channel: channel, ParticipantID: participantID, Body: body, Kind: msgmodels.KindQuestion}, nil
 }
 
-func (m *fakeMessenger) Deliver(ctx context.Context, summary string, report json.RawMessage, out any) error {
+func (m *fakeMessenger) Deliver(ctx context.Context, summary string, report json.RawMessage, files map[string][]byte, out any) error {
 	if m.deliverErr != nil {
 		return m.deliverErr
 	}
@@ -112,7 +112,7 @@ func (m *fakeMessenger) Wait(ctx context.Context, channel string, after int64, t
 	return &httpapi.MessagesResponse{Messages: batch}, nil
 }
 
-func (m *fakeMessenger) Channels(ctx context.Context) (*httpapi.ChannelsResponse, error) {
+func (m *fakeMessenger) Channels(ctx context.Context, archived bool) (*httpapi.ChannelsResponse, error) {
 	channels := []messaging.ChannelInfo{}
 	for channel, lastID := range m.lastIDs {
 		channels = append(channels, messaging.ChannelInfo{Channel: channel, LastID: lastID})
@@ -320,5 +320,51 @@ func TestAgentLoopPostsAQuestionThatFails(t *testing.T) {
 
 	if len(msg.posts) != 1 || msg.posts[0] != "#fix-login me: QUESTION: which?" {
 		t.Fatalf("posts = %q", msg.posts)
+	}
+}
+
+func TestAgentLoopSkipsAnotherAgentsPlainPost(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	plain := message(3, "reviewer-1", "p-rev", "I already reviewed this delivery.")
+	plain.Agent = "reviewer-1"
+	naming := message(4, "reviewer-1", "p-rev", "@fix-login run git fetch")
+	naming.Agent = "reviewer-1"
+	question := message(5, "reviewer-1", "p-rev", "which sha?")
+	question.Agent = "reviewer-1"
+	question.Kind = msgmodels.KindQuestion
+	person := message(6, "franco", "p-franco", "hello")
+	person.Human = true
+
+	msg := &fakeMessenger{
+		cancel:  cancel,
+		nextID:  2,
+		lastIDs: map[string]int64{"#fix-login": 2},
+		script:  [][]msgmodels.Message{{plain, naming, question, person}},
+	}
+	harness := &fakeHarness{}
+	loop := &agentLoop{
+		harness: harness,
+		msg:     msg,
+		task:    "fix-login",
+		name:    "fix-login",
+		brief:   "# Fix login\n",
+		closers: map[string]bool{"reviewer-1": true, "franco": true},
+	}
+
+	err := loop.run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wantTurns := []string{
+		"|# Fix login\n",
+		"s1|@reviewer-1 in #fix-login:\n\n@fix-login run git fetch",
+		"s1|@reviewer-1 in #fix-login:\n\nwhich sha?",
+		"s1|@franco in #fix-login:\n\nhello",
+	}
+	if !reflect.DeepEqual(harness.turns, wantTurns) {
+		t.Fatalf("turns:\n%s", strings.Join(harness.turns, "\n---\n"))
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/vanclief/agent-composer/messaging/httpapi"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 	"github.com/vanclief/agent-composer/runtime/harnesses"
+	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 )
 
 const (
@@ -26,6 +28,10 @@ const (
 	agentWaitTimeout = time.Minute
 	// agentRetryDelay is the pause after a failed wait before trying again.
 	agentRetryDelay = 5 * time.Second
+	// homeRetryMin and homeRetryMax bound the home loop's back-off after a
+	// failed wait: it doubles from min to max and resets on a good wait.
+	homeRetryMin = 2 * time.Second
+	homeRetryMax = 30 * time.Second
 	// deliverPrefix starts an answer that delivers the task (ADR 0010
 	// item 2); the rest of the answer is the summary.
 	deliverPrefix = "DONE:"
@@ -33,10 +39,6 @@ const (
 	// or the owner: the rest is posted as a question, which shows as
 	// waiting on them until someone answers it.
 	questionPrefix = "QUESTION:"
-	// agc posts these in #<task> when the task is accepted or rejected
-	// (core/resources/tasks).
-	acceptedPrefix = "Accepted by "
-	rejectedPrefix = "Rejected by "
 )
 
 // agentHarness runs one turn: prompt on session, or a new session when
@@ -52,9 +54,9 @@ type agentMessenger interface {
 	Post(ctx context.Context, participantID, channel, body string, replyTo *int64) (*msgmodels.Message, error)
 	Ask(ctx context.Context, participantID, channel, body string) (*msgmodels.Message, error)
 	Wait(ctx context.Context, channel string, after int64, timeout time.Duration) (*httpapi.MessagesResponse, error)
-	Channels(ctx context.Context) (*httpapi.ChannelsResponse, error)
+	Channels(ctx context.Context, archived bool) (*httpapi.ChannelsResponse, error)
 	// Deliver is agc task deliver on the sandbox's socket.
-	Deliver(ctx context.Context, summary string, report json.RawMessage, out any) error
+	Deliver(ctx context.Context, summary string, report json.RawMessage, files map[string][]byte, out any) error
 }
 
 // agentLoop is `agc agent run` (ADR 0009 item 2, ADR 0010): it joins
@@ -88,6 +90,7 @@ func agentCommand() *cli.Command {
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "harness", Usage: "claude_code or codex_cli", Required: true},
 					&cli.StringFlag{Name: "model", Usage: "Model the harness runs"},
+					&cli.StringFlag{Name: "effort", Usage: "Reasoning effort the harness runs at: low, medium, high or xhigh (default the harness's)"},
 					&cli.StringFlag{Name: "task", Usage: "Task name; its channel is #<task> (default $AGC_TASK)"},
 					&cli.StringFlag{Name: "brief", Usage: "Path to the instructions", Value: "/home/agent/TASK.md"},
 					&cli.StringFlag{Name: "name", Usage: "Messaging name to join as (default $AGC_SANDBOX, else the task name)"},
@@ -122,7 +125,7 @@ func agentRun(c *cli.Context) error {
 		return ez.New(ez.EINVALID, "cannot read the brief "+c.String("brief"), err)
 	}
 
-	harness, err := newAgentHarness(c.String("harness"), c.String("model"))
+	harness, err := agentHarnessFor(c)
 	if err != nil {
 		return err
 	}
@@ -161,7 +164,7 @@ func agentHomeRun(c *cli.Context, name string) error {
 		return ez.New(ez.EINVALID, "cannot read the brief "+c.String("brief"), err)
 	}
 
-	harness, err := newAgentHarness(c.String("harness"), c.String("model"))
+	harness, err := agentHarnessFor(c)
 	if err != nil {
 		return err
 	}
@@ -237,12 +240,12 @@ func (l *agentLoop) run(ctx context.Context) error {
 				continue
 			}
 
-			if isSystem(m) && strings.HasPrefix(m.Body, acceptedPrefix) {
+			if isSystem(m) && strings.HasPrefix(m.Body, msgmodels.AcceptedPrefix) {
 				l.logf("the task is accepted (%s), exiting", strings.TrimSpace(m.Body))
 				return nil
 			}
 
-			if !l.isTurn(m) {
+			if !l.isTurn(m, p) {
 				continue
 			}
 
@@ -259,12 +262,17 @@ func (l *agentLoop) run(ctx context.Context) error {
 }
 
 // isTurn reports whether m, not the loop's own, is the agent's next turn.
-// agc's posts are not, except a rejection; the manager's and the owner's
-// /accept and /reject are not either, since agc answers them in the
-// channel.
-func (l *agentLoop) isTurn(m msgmodels.Message) bool {
+// agc's posts are not, except a rejection; another agent's post is only
+// when it is a question or names the agent (msgmodels.TurnFor, ADR 0016
+// item 6); the manager's and the owner's /accept and /reject are not
+// either, since agc answers them in the channel.
+func (l *agentLoop) isTurn(m msgmodels.Message, me *msgmodels.Participant) bool {
 	if isSystem(m) {
-		return strings.HasPrefix(m.Body, rejectedPrefix)
+		return strings.HasPrefix(m.Body, msgmodels.RejectedPrefix)
+	}
+
+	if !msgmodels.TurnFor(&m, me) {
+		return false
 	}
 
 	if !l.closers[m.From] {
@@ -281,7 +289,7 @@ func (l *agentLoop) isTurn(m msgmodels.Message) bool {
 
 // isSystem reports whether agc itself posted m.
 func isSystem(m msgmodels.Message) bool {
-	return m.From == msgmodels.SystemName && m.Task == "" && !m.Human
+	return msgmodels.FromSystem(&m)
 }
 
 // join takes the sandbox's name, or name-2 … name-5 when an earlier run
@@ -335,9 +343,10 @@ func (l *agentLoop) leave(p *msgmodels.Participant) {
 }
 
 // lastID is the newest message id in the task's channel, so the loop
-// answers only what is posted from now on.
+// answers only what is posted from now on. Archived channels count too, so
+// an archived #<task> never reads as empty.
 func (l *agentLoop) lastID(ctx context.Context) (int64, error) {
-	res, err := l.msg.Channels(ctx)
+	res, err := l.msg.Channels(ctx, true)
 	if err != nil {
 		return 0, err
 	}
@@ -378,7 +387,7 @@ func (l *agentLoop) turn(ctx context.Context, p *msgmodels.Participant, prompt s
 
 		var view any
 		// DONE: delivers the summary only, with no report.
-		err = l.msg.Deliver(ctx, summary, nil, &view)
+		err = l.msg.Deliver(ctx, summary, nil, nil, &view)
 		if err == nil {
 			l.logf("delivered, waiting for review")
 			return next
@@ -410,15 +419,28 @@ func (l *agentLoop) pause(ctx context.Context) {
 	pause(ctx)
 }
 
+// agentHarnessFor is the harness agc agent run's flags name.
+func agentHarnessFor(c *cli.Context) (agentHarness, error) {
+	return newAgentHarness(c.String("harness"), c.String("model"), c.String("effort"))
+}
+
 // newAgentHarness drives the harness CLI non-interactively, as
 // runtime/harnesses does, without permission prompts: the VM is the
 // sandbox.
-func newAgentHarness(harness string, model string) (agentHarness, error) {
+func newAgentHarness(harness string, model string, effort string) (agentHarness, error) {
+	effort = strings.TrimSpace(effort)
+	if effort != "" {
+		err := runtimetypes.ReasoningEffort(effort).Validate()
+		if err != nil {
+			return nil, ez.New(ez.EINVALID, "effort "+effort+" is not one of low, medium, high, xhigh", err)
+		}
+	}
+
 	switch harness {
 	case "claude_code":
-		return claudeAgent{model: model}, nil
+		return claudeAgent{model: model, effort: effort}, nil
 	case "codex_cli":
-		return codexAgent{model: model}, nil
+		return codexAgent{model: model, effort: effort}, nil
 	}
 
 	return nil, ez.New(ez.EINVALID, "agc agent run supports --harness claude_code or codex_cli, not "+harness, nil)
@@ -448,20 +470,29 @@ func runHarness(ctx context.Context, name string, args []string) (string, error)
 }
 
 type claudeAgent struct {
-	model string
+	model  string
+	effort string
 }
 
-func (a claudeAgent) Run(ctx context.Context, prompt string, session string) (string, string, error) {
+// args is the claude command line, effort passed as runtime/harnesses
+// does.
+func (a claudeAgent) args(prompt string, session string) []string {
 	args := []string{"-p", "--output-format", "json", "--dangerously-skip-permissions"}
 	if a.model != "" {
 		args = append(args, "--model", a.model)
 	}
+	if a.effort != "" {
+		args = append(args, "--effort", a.effort)
+	}
 	if session != "" {
 		args = append(args, "--resume", session)
 	}
-	args = append(args, "--", prompt)
 
-	stdout, err := runHarness(ctx, "claude", args)
+	return append(args, "--", prompt)
+}
+
+func (a claudeAgent) Run(ctx context.Context, prompt string, session string) (string, string, error) {
+	stdout, err := runHarness(ctx, "claude", a.args(prompt, session))
 	if err != nil {
 		return "", "", err
 	}
@@ -470,7 +501,8 @@ func (a claudeAgent) Run(ctx context.Context, prompt string, session string) (st
 }
 
 type codexAgent struct {
-	model string
+	model  string
+	effort string
 }
 
 func (a codexAgent) Run(ctx context.Context, prompt string, session string) (string, string, error) {
@@ -491,6 +523,9 @@ func (a codexAgent) Run(ctx context.Context, prompt string, session string) (str
 	args = append(args, "--json", "--skip-git-repo-check", "-o", lastMessage)
 	if a.model != "" {
 		args = append(args, "-m", a.model)
+	}
+	if a.effort != "" {
+		args = append(args, "-c", "model_reasoning_effort="+strconv.Quote(a.effort))
 	}
 	args = append(args, prompt)
 

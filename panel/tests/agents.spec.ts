@@ -121,7 +121,60 @@ test('the detail page links home, tasks and conversations, the DM first', async 
   await expect(page.locator('a[data-task="review-42"]')).toHaveAttribute('href', '/panel/tasks/review-42')
   await expect(page.locator('a[data-task="review-42"] [data-status]')).toHaveText('review')
   const channels = page.locator('[data-card="conversations"] a[data-channel]')
-  await expect(channels.first()).toHaveAttribute('data-channel', '#franco')
-  await expect(channels.first()).toHaveAttribute('href', '/panel/messages/franco')
+  await expect(channels.first()).toHaveAttribute('data-channel', '#orchestrator-1')
+  await expect(channels.first()).toHaveAttribute('href', '/panel/messages/orchestrator-1')
   await expect(channels).toHaveCount(3)
+})
+
+test('the page shows model with effort, a skill tile each and a rule row each', async ({ page }) => {
+  await page.goto('/panel/agents/orchestrator-1')
+  await expect(page.getByTestId('agent-model')).toContainText('claude-opus-5-5')
+  await expect(page.getByTestId('agent-effort')).toHaveText('· high')
+
+  const tiles = page.locator('[data-card="skills"] button[data-skill]')
+  await expect(tiles).toHaveCount(2)
+  await expect(tiles.nth(0)).toHaveText('rtsdesign')
+  await expect(tiles.nth(1)).toHaveText('go-style')
+
+  const rules = page.locator('[data-card="rules"] li[data-rule]')
+  await expect(rules).toHaveCount(2)
+  const first = page.locator('li[data-rule="panel-follows-the-design-system"]')
+  await expect(first.locator('[data-slot="rule"]')).toHaveText(
+    'A change to the panel follows docs/design/panel.md and the rtsdesign skill.',
+  )
+  await expect(first.locator('[data-slot="id"]')).toHaveText('panel-follows-the-design-system')
+  // A rule row is not clickable.
+  await expect(page.locator('[data-card="rules"] a, [data-card="rules"] button')).toHaveCount(0)
+})
+
+test('an agent with no effort, skills or rules shows the empty labels in place', async ({ page }) => {
+  await page.goto('/panel/agents/reviewer-2')
+  await expect(page.getByTestId('agent-model')).toHaveText('claude-opus-5-5')
+  await expect(page.getByTestId('agent-effort')).toHaveCount(0)
+  await expect(page.locator('[data-card="skills"]')).toContainText('no skills')
+  await expect(page.locator('[data-card="skills"] [data-skill]')).toHaveCount(0)
+  await expect(page.locator('[data-card="rules"]')).toContainText('no rules')
+  await expect(page.locator('[data-card="rules"] [data-rule]')).toHaveCount(0)
+})
+
+test('a skill tile opens the skill text from GET /api/skills/{name}', async ({ page }) => {
+  await page.goto('/panel/agents/orchestrator-1')
+  const fetched = page.waitForResponse((r) => r.url().endsWith('/api/skills/go-style') && r.status() === 200)
+  await page.locator('button[data-skill="go-style"]').click()
+  await fetched
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('heading', { name: 'go-style' })).toBeVisible()
+  // Plain text: the markdown heading stays a literal "# go-style" line.
+  await expect(dialog.getByTestId('skill-text')).toContainText('# go-style')
+  await expect(dialog.getByTestId('skill-text')).toContainText('- One statement per line.')
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+})
+
+test('the list shows effort after the model and nothing else new', async ({ page }) => {
+  await page.goto('/panel/agents')
+  const row = (name: string) => page.locator(`li[data-agent="${name}"]`)
+  await expect(row('orchestrator-1').locator('[data-readout="model"]')).toHaveText('modelclaude-opus-5-5 · high')
+  await expect(row('reviewer-2').locator('[data-readout="model"]')).toHaveText('modelclaude-opus-5-5')
+  await expect(row('orchestrator-1').locator('[data-skill], [data-rule]')).toHaveCount(0)
 })

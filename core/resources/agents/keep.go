@@ -56,7 +56,7 @@ func (api *API) Keep(ctx context.Context, requester interface{}, request *KeepRe
 	role := strings.TrimSpace(request.Role)
 
 	if role != "" {
-		_, err = LoadTemplate(api.dir, role)
+		_, err = api.template(role)
 		if err != nil {
 			return nil, ez.Wrap(err)
 		}

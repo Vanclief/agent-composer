@@ -55,7 +55,8 @@ sandbox:
   setup: |
     npx playwright install chromium
     printf '%s\n' '#!/bin/sh' 'exec claude "$(cat /home/agent/TASK.md)"' > /home/agent/run.sh
-  secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]
+  # The Claude credential comes from the provider's default account (ADR 0018) unless the spec names one.
+  secrets: [GITHUB_TOKEN]
   # A bare `claude` waits at its prompt for someone to type, and agc splits
   # command on whitespace, so setup writes a one-line script that hands
   # claude the whole brief.

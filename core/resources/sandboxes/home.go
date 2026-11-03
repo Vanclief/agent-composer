@@ -12,6 +12,7 @@ import (
 
 	"github.com/vanclief/agent-composer/messaging"
 	"github.com/vanclief/agent-composer/messaging/httpapi"
+	"github.com/vanclief/agent-composer/models/agent"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/task"
 )
@@ -72,6 +73,9 @@ func (api *API) currentHomes() (Homes, error) {
 type HomeRequest struct {
 	// Agent is the agent's name, which the sandbox is named after.
 	Agent string
+	// Harness is the agent's harness, whose provider's default account
+	// is bound when the template names no credential of it (ADR 0018).
+	Harness agent.Harness
 	// Sandbox is the template's sandbox; its command is ignored for
 	// Command.
 	Sandbox task.Sandbox
@@ -83,7 +87,11 @@ type HomeRequest struct {
 
 // AllocateHome inserts the agent's home and boots it in the background, as
 // AllocateFor does for a task. The sandbox is named after the agent (the
-// first free name), has no task, and gets $AGC_AGENT.
+// first free name), has no task, and gets $AGC_AGENT. Its volume is the
+// agent's, agc-<agent>, whatever the sandbox is called, and is reused when
+// an earlier home left it: the harness sessions and the loop's
+// agc-sessions.json and agc-cursor.json outlive every home (ADR 0016
+// item 5).
 func (api *API) AllocateHome(ctx context.Context, request HomeRequest) (*SandboxView, error) {
 	err := request.Sandbox.Validate()
 	if err != nil {
@@ -94,6 +102,11 @@ func (api *API) AllocateHome(ctx context.Context, request HomeRequest) (*Sandbox
 		return nil, ez.New(ez.EINVALID, "a home needs its agent's name", nil)
 	}
 
+	err = api.skillsRepo().Check(request.Sandbox.Skills)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
 	spec := request.Sandbox.Spec
 	env := map[string]string{}
 	for k, v := range spec.Env {
@@ -102,7 +115,7 @@ func (api *API) AllocateHome(ctx context.Context, request HomeRequest) (*Sandbox
 	env[EnvAgent] = request.Agent
 	spec.Env = env
 
-	bindings, err := api.resolveSecrets(spec)
+	spec, bindings, err := api.resolveSecrets(ctx, spec, request.Harness)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -112,7 +125,7 @@ func (api *API) AllocateHome(ctx context.Context, request HomeRequest) (*Sandbox
 		return nil, ez.Wrap(err)
 	}
 
-	record := &taskmodels.Sandbox{Agent: request.Agent, Spec: encodedSpec, Command: strings.TrimSpace(request.Command), Instructions: request.Instructions}
+	record := &taskmodels.Sandbox{Agent: request.Agent, Volume: task.VolumeName(request.Agent), Spec: encodedSpec, Command: strings.TrimSpace(request.Command), Instructions: request.Instructions}
 
 	err = api.insert(ctx, request.Agent, record)
 	if err != nil {

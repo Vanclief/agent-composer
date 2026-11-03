@@ -14,6 +14,10 @@ AGC_RIG_KNOWLEDGE="${AGC_RIG_KNOWLEDGE:-$AGC_RIG_SRC}"
 # checkout's agents/ by default, so a template pushed to the branch is live
 # after a deploy.
 AGC_RIG_AGENTS="${AGC_RIG_AGENTS:-$AGC_RIG_SRC/agents}"
+# Skills agc writes into sandboxes (AGC_SKILLS_DIR, ADR 0008 "Skills"): the
+# checkout's skills/ by default, so a skill pushed to the branch reaches
+# the next sandbox after a deploy.
+AGC_RIG_SKILLS="${AGC_RIG_SKILLS:-$AGC_RIG_SRC/skills}"
 # The person tasks escalate to and are owned by when none is given (ADR 0009).
 AGC_RIG_OWNER="${AGC_RIG_OWNER:-franco}"
 
@@ -39,6 +43,7 @@ Environment (current value):
   AGC_RIG_PORT  server port         (${AGC_RIG_PORT})
   AGC_RIG_KNOWLEDGE  knowledge dir  (${AGC_RIG_KNOWLEDGE})
   AGC_RIG_AGENTS  agent templates dir (${AGC_RIG_AGENTS})
+  AGC_RIG_SKILLS  skills dir          (${AGC_RIG_SKILLS})
   AGC_RIG_OWNER  default task owner  (${AGC_RIG_OWNER})
 EOF
 }
@@ -85,6 +90,7 @@ PORT=$(printf '%q' "$AGC_RIG_PORT")
 HOST=$(printf '%q' "$AGC_RIG_HOST")
 KNOWLEDGE=$(printf '%q' "$AGC_RIG_KNOWLEDGE")
 AGENTS=$(printf '%q' "$AGC_RIG_AGENTS")
+SKILLS=$(printf '%q' "$AGC_RIG_SKILLS")
 OWNER=$(printf '%q' "$AGC_RIG_OWNER")
 $(
   cat <<'REMOTE'
@@ -93,6 +99,7 @@ SRC="${SRC/#\~/$HOME}"
 RUN="${RUN/#\~/$HOME}"
 KNOWLEDGE="${KNOWLEDGE/#\~/$HOME}"
 AGENTS="${AGENTS/#\~/$HOME}"
+SKILLS="${SKILLS/#\~/$HOME}"
 
 # The rig's global git config rewrites GitHub HTTPS to SSH and it has no key,
 # so every git network command runs with GIT_CONFIG_GLOBAL=/dev/null.
@@ -113,7 +120,7 @@ make install
 echo "==> restarting"
 pkill -x agc || true
 cd "$RUN"
-(AGC_KNOWLEDGE_DIR="$KNOWLEDGE" AGC_AGENTS_DIR="$AGENTS" AGC_DEFAULT_OWNER="$OWNER" nohup agc rest > agc-rest.log 2>&1 < /dev/null &)
+(AGC_KNOWLEDGE_DIR="$KNOWLEDGE" AGC_AGENTS_DIR="$AGENTS" AGC_SKILLS_DIR="$SKILLS" AGC_DEFAULT_OWNER="$OWNER" nohup agc rest > agc-rest.log 2>&1 < /dev/null &)
 
 for _ in $(seq 20); do
   if curl -fsS -o /dev/null "127.0.0.1:$PORT/api/tasks" 2>/dev/null; then

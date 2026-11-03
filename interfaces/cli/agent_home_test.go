@@ -77,6 +77,11 @@ type fakeHomeMessenger struct {
 	left     []string
 	slept    bool
 	nextID   int64
+	// failures fail the next waits, one each, before the script.
+	failures []error
+	// strict rejects a wait naming a channel messaging's check rejects,
+	// as the home socket does.
+	strict bool
 }
 
 func (m *fakeHomeMessenger) Join(ctx context.Context, name string) (*msgmodels.Participant, error) {
@@ -121,6 +126,21 @@ func (m *fakeHomeMessenger) Read(ctx context.Context, channel string, after int6
 func (m *fakeHomeMessenger) WaitChannels(ctx context.Context, channels []string, after int64, timeout time.Duration) (*httpapi.MessagesResponse, error) {
 	m.waits = append(m.waits, fmt.Sprintf("%s after %d", strings.Join(channels, ","), after))
 	m.timeouts = append(m.timeouts, timeout)
+
+	if len(m.failures) > 0 {
+		failure := m.failures[0]
+		m.failures = m.failures[1:]
+		return nil, failure
+	}
+
+	if m.strict {
+		for _, channel := range channels {
+			err := msgmodels.ValidateChannel(channel)
+			if err != nil {
+				return nil, ez.Wrap(err)
+			}
+		}
+	}
 
 	if len(m.script) == 0 {
 		if m.idle {
@@ -287,6 +307,25 @@ func TestHomeLoopTakesOneTurnPerThread(t *testing.T) {
 	}
 }
 
+func TestHomeLoopTurnsOnAgcPostsForTheManager(t *testing.T) {
+	loop := &homeLoop{name: "reviewer-1", me: &msgmodels.Participant{ID: "me", Name: "reviewer-1"}}
+
+	cases := map[string]bool{
+		"Delivered: added tests":   true,
+		"Accepted by franco.":      true,
+		"Accepted by reviewer-1.":  false,
+		"Rejected by franco: no":   true,
+		"Task fix-login created.":  false,
+		"Accepted by reviewer-10.": true,
+	}
+	for body, want := range cases {
+		got := loop.isTurn(fromAgcIn(1, "#fix-login", body), time.Time{})
+		if got != want {
+			t.Errorf("isTurn(%q) = %v, want %v", body, got, want)
+		}
+	}
+}
+
 func TestHomeLoopResumesKnownThreadsAfterAWake(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -424,4 +463,189 @@ func fromAgcIn(id int64, channel string, body string) msgmodels.Message {
 	m.ParticipantID = "p-agc"
 
 	return m
+}
+
+func TestHomeLoopBacksOffAndDropsAnInvalidChannel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	down := ez.New(ez.EUNAVAILABLE, "agc messaging is unreachable", nil)
+	msg := &fakeHomeMessenger{
+		cancel:   cancel,
+		nextID:   100,
+		strict:   true,
+		agent:    msgclient.AgentResponse{Agent: msgclient.AgentView{Name: "reviewer-1", Role: "reviewer"}, Channels: []string{"#Not-A-Channel", "#b"}, Idle: "15m"},
+		failures: []error{down, down, down, down, down, down},
+		script: [][]msgmodels.Message{
+			{homeMsg(10, "#b", "agc", 0, "Delivered: fix-login")},
+		},
+	}
+	harness := &homeHarness{}
+	loop, _ := newHomeLoop(t, msg, harness)
+	logs := &strings.Builder{}
+	loop.log = logs
+	pauses := []time.Duration{}
+	loop.backoff = func(ctx context.Context, d time.Duration) {
+		pauses = append(pauses, d)
+	}
+
+	err := loop.run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Doubling from 2s, capped at 30s.
+	wantPauses := []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second, 30 * time.Second, 30 * time.Second}
+	if !reflect.DeepEqual(pauses, wantPauses) {
+		t.Fatalf("pauses = %v, want %v", pauses, wantPauses)
+	}
+
+	// The invalid channel is dropped and the wait asked again at once
+	// without it, in every cycle; it never costs a back-off.
+	both := "#Not-A-Channel,#b after 0"
+	wantWaits := []string{both, both, both, both, both, both, both, "#b after 0", "#Not-A-Channel,#b after 10", "#b after 10"}
+	if !reflect.DeepEqual(msg.waits, wantWaits) {
+		t.Fatalf("waits = %q, want %q", msg.waits, wantWaits)
+	}
+
+	if len(harness.turns) != 1 || !strings.Contains(harness.turns[0].prompt, "Delivered: fix-login") {
+		t.Fatalf("turns = %#v, want one on the delivery", harness.turns)
+	}
+
+	out := logs.String()
+	if strings.Count(out, "wait failed") != 1 || !strings.Contains(out, "unreachable") {
+		t.Fatalf("the failure is not logged once:\n%s", out)
+	}
+	if strings.Count(out, "leaving #Not-A-Channel out of the wait") != 1 {
+		t.Fatalf("the dropped channel is not logged once:\n%s", out)
+	}
+	if strings.Count(out, "wait works again") != 1 {
+		t.Fatalf("the recovery is not logged once:\n%s", out)
+	}
+}
+
+// agentMsg is a post by another agent: a task's sandbox.
+func agentMsg(id int64, channel, from string, replyTo int64, body string) msgmodels.Message {
+	m := homeMsg(id, channel, from, replyTo, body)
+	m.Task = from
+
+	return m
+}
+
+func TestHomeLoopSkipsAnotherAgentsPlainPost(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	question := agentMsg(13, "#c", "fix-ci", 0, "which runner?")
+	question.Kind = msgmodels.KindQuestion
+
+	msg := &fakeHomeMessenger{
+		cancel: cancel,
+		nextID: 100,
+		agent:  msgclient.AgentResponse{Agent: msgclient.AgentView{Name: "reviewer-1", Role: "reviewer"}, Channels: []string{"#b", "#c"}, Idle: "15m"},
+		script: [][]msgmodels.Message{
+			// The task's agent acknowledges in a new thread: no turn.
+			{agentMsg(10, "#b", "fix-login", 0, "Noted, thanks.")},
+			// A person answers in that thread: a turn, shown the agent's
+			// post as context; another agent's question and a post naming
+			// the reviewer are turns too.
+			{
+				homeMsg(11, "#b", "franco", 10, "@reviewer-1 did you fetch?"),
+				question,
+				agentMsg(14, "#c", "fix-db", 0, "@reviewer-1 fetch origin"),
+				agentMsg(15, "#c", "fix-db", 0, "@reviewer-10 fetch origin"),
+			},
+		},
+	}
+	harness := &homeHarness{}
+	loop, _ := newHomeLoop(t, msg, harness)
+
+	err := loop.run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(harness.turns) != 3 {
+		t.Fatalf("turns = %#v, want 3", harness.turns)
+	}
+	want := "@fix-login in #b [message] (10): Noted, thanks.\n@franco in #b [message] (11): @reviewer-1 did you fetch?\n"
+	if !strings.Contains(harness.turns[0].prompt, want) {
+		t.Fatalf("the first turn does not show the agent's post as context:\n%s", harness.turns[0].prompt)
+	}
+	if !strings.Contains(harness.turns[1].prompt, "which runner?") || !strings.Contains(harness.turns[2].prompt, "fetch origin") {
+		t.Fatalf("turns = %#v", harness.turns)
+	}
+
+	wantPosts := []homePost{
+		{channel: "#b", body: "answer 1", replyTo: 10},
+		{channel: "#c", body: "answer 2", replyTo: 13},
+		{channel: "#c", body: "answer 3", replyTo: 14},
+	}
+	if !reflect.DeepEqual(msg.posts, wantPosts) {
+		t.Fatalf("posts = %+v", msg.posts)
+	}
+
+	cursor := cursorState{}
+	readJSONFile(t, filepath.Join(loop.dir, cursorFile), &cursor)
+	if cursor.After != 15 {
+		t.Fatalf("cursor = %d", cursor.After)
+	}
+}
+
+func TestHomeLoopHearsTheAnswerToItsQuestionInAChannelItDoesNotRead(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// The reviewer asked franco in #franco (702), from an earlier run; it
+	// reads #b only. A task agent asked there too (703).
+	asked := homeMsg(702, "#franco", "reviewer-1", 0, "merge #fix-login?")
+	asked.ParticipantID = "p-old"
+	asked.Agent = "reviewer-1-home"
+	asked.Kind = msgmodels.KindQuestion
+	other := agentMsg(703, "#franco", "fix-ci", 0, "which runner?")
+	other.Kind = msgmodels.KindQuestion
+	own := homeMsg(709, "#franco", "reviewer-1", 702, "merging")
+	own.ParticipantID = "me"
+
+	msg := &fakeHomeMessenger{
+		cancel: cancel,
+		nextID: 800,
+		agent:  msgclient.AgentResponse{Agent: msgclient.AgentView{Name: "reviewer-1", Role: "reviewer"}, Channels: []string{"#b"}, Asked: []string{"#franco"}, Idle: "15m"},
+		stored: map[int64]msgmodels.Message{702: asked, 703: other},
+		script: [][]msgmodels.Message{
+			{
+				// franco's own post and his answer to someone else's
+				// question are not the reviewer's turns.
+				homeMsg(705, "#franco", "franco", 0, "note to self"),
+				homeMsg(706, "#franco", "franco", 703, "the big one"),
+				homeMsg(707, "#franco", "franco", 702, "Yes do it"),
+				own,
+				agentMsg(710, "#franco", "fix-ci", 0, "Noted."),
+			},
+		},
+	}
+	harness := &homeHarness{}
+	loop, _ := newHomeLoop(t, msg, harness)
+
+	err := loop.run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wantPrompts := []homeHarnessTurn{
+		{"", "# Reviewer\n\n\n---\n\n@franco in #franco [message] (707): Yes do it\n\nRead more with: agc msg read '#franco' --after 701\n"},
+	}
+	if !reflect.DeepEqual(harness.turns, wantPrompts) {
+		t.Fatalf("turns:\n%#v", harness.turns)
+	}
+
+	wantPosts := []homePost{{channel: "#franco", body: "answer 1", replyTo: 702}}
+	if !reflect.DeepEqual(msg.posts, wantPosts) {
+		t.Fatalf("posts = %+v", msg.posts)
+	}
+
+	wantWaits := []string{"#b,#franco after 0", "#b,#franco after 710"}
+	if !reflect.DeepEqual(msg.waits, wantWaits) {
+		t.Fatalf("waits = %q", msg.waits)
+	}
 }

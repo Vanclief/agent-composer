@@ -2,6 +2,7 @@
 // under src/features/<feature>/ (see CLAUDE.md); this file only wires them.
 import { Navigate, Route, Routes } from 'react-router'
 
+import { AccountsPage } from '@/features/accounts/AccountsPage'
 import { AgentPage } from '@/features/agents/AgentPage'
 import { AgentsPage } from '@/features/agents/AgentsPage'
 import { ComputePage } from '@/features/compute/ComputePage'
@@ -35,6 +36,8 @@ export function App() {
         {/* Persistent agents: :name is the agent's number or kept name. */}
         <Route path="agents" element={<AgentsPage />} />
         <Route path="agents/:name" element={<AgentPage />} />
+        {/* Accounts: one card per provider, its default and usage. */}
+        <Route path="accounts" element={<AccountsPage />} />
         {/* :channel is the channel name without its #: /messages/review-42 is #review-42. */}
         <Route path="messages" element={<MessagesPage />} />
         <Route path="messages/:channel" element={<MessagesPage />} />

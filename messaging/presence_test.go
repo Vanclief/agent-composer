@@ -189,3 +189,25 @@ func TestParticipantVisibilityForTasks(t *testing.T) {
 		t.Fatalf("a task should see a participant who posted in its grant: %v", err)
 	}
 }
+
+// Only a persistent agent's home takes a name over from an absent agent
+// (ADR 0016 item 6); a task's sandbox still gets 409 and picks another.
+func TestOnlyAHomeTakesOverAStaleName(t *testing.T) {
+	svc := newTestService(t)
+	svc.SetPresence(fakePresence{sandboxes: map[string]bool{"reviewer-1-2": true}, tasks: map[string]bool{}})
+
+	stale := join(t, svc, Caller{Agent: "reviewer-1"}, "reviewer-1")
+
+	_, err := svc.Join(context.Background(), review, "reviewer-1")
+	if ez.ErrorCode(err) != ez.ECONFLICT {
+		t.Fatalf("task join err = %v", err)
+	}
+
+	p := join(t, svc, Caller{Agent: "reviewer-1-2"}, "reviewer-1")
+	if p.ID == stale.ID || p.Agent != "reviewer-1-2" {
+		t.Fatalf("joined = %+v", p)
+	}
+	if onlyView(t, svc, stale.ID).LeftAt == nil {
+		t.Fatal("the stale participant should have left")
+	}
+}

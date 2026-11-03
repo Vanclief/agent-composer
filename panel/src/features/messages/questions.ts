@@ -43,6 +43,8 @@ export type OpenQuestions = {
   all: Question[]
   of: (channel: string) => Question[]
   total: number
+  // The first answer arrived (later refetches keep the previous one).
+  loaded: boolean
 }
 
 // Open questions addressed to me, by channel. My own questions never wait
@@ -55,5 +57,6 @@ export function useOpenQuestions(): OpenQuestions {
     all,
     of: (channel) => all.filter((q) => q.channel === channel),
     total: all.length,
+    loaded: query.isSuccess,
   }
 }

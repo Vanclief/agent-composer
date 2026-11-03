@@ -31,7 +31,8 @@ func (r AcceptRequest) Validate() error {
 }
 
 // Accept closes the task (ADR 0010 item 4): it sets done_at and
-// accepted_by, posts "Accepted by <name>." in #<task>, then stops every
+// accepted_by, posts "Accepted by <name>." in #<task>, closes the task's
+// open agent questions (closeQuestions), then stops every
 // running sandbox of the task, and every starting one as soon as it has
 // booted. A sandbox that cannot be stopped is logged and does not fail
 // the accept. Nothing is deleted. A
@@ -71,6 +72,7 @@ func (api *API) accept(ctx context.Context, record *taskmodels.Task, by string) 
 	}
 
 	api.post(ctx, record, "Accepted by "+by+".")
+	api.closeQuestions(ctx, record, by)
 	api.stopSandboxes(ctx, record)
 
 	return nil
@@ -164,6 +166,23 @@ func cutSummary(body string) string {
 	}
 
 	return string(runes)
+}
+
+// closeQuestions closes, with agc's "Closed: <task> accepted by <by>."
+// reply, the open agent questions in #<task> and the manager's accept
+// questions about the task in the owner's inbox (ADR 0010 "Accept"). A
+// failure is logged and does not fail the accept; the collector's tick
+// closes what is left.
+func (api *API) closeQuestions(ctx context.Context, record *taskmodels.Task, by string) {
+	closing := messaging.Closing{Task: record.Name, Manager: record.Manager, Owner: record.Owner, By: by}
+
+	closed, err := api.msg.CloseQuestions(ctx, []messaging.Closing{closing})
+	for _, c := range closed {
+		log.Info().Str("task", c.Task).Str("channel", c.Channel).Int64("question", c.Question).Str("from", c.From).Msg("messaging: closed question")
+	}
+	if err != nil {
+		log.Warn().Err(err).Str("task", record.Name).Msg("cannot close the task's questions")
+	}
 }
 
 // stopSandboxes stops the task's running sandboxes the way

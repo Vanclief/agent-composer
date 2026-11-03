@@ -62,8 +62,8 @@ func TestTaskAgentRoutes(t *testing.T) {
 	opening := "@orchestrator (manager), @franco (owner): task `fix-login` is open: Fix login.\n" +
 		"Agent: claude_code (claude-opus-5-5) on sandbox `fix-login`, starting.\n" +
 		"The agent's instructions are the next message. Reply here to talk to it;\n" +
-		"it escalates to #franco when only the owner can decide. Post /accept\n" +
-		"to accept the task, /reject <why> to send it back."
+		"its manager raises to franco what only the owner can decide.\n" +
+		"Post /accept to accept the task, /reject <why> to send it back."
 	if read.Messages[0].Body != opening || read.Messages[1].Body != created.Instructions {
 		t.Fatalf("messages = %s", body)
 	}

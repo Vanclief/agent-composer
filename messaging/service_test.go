@@ -34,6 +34,7 @@ func newTestDB(t *testing.T) *bun.DB {
 	tables := []interface{}{
 		(*msgmodels.Participant)(nil),
 		(*msgmodels.Message)(nil),
+		(*msgmodels.ChannelArchive)(nil),
 	}
 	for _, table := range tables {
 		_, err = db.NewCreateTable().Model(table).IfNotExists().Exec(context.Background())
@@ -188,7 +189,7 @@ func TestAccessMatrix(t *testing.T) {
 	_, err = svc.Read(ctx, Caller{}, "#releases", 0, 0)
 	wantCode(t, err, ez.ENOTAUTHORIZED)
 
-	channels, err := svc.Channels(ctx, review)
+	channels, err := svc.Channels(ctx, review, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +207,7 @@ func TestAccessMatrix(t *testing.T) {
 		}
 	}
 
-	all, err := svc.Channels(ctx, human)
+	all, err := svc.Channels(ctx, human, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -516,4 +517,110 @@ func TestAllParticipantsListsEveryoneForHumansOnly(t *testing.T) {
 
 	_, err = svc.AllParticipants(ctx, review)
 	wantCode(t, err, ez.ENOTAUTHORIZED)
+}
+
+func TestInboxTakesOnlyQuestionsAndAnswersFromAgents(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+
+	owner := Caller{Task: "review-42", Grants: []Grant{{Channel: "#franco"}}}
+	agent := join(t, svc, owner, "agent")
+	franco := join(t, svc, human, "franco")
+
+	// A plain note from an agent is refused.
+	_, err := svc.Post(ctx, owner, agent.ID, "#franco", "Merged it.", nil, "")
+	wantCode(t, err, ez.ENOTAUTHORIZED)
+	want := "only questions and answers go in a person's inbox; post notes in #<task>"
+	if ez.ErrorMessage(err) != want {
+		t.Fatalf("unexpected message %q", ez.ErrorMessage(err))
+	}
+
+	// A question goes through.
+	q, err := svc.Post(ctx, owner, agent.ID, "#franco", "Accept review-42?", nil, msgmodels.KindQuestion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// So does a reply in its thread, from the person or the agent.
+	answer, err := svc.Post(ctx, human, franco.ID, "#franco", "What changed?", &q.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = svc.Post(ctx, owner, agent.ID, "#franco", "Only the inbox rule.", &answer.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The person posts anything in their inbox.
+	post(t, svc, human, franco, "#franco", "note to self")
+
+	// agc is unaffected.
+	_, err = svc.PostAsSystem(ctx, "#franco", "Accepted by franco.")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The agent's note goes in #<task>.
+	post(t, svc, owner, agent, "#review-42", "Merged it.")
+
+	// A granted channel no person is named after is not an inbox.
+	post(t, svc, review, join(t, svc, review, "reviewer"), "#releases", "shipped")
+
+	// A task's agent is not granted its owner's inbox (ADR 0009 item 5):
+	// even a question there is refused, it asks its manager in #<task>.
+	ungranted := Caller{Task: "review-43"}
+	worker := join(t, svc, ungranted, "worker")
+	_, err = svc.Post(ctx, ungranted, worker.ID, "#franco", "Accept review-43?", nil, msgmodels.KindQuestion)
+	wantCode(t, err, ez.ENOTAUTHORIZED)
+	if ez.ErrorMessage(err) != "channel #franco is not available to task review-43" {
+		t.Fatalf("unexpected message %q", ez.ErrorMessage(err))
+	}
+}
+
+func TestAnAgentsInboxTakesOnlyQuestionsAndAnswersFromOtherAgents(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+
+	designer := Caller{Agent: "designer-1", Grants: []Grant{{Channel: "#designer-1"}, {Channel: "#reviewer-1"}}}
+	reviewer := Caller{Agent: "reviewer-1", Grants: []Grant{{Channel: "#designer-1"}, {Channel: "#fix-login"}}}
+	worker := Caller{Task: "fix-login", Grants: []Grant{{Channel: "#designer-1"}}}
+	self := join(t, svc, designer, "designer-1")
+	other := join(t, svc, reviewer, "reviewer-1")
+	task := join(t, svc, worker, "fix-login")
+	franco := join(t, svc, human, "franco")
+
+	// Another agent's or a task's plain note is refused.
+	_, err := svc.Post(ctx, reviewer, other.ID, "#designer-1", "FYI, merged.", nil, "")
+	wantCode(t, err, ez.ENOTAUTHORIZED)
+	_, err = svc.Post(ctx, worker, task.ID, "#designer-1", "FYI, merged.", nil, "")
+	wantCode(t, err, ez.ENOTAUTHORIZED)
+
+	// A question, and a reply in a thread there, go through.
+	q, err := svc.Post(ctx, reviewer, other.ID, "#designer-1", "Which icon for stop?", nil, msgmodels.KindQuestion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	answer, err := svc.Post(ctx, designer, self.ID, "#designer-1", "The square.", &q.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = svc.Post(ctx, reviewer, other.ID, "#designer-1", "Thanks.", &answer.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The agent itself, its owner and agc post freely.
+	post(t, svc, designer, self, "#designer-1", "Working on the sidebar.")
+	post(t, svc, human, franco, "#designer-1", "Look at the agents page.")
+	_, err = svc.PostAsSystem(ctx, "#designer-1", "Asleep.")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The agent's inbox is its own: it is still held to the rule in another agent's.
+	_, err = svc.Post(ctx, designer, self.ID, "#reviewer-1", "note", nil, "")
+	wantCode(t, err, ez.ENOTAUTHORIZED)
+
+	// #<task> is not an inbox, though a task participant is named after it.
+	post(t, svc, reviewer, other, "#fix-login", "note")
 }

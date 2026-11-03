@@ -2,13 +2,15 @@
 // and whether it is kept, and its actions (Wake when asleep, Sleep when
 // awake, disabled while waking; Keep… for a numbered agent, Rename… for a
 // kept one). Cards: its home sandbox, the tasks it manages, the channels
-// it reads (the DM with its owner first) and who it is.
-import type { ReactNode } from 'react'
+// it reads (the DM with its owner first), who it is (model with its
+// effort), the skills it has (a tile each, opening the skill's text) and the
+// rules it follows (a row each).
+import { useState, type ReactNode } from 'react'
 import { Clock, Loader2, Moon, Pencil, Sun, UserCheck } from 'lucide-react'
 import { Link, useParams } from 'react-router'
 
 import type { AgentView } from '@/api/agents'
-import { useAgent, useSleepAgent, useWakeAgent } from '@/api/hooks'
+import { useAgent, useSkillText, useSleepAgent, useWakeAgent } from '@/api/hooks'
 import { Avatar } from '@/components/avatar'
 import { conceptColors, conceptIcons, type Concept } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
@@ -16,6 +18,7 @@ import { ErrorText } from '@/components/error-text'
 import { IconChip } from '@/components/icon-chip'
 import { StatusPill } from '@/components/status-pill'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/shell/page-title'
@@ -86,6 +89,8 @@ export function AgentPage() {
         <TasksCard agent={a} />
         <ConversationsCard agent={a} />
         <IdentityCard agent={a} />
+        <SkillsCard agent={a} />
+        <RulesCard agent={a} />
       </div>
     </div>
   )
@@ -248,7 +253,10 @@ function IdentityCard({ agent }: { agent: AgentView }) {
           </IconChip>
         </dd>
         <dt className="text-xs text-muted-foreground">Model</dt>
-        <dd className="font-mono text-xs">{agent.model || '–'}</dd>
+        <dd data-testid="agent-model" className="flex min-w-0 items-center gap-1.5 font-mono text-xs">
+          <span className="truncate">{agent.model || '–'}</span>
+          <EffortChip effort={agent.effort} />
+        </dd>
         <dt className="text-xs text-muted-foreground">Owner</dt>
         <dd>
           <IconChip icon={conceptIcons.human} concept="human">
@@ -260,6 +268,115 @@ function IdentityCard({ agent }: { agent: AgentView }) {
           {ago(agent.created_at)}
         </dd>
       </dl>
+    </AgentCard>
+  )
+}
+
+// The model's reasoning effort beside it, dim: "· high". Nothing when empty
+// (the harness default).
+function EffortChip({ effort }: { effort?: string }) {
+  if (!effort) {
+    return null
+  }
+  return (
+    <span
+      data-testid="agent-effort"
+      title="Effort"
+      className="inline-flex shrink-0 items-center rounded-md border border-zinc-200 px-1.5 py-0.5 font-mono text-xs text-muted-foreground dark:border-zinc-800"
+    >
+      · {effort}
+    </span>
+  )
+}
+
+function SkillsCard({ agent }: { agent: AgentView }) {
+  const skills = agent.skills ?? []
+  const [open, setOpen] = useState<string | null>(null)
+  return (
+    <AgentCard label="Skills" concept="skill" name="skills">
+      {skills.length === 0 ? (
+        <EmptySlot reason="no skills" className="self-start" />
+      ) : (
+        <ul aria-label="Skills" className="flex flex-wrap gap-2">
+          {skills.map((skill) => (
+            <li key={skill}>
+              <button
+                type="button"
+                data-skill={skill}
+                title={`Read the skill ${skill}`}
+                onClick={() => setOpen(skill)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 font-mono text-xs transition-colors hover:bg-blue-500/20 focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none',
+                  conceptColors.skill.bg,
+                  conceptColors.skill.border,
+                  conceptColors.skill.text,
+                )}
+              >
+                <conceptIcons.skill aria-hidden className="size-3.5" />
+                {skill}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <SkillDialog name={open} onClose={() => setOpen(null)} />
+    </AgentCard>
+  )
+}
+
+// The skill's markdown, as plain text.
+function SkillDialog({ name, onClose }: { name: string | null; onClose: () => void }) {
+  const text = useSkillText(name ?? '', name !== null)
+  return (
+    <Dialog open={name !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-1.5 font-mono">
+            <conceptIcons.skill aria-hidden className={cn('size-4', conceptColors.skill.text)} />
+            {name}
+          </DialogTitle>
+          <DialogDescription>Skill</DialogDescription>
+        </DialogHeader>
+        {text.isPending ? (
+          <Skeleton className="h-40" />
+        ) : text.error ? (
+          <ErrorText error={text.error} />
+        ) : (
+          <pre
+            data-testid="skill-text"
+            className="max-h-[60vh] overflow-auto rounded-md border border-border bg-zinc-50 p-3 font-mono text-xs whitespace-pre-wrap dark:bg-zinc-950/60"
+          >
+            {text.data}
+          </pre>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// One row per rule: the sentence, then its id dim and mono. Not clickable.
+function RulesCard({ agent }: { agent: AgentView }) {
+  const rules = agent.rules ?? []
+  return (
+    <AgentCard label="Rules" concept="rule" name="rules">
+      {rules.length === 0 ? (
+        <EmptySlot reason="no rules" className="self-start" />
+      ) : (
+        <ul aria-label="Rules" className="flex flex-col divide-y divide-border">
+          {rules.map((r) => (
+            <li
+              key={r.id}
+              data-rule={r.id}
+              className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-2 py-1.5 text-sm"
+            >
+              <span data-slot="rule">{r.rule}</span>
+              <span data-slot="id" className="ml-auto font-mono text-xs break-all text-muted-foreground">
+                {r.id}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </AgentCard>
   )
 }

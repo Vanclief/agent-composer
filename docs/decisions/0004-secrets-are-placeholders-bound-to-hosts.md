@@ -32,14 +32,16 @@ not.
 
    ```yaml
    environment:
-     secrets: [CLAUDE_CODE_OAUTH_TOKEN, GITHUB_TOKEN]   # placeholders, host-bound
+     secrets: [GITHUB_TOKEN]                           # placeholders, host-bound
      env:
        GOFLAGS: -mod=mod                                 # plain, readable by agents
      files:
        - codex-auth:/home/agent/.codex/auth.json         # copied in, fully exposed
    ```
 
-   `secrets` is the default and the only tier agc recommends. `env` is for
+   `secrets` is the default and the only tier agc recommends. The harness
+   credential comes from the provider's default account (ADR 0018) unless
+   the spec names one. `env` is for
    non-sensitive configuration. `files` exists for credentials that cannot be
    substituted (rotating tokens a program rewrites, SSH keys) and the UI
    marks every file entry as exposed to the agent.
@@ -58,7 +60,7 @@ not.
    | Name | Allowed hosts |
    |---|---|
    | `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` | `api.anthropic.com` |
-   | `OPENAI_API_KEY` | `api.openai.com` |
+   | `OPENAI_API_KEY`, `CODEX_API_KEY` | `api.openai.com` |
    | `GITHUB_TOKEN` | `api.github.com`, `github.com` |
 
    Any other name must declare hosts in the spec, `NAME@host1,host2`, or
@@ -73,14 +75,64 @@ not.
 
 5. **Harness authentication is environment-based inside Tasks.** Claude Code
    through `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` (from
-   `claude setup-token`); Codex through `OPENAI_API_KEY`. Interactive
+   `claude setup-token`); Codex through `CODEX_API_KEY` (read by `codex
+   exec`). Interactive
    `claude login` inside a Task is possible but writes a token to the Task's
    disk, is not substituted, and is lost on delete, so the UI does not offer
    it. Codex on a ChatGPT subscription needs its rotating `auth.json` and
-   therefore falls into `files`.
+   therefore falls into `files`. (2026-11-02, Franco: list what the current
+   Codex CLI reads; `codex exec` authenticates with `CODEX_API_KEY`, and
+   reads `OPENAI_API_KEY` only to prefill the TUI login prompt.)
 
 6. **Git uses HTTPS with the credential helper baked into the base image**,
    reading `GITHUB_TOKEN`. SSH remotes are not supported inside Tasks.
+
+## Accounts
+
+Added 2026-11-02, on Franco's ask for several accounts per provider. Each
+harness reads one fixed variable (Claude Code `CLAUDE_CODE_OAUTH_TOKEN`, then
+`ANTHROPIC_API_KEY`; Codex in `codex exec` `CODEX_API_KEY`), so with one name
+per variable a rig could hold one account per provider. An account is a named
+secret a sandbox receives under the variable the harness reads:
+
+```yaml
+secrets:
+  - ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN
+  - OPENAI_PERSONAL as CODEX_API_KEY@api.openai.com
+  - GITHUB_TOKEN
+```
+
+- **Syntax.** `NAME as ENV[@host1,host2]`. `NAME` is the entry in
+  `secrets.env`, `ENV` the guest variable. Without `as`, `ENV` is `NAME`, as
+  before, so `NAME` and `NAME@hosts` mean what they meant. `ENV` must look
+  like an environment variable name (`[A-Z_][A-Z0-9_]*`), and an account
+  may not share its `ENV` with another entry of the spec; both are spec
+  validation errors that quote the entry. A plain `NAME` listed twice is
+  left as it was before accounts, so no spec that validated stops
+  validating.
+- **Hosts.** From the entry when it names them, else the table above for
+  `ENV`, else the table for `NAME`, else creation fails asking for
+  `NAME as ENV@host`. So `ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN` is bound
+  to `api.anthropic.com` with no hosts written. `CODEX_API_KEY` is in the
+  table, bound to `api.openai.com`.
+- **Which variable.** `GET /api/secrets` returns, besides the names,
+  `harnesses: [{ id, reads }]`: each harness in the catalog
+  (`runtime/harnesses/catalog.go`) with the variables it takes its
+  credentials from, in order of preference, so a client can offer "use this
+  secret as the variable claude_code reads".
+- **Persistent agents.** A role's template (`agents/<role>.yaml`,
+  `sandbox.secrets`, ADR 0016) takes the same entries, so a role runs on a
+  given account. A per-agent override at `agc agent create` is not offered
+  yet; the template decides.
+- **Still never readable.** Nothing else changes: the guest variable `ENV`
+  holds a placeholder, and the proxy swaps in the value of `NAME` only in
+  requests to the bound hosts. No request returns the value.
+- A schedule's poll command reads its secrets on the host by their own
+  names, so `as` is refused there.
+- **Managed accounts.** [ADR 0018](0018-accounts.md) keeps accounts as rows
+  plus `ACCOUNT_<NAME>` lines of `secrets.env`, with a default per provider
+  bound as `<secret> as <variable>` when a spec names no credential of its
+  harness.
 
 ## Rationale
 

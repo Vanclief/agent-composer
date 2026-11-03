@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/vanclief/ez"
@@ -41,8 +42,7 @@ func isGlob(pattern string) bool {
 }
 
 // MatchChannel reports whether channel matches pattern: * matches every
-// channel, otherwise a glob on the whole name (* does not cross the / of a
-// DM channel).
+// channel, otherwise a glob on the whole name (* does not cross a /).
 func MatchChannel(pattern string, channel string) bool {
 	if pattern == Every {
 		return true
@@ -56,10 +56,16 @@ func MatchChannel(pattern string, channel string) bool {
 	return err == nil && matched
 }
 
+// validChannel is messaging's channel name check, swapped in tests.
+var validChannel = msgmodels.ValidateChannel
+
 // Reads is every channel pattern the agent reads (ADR 0016 item 6): its
-// DM channel, #<task> for each task it manages, then the template's
+// inbox #<name>, #<task> for each task it manages, then the template's
 // reads. It is the one list behind GET /agent, the wake hook and the
 // home's messaging access.
+//
+// A channel messaging rejects is left out: one name it rejects fails the
+// home loop's whole wait on every channel.
 func (api *API) Reads(ctx context.Context, record *agent.Agent, tmpl *Template) ([]string, error) {
 	patterns := []string{}
 
@@ -81,7 +87,22 @@ func (api *API) Reads(ctx context.Context, record *agent.Agent, tmpl *Template) 
 		patterns = append(patterns, tmpl.Reads...)
 	}
 
-	return dedupe(patterns), nil
+	return dedupe(knownChannels(patterns)), nil
+}
+
+// knownChannels drops every pattern that names one channel messaging
+// rejects; globs and * stay, they only ever match channels that exist.
+func knownChannels(patterns []string) []string {
+	out := []string{}
+	for _, pattern := range patterns {
+		if pattern != Every && !isGlob(pattern) && validChannel(pattern) != nil {
+			continue
+		}
+
+		out = append(out, pattern)
+	}
+
+	return out
 }
 
 // matchesAny reports whether channel matches one of patterns.
@@ -151,4 +172,39 @@ func dedupe(values []string) []string {
 	}
 
 	return out
+}
+
+// Asked is every channel outside channels where the agent started a
+// thread (ADR 0016 item 6): a reply there is a turn for it
+// (msgmodels.AnswerFor), so its home waits on these channels too and is
+// granted them, but takes only the replies in its own threads. In
+// practice it is the owner's inbox #<owner>, the one channel an agent may
+// post in without reading it.
+func (api *API) Asked(ctx context.Context, record *agent.Agent, channels []string) ([]string, error) {
+	started := []string{}
+
+	err := api.db.NewSelect().
+		Model((*msgmodels.Message)(nil)).
+		ColumnExpr("DISTINCT channel").
+		Where("reply_to IS NULL").
+		Where(`"from" = ?`, record.Name).
+		Where("human = ?", false).
+		Where("task = ''").
+		Where("agent <> ''").
+		Order("channel ASC").
+		Scan(ctx, &started)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	asked := []string{}
+	for _, channel := range started {
+		if slices.Contains(channels, channel) {
+			continue
+		}
+
+		asked = append(asked, channel)
+	}
+
+	return asked, nil
 }

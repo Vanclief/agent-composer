@@ -79,8 +79,11 @@ func msgCommand() *cli.Command {
 				Action: msgWait,
 			},
 			{
-				Name:   "channels",
-				Usage:  "List the channels you may read",
+				Name:  "channels",
+				Usage: "List the channels you may read; archived ones only with --archived",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{Name: "archived", Usage: "List archived channels too, with archived_at"},
+				},
 				Action: msgChannels,
 			},
 		},
@@ -212,7 +215,7 @@ func msgWait(c *cli.Context) error {
 }
 
 func msgChannels(c *cli.Context) error {
-	res, err := newMsgClient().Channels(c.Context)
+	res, err := newMsgClient().Channels(c.Context, c.Bool("archived"))
 	if err != nil {
 		return err
 	}
@@ -271,8 +274,8 @@ func msgArgs(c *cli.Context, min int) ([]string, error) {
 }
 
 // msgChannel adds the leading # when it was left off, since an unquoted
-// #name starts a comment in most shells. A DM channel (`@<owner>/<name>`)
-// is left as it is.
+// #name starts a comment in most shells. A DM channel (`@<human>/<task>`,
+// ADR 0011) is left as it is.
 func msgChannel(channel string) string {
 	if strings.HasPrefix(channel, "#") || strings.HasPrefix(channel, "@") {
 		return channel

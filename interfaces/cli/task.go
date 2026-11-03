@@ -17,6 +17,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	"github.com/vanclief/agent-composer/interfaces/cli/client"
+	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/task"
 )
 
@@ -141,11 +142,13 @@ var valueFlags = map[string]string{
 	"--role":    "role",
 	"--harness": "harness",
 	"--model":   "model",
+	"--report":  "report",
 }
 
 // leafArgs returns the positional arguments. urfave/cli stops reading
-// flags at the first argument, so --yes, --json, --server <url> and
-// -f <file> written after a name are picked out here and set on c.
+// flags at the first argument, so --yes, --json, --server <url>,
+// -f <file> and --report <file> written after a name (or after the
+// summary of agc task deliver) are picked out here and set on c.
 func leafArgs(c *cli.Context) ([]string, bool, error) {
 	yes := c.Bool("yes")
 	names := []string{}
@@ -664,6 +667,11 @@ func taskDeliver(c *cli.Context) error {
 		return err
 	}
 
+	files, err := readShots(report)
+	if err != nil {
+		return err
+	}
+
 	sandboxTask := strings.TrimSpace(os.Getenv(task.EnvTask))
 	name := firstNonEmpty(c.String("task"), sandboxTask)
 
@@ -673,7 +681,7 @@ func taskDeliver(c *cli.Context) error {
 		}
 
 		view := &tasks.TaskView{}
-		err = newMsgClient().Deliver(c.Context, summary, report, view)
+		err = newMsgClient().Deliver(c.Context, summary, report, files, view)
 		if err != nil {
 			return err
 		}
@@ -693,7 +701,7 @@ func taskDeliver(c *cli.Context) error {
 	}
 
 	return withService(c, func(ctx context.Context, svc taskService) error {
-		view, err := svc.DeliverTask(ctx, name, summary, decoded)
+		view, err := svc.DeliverTask(ctx, name, summary, decoded, files)
 		if err != nil {
 			return err
 		}
@@ -733,6 +741,47 @@ func readReport(c *cli.Context) (json.RawMessage, error) {
 	}
 
 	return json.RawMessage(trimmed), nil
+}
+
+// readShots reads the PNG each of the report's shots names, by its file
+// path here, and returns them under their labels, nil when the report has
+// no shots. The server checks them; only a file that cannot be read, or
+// a shot without a label or a file, stops agc here.
+func readShots(report json.RawMessage) (map[string][]byte, error) {
+	if report == nil {
+		return nil, nil
+	}
+
+	var shaped struct {
+		Shots []taskmodels.Shot `json:"shots"`
+	}
+
+	err := json.Unmarshal(report, &shaped)
+	if err != nil {
+		return nil, nil
+	}
+
+	if len(shaped.Shots) == 0 {
+		return nil, nil
+	}
+
+	files := map[string][]byte{}
+	for i, shot := range shaped.Shots {
+		label := strings.TrimSpace(shot.Label)
+		path := strings.TrimSpace(shot.File)
+		if label == "" || path == "" {
+			return nil, ez.New(ez.EINVALID, fmt.Sprintf("the report's shots[%d] needs a label and a file", i), nil)
+		}
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, ez.New(ez.EINVALID, "cannot read the shot "+label+" at "+path+": "+err.Error(), err)
+		}
+
+		files[label] = data
+	}
+
+	return files, nil
 }
 
 // insideSandbox reports whether this agc runs in a task's sandbox: the

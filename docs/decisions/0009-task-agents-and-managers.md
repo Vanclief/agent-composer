@@ -73,8 +73,9 @@ the agent was given, and the exact text the manager was sent.
      `agc msg post '#<name>' <text>`; your manager reads that channel and
      answers there. Ask your manager there too, then keep working on what
      does not depend on the answer.
-   - If something needs a decision only <owner> can make, post it in
-     `#<owner>` (their inbox) and say so in `#<name>`; do not wait idle.
+   - If something needs a decision only <owner> can make, ask your manager
+     in `#<name>` and say it is for the owner; your manager raises it.
+     Keep working on what does not depend on the answer.
    - Do not modify files outside the repository, and never print secret values.
    ```
 
@@ -86,8 +87,8 @@ the agent was given, and the exact text the manager was sent.
    @<manager> (manager), @<owner> (owner): task `<name>` is open: <title>.
    Agent: <harness> (<model>) on sandbox `<sandbox>`, starting.
    The agent's instructions are the next message. Reply here to talk to it;
-   it escalates to #<owner> when only the owner can decide. Post /done to
-   close the task.
+   its manager raises to <owner> what only the owner can decide.
+   Post /done to close the task.
    ```
 
    followed by a second message whose body is the `instructions` text from
@@ -105,11 +106,17 @@ the agent was given, and the exact text the manager was sent.
    ordinary message.
 
    **Escalation is a channel, not a feature.** Every person has an inbox
-   channel named after them (`#franco`). A task's sandbox is granted its
-   owner's inbox read-write in addition to `#<task>` and the spec's
-   channels, so the agent can post there when it needs a decision only the
-   owner can make; the manager raises things to the owner the same way.
-   Everything else goes through `#<task>`, where the manager answers.
+   channel named after them (`#franco`). The chain is owner ↔ manager ↔
+   task agent: the manager is the owner's only interlocutor for a task. A
+   task's sandbox is granted `#<task>` and the spec's channels, nothing
+   else; its agent asks its manager in `#<task>`, saying when a question is
+   for the owner, and the manager raises it in the owner's inbox (as ADR
+   0010 "Who merges" already has it). The owner's inbox hears from managers
+   and people, never from a task's agent, unless a spec grants it. A
+   person's questions (`GET /api/msg/questions?for=<name>`) are the ones in
+   their inbox and in `#<task>` of the tasks they manage, not of those they
+   only own. When the owner is also the manager, they hear from the agent
+   as its manager.
 
 6. **The panel shows both texts where they belong.** The task page's Brief
    tab shows the brief, and under it "What the agent received", the
@@ -148,7 +155,8 @@ the agent was given, and the exact text the manager was sent.
   `instructions`. `CreateTaskRequest` gains `model`, `manager` (required)
   and `owner`; `TaskView` returns all three; `SandboxView` returns
   `instructions`.
-- A sandbox's channel grants include its owner's inbox `#<owner>`.
+- A sandbox's channel grants are `#<task>` and its spec's; the owner's inbox
+  is not among them, the manager is the owner's only interlocutor for a task.
 - The guest `agc` gains `agent run`; the image needs no other change.
 - `agc msg join agc` is refused for everyone but the server.
 - The CLI's `agc task create` prints the defaults it applied.

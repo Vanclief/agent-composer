@@ -43,6 +43,7 @@ export const AREAS: Record<Area, { label: string; icon: LucideIcon; concept: Con
       { to: '/tasks', label: 'Tasks', concept: 'task' },
       { to: '/compute', label: 'Compute', concept: 'sandbox' },
       { to: '/agents', label: 'Agents', concept: 'agent' },
+      { to: '/accounts', label: 'Accounts', concept: 'account' },
     ],
   },
   talk: {

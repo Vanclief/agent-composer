@@ -202,3 +202,125 @@ func TestTaskDeliverOverTheSocketReturnsTheRefusal(t *testing.T) {
 		t.Fatalf("err %v, message %q", err, ez.ErrorMessage(err))
 	}
 }
+
+// The order TASK.md, the guest readme and ADR 0010 give: the summary
+// first, --report <file> after it. urfave/cli stops reading flags at the
+// summary, so leafArgs must pick --report out; the summary carries no flag
+// text and the report is sent.
+func TestTaskDeliverReadsAReportAfterTheSummary(t *testing.T) {
+	bodies := []map[string]json.RawMessage{}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := map[string]json.RawMessage{}
+		err := json.NewDecoder(r.Body).Decode(&body)
+		if err != nil {
+			t.Error(err)
+		}
+		bodies = append(bodies, body)
+
+		httpapi.WriteJSON(w, http.StatusOK, tasks.TaskView{Name: "fix-login", Status: tasks.StatusReview})
+	}))
+	defer server.Close()
+
+	t.Setenv("AGC_SERVER", "")
+	t.Setenv("AGC_TASK", "fix-login")
+	t.Setenv("AGC_MSG_URL", server.URL)
+
+	file := filepath.Join(t.TempDir(), "report.json")
+	err := os.WriteFile(file, []byte(cliReport), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = runAgc(t, "task", "deliver", "Fixed 2FA; all checks pass.", "--report", file)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = runAgc(t, "task", "deliver", "Fixed 2FA again.", "--report="+file)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = runAgc(t, "task", "deliver", "--report", file, "Fixed 2FA, flag first.")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{`"Fixed 2FA; all checks pass."`, `"Fixed 2FA again."`, `"Fixed 2FA, flag first."`}
+	if len(bodies) != len(want) {
+		t.Fatalf("bodies = %v", bodies)
+	}
+	for i, body := range bodies {
+		if string(body["summary"]) != want[i] {
+			t.Fatalf("summary = %s, want %s", body["summary"], want[i])
+		}
+		if string(body["report"]) != cliReport {
+			t.Fatalf("report = %s, want %s", body["report"], cliReport)
+		}
+	}
+
+	_, err = runAgc(t, "task", "deliver", "Fixed 2FA.", "--report")
+	if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), "--report needs a value") {
+		t.Fatalf("err %v", err)
+	}
+}
+
+// Inside a sandbox, --report with shots reads each shot's PNG from its
+// file and sends it with the delivery, in files under its label; a shot
+// whose file cannot be read stops agc before anything is sent.
+func TestTaskDeliverSendsShotsOverTheSocket(t *testing.T) {
+	var got httpapi.DeliverRequest
+	sent := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sent++
+
+		err := json.NewDecoder(r.Body).Decode(&got)
+		if err != nil {
+			t.Error(err)
+		}
+
+		httpapi.WriteJSON(w, http.StatusOK, tasks.TaskView{Name: "fix-login", Status: tasks.StatusReview})
+	}))
+	defer server.Close()
+
+	t.Setenv("AGC_SERVER", "")
+	t.Setenv("AGC_TASK", "fix-login")
+	t.Setenv("AGC_MSG_URL", server.URL)
+
+	dir := t.TempDir()
+	before := []byte("\x89PNG\r\n\x1a\nbefore")
+	after := []byte("\x89PNG\r\n\x1a\nafter")
+	for name, data := range map[string][]byte{"before.png": before, "after.png": after} {
+		err := os.WriteFile(filepath.Join(dir, name), data, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	report := `{"criteria":[{"met":"yes"}],"shots":[` +
+		`{"label":"before","file":"` + filepath.Join(dir, "before.png") + `"},` +
+		`{"label":"after","file":"` + filepath.Join(dir, "after.png") + `"}]}`
+
+	_, _, err := runAgcStdin(t, report, "task", "deliver", "--report", "-", "Moved the button.")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if sent != 1 || string(got.Report) != report || len(got.Files) != 2 {
+		t.Fatalf("sent %d, request %+v", sent, got)
+	}
+	if !bytes.Equal(got.Files["before"], before) || !bytes.Equal(got.Files["after"], after) {
+		t.Fatalf("files %q", got.Files)
+	}
+
+	missing := `{"criteria":[{"met":"yes"}],"shots":[{"label":"after","file":"` + filepath.Join(dir, "nope.png") + `"}]}`
+	_, _, err = runAgcStdin(t, missing, "task", "deliver", "--report", "-", "x")
+	if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), "cannot read the shot after") {
+		t.Fatalf("err %v", err)
+	}
+	if sent != 1 {
+		t.Fatalf("a shot that cannot be read must not be sent: sent %d", sent)
+	}
+}

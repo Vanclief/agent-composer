@@ -98,6 +98,7 @@ func newApp() *cli.App {
 			sandboxCommand(),
 			scheduleCommand(),
 			triggersCommand(),
+			skillCommand(),
 			rulesCommand(),
 			beliefsCommand(),
 			evidenceCommand(),
@@ -397,7 +398,7 @@ func runServer(ctx context.Context, project string) error {
 	}
 
 	group, gctx := errgroup.WithContext(ctx)
-	app := restserver.New(gctx, stack.Controller, stack.HooksAPI, stack.WorkflowAPI, stack.TasksAPI, stack.SchedulesAPI, stack.KnowledgeAPI, stack.AgentsAPI, stack.Messaging, stack.Events)
+	app := restserver.New(gctx, stack.Controller, stack.HooksAPI, stack.WorkflowAPI, stack.TasksAPI, stack.SchedulesAPI, stack.KnowledgeAPI, stack.SkillsAPI, stack.AgentsAPI, stack.AccountsAPI, stack.Messaging, stack.Events)
 
 	group.Go(func() error {
 		stack.StartScheduler(gctx)
@@ -407,6 +408,18 @@ func runServer(ctx context.Context, project string) error {
 	// Scheduled tasks run only under agc rest (ADR 0012).
 	group.Go(func() error {
 		stack.SchedulesAPI.Start(gctx)
+		return nil
+	})
+
+	// Account usage is polled only under agc rest, every 10 minutes.
+	group.Go(func() error {
+		stack.AccountsUsage.Start(gctx)
+		return nil
+	})
+
+	// The sandbox collector runs only under agc rest too (ADR 0008 "Garbage collection").
+	group.Go(func() error {
+		stack.TasksAPI.Sandboxes.StartGC(gctx)
 		return nil
 	})
 

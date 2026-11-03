@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,9 +32,6 @@ const (
 	cursorFile = "agc-cursor.json"
 	// maxThreadDepth bounds following reply_to to a thread's root.
 	maxThreadDepth = 100
-	// deliveredPrefix is how agc reports a delivery in #<task>
-	// (core/resources/tasks): a turn for the task's manager.
-	deliveredPrefix = "Delivered: "
 )
 
 // AgentRecord is one message as a persistent agent's turn sees it (ADR
@@ -123,12 +121,26 @@ type homeLoop struct {
 	joined func(p *msgmodels.Participant) error
 	// now is the clock, swapped in tests.
 	now func() time.Time
+	// backoff waits after a failed wait; nil waits for real, tests record.
+	backoff func(ctx context.Context, d time.Duration)
 
 	me       *msgmodels.Participant
 	role     string
 	sessions *sessionStore
 	// parents maps a message id to the id it replies to, 0 for none.
 	parents map[int64]int64
+	// heads keeps who posted each message seen (its body dropped), to
+	// tell the threads the agent started.
+	heads map[int64]msgmodels.Message
+	// reading holds the channels the agent reads this cycle; in the
+	// others it waits on (GET /agent's asked) only replies in its own
+	// threads are turns.
+	reading map[string]bool
+	// dropped holds the channels already logged as left out of a wait.
+	dropped map[string]bool
+	// pending holds, per session key, other agents' plain posts that were
+	// no turn, shown with the next turn in that thread.
+	pending map[string][]AgentRecord
 }
 
 // homeTurn is the work of one turn: the new messages of one thread.
@@ -168,13 +180,23 @@ func (l *homeLoop) run(ctx context.Context) error {
 	}
 	l.sessions = sessions
 	l.parents = map[int64]int64{}
+	l.heads = map[int64]msgmodels.Message{}
+	l.dropped = map[string]bool{}
 
 	if l.prior != nil && l.prior.Name == l.name && l.prior.ParticipantID != "" {
 		// A run stopped with the VM still holds the name; it is ours.
 		_, _ = l.msg.Leave(ctx, l.prior.ParticipantID)
 	}
 
-	p, err := joinAs(ctx, l.msg, l.name)
+	// The home joins as the agent's name, never <name>-2: who wakes whom
+	// (msgmodels.TurnFor), mentions and the manager's filters all use it.
+	// Messaging hands it a name a stale participant holds (its home gone
+	// or stopped); a running home's or a human's it refuses, and so does
+	// this loop.
+	p, err := l.msg.Join(ctx, l.name)
+	if ez.ErrorCode(err) == ez.ECONFLICT {
+		return ez.New(ez.ECONFLICT, "cannot join as @"+l.name+": "+ez.ErrorMessage(err), err)
+	}
 	if err != nil {
 		return err
 	}
@@ -202,8 +224,13 @@ func (l *homeLoop) run(ctx context.Context) error {
 	}
 
 	l.logf("joined as @%s (role %s), reading %s after %d", p.Name, l.role, strings.Join(info.Channels, ", "), cursor)
+	if len(info.Asked) > 0 {
+		l.logf("and the replies to its threads in %s", strings.Join(info.Asked, ", "))
+	}
 
 	lastTurn := l.clock()
+	lastFailure := ""
+	delay := homeRetryMin
 
 	for {
 		if ctx.Err() != nil {
@@ -223,22 +250,36 @@ func (l *homeLoop) run(ctx context.Context) error {
 			return l.sleep(ctx, quiet)
 		}
 
-		if len(info.Channels) == 0 {
+		channels := l.waitChannels(info)
+		if len(channels) == 0 {
 			l.logf("the agent reads no channel")
 			return l.sleep(ctx, quiet)
 		}
 
 		timeout := min(agentWaitTimeout, idle-quiet)
 
-		res, err := l.msg.WaitChannels(ctx, info.Channels, cursor, timeout)
+		res, err := l.wait(ctx, channels, cursor, timeout)
 		if ctx.Err() != nil {
 			return nil
 		}
 		if err != nil {
-			l.logf("wait failed, retrying: %s", ez.ErrorMessage(err))
-			pause(ctx)
+			// Log a failure once, not on every retry, and wait longer
+			// each time up to homeRetryMax.
+			failure := ez.ErrorMessage(err)
+			if failure != lastFailure {
+				l.logf("wait failed, retrying with a back-off: %s", failure)
+				lastFailure = failure
+			}
+			l.pauseFor(ctx, delay)
+			delay = min(delay*2, homeRetryMax)
 			continue
 		}
+
+		if lastFailure != "" {
+			l.logf("wait works again")
+			lastFailure = ""
+		}
+		delay = homeRetryMin
 
 		if len(res.Messages) == 0 {
 			continue
@@ -279,48 +320,126 @@ func (l *homeLoop) leave() {
 	}
 }
 
-// isTurn reports whether m is for the agent: not its own, not agc's
-// except a rejection, a delivery (the agent manages the task) or a
-// question naming it, and not older than since.
-func (l *homeLoop) isTurn(m msgmodels.Message, since time.Time) bool {
-	if m.ParticipantID == l.me.ID || m.From == l.me.Name {
-		return false
+// waitChannels is the channels the agent reads, which it notes in
+// reading, then the ones where it only started threads (asked).
+func (l *homeLoop) waitChannels(info *msgclient.AgentResponse) []string {
+	l.reading = map[string]bool{}
+	channels := []string{}
+	for _, channel := range info.Channels {
+		l.reading[channel] = true
+		channels = append(channels, channel)
 	}
 
+	for _, channel := range info.Asked {
+		if l.reading[channel] {
+			continue
+		}
+
+		channels = append(channels, channel)
+	}
+
+	return channels
+}
+
+// reads reports whether the agent reads channel; before the first wait
+// (tests calling isTurn directly) it reads every channel.
+func (l *homeLoop) reads(channel string) bool {
+	return l.reading == nil || l.reading[channel]
+}
+
+// isTurn reports whether m is for the agent (msgmodels.TurnFor: a
+// person's post, another agent's question or post naming it, agc's
+// rejection, delivery, accept by someone else or question naming it,
+// never its own) and not older than since.
+func (l *homeLoop) isTurn(m msgmodels.Message, since time.Time) bool {
 	if !since.IsZero() && m.CreatedAt.Before(since) {
 		return false
 	}
 
-	if !isSystem(m) {
-		return true
+	return l.reads(m.Channel) && msgmodels.TurnFor(&m, l.me)
+}
+
+// isAnswer reports whether m, not older than since, is a reply by
+// someone else in a thread the agent started, root being its first
+// message: a turn in any channel (msgmodels.AnswerFor).
+func (l *homeLoop) isAnswer(m msgmodels.Message, root int64, since time.Time) bool {
+	if !since.IsZero() && m.CreatedAt.Before(since) {
+		return false
 	}
 
-	if strings.HasPrefix(m.Body, rejectedPrefix) || strings.HasPrefix(m.Body, deliveredPrefix) {
-		return true
+	head, ok := l.heads[root]
+	if !ok {
+		return false
 	}
 
-	return m.Kind == msgmodels.KindQuestion && strings.Contains(m.Body, "@"+l.me.Name)
+	return msgmodels.AnswerFor(&m, &head, l.me)
+}
+
+// remember keeps m's parent and who posted it.
+func (l *homeLoop) remember(m msgmodels.Message) {
+	l.parents[m.ID] = parentOf(m)
+
+	m.Body = ""
+	l.heads[m.ID] = m
+}
+
+// isContext reports whether m, not a turn, is another agent's plain post
+// the agent is shown with the next turn in its thread.
+func (l *homeLoop) isContext(m msgmodels.Message, since time.Time) bool {
+	if !since.IsZero() && m.CreatedAt.Before(since) {
+		return false
+	}
+
+	if m.ParticipantID == l.me.ID || m.From == l.me.Name {
+		return false
+	}
+
+	return l.reads(m.Channel) && msgmodels.FromAgent(&m)
 }
 
 // plan groups the messages that are turns by thread: one turn per root,
 // in the order the roots first appear, or, for main, one turn for all.
+// Another agent's plain post is no turn (ADR 0016 item 6); it is kept as
+// context and shown with the next turn in its thread. A reply in a thread
+// the agent started is a turn in any channel (isAnswer).
 func (l *homeLoop) plan(ctx context.Context, messages []msgmodels.Message, since time.Time) []homeTurn {
+	if l.heads == nil {
+		l.heads = map[int64]msgmodels.Message{}
+	}
+
 	for _, m := range messages {
-		l.parents[m.ID] = parentOf(m)
+		l.remember(m)
+	}
+
+	if l.pending == nil {
+		l.pending = map[string][]AgentRecord{}
 	}
 
 	turns := []homeTurn{}
 	index := map[string]int{}
 
 	for _, m := range messages {
-		if !l.isTurn(m, since) {
+		turn := l.isTurn(m, since)
+		if !turn && !l.isContext(m, since) && m.ReplyTo == nil {
 			continue
 		}
 
 		root := l.root(ctx, m)
+		if !turn {
+			turn = l.isAnswer(m, root, since)
+		}
+		if !turn && !l.isContext(m, since) {
+			continue
+		}
+
 		key := threadSessionKey(m.Channel, root)
 		if l.role == mainRole {
 			key = mainSessionKey
+		}
+
+		if !turn {
+			l.pending[key] = append(l.pending[key], newAgentRecord(m))
+			continue
 		}
 
 		i, ok := index[key]
@@ -333,7 +452,9 @@ func (l *homeLoop) plan(ctx context.Context, messages []msgmodels.Message, since
 		// main answers in the thread of the newest message it was given.
 		turns[i].channel = m.Channel
 		turns[i].root = root
+		turns[i].records = append(turns[i].records, l.pending[key]...)
 		turns[i].records = append(turns[i].records, newAgentRecord(m))
+		delete(l.pending, key)
 	}
 
 	return turns
@@ -378,7 +499,7 @@ func (l *homeLoop) fetchParent(ctx context.Context, channel string, id int64) (i
 	}
 
 	parent := parentOf(res.Messages[0])
-	l.parents[id] = parent
+	l.remember(res.Messages[0])
 
 	return parent, true
 }
@@ -428,7 +549,7 @@ func (l *homeLoop) take(ctx context.Context, t homeTurn) {
 	if err == nil && strings.HasPrefix(body, questionPrefix) && question != "" {
 		m, askErr := l.msg.AskReply(ctx, l.me.ID, t.channel, question, &root)
 		if askErr == nil {
-			l.parents[m.ID] = root
+			l.remember(*m)
 			return
 		}
 
@@ -441,7 +562,7 @@ func (l *homeLoop) take(ctx context.Context, t homeTurn) {
 		return
 	}
 
-	l.parents[m.ID] = root
+	l.remember(*m)
 }
 
 func parseIdle(value string) time.Duration {
@@ -506,6 +627,78 @@ func writeJSONFile(path string, value any) error {
 	}
 
 	return nil
+}
+
+// wait is WaitChannels on channels, without the channels messaging
+// rejects as invalid: on an EINVALID naming one of them it leaves that
+// channel out of this cycle's list and asks again, instead of failing the
+// wait on every channel. Each dropped channel is logged once per run.
+func (l *homeLoop) wait(ctx context.Context, channels []string, after int64, timeout time.Duration) (*httpapi.MessagesResponse, error) {
+	for {
+		res, err := l.msg.WaitChannels(ctx, channels, after, timeout)
+		if err == nil || ctx.Err() != nil {
+			return res, err
+		}
+
+		bad := invalidChannel(err, channels)
+		if bad == "" {
+			return nil, err
+		}
+
+		if !l.dropped[bad] {
+			l.logf("leaving %s out of the wait: %s", bad, ez.ErrorMessage(err))
+			l.dropped[bad] = true
+		}
+
+		channels = withoutChannel(channels, bad)
+		if len(channels) == 0 {
+			return nil, err
+		}
+	}
+}
+
+// invalidChannel is the channel of channels an EINVALID error names
+// (messaging quotes it), "" for any other error.
+func invalidChannel(err error, channels []string) string {
+	if ez.ErrorCode(err) != ez.EINVALID {
+		return ""
+	}
+
+	failure := ez.ErrorMessage(err)
+	for _, channel := range channels {
+		if strings.Contains(failure, strconv.Quote(channel)) {
+			return channel
+		}
+	}
+
+	return ""
+}
+
+func withoutChannel(channels []string, drop string) []string {
+	out := []string{}
+	for _, channel := range channels {
+		if channel != drop {
+			out = append(out, channel)
+		}
+	}
+
+	return out
+}
+
+// pauseFor waits d, or until ctx is done.
+func (l *homeLoop) pauseFor(ctx context.Context, d time.Duration) {
+	if l.backoff != nil {
+		l.backoff(ctx, d)
+		return
+	}
+
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+	case <-timer.C:
+	}
 }
 
 // pause waits agentRetryDelay or until ctx is done.
