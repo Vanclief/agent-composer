@@ -537,9 +537,18 @@ Messages tab) provides the channel context (`context.ts`) every piece reads.
   blocks are mono with a copy button (`data-testid="code-block"`), links open
   in a new tab, `@name` is a chip (`mention-chip`, solid pink when it is me)
   and `#name` (a letter first, so `PR #42` stays text) a channel chip
-  (`channel-chip`, the `#` is its icon) linking to `/messages/<name>`. Every
-  body (`message-body`), question cards included, shows in full: no height
-  cap, no fade, no "Show more". Only the agc Instructions line folds.
+  (`channel-chip`, the `#` is its icon) linking to `/messages/<name>`. Bodies
+  are `text-base leading-7` (16px, 1.75) in the feed, the thread pane and a
+  task's Messages tab; inline code and chips are em-based and scale with
+  them; code blocks are 13px mono (`text-[13px] leading-6`), tables
+  `text-sm`, both scroll horizontally. Every body (`message-body`),
+  question cards included, shows in full: no height cap, no fade, no "Show
+  more". Only the agc Instructions line folds.
+- **Sizes and column**: sender names and the kind line 14px, times and the
+  hover clock 12px (`text-xs`), system lines 14px (`text-sm`), day
+  separators 12px. The feed and its composer share `FEED_COLUMN`
+  (`MessageList.tsx`): at most 72ch at `text-base`, left-aligned under the
+  channel header; the thread pane keeps its width with the same sizes.
 - **Feed** (`MessageList.tsx`): top-level messages only. Day separators
   (`day-separator`: Today, Yesterday, then the date); headers show relative
   times ("3 min ago", exact on hover) and the gutter the clock on hover. An
