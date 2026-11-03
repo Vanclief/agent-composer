@@ -61,6 +61,10 @@ outlined and dim. Every text color meets AA on its ground.
   frame color; a pseudo-element one pixel inside is the fill).
 - A list is a column of plates, each with a two-digit index. A plate's left
   edge carries its status as a tab fused into the frame, top to bottom.
+  A plate's frame is its status color (Franco, 2026-11-03: "I want to
+  change the outline so it is the same as the status."): the color of its
+  tab, steady even when the tab blinks. A row waiting on you says so with
+  its orange mark and acts, not with its frame.
 - Frames are one pixel. Rulers (a line with a tick every 24px, or every
   12px for a finer one) close the top bar and a list's header strip.
 - The page title and the current area header are filled orange tabs. Pages
@@ -81,7 +85,9 @@ status tab: running filled green, steady; starting, stopping and creating
 filled blue, steady; review yellow, the whole tab blinking between filled
 and outlined; crashed the same in red; failed a steady red outline; done a
 green outline, not filled; open and any unknown word a dim green outline
-with muted text. Canceled is not a backend status yet; failed is the
+with muted text. The plate's frame takes the tab's color (running and
+done green, transition blue, review yellow, crashed, failed and error red,
+open and unknown the dim green) and never blinks. Canceled is not a backend status yet; failed is the
 steady red until it is. Nothing else on the screen blinks: not the counts
 in the header, not the pill in a rail, not a machine in transition. Blink
 is hard, once a second (`tab-blink`), never a fade. The four `data-tier`

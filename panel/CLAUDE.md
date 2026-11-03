@@ -109,7 +109,10 @@ its area.
   filled blue, both steady; review blinks the whole tab yellow and crashed
   red, the only two things that blink anywhere; failed a steady red
   outline; done a green outline, not filled; open and unknown a dim green
-  outline. The pill alone (rails, Compute, counts) carries the colors as
+  outline. A plate's frame is its status color, the tab's (Franco,
+  2026-11-03), steady even when the tab blinks, keyed in CSS on the tab's
+  `data-status`/`data-tier` with `:has()`; waiting on me is the orange
+  `attention-mark` and act chips only, never the frame. The pill alone (rails, Compute, counts) carries the colors as
   border and text and never blinks. A dead thing never looks like a done
   one (red, never green). `statusTier`/`tierRank` from
   `@/components/status-pill` give a status's tier; the Tasks and Compute

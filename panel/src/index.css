@@ -308,14 +308,24 @@
   position: relative;
   z-index: 1;
 }
-.dark ul[aria-label='Tasks'] > li[data-attention='me'] {
-  background: var(--eva);
+/* The frame is the status color (Franco, 2026-11-03): keyed on the tab's
+   own word and tier, so a row reads as one state. Always steady, even when
+   the tab blinks; a row waiting on me says so with its mark and acts only. */
+.dark ul[aria-label='Tasks'] > li:has([data-testid='task-status'] span[data-status]) {
+  background: oklch(0.8 0.2 150 / 45%);
 }
-.dark ul[aria-label='Tasks'] > li[data-tier='attention']:not([data-attention]) {
+.dark ul[aria-label='Tasks'] > li:has([data-testid='task-status'] span[data-status][data-tier='off']),
+.dark ul[aria-label='Tasks'] > li:has([data-testid='task-status'] span[data-status='running'][data-tier='lit']) {
+  background: var(--eva-green);
+}
+.dark ul[aria-label='Tasks'] > li:has([data-testid='task-status'] span[data-status][data-tier='lit']:not([data-status='running']):not([data-status='review'])) {
+  background: oklch(0.78 0.12 220);
+}
+.dark ul[aria-label='Tasks'] > li:has([data-testid='task-status'] span[data-status='review'][data-tier='lit']) {
+  background: var(--eva-yellow);
+}
+.dark ul[aria-label='Tasks'] > li:has([data-testid='task-status'] span[data-status][data-tier='attention']) {
   background: var(--eva-red);
-}
-.dark ul[aria-label='Tasks'] > li[data-tier='off'] {
-  background: oklch(0.74 0.19 48 / 22%);
 }
 /* The row index, small, at the top right inside the cut. */
 .dark ul[aria-label='Tasks'] > li::before {
