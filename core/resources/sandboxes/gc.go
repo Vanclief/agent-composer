@@ -87,7 +87,8 @@ func (api *API) GC(ctx context.Context, requester interface{}, request *GCReques
 // StartGC runs the collector every GCInterval until ctx ends, one run at a
 // time. Only agc rest calls it. Each tick deletes the sandboxes of tasks
 // done longer than keep_done ago and archives the channels of tasks done
-// longer than archive_done ago (ADR 0005 "Archived channels"); a setting
+// longer than archive_done ago (ADR 0005 "Archived channels"), and closes
+// the open agent questions of done tasks (ADR 0010 "Accept"); a setting
 // of 0 turns its half off, and both 0 stops the ticker altogether.
 func (api *API) StartGC(ctx context.Context) {
 	if api.keepDone == 0 {
@@ -117,13 +118,19 @@ func (api *API) StartGC(ctx context.Context) {
 	}
 }
 
-// tick is one run of the collector: sandboxes, then channels.
+// tick is one run of the collector: sandboxes, then the questions of done
+// tasks, then channels.
 func (api *API) tick(ctx context.Context) {
 	if api.keepDone > 0 {
 		_, err := api.collect(ctx, api.keepDone, false)
 		if err != nil {
 			log.Warn().Err(err).Msg("sandboxes: collector run failed")
 		}
+	}
+
+	_, err := api.closeDoneQuestions(ctx)
+	if err != nil {
+		log.Warn().Err(err).Msg("messaging: closing questions failed")
 	}
 
 	if api.archiveDone > 0 {
