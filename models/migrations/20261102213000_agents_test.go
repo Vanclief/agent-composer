@@ -47,6 +47,12 @@ kind TEXT NOT NULL DEFAULT 'message', created_at TIMESTAMP NOT NULL)`,
 		}
 	}
 
+	// The later column too, so the current model can write messages.
+	err = messageImages(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	record, err := task.GetSandboxByName(ctx, db, "stop-icon")
 	if err != nil {
 		t.Fatal(err)

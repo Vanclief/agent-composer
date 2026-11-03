@@ -41,8 +41,27 @@ type Message struct {
 	ReplyTo *int64 `bun:"reply_to,nullzero" json:"reply_to,omitempty"`
 	Body    string `bun:"body,notnull" json:"body"`
 	// Kind is message or question.
-	Kind      string    `bun:"kind,notnull,default:'message'" json:"kind"`
+	Kind string `bun:"kind,notnull,default:'message'" json:"kind"`
+	// Images are the images the message carries (ADR 0005 "Images"),
+	// kept under the agc home; each URL is filled in from the id.
+	Images    []Image   `bun:"images,type:jsonb,nullzero" json:"images,omitempty"`
 	CreatedAt time.Time `bun:"created_at,notnull" json:"created_at"`
+}
+
+var _ bun.AfterScanRowHook = (*Message)(nil)
+
+// AfterScanRow fills in each image's URL.
+func (m *Message) AfterScanRow(ctx context.Context) error {
+	m.FillImageURLs()
+
+	return nil
+}
+
+// FillImageURLs sets each image's URL from the message id.
+func (m *Message) FillImageURLs() {
+	for i := range m.Images {
+		m.Images[i].URL = ImagePath(m.ID, m.Images[i].Name)
+	}
 }
 
 var _ bun.AfterCreateTableHook = (*Message)(nil)
@@ -114,8 +133,13 @@ func (m *Message) Validate() error {
 		return ez.Wrap(err)
 	}
 
-	if strings.TrimSpace(m.Body) == "" {
+	if strings.TrimSpace(m.Body) == "" && len(m.Images) == 0 {
 		return ez.New(ez.EINVALID, "body is required", nil)
+	}
+
+	if len(m.Images) > MaxImages {
+		msg := fmt.Sprintf("a message carries at most %d images, this one has %d", MaxImages, len(m.Images))
+		return ez.New(ez.EINVALID, msg, nil)
 	}
 
 	if len(m.Body) > MaxBodyBytes {
