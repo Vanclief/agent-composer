@@ -39,7 +39,7 @@ func (h homes) agentOf(ctx context.Context, home string) (*agent.Agent, *Templat
 		return nil, nil, ez.Wrap(err)
 	}
 
-	tmpl, err := LoadTemplate(h.api.dir, record.Role)
+	tmpl, err := h.api.template(record.Role)
 	if err != nil {
 		return record, nil, nil
 	}

@@ -2157,6 +2157,12 @@ export interface components {
             /** @description Omitted keeps the role. */
             role?: string;
         };
+        /** @description A rule an agent follows, from the knowledge directory (ADR 0006). */
+        AgentRule: {
+            id: string;
+            /** @description The rule's text as written. */
+            rule: string;
+        };
         AgentTask: {
             /** @description The task's name, also its channel. */
             name: string;
@@ -2189,6 +2195,8 @@ export interface components {
             state: string;
             /** @description The home sandbox's name; null before the first wake. */
             home: string | null;
+            /** @description The rules its template names (ADR 0016 item 2), in template order, read from the knowledge directory on the request; [] when it names none or they cannot be read. */
+            rules: components["schemas"]["AgentRule"][];
             /** @description The tasks whose manager is the agent. */
             tasks: components["schemas"]["AgentTask"][];
             /** @description The DM channel @<owner>/<name> first, then #<task> for each of its tasks, then any other channel the agent has posted in, newest first. */

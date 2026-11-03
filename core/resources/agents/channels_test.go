@@ -32,7 +32,7 @@ func TestReadsHasTheDMChannelOnlyWhenMessagingAcceptsIt(t *testing.T) {
 	if record.Owner == "" {
 		t.Fatal("the agent has no owner")
 	}
-	tmpl, err := LoadTemplate(env.api.dir, record.Role)
+	tmpl, err := env.api.template(record.Role)
 	if err != nil {
 		t.Fatal(err)
 	}

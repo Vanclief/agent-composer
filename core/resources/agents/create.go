@@ -58,7 +58,7 @@ func (api *API) Create(ctx context.Context, requester interface{}, request *Crea
 
 	role := strings.TrimSpace(request.Role)
 
-	tmpl, err := LoadTemplate(api.dir, role)
+	tmpl, err := api.template(role)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}

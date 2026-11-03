@@ -22,6 +22,13 @@ export type AgentConversation = {
   last_at: string
 }
 
+// A rule the agent's template names, from the knowledge dir (ADR 0016 item 2).
+export type AgentRule = {
+  id: string
+  // The rule's text as written.
+  rule: string
+}
+
 export type AgentView = {
   // Unique: numbered from the role (reviewer-3) until kept, then its name.
   name: string
@@ -35,6 +42,8 @@ export type AgentView = {
   state: AgentState
   // The home sandbox's name; null before the first wake.
   home: string | null
+  // The rules it follows, in template order; the mock does not serve them yet.
+  rules?: AgentRule[]
   // The tasks it manages.
   tasks: AgentTask[]
   // The channels it reads, the DM with the owner first.

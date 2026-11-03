@@ -20,6 +20,7 @@ import (
 
 	"github.com/vanclief/agent-composer/core/controller"
 	"github.com/vanclief/agent-composer/core/events"
+	"github.com/vanclief/agent-composer/core/resources/knowledge"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	"github.com/vanclief/agent-composer/executor"
@@ -749,7 +750,7 @@ func TestChannelsOfAnAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tmpl, err := LoadTemplate(env.api.dir, record.Role)
+	tmpl, err := env.api.template(record.Role)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1249,7 +1250,9 @@ func TestMainReadsEveryChannel(t *testing.T) {
 func TestShippedTemplatesLoad(t *testing.T) {
 	dir := filepath.Join("..", "..", "..", "agents")
 
-	reviewer, err := LoadTemplate(dir, "Reviewer")
+	rules := knowledge.NewAPI(filepath.Join("..", "..", ".."))
+
+	reviewer, err := LoadTemplate(dir, "Reviewer", rules)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1257,7 +1260,11 @@ func TestShippedTemplatesLoad(t *testing.T) {
 		t.Fatalf("reviewer = %+v", reviewer)
 	}
 
-	main, err := LoadTemplate(dir, "main")
+	if len(reviewer.Followed) == 0 || len(reviewer.Followed) != len(reviewer.Rules) {
+		t.Fatalf("reviewer rules = %q, followed %+v", reviewer.Rules, reviewer.Followed)
+	}
+
+	main, err := LoadTemplate(dir, "main", rules)
 	if err != nil {
 		t.Fatal(err)
 	}

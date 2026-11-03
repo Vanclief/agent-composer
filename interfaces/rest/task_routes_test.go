@@ -22,6 +22,7 @@ import (
 	"github.com/vanclief/agent-composer/core/events"
 	"github.com/vanclief/agent-composer/core/resources/accounts"
 	"github.com/vanclief/agent-composer/core/resources/agents"
+	"github.com/vanclief/agent-composer/core/resources/knowledge"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/schedules"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
@@ -116,6 +117,8 @@ func serveTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *ta
 	// The templates the repo ships, agents/ at its root.
 	agentsAPI := agents.NewAPI(ctrl, tasksAPI, msg, filepath.Join("..", "..", "agents"))
 	agentsAPI.SetEvents(bus)
+	// The rules templates name come from the repo's own knowledge dir.
+	agentsAPI.SetRules(knowledge.NewAPI(filepath.Join("..", "..")))
 	server := &restserver.Server{
 		Ctrl:         ctrl,
 		RateLimiter:  ratelimit.NewWindowCounter(10, 100),

@@ -90,7 +90,7 @@ func (api *API) wake(ctx context.Context, record *agent.Agent) error {
 // allocate boots the agent's first home (or a new one when the old one is
 // gone) from its template, and records it.
 func (api *API) allocate(ctx context.Context, record *agent.Agent) error {
-	tmpl, err := LoadTemplate(api.dir, record.Role)
+	tmpl, err := api.template(record.Role)
 	if err != nil {
 		return ez.Wrap(err)
 	}
@@ -100,7 +100,7 @@ func (api *API) allocate(ctx context.Context, record *agent.Agent) error {
 		Harness:      record.Harness,
 		Sandbox:      tmpl.Sandbox,
 		Command:      Command(record),
-		Instructions: tmpl.Instructions,
+		Instructions: tmpl.AgentMD(),
 	})
 	if err != nil {
 		return ez.Wrap(err)
