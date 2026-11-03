@@ -5,6 +5,8 @@ The base image every Task boots from (ADR 0003). It contains:
 - Debian bookworm with Node 22 (`node:22-bookworm`), git, tmux, ripgrep, jq,
   make, curl, ssh, less, procps and vim-tiny.
 - Claude Code and Codex CLI.
+- The GitHub CLI `gh`, from GitHub's apt repository. It authenticates from
+  `GITHUB_TOKEN` when the task binds that secret, like git.
 - Go from the official tarball in `/usr/local/go`, at the version in
   `go.mod` (`gofmt` comes with it). `GOPATH` is `/home/agent/go`; `PATH` has
   `/usr/local/go/bin` and `$GOPATH/bin`, also in login shells through
