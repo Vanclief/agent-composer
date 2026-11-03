@@ -23,6 +23,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/accounts"
 	"github.com/vanclief/agent-composer/core/resources/agents"
 	"github.com/vanclief/agent-composer/core/resources/knowledge"
+	"github.com/vanclief/agent-composer/core/resources/messages"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/schedules"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
@@ -129,6 +130,7 @@ func serveTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *ta
 		TurnsAPI:     agents.NewTurnsAPI(volumes, sandboxesAPI),
 		AgentsAPI:    agentsAPI,
 		AccountsAPI:  accounts.New(db, secretsPath, sandboxesAPI),
+		MessagesAPI:  messages.NewAPI(msg),
 		Messaging:    msg,
 		Events:       bus,
 	}

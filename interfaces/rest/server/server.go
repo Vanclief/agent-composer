@@ -14,6 +14,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/harnessinfo"
 	"github.com/vanclief/agent-composer/core/resources/hooks"
 	knowledgeapi "github.com/vanclief/agent-composer/core/resources/knowledge"
+	"github.com/vanclief/agent-composer/core/resources/messages"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/schedules"
 	settingsapi "github.com/vanclief/agent-composer/core/resources/settings"
@@ -51,6 +52,8 @@ type Server struct {
 	AgentsAPI *agents.API
 	// AccountsAPI is provider accounts (ADR 0018).
 	AccountsAPI *accounts.API
+	// MessagesAPI serves messages' images (ADR 0005 "Images").
+	MessagesAPI *messages.API
 	Messaging   *messaging.Service
 	// Events feeds GET /api/events.
 	Events *events.Bus
@@ -80,6 +83,7 @@ func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.A
 		TurnsAPI:      agents.NewTurnsAPI(tasksAPI.Sandboxes.VolumeRootDir(), tasksAPI.Sandboxes),
 		AgentsAPI:     agentsAPI,
 		AccountsAPI:   accountsAPI,
+		MessagesAPI:   messages.NewAPI(msg),
 		Messaging:     msg,
 		Events:        bus,
 	}
@@ -327,6 +331,10 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.SkillsAPI.List(request.GetContext(), nil, body)
 	case *skillsapi.GetRequest:
 		return s.SkillsAPI.Get(request.GetContext(), nil, body)
+
+	// The handler streams the opened file and closes it (ADR 0005 "Images").
+	case *messages.GetImageRequest:
+		return s.MessagesAPI.OpenImage(request.GetContext(), nil, body)
 
 	default:
 		return nil, ez.New(ez.EINVALID, "Unsupported request type", nil)

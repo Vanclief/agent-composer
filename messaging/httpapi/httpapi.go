@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -375,7 +376,7 @@ func (a *api) image(w http.ResponseWriter, r *http.Request) {
 }
 
 // ServeImage answers the image called name of message id, as caller may
-// read it, with its type; agc's REST route uses it too.
+// read it, on a sandbox's socket.
 func ServeImage(w http.ResponseWriter, r *http.Request, svc *messaging.Service, caller messaging.Caller, id string, name string) {
 	messageID, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
@@ -390,16 +391,26 @@ func ServeImage(w http.ResponseWriter, r *http.Request, svc *messaging.Service, 
 	}
 	defer file.Close()
 
+	err = WriteImage(w, r, file, image)
+	if err != nil {
+		WriteError(w, err)
+	}
+}
+
+// WriteImage sends an opened image as it was posted, with its type; agc's
+// REST route uses it too.
+func WriteImage(w http.ResponseWriter, r *http.Request, file *os.File, image *msgmodels.Image) error {
 	info, err := file.Stat()
 	if err != nil {
-		WriteError(w, ez.Wrap(err))
-		return
+		return ez.Wrap(err)
 	}
 
 	w.Header().Set("Content-Type", image.Type)
 	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(w, r, image.Name, info.ModTime(), file)
+
+	return nil
 }
 
 // decode resolves the caller and reads a JSON body into dst.

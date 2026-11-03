@@ -1195,7 +1195,7 @@ export interface paths {
         };
         /**
          * Get a message's image
-         * @description One of the images a message carries, as it was posted, with its type (ADR 0005 "Images"). The `url` of each of a message's `images` points here. A sandbox reads the same route at `/images/{id}/{name}` on its socket, only for messages in channels it may read (403 otherwise). 404 when the message or the image is absent.
+         * @description One of the images a message carries, as it was posted, with its type (ADR 0005 "Images"; `messages.API.OpenImage`). The `url` of each of a message's `images` points here. A sandbox reads the same image at `/images/{id}/{name}` on its socket, only for messages in channels it may read (403 otherwise, as messaging errors). 404 when the message or the image is absent.
          */
         get: operations["getMessageImage"];
         put?: never;
@@ -4811,9 +4811,8 @@ export interface operations {
                     "image/webp": string;
                 };
             };
-            403: components["responses"]["MsgError"];
-            404: components["responses"]["MsgError"];
-            500: components["responses"]["MsgError"];
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
         };
     };
     waitMessages: {

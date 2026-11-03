@@ -2116,9 +2116,10 @@ paths:
       summary: Get a message's image
       description: >
         One of the images a message carries, as it was posted, with its type (ADR 0005
-        "Images"). The `url` of each of a message's `images` points here. A sandbox reads
-        the same route at `/images/{id}/{name}` on its socket, only for messages in channels
-        it may read (403 otherwise). 404 when the message or the image is absent.
+        "Images"; `messages.API.OpenImage`). The `url` of each of a message's `images` points
+        here. A sandbox reads the same image at `/images/{id}/{name}` on its socket, only for
+        messages in channels it may read (403 otherwise, as messaging errors). 404 when the
+        message or the image is absent.
       parameters:
         - name: id
           in: path
@@ -2153,12 +2154,10 @@ paths:
               schema:
                 type: string
                 format: binary
-        '403':
-          $ref: '#/components/responses/MsgError'
         '404':
-          $ref: '#/components/responses/MsgError'
+          $ref: '#/components/responses/Error'
         '500':
-          $ref: '#/components/responses/MsgError'
+          $ref: '#/components/responses/Error'
   /msg/wait:
     get:
       tags: [Messaging]

@@ -195,7 +195,8 @@ box, and the agent he writes to opens them.
   the extension of its type, unique within the message. The message row
   lists them in `images` (`[{name, type, size}]`, jsonb, null for text-only);
   `url` is filled in from the id on every read, never stored.
-- Served: `GET /api/msg/images/{id}/{name}` for people, `/images/{id}/{name}`
+- Served: `GET /api/msg/images/{id}/{name}` for people (`core/resources/messages`:
+  `GetImageRequest` and `API.OpenImage`, as task shots), `/images/{id}/{name}`
   on a sandbox's socket, only for messages in channels the caller may read
   (`messaging.Service.OpenImage`), as posted, with their type. `agc msg read`
   prints each image's `url`.
