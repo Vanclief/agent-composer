@@ -115,6 +115,8 @@ agc rest
 
 Workflow monitor, canvas, and composer at `http://localhost:1202`. For live reload during Go development: `air`.
 
+`agc rest` listens on `127.0.0.1:1202` by default, so it is reachable only from the same machine (from elsewhere, over an SSH tunnel). To open it up, set `AGC_APP_HOST=0.0.0.0` or `"app": {"host": "0.0.0.0"}` in the config file; an empty `host` in the config file means every interface. `agc config` prints the effective `app_host`.
+
 ```bash
 curl http://localhost:1202/api/workflows
 curl http://localhost:1202/api/workflows/parallel_pr_review

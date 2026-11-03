@@ -31,6 +31,9 @@ waits for http://127.0.0.1:\$AGC_RIG_PORT/api/tasks to answer.
 
 The rig builds origin/<branch>, so the branch must be pushed first.
 
+agc rest listens on 127.0.0.1 by default (app.host, AGC_APP_HOST), so
+reach it over an SSH tunnel, e.g. ssh -L \$AGC_RIG_PORT:127.0.0.1:\$AGC_RIG_PORT.
+
 Options:
   --force     skip the clean-tree and pushed-branch checks
   --dry-run   print the remote script instead of running it (no SSH)
