@@ -10,9 +10,11 @@ import { Link } from 'react-router'
 import remarkGfm from 'remark-gfm'
 
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
+import { ShotImages } from '@/components/shot-images'
 import { cn } from '@/lib/utils'
 
 import { useMyName } from './identity'
+import { splitShots } from './questionShape'
 
 // ---------- @name and #channel chips (a remark plugin) ----------
 
@@ -211,15 +213,34 @@ function components(me: string): Components {
   }
 }
 
-// The markdown alone, unclamped.
+// The markdown alone, unclamped. Before:/After: lines with an image URL
+// (splitShots) render as a row of labelled images in their place.
 export function MarkdownText({ body, className }: { body: string; className?: string }) {
   const me = useMyName()
   const parts = useMemo(() => components(me), [me])
+  const pieces = useMemo(() => splitShots(body), [body])
+  if (!pieces.some((piece) => piece.type === 'shots')) {
+    return (
+      <div className={cn('min-w-0 text-sm leading-5', className)}>
+        <Markdown remarkPlugins={REMARK} components={parts}>
+          {body}
+        </Markdown>
+      </div>
+    )
+  }
   return (
-    <div className={cn('min-w-0 text-sm leading-5', className)}>
-      <Markdown remarkPlugins={REMARK} components={parts}>
-        {body}
-      </Markdown>
+    <div className={cn('flex min-w-0 flex-col gap-1.5 text-sm leading-5', className)}>
+      {pieces.map((piece, i) =>
+        piece.type === 'shots' ? (
+          <ShotImages key={i} shots={piece.shots} className="max-w-[72ch]" />
+        ) : (
+          <div key={i}>
+            <Markdown remarkPlugins={REMARK} components={parts}>
+              {piece.text}
+            </Markdown>
+          </div>
+        ),
+      )}
     </div>
   )
 }

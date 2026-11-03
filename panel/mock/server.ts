@@ -64,6 +64,7 @@ type Report = {
   checks: { name: string; passed: boolean; note: string }[]
   left_out: { what: string; why: string }[]
   needs: string[]
+  shots?: { label: string; file: string; url?: string }[]
 }
 
 // A sandbox row plus the runtime's word for it (running, stopped,
@@ -877,7 +878,8 @@ async function tasksAPI(state: State, method: string, rest: string[], req: Incom
     task.summary = summary
     task.report = body.report && typeof body.report === 'object' ? (body.report as Report) : null
     task.updated_at = task.delivered_at
-    state.post('#' + task.name, state.agc(), `Delivered: ${summary}`)
+    keepShots(task.name, task.report, body.files)
+    state.post('#' + task.name, state.agc(), `Delivered: ${summary}` + shotLines(task.report))
     return state.taskView(task)
   }
   // ADR 0010 item 4: sets done_at and accepted_by, posts in #<task>, then
@@ -1281,6 +1283,10 @@ async function handle(state: State, req: IncomingMessage, res: ServerResponse) {
 
   if (parts[0] !== 'api') {
     send(res, 404, { message: 'Not Found' })
+    return
+  }
+  if (parts[1] === 'tasks' && parts.length === 5 && parts[3] === 'shots' && method === 'GET') {
+    serveShot(res, parts[2], parts[4])
     return
   }
   if (parts[1] === 'events' && parts.length === 2 && method === 'GET') {
@@ -2889,4 +2895,46 @@ function skillsRoute(res: ServerResponse, method: string, rest: string[]) {
     'Content-Length': Buffer.byteLength(skill.text),
   })
   res.end(skill.text)
+}
+
+// ---------- delivery shots (ADR 0010 "Delivery report") ----------
+
+// The PNGs delivered under <task>/<label>, as the agc home keeps them.
+const SHOTS = new Map<string, Buffer>()
+
+// Like tasks.storeShots: a delivery replaces the task's shots, each served
+// at the root-relative /api/tasks/<task>/shots/<label>.png, set as its url.
+function keepShots(task: string, report: Report | null, files: unknown) {
+  for (const key of [...SHOTS.keys()]) {
+    if (key.startsWith(task + '/')) {
+      SHOTS.delete(key)
+    }
+  }
+  const given = files && typeof files === 'object' ? (files as Record<string, unknown>) : {}
+  for (const shot of report?.shots ?? []) {
+    const data = given[shot.label]
+    if (typeof data === 'string') {
+      SHOTS.set(`${task}/${shot.label}`, Buffer.from(data, 'base64'))
+    }
+    shot.file = `${shot.label}.png`
+    shot.url = `/api/tasks/${encodeURIComponent(task)}/shots/${encodeURIComponent(shot.label)}.png`
+  }
+}
+
+// The "<Label>: <url>" lines tasks.DeliveredMessage puts after the summary.
+function shotLines(report: Report | null) {
+  const lines = (report?.shots ?? []).map(
+    (shot) => `${shot.label.charAt(0).toUpperCase()}${shot.label.slice(1)}: ${shot.url}`,
+  )
+  return lines.length > 0 ? '\n\n' + lines.join('\n') : ''
+}
+
+function serveShot(res: ServerResponse, task: string, file: string) {
+  const data = file.endsWith('.png') ? SHOTS.get(`${task}/${file.slice(0, -4)}`) : undefined
+  if (!data) {
+    send(res, 404, { message: `no shot ${file} for task ${task}` })
+    return
+  }
+  res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': data.length })
+  res.end(data)
 }
