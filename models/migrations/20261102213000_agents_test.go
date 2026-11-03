@@ -47,8 +47,12 @@ kind TEXT NOT NULL DEFAULT 'message', created_at TIMESTAMP NOT NULL)`,
 		}
 	}
 
-	// The later column too, so the current model can write messages.
+	// The later columns too, so the current model can write messages.
 	err = messageImages(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = messageTurnFor(ctx, db)
 	if err != nil {
 		t.Fatal(err)
 	}

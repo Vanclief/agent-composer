@@ -36,6 +36,12 @@ created_at TIMESTAMP NOT NULL)`)
 		}
 	}
 
+	// The later column too, so the current model can write messages.
+	err = messageTurnFor(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	m := &messaging.Message{Channel: "#talk", From: "franco", ParticipantID: "p1",
 		Images: []messaging.Image{{Name: "shot.png", Type: "image/png", Size: 12}}}
 	err = m.Insert(ctx, db)
