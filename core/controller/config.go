@@ -7,7 +7,11 @@ import (
 )
 
 type AppSettings struct {
-	Name            string
+	Name string
+	// Host is the address agc rest listens on; see ResolveAppHost. Nil
+	// (no host in the config file) means BuiltinAppHost, an empty string
+	// means every interface.
+	Host            *string `mapstructure:"host"`
 	Port            string
 	Debug           bool
 	Version         string

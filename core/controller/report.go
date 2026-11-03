@@ -21,7 +21,10 @@ type ConfigReport struct {
 	PostgresHost     string `json:"postgres_host,omitempty"`
 	PostgresDatabase string `json:"postgres_database,omitempty"`
 	HomeDir          string `json:"home_dir"`
-	AppPort          string `json:"app_port"`
+	// AppHost is the address agc rest listens on, empty for every
+	// interface.
+	AppHost string `json:"app_host"`
+	AppPort string `json:"app_port"`
 	// Defaults are the task defaults in effect, after the environment.
 	Defaults DefaultsSettings `json:"defaults"`
 }
@@ -33,6 +36,7 @@ func (controller *Controller) ConfigReport() (*ConfigReport, error) {
 		Environment:     controller.Environment,
 		ConfigFile:      controller.configFile,
 		ConfigFileFound: controller.configFileFound,
+		AppHost:         controller.AppHost(),
 		AppPort:         controller.Config.App.Port,
 		Defaults:        controller.Defaults(),
 	}
