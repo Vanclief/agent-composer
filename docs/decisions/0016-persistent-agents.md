@@ -125,7 +125,12 @@ that mock a backend and settles what it left open.
    home also takes `Rejected by` and an agc question naming it, and the
    task loop takes only `Rejected by`. A match on
    an `asleep` agent starts the home (item 4); on an `awake` one it is picked
-   up by the running loop. The loop is `agc agent run --agent <name>` inside
+   up by the running loop. The hook stores the names of the agents a
+   message is a turn for, asleep or awake, on the message as `turn_for`
+   before `message.posted` is published, so the panel can show who will
+   answer without re-deriving the rule (task `message-turn-for`,
+   2026-11-03); the loops still apply `TurnFor` themselves.
+   The loop is `agc agent run --agent <name>` inside
    the home, the job `agent` of ADR 0009. It joins messaging as the
    agent's `<name>`, never the home's name or `<name>-2`, with `agent`
    set to the home, since `TurnFor`, `@<name>` mentions and `Accepted by

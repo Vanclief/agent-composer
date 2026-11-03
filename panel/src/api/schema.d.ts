@@ -1734,6 +1734,8 @@ export interface components {
             body: string;
             /** @description The images the message carries (ADR 0005 "Images"); absent for a text-only message. */
             images?: components["schemas"]["MsgImage"][];
+            /** @description The persistent agents this message is a turn for (ADR 0016 item 6), asleep or awake, in name order; set by the wake hook before the message is published, absent when none. */
+            turn_for?: string[];
             /** Format: date-time */
             created_at: string;
         };
@@ -2564,6 +2566,8 @@ export interface components {
             kind: components["schemas"]["MsgKind"];
             /** @description The images the message carries; absent for a text-only message. */
             images?: components["schemas"]["MsgImage"][];
+            /** @description The persistent agents this message is a turn for (ADR 0016 item 6), asleep or awake, in name order; set by the wake hook before the message is published, absent when none. */
+            turn_for?: string[];
             /** Format: date-time */
             created_at: string;
         };
