@@ -134,8 +134,11 @@ that mock a backend and settles what it left open.
    is gone or not running: a deleted home's), the join takes the name
    over and marks the old participant left; a human's name, or one whose
    sandbox is running, is refused (409) and the loop exits with the
-   error. Only a home's join takes over; a task's sandbox still moves on
-   to `<name>-2`. The loop reads "messages since my last
+   error. A home always retakes the name its own previous process held
+   (the participant's `agent` is the joining home, as after a crash and
+   a home re-created under the same name), whatever presence says; agc
+   logs every takeover at info. Only a home's join takes over; a task's
+   sandbox still moves on to `<name>-2`. The loop reads "messages since my last
    turn" over the sandbox's messaging socket as records (`id`, `channel`,
    `from`, `kind`, `human`, `body`, `created_at`), the agent's own messages
    left out; how the records become a prompt is the role's business (ADR
