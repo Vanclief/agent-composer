@@ -20,6 +20,13 @@ starts a shell comment. `read` and `wait` return a `cursor`; pass it as
 one cursor works across channels: `wait '#a,#b'` returns the new messages of
 both in id order. `wait` returns an empty list when the timeout passes.
 
+A message may carry up to 4 images (PNG, JPEG, GIF or WebP, 5 MB each):
+`agc msg post '#review-42' "the broken page" --image shot.png` (repeat
+`--image` for more). `read` lists each image with its `url`; when a message
+with images is your turn, the agent loop has already saved them under
+`/home/agent/.agc/images/<message id>/` and the prompt names each path, so
+open the file to see it.
+
 Never print, echo or quote a secret value (a token, a key, anything from
 the secrets store or the environment) in a command's output or in a
 message: a token in the model's context ends the session for good, because

@@ -2083,7 +2083,11 @@ paths:
         agc fills in `from`, `task` and `human`. `kind` is `message` (the default) or `question`;
         anything else is 400. A reply (`reply_to`) to a question from someone other than its
         asker answers it. Inside a sandbox `agc msg post` and `agc msg ask` reach the same call
-        over the sandbox's socket, limited to the task's channels.
+        over the sandbox's socket, limited to the task's channels. A post may carry up to 4
+        `images` (PNG, JPEG, GIF or WebP, sniffed from the bytes, at most 5 MB each; the body
+        may then be empty), kept on the agc host under `<agc home>/images/<message id>/<name>`
+        and listed on the message with their URLs (ADR 0005 "Images"); `agc msg post --image
+        <file>` sends them. The request body is at most 28 MB.
       requestBody:
         required: true
         content:
@@ -2100,6 +2104,56 @@ paths:
         '400':
           $ref: '#/components/responses/MsgError'
         '401':
+          $ref: '#/components/responses/MsgError'
+        '404':
+          $ref: '#/components/responses/MsgError'
+        '500':
+          $ref: '#/components/responses/MsgError'
+  /msg/images/{id}/{name}:
+    get:
+      tags: [Messaging]
+      operationId: getMessageImage
+      summary: Get a message's image
+      description: >
+        One of the images a message carries, as it was posted, with its type (ADR 0005
+        "Images"). The `url` of each of a message's `images` points here. A sandbox reads
+        the same route at `/images/{id}/{name}` on its socket, only for messages in channels
+        it may read (403 otherwise). 404 when the message or the image is absent.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The message's id.
+          schema:
+            type: integer
+            format: int64
+        - name: name
+          in: path
+          required: true
+          description: The image's stored name, as the message lists it.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The image.
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '403':
           $ref: '#/components/responses/MsgError'
         '404':
           $ref: '#/components/responses/MsgError'
@@ -3375,6 +3429,11 @@ components:
           format: int64
         body:
           type: string
+        images:
+          type: array
+          description: The images the message carries (ADR 0005 "Images"); absent for a text-only message.
+          items:
+            $ref: '#/components/schemas/MsgImage'
         created_at:
           type: string
           format: date-time
@@ -5209,17 +5268,61 @@ components:
           description: '`#` followed by 1-64 lowercase letters, digits, _ or -.'
         body:
           type: string
-          description: Plain text, at most 64 KiB.
+          description: Plain text, at most 64 KiB; may be empty when the post carries images.
         reply_to:
           type: integer
           format: int64
           description: Id of a message in the same channel this replies to.
         kind:
           $ref: '#/components/schemas/MsgKind'
+        images:
+          type: array
+          maxItems: 4
+          description: Up to 4 images (ADR 0005 "Images").
+          items:
+            $ref: '#/components/schemas/MsgImageUpload'
       required:
         - participant_id
         - channel
         - body
+    MsgImageUpload:
+      type: object
+      description: An image as a post sends it.
+      properties:
+        name:
+          type: string
+          description: >
+            The file name; agc keeps letters, digits, dots, dashes and underscores, adds the
+            extension of the sniffed type and makes it unique within the message.
+        data:
+          type: string
+          format: byte
+          description: The bytes, base64; a PNG, JPEG, GIF or WebP of at most 5 MB.
+      required:
+        - name
+        - data
+    MsgImage:
+      type: object
+      description: An image a message carries (ADR 0005 "Images").
+      properties:
+        name:
+          type: string
+          description: The stored file name.
+        type:
+          type: string
+          enum: [image/png, image/jpeg, image/gif, image/webp]
+        size:
+          type: integer
+          format: int64
+          description: Bytes.
+        url:
+          type: string
+          description: Where it is served, `/api/msg/images/{id}/{name}`.
+      required:
+        - name
+        - type
+        - size
+        - url
     MsgMessage:
       type: object
       properties:
@@ -5251,6 +5354,11 @@ components:
           type: string
         kind:
           $ref: '#/components/schemas/MsgKind'
+        images:
+          type: array
+          description: The images the message carries; absent for a text-only message.
+          items:
+            $ref: '#/components/schemas/MsgImage'
         created_at:
           type: string
           format: date-time
