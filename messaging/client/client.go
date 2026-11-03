@@ -176,12 +176,14 @@ type AgentView struct {
 // AgentResponse is GET /agent on a home sandbox's socket: the agent, the
 // channels it reads right now, the channels outside those where it
 // started a thread (only the replies in its threads there are its turns)
-// and how long it may sit idle ("15m").
+// how long it may sit idle ("15m") and how many turns of different
+// threads it runs at once (0 from an agc that predates turns: one).
 type AgentResponse struct {
 	Agent    AgentView `json:"agent"`
 	Channels []string  `json:"channels"`
 	Asked    []string  `json:"asked"`
 	Idle     string    `json:"idle"`
+	Turns    int       `json:"turns"`
 }
 
 // Agent reads the agent whose home this is, on the sandbox's socket.

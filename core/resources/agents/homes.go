@@ -23,12 +23,14 @@ var _ sandboxes.Homes = homes{}
 // HomeAgent answers GET /agent on a home's socket: the agent, the channels
 // it reads now, the channels outside those where it started a thread
 // (Asked: only the replies in its threads there are turns), and how long
-// it may be idle before it sleeps.
+// it may be idle before it sleeps, and how many turns of different
+// threads it runs at once (the agent view's turns).
 type HomeAgent struct {
 	Agent    *AgentView `json:"agent"`
 	Channels []string   `json:"channels"`
 	Asked    []string   `json:"asked"`
 	Idle     string     `json:"idle"`
+	Turns    int        `json:"turns"`
 }
 
 // agentOf returns the agent living in home and its template, nil when the
@@ -109,7 +111,7 @@ func (h homes) Agent(ctx context.Context, home string) (any, error) {
 		idle = "15m"
 	}
 
-	return &HomeAgent{Agent: view, Channels: channels, Asked: asked, Idle: idle}, nil
+	return &HomeAgent{Agent: view, Channels: channels, Asked: asked, Idle: idle, Turns: view.Turns}, nil
 }
 
 func (h homes) Sleep(ctx context.Context, home string) error {
