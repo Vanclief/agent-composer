@@ -21,12 +21,14 @@ type TriggersSettings struct {
 }
 
 // GitHubTriggers is triggers.github: the repos to poll (owner/name), the
-// logins whose events are dropped before posting, and the poll interval
-// as a Go duration. No repos means the source is off.
+// logins whose events are dropped before posting, the poll interval as a
+// Go duration, and post_own, which posts the events made by the token's
+// own login too (dropped by default). No repos means the source is off.
 type GitHubTriggers struct {
 	Repos       []string `mapstructure:"repos" json:"repos"`
 	IgnoreUsers []string `mapstructure:"ignore_users" json:"ignore_users"`
 	Poll        string   `mapstructure:"poll" json:"poll"`
+	PostOwn     bool     `mapstructure:"post_own" json:"post_own"`
 }
 
 // Enabled reports whether any repo is configured.

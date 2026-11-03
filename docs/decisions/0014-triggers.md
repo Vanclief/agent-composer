@@ -84,13 +84,22 @@ and are not repeated here.
      "github": {
        "repos": ["vanclief/agent-composer"],
        "ignore_users": ["dependabot[bot]"],
-       "poll": "60s"
+       "poll": "60s",
+       "post_own": false
      }
    }
    ```
 
    An empty `repos` list means triggers are off. Events by a login in
    `ignore_users` (case-insensitive) are marked seen and not posted.
+
+   agc writes to GitHub as the user behind `GITHUB_TOKEN`, so by default
+   its own events are dropped too: each poll asks GitHub who the token is
+   (`GET /user`, its `login`, once per poll) and an event whose actor is
+   that login (case-insensitive) is marked seen and not posted, like an
+   ignored user's. If `GET /user` fails, the failure is logged and the
+   poll goes on, posting own events that once. `post_own: true` (config
+   only, default false) skips the lookup and posts own events as before.
 
 7. **Only `agc rest` polls.** `core.Stack.StartScheduler`, which only
    `agc rest` calls, starts the poll loop next to the scheduler; CLI

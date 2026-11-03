@@ -96,6 +96,17 @@ func (c *githubClient) get(ctx context.Context, apiPath string, query url.Values
 	return nil
 }
 
+// login asks GitHub who the token is: GET /user, its login.
+func (c *githubClient) login(ctx context.Context) (string, error) {
+	var user ghUser
+	err := c.get(ctx, "/user", nil, &user)
+	if err != nil {
+		return "", err
+	}
+
+	return user.Login, nil
+}
+
 // GitHub API shapes, only the fields agc reads.
 
 type ghUser struct {

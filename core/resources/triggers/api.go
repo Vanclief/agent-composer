@@ -233,10 +233,16 @@ func (api *API) PollOnce(ctx context.Context) {
 	defer cancel()
 
 	token, tokenErr := api.token()
+	client := &githubClient{base: api.base, token: token, http: api.client}
+
+	own := ""
+	if tokenErr == nil && !api.github.PostOwn {
+		own = api.ownLogin(ctx, client, token)
+	}
 
 	for _, repo := range api.github.RepoList() {
 		poll := &repoPoll{
-			client: &githubClient{base: api.base, token: token, http: api.client},
+			client: client,
 			repo:   repo,
 			pulls:  map[int]*ghPull{},
 		}
@@ -249,7 +255,7 @@ func (api *API) PollOnce(ctx context.Context) {
 			source := SourceName(repo, kind)
 			err := tokenErr
 			if err == nil {
-				err = api.pollKind(ctx, poll, source, kind)
+				err = api.pollKind(ctx, poll, source, kind, own)
 			}
 
 			if err != nil {
@@ -258,6 +264,23 @@ func (api *API) PollOnce(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// ownLogin asks GitHub who the token is, once per poll, so the events agc
+// itself made through it are not posted back (unless post_own). A failure
+// is logged, the token redacted, and the poll goes on posting them.
+func (api *API) ownLogin(ctx context.Context, client *githubClient, token string) string {
+	login, err := client.login(ctx)
+	if err != nil {
+		msg := err.Error()
+		if token != "" {
+			msg = strings.ReplaceAll(msg, token, "[redacted]")
+		}
+		log.Warn().Str("error", msg).Msg("triggers: cannot read the token's own login, its events post this poll")
+		return ""
+	}
+
+	return strings.TrimSpace(login)
 }
 
 // token reads GITHUB_TOKEN from the secrets file on every poll, through
@@ -295,8 +318,10 @@ func (api *API) recordError(source string, err error, token string) {
 // pollKind polls one kind of one repo. The first poll of a source only
 // sets its cursor to now: history is not posted. Later polls post every
 // event inside [cursor - Overlap, now) not yet seen, oldest first, and
-// save the cursor after each post, so a crash posts nothing twice.
-func (api *API) pollKind(ctx context.Context, poll *repoPoll, source, kind string) error {
+// save the cursor after each post, so a crash posts nothing twice. An
+// event by an ignored user or by own, the token's login, is marked seen
+// and not posted.
+func (api *API) pollKind(ctx context.Context, poll *repoPoll, source, kind, own string) error {
 	started := api.now()
 
 	cursor, err := api.store.Get(source)
@@ -328,7 +353,7 @@ func (api *API) pollKind(ctx context.Context, poll *repoPoll, source, kind strin
 			continue
 		}
 
-		posted := !api.ignored(event.Actor)
+		posted := !api.ignored(event.Actor) && !isOwn(event.Actor, own)
 		if posted {
 			_, err = api.poster.PostAsSystem(ctx, api.Route(ctx, event), event.Body())
 			if err != nil {
@@ -373,6 +398,13 @@ func (api *API) ignored(login string) bool {
 	}
 
 	return false
+}
+
+// isOwn reports whether login is own, the token's login, case
+// insensitively; an empty own (post_own, or GET /user failed) matches
+// nothing.
+func isOwn(login, own string) bool {
+	return login != "" && own != "" && strings.EqualFold(login, own)
 }
 
 // SourceView is one source for agc triggers show.

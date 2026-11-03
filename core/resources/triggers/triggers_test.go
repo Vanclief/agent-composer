@@ -1,6 +1,7 @@
 package triggers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -11,6 +12,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"github.com/vanclief/agent-composer/core/controller"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
@@ -50,9 +54,14 @@ func ts(t0 time.Time, d time.Duration) string {
 	return t0.Add(d).UTC().Format(time.RFC3339)
 }
 
+// testOwnLogin is the token's own login in the fake: GET /user answers it.
+const testOwnLogin = "agc-bot"
+
 // fakeGitHub serves one repo, acme/app, with one event of every kind
-// after t0, one before the window, and one by an ignored user.
-func fakeGitHub(t *testing.T, t0 time.Time) *httptest.Server {
+// after t0, one before the window, one by an ignored user and one by the
+// token's own login. GET /user answers testOwnLogin, or 500 when
+// userFails.
+func fakeGitHub(t *testing.T, t0 time.Time, userFails bool) *httptest.Server {
 	t.Helper()
 
 	base := "https://github.com/acme/app"
@@ -84,6 +93,11 @@ func fakeGitHub(t *testing.T, t0 time.Time) *httptest.Server {
 				"id": 3, "user": map[string]any{"login": "Dependabot"}, "body": "bump",
 				"html_url": base + "/issues/7#issuecomment-3", "issue_url": "https://api/repos/acme/app/issues/7",
 				"created_at": ts(t0, 21*time.Second),
+			},
+			map[string]any{
+				"id": 9, "user": map[string]any{"login": "AGC-Bot"}, "body": "Delivered, see the PR",
+				"html_url": base + "/issues/7#issuecomment-9", "issue_url": "https://api/repos/acme/app/issues/7",
+				"created_at": ts(t0, 22*time.Second),
 			},
 			map[string]any{
 				"id": 4, "user": map[string]any{"login": "ana"}, "body": "edited long ago",
@@ -143,6 +157,17 @@ func fakeGitHub(t *testing.T, t0 time.Time) *httptest.Server {
 			return
 		}
 
+		if r.URL.Path == "/user" {
+			if userFails {
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"message":"Server Error"}`))
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"login": testOwnLogin})
+			return
+		}
+
 		body, ok := routes[r.URL.Path]
 		if !ok {
 			t.Errorf("unexpected GitHub request %s", r.URL.Path)
@@ -175,6 +200,12 @@ func newTestAPI(t *testing.T, server *httptest.Server, poster *fakePoster, secre
 	t.Helper()
 
 	settings := controller.GitHubTriggers{Repos: []string{"acme/app"}, IgnoreUsers: []string{"dependabot"}}
+	return newTestAPIWith(t, settings, server, poster, secretsPath, statePath, clock)
+}
+
+func newTestAPIWith(t *testing.T, settings controller.GitHubTriggers, server *httptest.Server, poster *fakePoster, secretsPath, statePath string, clock *time.Time) *API {
+	t.Helper()
+
 	tasks := func(ctx context.Context, name string) (bool, error) {
 		return name == "dms-whatsapp", nil
 	}
@@ -192,7 +223,7 @@ func newTestAPI(t *testing.T, server *httptest.Server, poster *fakePoster, secre
 func TestPollPostsEachEventOnceAcrossRestarts(t *testing.T) {
 	dir := t.TempDir()
 	t0 := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
-	server := fakeGitHub(t, t0)
+	server := fakeGitHub(t, t0, false)
 	defer server.Close()
 
 	secretsPath := writeSecrets(t, dir, "GITHUB_TOKEN="+testToken+"\n")
@@ -278,7 +309,7 @@ func TestPollPostsEachEventOnceAcrossRestarts(t *testing.T) {
 func TestPollWithoutTokenRecordsTheError(t *testing.T) {
 	dir := t.TempDir()
 	t0 := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
-	server := fakeGitHub(t, t0)
+	server := fakeGitHub(t, t0, false)
 	defer server.Close()
 
 	poster := &fakePoster{}
@@ -305,7 +336,7 @@ func TestPollWithoutTokenRecordsTheError(t *testing.T) {
 func TestPollRejectedTokenKeepsTheCursor(t *testing.T) {
 	dir := t.TempDir()
 	t0 := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
-	server := fakeGitHub(t, t0)
+	server := fakeGitHub(t, t0, false)
 	defer server.Close()
 
 	secretsPath := writeSecrets(t, dir, "GITHUB_TOKEN="+testToken+"\n")
@@ -347,6 +378,106 @@ func TestPollRejectedTokenKeepsTheCursor(t *testing.T) {
 	got = poster.take()
 	if len(got) != 7 {
 		t.Fatalf("the poll after the failure posted %d messages, want 7", len(got))
+	}
+}
+
+// ownComment is the fake's comment by the token's own login, as posted.
+const ownComment = "[github] AGC-Bot commented on issue #7 in acme/app: Delivered, see the PR\nhttps://github.com/acme/app/issues/7#issuecomment-9"
+
+// pollTwice polls at t0, which only sets the cursors, and a minute later,
+// and returns what the second poll posted.
+func pollTwice(t *testing.T, settings controller.GitHubTriggers, userFails bool) ([]post, *API) {
+	t.Helper()
+
+	dir := t.TempDir()
+	t0 := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	server := fakeGitHub(t, t0, userFails)
+	t.Cleanup(server.Close)
+
+	poster := &fakePoster{}
+	clock := t0
+	api := newTestAPIWith(t, settings, server, poster, writeSecrets(t, dir, "GITHUB_TOKEN="+testToken+"\n"), StatePath(dir), &clock)
+	ctx := context.Background()
+
+	api.PollOnce(ctx)
+	clock = t0.Add(time.Minute)
+	api.PollOnce(ctx)
+
+	return poster.take(), api
+}
+
+func hasPost(posts []post, body string) bool {
+	for _, p := range posts {
+		if p.Body == body {
+			return true
+		}
+	}
+
+	return false
+}
+
+func TestPollSkipsTheTokensOwnEvents(t *testing.T) {
+	settings := controller.GitHubTriggers{Repos: []string{"acme/app"}}
+	got, api := pollTwice(t, settings, false)
+
+	if hasPost(got, ownComment) {
+		t.Errorf("the token's own comment was posted: %q", ownComment)
+	}
+	if len(got) != 8 {
+		t.Errorf("posted %d messages, want 8 (7 plus the unignored dependabot)", len(got))
+	}
+
+	cursor, err := api.store.Get(SourceName("acme/app", KindIssueComments))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, seen := cursor.Seen["comment:9"]
+	if !seen {
+		t.Errorf("the own comment is not marked seen: %v", cursor.Seen)
+	}
+}
+
+func TestPollPostOwnPostsTheTokensOwnEvents(t *testing.T) {
+	settings := controller.GitHubTriggers{Repos: []string{"acme/app"}, IgnoreUsers: []string{"dependabot"}, PostOwn: true}
+	got, _ := pollTwice(t, settings, false)
+
+	if !hasPost(got, ownComment) {
+		t.Errorf("post_own: the token's own comment was not posted")
+	}
+	if len(got) != 8 {
+		t.Errorf("posted %d messages, want 8", len(got))
+	}
+}
+
+func TestPollOwnLoginFailureIsLoggedAndThePollRuns(t *testing.T) {
+	var logged bytes.Buffer
+	previous := log.Logger
+	log.Logger = zerolog.New(&logged)
+	t.Cleanup(func() {
+		log.Logger = previous
+	})
+
+	settings := controller.GitHubTriggers{Repos: []string{"acme/app"}, IgnoreUsers: []string{"dependabot"}}
+	got, api := pollTwice(t, settings, true)
+
+	if len(got) != 8 || !hasPost(got, ownComment) {
+		t.Errorf("posted %d messages, want all 8 with the own comment, the login unknown", len(got))
+	}
+	if !strings.Contains(logged.String(), "own login") || !strings.Contains(logged.String(), "/user") {
+		t.Errorf("the GET /user failure was not logged: %s", logged.String())
+	}
+	if strings.Contains(logged.String(), testToken) {
+		t.Errorf("the log carries the token")
+	}
+
+	views, err := api.Show()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, view := range views {
+		if view.LastError != "" {
+			t.Errorf("source %s last_error = %q, want none", view.Source, view.LastError)
+		}
 	}
 }
 
