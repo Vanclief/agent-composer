@@ -715,6 +715,11 @@ function createState() {
     post('@franco/review-42', reviewer, 'PR 42 is ready for your eyes when you have a minute.')
     post('@franco/review-42', franco, 'Thanks, looking after lunch.')
     post('@franco/yc-pitch', pitcher, 'Draft 3 of the YC pitch is up: should the demo lead or close?')
+    // The persistent agent designer-1's inbox #designer-1 (ADR 0016): franco
+    // asked, so it is followed, and its answer is unread.
+    const designer = join('designer-1', '', false)
+    post('#designer-1', franco, '@designer-1 can you sketch the Talk sidebar split into Asks, DMs and Channels?')
+    post('#designer-1', designer, 'Sketch is up: Asks first, then DMs with each agent, then Channels.')
     // The seeded human has left, so the panel can join as @franco.
     franco.left_at = iso()
   }
@@ -2333,12 +2338,26 @@ function agentsSeed(): MockAgents {
       last_active_at: ago(1),
       created_at: ago(2),
     },
+    {
+      // An inbox with messages (#designer-1), so Talk's DMs section shows.
+      ...base,
+      name: 'designer-1',
+      role: 'Designer',
+      kept: false,
+      state: 'awake',
+      home: 'designer-1',
+      tasks: [],
+      conversations: [{ channel: '#designer-1', last_at: ago(0) }],
+      last_active_at: ago(0),
+      created_at: ago(60 * 3),
+    },
   ]
   // ada was reviewer-1.
   const numbers = new Map([
     ['orchestrator', 1],
     ['reviewer', 2],
     ['writer', 1],
+    ['designer', 1],
   ])
   return { list, numbers }
 }

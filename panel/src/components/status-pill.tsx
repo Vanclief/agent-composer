@@ -139,3 +139,26 @@ const LIGHT = {
 export function Led({ color, className }: { color: 'green' | 'yellow' | 'red'; className?: string }) {
   return <span data-led={color} className={cn('block size-2.5 shrink-0 rounded-full', LIGHT[color], className)} />
 }
+
+// A status as a small light where a pill does not fit (the Talk sidebar's
+// agent DMs): the pill's colors, filled while lit, an outline otherwise;
+// the word, verbatim, is its label and tooltip.
+export function StatusLed({ status, detail, className }: StatusPillProps) {
+  const style = styleOf(status, detail)
+  return (
+    <span
+      role="img"
+      aria-label={status}
+      title={detail ? `${status}: ${detail}` : status}
+      data-testid="status-led"
+      data-status={status}
+      data-tier={style.tier}
+      className={cn(
+        'block size-2 shrink-0 rounded-full border',
+        style.pill,
+        style.tier === 'lit' || style.tier === 'attention' ? 'bg-current' : 'bg-transparent',
+        className,
+      )}
+    />
+  )
+}
