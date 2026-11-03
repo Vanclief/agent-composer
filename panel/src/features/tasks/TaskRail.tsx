@@ -14,6 +14,7 @@ import { Avatar } from '@/components/avatar'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { EmptySlot } from '@/components/empty-slot'
 import { ErrorText } from '@/components/error-text'
+import { ShotImages } from '@/components/shot-images'
 import { Led, StatusPill } from '@/components/status-pill'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -317,6 +318,7 @@ function ReportParts({ task, report }: { task: TaskView; report: Report }) {
           ))}
         </Part>
       )}
+      <Shots report={report} />
       {report.left_out.length > 0 && (
         <Part label="Left out">
           {report.left_out.map((item, i) => (
@@ -338,6 +340,27 @@ function ReportParts({ task, report }: { task: TaskView; report: Report }) {
         </Part>
       )}
     </>
+  )
+}
+
+// The report's screenshots in its order, labelled, side by side; a click
+// opens one full size in a new tab (the panel has no lightbox). Nothing
+// when the report has none: shots are optional.
+function Shots({ report }: { report: Report }) {
+  const shots = (report.shots ?? []).filter((shot) => shot.url)
+  if (shots.length === 0) {
+    return null
+  }
+  return (
+    <div className="flex flex-col gap-1.5 pt-1">
+      <h4 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Shots</h4>
+      <ShotImages
+        testId="report-shots"
+        shots={shots.map((shot) => ({ label: shot.label, url: shot.url ?? '' }))}
+        className="gap-2"
+        imageClassName="max-h-48"
+      />
+    </div>
   )
 }
 
