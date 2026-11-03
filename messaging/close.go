@@ -126,5 +126,5 @@ func (s *Service) replyAsSystem(ctx context.Context, q *msgmodels.Message, body 
 
 	id := q.ID
 
-	return s.insert(ctx, p, q.Channel, body, &id, msgmodels.KindMessage)
+	return s.insert(ctx, p, q.Channel, body, &id, msgmodels.KindMessage, nil)
 }
