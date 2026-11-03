@@ -155,6 +155,9 @@ func Command(record *agent.Agent) string {
 	if record.Model != "" {
 		fields = append(fields, "--model", record.Model)
 	}
+	if record.Effort != "" {
+		fields = append(fields, "--effort", record.Effort)
+	}
 	fields = append(fields, "--brief", sandboxes.AgentBriefPath)
 
 	return strings.Join(fields, " ")

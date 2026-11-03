@@ -154,8 +154,10 @@ const testSandbox = `sandbox:
 `
 
 // templates are the roles the tests use: reviewer reads nothing extra,
-// watcher reads #ci-*, main reads every channel.
+// watcher reads #ci-*, main reads every channel, designer runs at high
+// effort.
 var templates = map[string]string{
+	"designer.yaml": "harness: claude_code\nmodel: claude-opus-5-5\neffort: high\nreads: []\n" + testSandbox + "instructions: Design.\n",
 	"reviewer.yaml": "harness: claude_code\nidle: 20m\nreads: []\n" + testSandbox + "instructions: |\n  Review.\n",
 	"watcher.yaml":  "harness: codex_cli\nmodel: gpt-5\nreads: ['#ci-*']\n" + testSandbox + "instructions: Watch CI.\n",
 	"main.yaml":     "harness: claude_code\nreads: ['*']\n" + testSandbox + "instructions: Route.\n",
@@ -259,6 +261,72 @@ func (env *testEnv) wake(t *testing.T, name string) *AgentView {
 	env.sbx.Wait()
 
 	return env.get(t, name)
+}
+
+func TestEffortFromTemplateToHomeCommand(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+
+	designer := env.create(t, "designer")
+	if designer.Effort != "high" {
+		t.Fatalf("view effort = %q, want high", designer.Effort)
+	}
+
+	record, err := agent.GetAgentByName(ctx, env.db, designer.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Effort != "high" {
+		t.Fatalf("row effort = %q, want high", record.Effort)
+	}
+
+	want := "/usr/local/bin/agc agent run --agent designer-1 --harness claude_code --model claude-opus-5-5 --effort high --brief /home/agent/AGENT.md"
+	if Command(record) != want {
+		t.Fatalf("command = %q, want %q", Command(record), want)
+	}
+
+	env.wake(t, designer.Name)
+	calls := env.rt.Calls()
+	if len(calls) == 0 || calls[len(calls)-1] != "terminal "+want {
+		t.Fatalf("calls = %q, want the home job %q", calls, want)
+	}
+
+	// The request overrides the template; the default leaves no flag.
+	low, err := env.api.Create(ctx, nil, &CreateRequest{Role: "designer", Effort: "low"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if low.Effort != "low" {
+		t.Fatalf("override effort = %q, want low", low.Effort)
+	}
+
+	reviewer := env.create(t, "reviewer")
+	record, err = agent.GetAgentByName(ctx, env.db, reviewer.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reviewer.Effort != "" || strings.Contains(Command(record), "--effort") {
+		t.Fatalf("reviewer effort = %q, command %q: want none", reviewer.Effort, Command(record))
+	}
+
+	_, err = env.api.Create(ctx, nil, &CreateRequest{Role: "designer", Effort: "huge"})
+	if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), "low, medium, high, xhigh") {
+		t.Fatalf("invalid request effort: %v, want EINVALID naming the allowed values", err)
+	}
+
+	err = Template{Effort: "huge"}.Validate()
+	if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), "low, medium, high, xhigh") {
+		t.Fatalf("invalid template effort: %v, want EINVALID naming the allowed values", err)
+	}
+
+	err = os.WriteFile(filepath.Join(env.api.dir, "loud.yaml"), []byte("harness: claude_code\neffort: huge\n"+testSandbox), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = env.api.Create(ctx, nil, &CreateRequest{Role: "loud"})
+	if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), "low, medium, high, xhigh") {
+		t.Fatalf("template with an invalid effort: %v, want EINVALID naming the allowed values", err)
+	}
 }
 
 func TestCreateNumbersPerRoleAndNeverReuses(t *testing.T) {

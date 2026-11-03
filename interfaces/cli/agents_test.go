@@ -113,7 +113,7 @@ func TestAgentCommandsAgainstAServer(t *testing.T) {
 
 	want := []string{
 		"GET /api/agents",
-		`POST /api/agents {"role":"Reviewer","harness":"codex_cli","model":""}`,
+		`POST /api/agents {"role":"Reviewer","harness":"codex_cli","model":"","effort":""}`,
 		`POST /api/agents/reviewer-1/keep {"name":"ada","role":"main"}`,
 		"POST /api/agents/reviewer-1/wake",
 		"DELETE /api/agents/reviewer-1",

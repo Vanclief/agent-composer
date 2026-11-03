@@ -43,7 +43,9 @@ type Agent struct {
 	Kept    bool    `bun:"kept,notnull,default:false" json:"kept"`
 	Harness Harness `bun:"harness,notnull" json:"harness"`
 	Model   string  `bun:"model,notnull,default:''" json:"model"`
-	Owner   string  `bun:"owner,notnull,default:''" json:"owner"`
+	// Effort is the harness's reasoning effort, empty for its default.
+	Effort string `bun:"effort,notnull,default:''" json:"effort"`
+	Owner  string `bun:"owner,notnull,default:''" json:"owner"`
 	// Home is the home sandbox's name, empty until the first wake. It
 	// keeps its name when the agent is renamed.
 	Home string `bun:"home,notnull,default:''" json:"home"`

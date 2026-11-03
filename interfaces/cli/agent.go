@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/vanclief/agent-composer/messaging/httpapi"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 	"github.com/vanclief/agent-composer/runtime/harnesses"
+	runtimetypes "github.com/vanclief/agent-composer/runtime/types"
 )
 
 const (
@@ -88,6 +90,7 @@ func agentCommand() *cli.Command {
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "harness", Usage: "claude_code or codex_cli", Required: true},
 					&cli.StringFlag{Name: "model", Usage: "Model the harness runs"},
+					&cli.StringFlag{Name: "effort", Usage: "Reasoning effort the harness runs at: low, medium, high or xhigh (default the harness's)"},
 					&cli.StringFlag{Name: "task", Usage: "Task name; its channel is #<task> (default $AGC_TASK)"},
 					&cli.StringFlag{Name: "brief", Usage: "Path to the instructions", Value: "/home/agent/TASK.md"},
 					&cli.StringFlag{Name: "name", Usage: "Messaging name to join as (default $AGC_SANDBOX, else the task name)"},
@@ -122,7 +125,7 @@ func agentRun(c *cli.Context) error {
 		return ez.New(ez.EINVALID, "cannot read the brief "+c.String("brief"), err)
 	}
 
-	harness, err := newAgentHarness(c.String("harness"), c.String("model"))
+	harness, err := agentHarnessFor(c)
 	if err != nil {
 		return err
 	}
@@ -161,7 +164,7 @@ func agentHomeRun(c *cli.Context, name string) error {
 		return ez.New(ez.EINVALID, "cannot read the brief "+c.String("brief"), err)
 	}
 
-	harness, err := newAgentHarness(c.String("harness"), c.String("model"))
+	harness, err := agentHarnessFor(c)
 	if err != nil {
 		return err
 	}
@@ -416,15 +419,28 @@ func (l *agentLoop) pause(ctx context.Context) {
 	pause(ctx)
 }
 
+// agentHarnessFor is the harness agc agent run's flags name.
+func agentHarnessFor(c *cli.Context) (agentHarness, error) {
+	return newAgentHarness(c.String("harness"), c.String("model"), c.String("effort"))
+}
+
 // newAgentHarness drives the harness CLI non-interactively, as
 // runtime/harnesses does, without permission prompts: the VM is the
 // sandbox.
-func newAgentHarness(harness string, model string) (agentHarness, error) {
+func newAgentHarness(harness string, model string, effort string) (agentHarness, error) {
+	effort = strings.TrimSpace(effort)
+	if effort != "" {
+		err := runtimetypes.ReasoningEffort(effort).Validate()
+		if err != nil {
+			return nil, ez.New(ez.EINVALID, "effort "+effort+" is not one of low, medium, high, xhigh", err)
+		}
+	}
+
 	switch harness {
 	case "claude_code":
-		return claudeAgent{model: model}, nil
+		return claudeAgent{model: model, effort: effort}, nil
 	case "codex_cli":
-		return codexAgent{model: model}, nil
+		return codexAgent{model: model, effort: effort}, nil
 	}
 
 	return nil, ez.New(ez.EINVALID, "agc agent run supports --harness claude_code or codex_cli, not "+harness, nil)
@@ -454,20 +470,29 @@ func runHarness(ctx context.Context, name string, args []string) (string, error)
 }
 
 type claudeAgent struct {
-	model string
+	model  string
+	effort string
 }
 
-func (a claudeAgent) Run(ctx context.Context, prompt string, session string) (string, string, error) {
+// args is the claude command line, effort passed as runtime/harnesses
+// does.
+func (a claudeAgent) args(prompt string, session string) []string {
 	args := []string{"-p", "--output-format", "json", "--dangerously-skip-permissions"}
 	if a.model != "" {
 		args = append(args, "--model", a.model)
 	}
+	if a.effort != "" {
+		args = append(args, "--effort", a.effort)
+	}
 	if session != "" {
 		args = append(args, "--resume", session)
 	}
-	args = append(args, "--", prompt)
 
-	stdout, err := runHarness(ctx, "claude", args)
+	return append(args, "--", prompt)
+}
+
+func (a claudeAgent) Run(ctx context.Context, prompt string, session string) (string, string, error) {
+	stdout, err := runHarness(ctx, "claude", a.args(prompt, session))
 	if err != nil {
 		return "", "", err
 	}
@@ -476,7 +501,8 @@ func (a claudeAgent) Run(ctx context.Context, prompt string, session string) (st
 }
 
 type codexAgent struct {
-	model string
+	model  string
+	effort string
 }
 
 func (a codexAgent) Run(ctx context.Context, prompt string, session string) (string, string, error) {
@@ -497,6 +523,9 @@ func (a codexAgent) Run(ctx context.Context, prompt string, session string) (str
 	args = append(args, "--json", "--skip-git-repo-check", "-o", lastMessage)
 	if a.model != "" {
 		args = append(args, "-m", a.model)
+	}
+	if a.effort != "" {
+		args = append(args, "-c", "model_reasoning_effort="+strconv.Quote(a.effort))
 	}
 	args = append(args, prompt)
 

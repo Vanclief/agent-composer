@@ -2145,6 +2145,11 @@ export interface components {
             harness?: string;
             /** @description Empty takes the template's (for its harness), then the default. */
             model?: string;
+            /**
+             * @description Reasoning effort; empty takes the template's, else the harness's default.
+             * @enum {string}
+             */
+            effort?: "" | "low" | "medium" | "high" | "xhigh";
         };
         KeepAgentRequest: {
             /** @description Up to 32 lowercase letters, digits and dashes. */
@@ -2174,6 +2179,11 @@ export interface components {
             kept: boolean;
             harness: string;
             model: string;
+            /**
+             * @description The harness's reasoning effort, from the template or the create request; empty for the harness's default.
+             * @enum {string}
+             */
+            effort: "" | "low" | "medium" | "high" | "xhigh";
             owner: string;
             /** @description Computed from the home sandbox, never stored: asleep (no home, or stopped), waking (starting), awake (running), otherwise the sandbox's own status verbatim (failed, stopping, unknown). In an agent.state event, deleted once it is gone. */
             state: string;

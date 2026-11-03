@@ -38,6 +38,10 @@ that mock a backend and settles what it left open.
    a rename, so the list stays readable while the agent is on trial.
    Templates name no harness credential, only `GITHUB_TOKEN`, and rely on
    the provider's default account (ADR 0018).
+   An optional `effort` (`low`, `medium`, `high` or `xhigh`, empty for the
+   harness's default) is copied to the row like `model` (`POST /api/agents`
+   may override it) and reaches the harness through `agc agent run
+   --effort`: Claude Code's `--effort`, Codex's `model_reasoning_effort`.
 
 3. **Keeping names it.** `POST /api/agents/{name}/keep { name, role? }` sets
    `kept`, renames the row and may change the role. The home sandbox and the
