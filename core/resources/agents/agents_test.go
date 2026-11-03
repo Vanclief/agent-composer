@@ -1309,3 +1309,132 @@ func TestTemplateTurns(t *testing.T) {
 		}
 	}
 }
+
+// TestTurnForIsStoredOnTheMessage covers turn_for (ADR 0016 item 6): the
+// wake hook's turn computation names, on the stored message and the one
+// the post returns (and publishes), the agents it is a turn for.
+func TestTurnForIsStoredOnTheMessage(t *testing.T) {
+	ctx := context.Background()
+	env := newTestEnv(t)
+	env.create(t, "designer")
+	env.create(t, "reviewer")
+	env.wake(t, "designer-1")
+	env.wake(t, "reviewer-1")
+
+	franco, err := env.msg.Join(ctx, messaging.Caller{Human: true}, "franco")
+	if err != nil {
+		t.Fatal(err)
+	}
+	designer := messaging.Caller{Agent: "designer-1", Grants: []messaging.Grant{{Channel: "#designer-1"}, {Channel: "#franco"}}}
+	designerP, err := env.msg.Join(ctx, designer, "designer-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviewer := messaging.Caller{Agent: "reviewer-1", Grants: []messaging.Grant{{Channel: "#designer-1"}}}
+	reviewerP, err := env.msg.Join(ctx, reviewer, "reviewer-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// stored reads m back as franco does over GET /api/msg/read.
+	stored := func(m *msgmodels.Message) []string {
+		t.Helper()
+		env.api.Wait()
+		env.sbx.Wait()
+
+		messages, err := env.msg.Read(ctx, messaging.Caller{Human: true}, m.Channel, m.ID-1, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(messages) != 1 || messages[0].ID != m.ID {
+			t.Fatalf("read = %+v, want message %d", messages, m.ID)
+		}
+		if !reflect.DeepEqual(messages[0].TurnFor, m.TurnFor) {
+			t.Fatalf("read turn_for = %q, posted %q", messages[0].TurnFor, m.TurnFor)
+		}
+
+		return messages[0].TurnFor
+	}
+
+	// A person's post in the agent's inbox.
+	hello, err := env.msg.Post(ctx, messaging.Caller{Human: true}, franco.ID, "#designer-1", "hello", nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := stored(hello)
+	if !reflect.DeepEqual(got, []string{"designer-1"}) {
+		t.Fatalf("a person's post: turn_for = %q, want designer-1", got)
+	}
+
+	// The agent's own post.
+	own, err := env.msg.Post(ctx, designer, designerP.ID, "#designer-1", "on it", nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = stored(own)
+	if len(got) != 0 {
+		t.Fatalf("the agent's own post: turn_for = %q", got)
+	}
+
+	// agc's plain post.
+	plain, err := env.msg.PostAsSystem(ctx, "#designer-1", "Note from agc.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = stored(plain)
+	if len(got) != 0 {
+		t.Fatalf("agc's plain post: turn_for = %q", got)
+	}
+
+	// Another agent's plain post, neither a question nor naming it (a
+	// thread reply, the only plain post the inbox takes from it).
+	other, err := env.msg.Post(ctx, reviewer, reviewerP.ID, "#designer-1", "looks fine", &hello.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = stored(other)
+	if len(got) != 0 {
+		t.Fatalf("another agent's plain post: turn_for = %q", got)
+	}
+
+	// Naming it makes it a turn.
+	named, err := env.msg.Post(ctx, reviewer, reviewerP.ID, "#designer-1", "@designer-1 looks fine", &hello.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = stored(named)
+	if !reflect.DeepEqual(got, []string{"designer-1"}) {
+		t.Fatalf("another agent's post naming it: turn_for = %q, want designer-1", got)
+	}
+
+	// A reply in a thread the agent started, in a channel it does not read.
+	question, err := env.msg.Post(ctx, designer, designerP.ID, "#franco", "Blue or green?", nil, msgmodels.KindQuestion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = stored(question)
+	if len(got) != 0 {
+		t.Fatalf("the agent's question: turn_for = %q", got)
+	}
+
+	answer, err := env.msg.Post(ctx, messaging.Caller{Human: true}, franco.ID, "#franco", "Green", &question.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = stored(answer)
+	if !reflect.DeepEqual(got, []string{"designer-1"}) {
+		t.Fatalf("a reply in its thread: turn_for = %q, want designer-1", got)
+	}
+
+	// Several agents, in name order, asleep or awake: the main agent reads
+	// every channel.
+	env.create(t, "main")
+	both, err := env.msg.Post(ctx, messaging.Caller{Human: true}, franco.ID, "#designer-1", "both of you", nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = stored(both)
+	if !reflect.DeepEqual(got, []string{"designer-1", "main-1"}) {
+		t.Fatalf("turn_for = %q, want designer-1 and main-1", got)
+	}
+}

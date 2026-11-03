@@ -2,6 +2,7 @@ package agents
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/rs/zerolog/log"
@@ -25,29 +26,29 @@ func forManager(m *msgmodels.Message) bool {
 	return strings.HasPrefix(m.Body, msgmodels.DeliveredPrefix) || strings.HasPrefix(m.Body, msgmodels.AcceptedPrefix)
 }
 
-// onPost is the wake hook (ADR 0016 item 6): every asleep agent that reads
-// the message's channel is woken when the message is a turn for it
-// (msgmodels.TurnFor): a person's post, another agent's question or post
-// naming it, never its own post; agc's own posts wake only the manager of
-// the task whose channel they are in, and only for a delivery or an accept
-// (forManager). A reply in a thread an agent started wakes that agent in
-// any channel, read or not (msgmodels.AnswerFor), so the asker hears the
-// answer. Wakes run in the background so a post never waits on a VM.
+// onPost is the wake hook (ADR 0016 item 6): every asleep agent the
+// message is a turn for (turnFor, already stored as turn_for before the
+// message was published) is woken. Wakes run in the background so a post
+// never waits on a VM.
 func (api *API) onPost(ctx context.Context, m *msgmodels.Message) {
-	if fromSystem(m) && !forManager(m) {
-		return
-	}
+	for i := range m.TurnFor {
+		name := m.TurnFor[i]
 
-	woken := api.toWake(ctx, m)
+		record, err := agent.GetAgentByName(ctx, api.db, name)
+		if err != nil {
+			log.Warn().Err(err).Str("agent", name).Msg("cannot read the agent for the wake hook")
+			continue
+		}
 
-	for i := range woken {
-		record := woken[i]
+		if !api.asleep(ctx, record) {
+			continue
+		}
 
 		api.wakes.Add(1)
 		go func() {
 			defer api.wakes.Done()
 
-			err := api.wake(context.WithoutCancel(ctx), &record)
+			err := api.wake(context.WithoutCancel(ctx), record)
 			if err != nil {
 				log.Warn().Err(err).Str("agent", record.Name).Str("channel", m.Channel).Msg("cannot wake the agent for a message")
 			}
@@ -55,10 +56,33 @@ func (api *API) onPost(ctx context.Context, m *msgmodels.Message) {
 	}
 }
 
-// toWake returns the asleep agents for which the message is a turn: in a
-// channel they read, by msgmodels.TurnFor, or anywhere, a reply in a
-// thread they started (msgmodels.AnswerFor).
-func (api *API) toWake(ctx context.Context, m *msgmodels.Message) []agent.Agent {
+// turnNames is messaging's TurnsFunc: the names of the agents m is a
+// turn for, in name order, stored as the message's turn_for.
+func (api *API) turnNames(ctx context.Context, m *msgmodels.Message) []string {
+	records := api.turnFor(ctx, m)
+
+	names := []string{}
+	for i := range records {
+		names = append(names, records[i].Name)
+	}
+
+	slices.Sort(names)
+
+	return names
+}
+
+// turnFor returns the agents, asleep or awake, for which the message is a
+// turn: in a channel they read, by msgmodels.TurnFor, a person's post,
+// another agent's question or post naming them, never their own post; or
+// anywhere, a reply in a thread they started (msgmodels.AnswerFor), so the
+// asker hears the answer. agc's own posts are a turn only for the manager
+// of the task whose channel they are in, and only for a delivery or an
+// accept (forManager).
+func (api *API) turnFor(ctx context.Context, m *msgmodels.Message) []agent.Agent {
+	if fromSystem(m) && !forManager(m) {
+		return nil
+	}
+
 	records, err := agent.ListAgents(ctx, api.db)
 	if err != nil {
 		log.Warn().Err(err).Msg("cannot list agents for the wake hook")
@@ -71,13 +95,13 @@ func (api *API) toWake(ctx context.Context, m *msgmodels.Message) []agent.Agent 
 		root = nil
 	}
 
-	woken := []agent.Agent{}
+	turns := []agent.Agent{}
 	for i := range records {
 		record := &records[i]
 
 		reader := &msgmodels.Participant{Name: record.Name, Agent: record.Home}
 		if msgmodels.AnswerFor(m, root, reader) {
-			woken = api.wakeIfAsleep(ctx, woken, record)
+			turns = append(turns, *record)
 			continue
 		}
 
@@ -113,25 +137,21 @@ func (api *API) toWake(ctx context.Context, m *msgmodels.Message) []agent.Agent 
 			}
 		}
 
-		woken = api.wakeIfAsleep(ctx, woken, record)
+		turns = append(turns, *record)
 	}
 
-	return woken
+	return turns
 }
 
-// wakeIfAsleep appends record to woken when it is asleep.
-func (api *API) wakeIfAsleep(ctx context.Context, woken []agent.Agent, record *agent.Agent) []agent.Agent {
+// asleep reports whether record's home is asleep.
+func (api *API) asleep(ctx context.Context, record *agent.Agent) bool {
 	state, _, err := api.state(ctx, record)
 	if err != nil {
 		log.Warn().Err(err).Str("agent", record.Name).Msg("cannot read the agent's state for the wake hook")
-		return woken
+		return false
 	}
 
-	if state != StateAsleep {
-		return woken
-	}
-
-	return append(woken, *record)
+	return state == StateAsleep
 }
 
 // maxThreadDepth bounds following reply_to to a thread's root.
