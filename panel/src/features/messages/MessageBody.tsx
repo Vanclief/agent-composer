@@ -97,7 +97,7 @@ function CodeBlock({ text, children }: { text: string; children: ReactNode }) {
   const Icon = copied ? Check : Copy
   return (
     <div data-testid="code-block" className="group/code relative my-1.5">
-      <pre className="overflow-x-auto rounded-md border border-border bg-zinc-100 px-3 py-2 font-mono text-xs leading-5 dark:bg-zinc-900 [&>code]:bg-transparent [&>code]:p-0">
+      <pre className="overflow-x-auto rounded-md border border-border bg-zinc-100 px-3 py-2 font-mono text-[13px] leading-6 dark:bg-zinc-900 [&>code]:bg-transparent [&>code]:p-0">
         {children}
       </pre>
       <button
@@ -190,10 +190,10 @@ function components(me: string): Components {
     code: ({ children, className }) => (
       <code className={cn('rounded bg-zinc-500/15 px-1 py-px font-mono text-[0.85em]', className)}>{children}</code>
     ),
-    h1: ({ children }) => <h3 className="mt-2 mb-1 text-base font-semibold first:mt-0">{children}</h3>,
-    h2: ({ children }) => <h4 className="mt-2 mb-1 text-sm font-semibold first:mt-0">{children}</h4>,
-    h3: ({ children }) => <h5 className="mt-2 mb-1 text-sm font-semibold first:mt-0">{children}</h5>,
-    h4: ({ children }) => <h6 className="mt-2 mb-1 text-sm font-medium first:mt-0">{children}</h6>,
+    h1: ({ children }) => <h3 className="mt-2 mb-1 text-lg font-semibold first:mt-0">{children}</h3>,
+    h2: ({ children }) => <h4 className="mt-2 mb-1 text-base font-semibold first:mt-0">{children}</h4>,
+    h3: ({ children }) => <h5 className="mt-2 mb-1 text-base font-semibold first:mt-0">{children}</h5>,
+    h4: ({ children }) => <h6 className="mt-2 mb-1 text-base font-medium first:mt-0">{children}</h6>,
     ul: ({ children }) => <ul className="my-1 list-disc pl-5">{children}</ul>,
     ol: ({ children }) => <ol className="my-1 list-decimal pl-5">{children}</ol>,
     li: ({ children }) => <li className="break-words whitespace-pre-wrap">{children}</li>,
@@ -205,7 +205,7 @@ function components(me: string): Components {
     hr: () => <hr className="my-2 border-border" />,
     table: ({ children }) => (
       <div className="my-1 overflow-x-auto">
-        <table className="border-collapse text-xs">{children}</table>
+        <table className="border-collapse text-sm">{children}</table>
       </div>
     ),
     th: ({ children }) => <th className="border border-border px-2 py-1 text-left font-semibold">{children}</th>,
@@ -221,7 +221,7 @@ export function MarkdownText({ body, className }: { body: string; className?: st
   const pieces = useMemo(() => splitShots(body), [body])
   if (!pieces.some((piece) => piece.type === 'shots')) {
     return (
-      <div className={cn('min-w-0 text-sm leading-5', className)}>
+      <div className={cn('min-w-0 text-base leading-7', className)}>
         <Markdown remarkPlugins={REMARK} components={parts}>
           {body}
         </Markdown>
@@ -229,7 +229,7 @@ export function MarkdownText({ body, className }: { body: string; className?: st
     )
   }
   return (
-    <div className={cn('flex min-w-0 flex-col gap-1.5 text-sm leading-5', className)}>
+    <div className={cn('flex min-w-0 flex-col gap-1.5 text-base leading-7', className)}>
       {pieces.map((piece, i) =>
         piece.type === 'shots' ? (
           <ShotImages key={i} shots={piece.shots} className="max-w-[72ch]" />

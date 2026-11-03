@@ -109,7 +109,17 @@ function IdentityChip({
 
 // replyTo makes it a thread's composer: it posts with reply_to, and the
 // identity chip stays with the channel's composer below the feed.
-export function Composer({ channel, identity, replyTo }: { channel: string; identity: Identity; replyTo?: number }) {
+export function Composer({
+  channel,
+  identity,
+  replyTo,
+  className,
+}: {
+  channel: string
+  identity: Identity
+  replyTo?: number
+  className?: string
+}) {
   const Send = conceptIcons.message
   const post = useSend(identity)
   const [draft, setDraft] = useState('')
@@ -220,6 +230,7 @@ export function Composer({ channel, identity, replyTo }: { channel: string; iden
       className={cn(
         'relative flex shrink-0 flex-col gap-2 border-t border-border p-3',
         dragging && 'outline-2 outline-[var(--eva)]',
+        className,
       )}
     >
       {dragging && (

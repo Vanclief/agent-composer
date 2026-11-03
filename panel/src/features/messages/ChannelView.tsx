@@ -17,7 +17,7 @@ import { Composer } from './Composer'
 import { ChannelContext } from './context'
 import { useIdentity, useMyName } from './identity'
 import { membersOf, type Member } from './members'
-import { MessageList } from './MessageList'
+import { FEED_COLUMN, MessageList } from './MessageList'
 import { answerOf, useOpenQuestions, useQuestions } from './questions'
 import { ThreadPane } from './ThreadPane'
 import { buildThreads } from './threads'
@@ -207,7 +207,7 @@ export function ChannelView({
           ) : (
             <MessageList messages={threads.top} unreadID={unreadID} />
           )}
-          <Composer channel={channel} identity={identity} />
+          <Composer channel={channel} identity={identity} className={FEED_COLUMN} />
         </div>
         {threadID !== undefined && <ThreadPane key={threadID} id={threadID} onClose={closeThread} />}
       </div>

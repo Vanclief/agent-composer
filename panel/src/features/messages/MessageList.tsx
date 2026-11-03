@@ -23,6 +23,10 @@ import { dayKey, dayLabel } from './time'
 const BOTTOM_SLACK = 32
 // The longest pause that still continues a group.
 const GROUP_GAP_MS = 5 * 60_000
+// The feed's reading column, shared with the composer under it: at most
+// 72ch at text-base (the time column included), left-aligned. No w-full:
+// the composer's dark margins would push a full-width box past its column.
+export const FEED_COLUMN = 'max-w-[72ch] text-base'
 
 type Item =
   | { type: 'day'; key: string; label: string }
@@ -75,7 +79,7 @@ function Divider({ label, testid, className }: { label: string; testid: string; 
       className={cn('flex items-center gap-2 py-1', className)}
     >
       <span className="h-px flex-1 bg-current opacity-30" />
-      <span className="text-[11px] font-medium tracking-wide uppercase">{label}</span>
+      <span className="text-xs font-medium tracking-wide uppercase">{label}</span>
       <span className="h-px flex-1 bg-current opacity-30" />
     </li>
   )
@@ -147,7 +151,7 @@ export function MessageList({ messages, unreadID }: { messages: Message[]; unrea
         data-testid="message-list"
         className="relative h-full overflow-y-auto px-4 py-3"
       >
-        <ol className="flex flex-col gap-2 text-sm">
+        <ol className={cn('flex flex-col gap-2', FEED_COLUMN)}>
           {itemsOf(messages, unreadID, now).map((item) => {
             switch (item.type) {
               case 'day':

@@ -137,12 +137,12 @@ export function MessageRow({ message, first, inThread }: { message: Message; fir
     >
       <div data-slot="stamp" className="flex w-11 shrink-0 justify-end pt-0.5">
         {first ? (
-          <RelativeTime iso={message.created_at} className="text-[10px]" />
+          <RelativeTime iso={message.created_at} className="text-xs" />
         ) : (
           <time
             dateTime={message.created_at}
             title={exact(message.created_at)}
-            className="font-mono text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100"
+            className="font-mono text-xs text-muted-foreground opacity-0 group-hover:opacity-100"
           >
             {clock(message.created_at)}
           </time>
@@ -210,10 +210,10 @@ export function SystemLine({ message }: { message: Message }) {
     <div
       data-testid="message"
       data-message-id={message.id}
-      className="group relative flex gap-2 rounded-md px-1 py-0.5 text-xs text-muted-foreground"
+      className="group relative flex gap-2 rounded-md px-1 py-0.5 text-sm text-muted-foreground"
     >
       <div data-slot="stamp" className="flex w-11 shrink-0 justify-end pt-px">
-        <RelativeTime iso={message.created_at} className="text-[10px]" />
+        <RelativeTime iso={message.created_at} className="text-xs" />
       </div>
       <div
         data-testid="system-line"
@@ -246,7 +246,7 @@ export function SystemLine({ message }: { message: Message }) {
             )}
           </div>
         ) : (
-          <MarkdownText body={message.body} className="flex-1 text-xs leading-4" />
+          <MarkdownText body={message.body} className="flex-1 text-sm leading-5" />
         )}
       </div>
     </div>
@@ -334,7 +334,7 @@ export function QuestionCard({ message }: { message: Message }) {
   return (
     <div data-testid="message" data-message-id={message.id} className="group relative flex gap-2 px-1 py-1">
       <div data-slot="stamp" className="flex w-11 shrink-0 justify-end pt-2">
-        <RelativeTime iso={message.created_at} className="text-[10px]" />
+        <RelativeTime iso={message.created_at} className="text-xs" />
       </div>
       <div
         data-testid="question-card"
@@ -346,7 +346,7 @@ export function QuestionCard({ message }: { message: Message }) {
         )}
       >
         <div className="flex items-center gap-2">
-          <span data-slot="kind" className="inline-flex shrink-0 items-center gap-1 text-xs">
+          <span data-slot="kind" className="inline-flex shrink-0 items-center gap-1 text-sm">
             <Icon aria-hidden className={cn('size-4 shrink-0', answeredBy ? 'text-muted-foreground' : color.text)} />
             {message.kind}
           </span>
@@ -359,7 +359,7 @@ export function QuestionCard({ message }: { message: Message }) {
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Check aria-hidden className="size-3.5" />
               <span data-testid="answered-by">Answered by @{answeredBy}</span>
-              {answeredAt && <RelativeTime iso={answeredAt} className="text-[10px]" />}
+              {answeredAt && <RelativeTime iso={answeredAt} className="text-xs" />}
             </div>
             {answer && <MessageBody body={answer.body} />}
           </div>
