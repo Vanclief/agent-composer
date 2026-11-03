@@ -344,7 +344,7 @@ func TestCreateNumbersPerRoleAndNeverReuses(t *testing.T) {
 	if !reflect.DeepEqual(first.Tasks, []AgentTask{}) {
 		t.Fatalf("tasks = %#v, want empty and not nil", first.Tasks)
 	}
-	if len(first.Conversations) != 1 || first.Conversations[0].Channel != "@franco/reviewer-1" || first.LastActiveAt != nil {
+	if len(first.Conversations) != 1 || first.Conversations[0].Channel != "#reviewer-1" || first.LastActiveAt != nil {
 		t.Fatalf("conversations = %+v, last_active_at = %v: want the DM only, never active", first.Conversations, first.LastActiveAt)
 	}
 
@@ -457,7 +457,7 @@ func TestKeepRenamesAndRefusesTakenNames(t *testing.T) {
 	if !reflect.DeepEqual(kept.Tasks, []AgentTask{{Name: "review-42", Status: "open"}}) {
 		t.Fatalf("kept tasks = %+v", kept.Tasks)
 	}
-	if kept.Conversations[0].Channel != "@franco/ada" {
+	if kept.Conversations[0].Channel != "#ada" {
 		t.Fatalf("conversations = %+v, want the DM under the new name first", kept.Conversations)
 	}
 
@@ -759,8 +759,7 @@ func TestChannelsOfAnAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// No @franco/watcher-1: messaging rejects @ names until ADR 0011.
-	wantReads := []string{"#fix-ci", "#bump-deps", "#ci-*"}
+	wantReads := []string{"#watcher-1", "#fix-ci", "#bump-deps", "#ci-*"}
 	if !reflect.DeepEqual(reads, wantReads) {
 		t.Fatalf("reads = %q, want %q", reads, wantReads)
 	}
@@ -769,7 +768,7 @@ func TestChannelsOfAnAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantChannels := []string{"#fix-ci", "#bump-deps", "#ci-main", "#ci-nightly"}
+	wantChannels := []string{"#watcher-1", "#fix-ci", "#bump-deps", "#ci-main", "#ci-nightly"}
 	if !reflect.DeepEqual(channels, wantChannels) {
 		t.Fatalf("channels = %q, want %q", channels, wantChannels)
 	}
@@ -780,13 +779,13 @@ func TestChannelsOfAnAgent(t *testing.T) {
 		t.Fatalf("tasks = %+v, want %+v", view.Tasks, wantTasks)
 	}
 
-	// Conversations: the DM, then the tasks' channels (each with the
+	// Conversations: the inbox, then the tasks' channels (each with the
 	// opening agc posted), then where the agent posted itself.
 	got := []string{}
 	for _, c := range view.Conversations {
 		got = append(got, c.Channel)
 	}
-	if !reflect.DeepEqual(got, []string{"@franco/watcher-1", "#fix-ci", "#bump-deps"}) {
+	if !reflect.DeepEqual(got, []string{"#watcher-1", "#fix-ci", "#bump-deps"}) {
 		t.Fatalf("conversations = %q", got)
 	}
 	if view.LastActiveAt == nil || !view.LastActiveAt.Equal(view.Conversations[2].LastAt) {
@@ -802,7 +801,7 @@ func TestChannelsOfAnAgent(t *testing.T) {
 		t.Fatalf("conversations = %+v, last_active_at = %v", view.Conversations, view.LastActiveAt)
 	}
 
-	if !MatchChannel("*", "@franco/x") || MatchChannel("#ci-*", "#cd-main") || !MatchChannel("#fix-ci", "#fix-ci") {
+	if !MatchChannel("*", "#x") || MatchChannel("#ci-*", "#cd-main") || !MatchChannel("#fix-ci", "#fix-ci") {
 		t.Fatal("MatchChannel")
 	}
 }
@@ -1082,7 +1081,7 @@ func TestHomeSocketServesTheAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Agent.Name != "reviewer-1" || got.Idle != "20m" || !reflect.DeepEqual(got.Channels, []string{"#review-42"}) || len(got.Asked) != 0 {
+	if got.Agent.Name != "reviewer-1" || got.Idle != "20m" || !reflect.DeepEqual(got.Channels, []string{"#reviewer-1", "#review-42"}) || len(got.Asked) != 0 {
 		t.Fatalf("GET /agent = %+v", got)
 	}
 
@@ -1123,7 +1122,7 @@ func TestHomeSocketServesTheAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(got.Channels, []string{"#review-42"}) || !reflect.DeepEqual(got.Asked, []string{"#franco"}) {
+	if !reflect.DeepEqual(got.Channels, []string{"#reviewer-1", "#review-42"}) || !reflect.DeepEqual(got.Asked, []string{"#franco"}) {
 		t.Fatalf("GET /agent after asking = %+v, want #franco asked", got)
 	}
 
@@ -1184,7 +1183,7 @@ func TestHomeSocketServesTheAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(got.Channels, []string{"#review-42"}) {
+	if !reflect.DeepEqual(got.Channels, []string{"#reviewer-1", "#review-42"}) {
 		t.Fatalf("channels after accept = %q, want #review-42 kept", got.Channels)
 	}
 

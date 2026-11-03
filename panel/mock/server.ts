@@ -2284,7 +2284,7 @@ function agentsSeed(): MockAgents {
       home: 'orchestrator-1',
       tasks: ['review-42', 'flaky-ci'],
       conversations: [
-        { channel: '#franco', last_at: ago(3) },
+        { channel: '#orchestrator-1', last_at: ago(3) },
         { channel: '#review-42', last_at: ago(5) },
         { channel: '#flaky-ci', last_at: ago(40) },
       ],
@@ -2299,7 +2299,7 @@ function agentsSeed(): MockAgents {
       state: 'asleep',
       home: 'reviewer-2',
       tasks: [],
-      conversations: [{ channel: '#franco', last_at: ago(60 * 5) }],
+      conversations: [{ channel: '#reviewer-2', last_at: ago(60 * 5) }],
       last_active_at: ago(60 * 5),
       created_at: ago(60 * 30),
     },
@@ -2312,7 +2312,7 @@ function agentsSeed(): MockAgents {
       home: 'ada',
       tasks: ['docs-pass'],
       conversations: [
-        { channel: '#franco', last_at: ago(60 * 20) },
+        { channel: '#ada', last_at: ago(60 * 20) },
         { channel: '#docs-pass', last_at: ago(60 * 22) },
       ],
       last_active_at: ago(60 * 20),
@@ -2327,7 +2327,7 @@ function agentsSeed(): MockAgents {
       state: 'waking',
       home: 'writer-1',
       tasks: [],
-      conversations: [{ channel: '#franco', last_at: ago(1) }],
+      conversations: [{ channel: '#writer-1', last_at: ago(1) }],
       last_active_at: ago(1),
       created_at: ago(2),
     },
@@ -2397,7 +2397,7 @@ async function agentsAPI(state: State, method: string, rest: string[], req: Inco
       state: 'asleep',
       home: null,
       tasks: [],
-      conversations: [{ channel: '#franco', last_at: now }],
+      conversations: [{ channel: `#${prefix}-${n}`, last_at: now }],
       last_active_at: null,
       created_at: now,
     }
@@ -2419,6 +2419,12 @@ async function agentsAPI(state: State, method: string, rest: string[], req: Inco
       throw apiError(409, `agent ${name} already exists`)
     }
     const role = str(body.role).trim()
+    // The inbox #<name> follows the name, as on the server (ADR 0016).
+    for (const c of agent.conversations) {
+      if (c.channel === `#${agent.name}`) {
+        c.channel = `#${name}`
+      }
+    }
     agent.name = name
     if (role) {
       agent.role = role

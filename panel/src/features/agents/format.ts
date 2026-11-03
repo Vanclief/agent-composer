@@ -34,9 +34,9 @@ export function ago(at: string) {
   return age === 'now' ? 'now' : `${age} ago`
 }
 
-// The DM with the owner first, then the rest as the server sent them.
+// The agent's inbox #<name> first, then the rest as the server sent them.
 export function dmFirst(agent: AgentView) {
-  const dm = `#${agent.owner}`
+  const dm = `#${agent.name}`
   return [...agent.conversations].sort((a, b) => Number(b.channel === dm) - Number(a.channel === dm))
 }
 

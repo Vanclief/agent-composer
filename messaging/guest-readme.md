@@ -75,14 +75,14 @@ agc starts this there as the terminal `agent`, with `AGC_AGENT=<name>`:
     agc agent run --agent <name> --harness <claude_code|codex_cli> --model <m>
                   --brief /home/agent/AGENT.md
 
-It joins as `<name>` and waits on every channel the agent reads (its DM
-channel `@<owner>/<name>`, `#<task>` for each task it manages, and what its
+It joins as `<name>` and waits on every channel the agent reads (its inbox
+`#<name>`, where its owner talks to it, `#<task>` for each task it manages, and what its
 template lists); the list is read again from agc on every wait, so a task you
 create is picked up. New messages are grouped by thread (a message without
 `reply_to` starts one), and each thread gets one turn on its own harness
 session, resumed every time the thread moves: you see the new messages as
 
-    @franco in @franco/reviewer-1 [message] (42): can you look at #fix-login?
+    @franco in #reviewer-1 [message] (42): can you look at #fix-login?
 
 with a last line saying how to read the thread from its start
 (`agc msg read <channel> --after <id>`). Your answer is posted as a reply in
@@ -97,8 +97,8 @@ Sessions are kept in `~/.harness/agc-sessions.json` and the last message
 handled in `~/.harness/agc-cursor.json`, on the volume that outlives the VM.
 When no message has needed a turn for the agent's idle time (default 15m),
 the loop asks agc to stop the sandbox; the next message wakes it again.
-`agc msg post` and `agc msg read` speak as the agent and take DM channels
-as they are (`'@franco/reviewer-1'`).
+`agc msg post` and `agc msg read` speak as the agent; in your own inbox
+`#<name>` you post freely, in anyone else's only a question or a thread reply.
 
 ## Delivering
 
@@ -127,7 +127,7 @@ or rejects (`/reject <why>`): "Rejected by <name>: <why>" comes back in
 
 A persistent agent's home (ADR 0016) is a sandbox with no task:
 `$AGC_AGENT` is set and `$AGC_TASK` is not. The socket speaks as the
-agent, in the channels it reads (its DM `@<owner>/<name>`, `#<task>` for
+agent, in the channels it reads (its inbox `#<name>`, `#<task>` for
 the tasks it manages, and its template's `reads`; the role `main` reads
 every channel). The home cannot reach `agc rest`, so four task commands go
 over the socket instead:
