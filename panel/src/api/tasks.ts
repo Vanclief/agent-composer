@@ -66,6 +66,10 @@ export type Report = {
   left_out: { what: string; why: string }[]
   // What waits on the reviewer.
   needs: string[]
+  // Screenshots, before and after for a change a person sees; url is where
+  // agc serves each (root-relative /api/tasks/<task>/shots/<label>.png
+  // unless AGC_PUBLIC_URL is set). Absent when the delivery has none.
+  shots?: { label: string; file: string; url?: string }[]
 }
 
 export type TaskView = {

@@ -617,3 +617,45 @@ test("a sandbox's aliased secret reads NAME → ENV in its parts", async ({ page
     'Secret ANTHROPIC_WORK as CLAUDE_CODE_OAUTH_TOKEN@api.anthropic.com, sent only to api.anthropic.com',
   )
 })
+
+// A made-up 1x1 PNG the mock keeps and serves as a delivered shot.
+const SHOT_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+
+test("the Review section shows the report's shots as labelled images, in order", async ({ page, request }) => {
+  const task = await createTask(request, unique('Shots'), { accept: ['it shows'] })
+  const report = {
+    criteria: [{ met: 'yes', note: '' }],
+    checks: [],
+    left_out: [],
+    needs: [],
+    shots: [
+      { label: 'before', file: '/tmp/before.png' },
+      { label: 'after', file: '/tmp/after.png' },
+    ],
+  }
+  const delivered = await request.post(`/api/tasks/${task.name}/deliver`, {
+    data: { summary: 'Done.', report, files: { before: SHOT_PNG, after: SHOT_PNG } },
+  })
+  expect(delivered.ok()).toBe(true)
+  await page.goto(`/panel/tasks/${task.name}`)
+  const shots = page.getByRole('region', { name: 'Review' }).getByTestId('report-shots')
+  await expect(shots.locator('figcaption')).toHaveText(['before', 'after'])
+  for (const label of ['before', 'after']) {
+    const img = shots.locator(`[data-image="${label}"]`).getByRole('img', { name: label })
+    await expect(img).toHaveAttribute('src', `/api/tasks/${task.name}/shots/${label}.png`)
+    await expect.poll(() => img.evaluate((el) => (el as unknown as { naturalWidth: number }).naturalWidth)).toBe(1)
+    await expect(shots.locator(`[data-image="${label}"]`).getByRole('link')).toHaveAttribute('target', '_blank')
+  }
+})
+
+test('a report without shots shows no shot images and no Shots label', async ({ page, request }) => {
+  const task = await createTask(request, unique('No shots'), { accept: ['it works'] })
+  const report = { criteria: [{ met: 'yes', note: '' }], checks: [], left_out: [], needs: [] }
+  await request.post(`/api/tasks/${task.name}/deliver`, { data: { summary: 'Done.', report } })
+  await page.goto(`/panel/tasks/${task.name}`)
+  const review = page.getByRole('region', { name: 'Review' })
+  await expect(review.getByTestId('criterion')).toHaveText(['it works'])
+  await expect(review.getByTestId('report-shots')).toHaveCount(0)
+  await expect(review.getByRole('heading', { name: 'Shots' })).toHaveCount(0)
+  await expect(review.getByRole('img')).toHaveCount(0)
+})
