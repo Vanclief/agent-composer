@@ -37,7 +37,7 @@ func (api *API) startSandboxListener(record *taskmodels.Sandbox, owner *taskmode
 		return api.startHomeListener(record.Name)
 	}
 
-	grants, err := Grants(owner, spec)
+	grants, err := Grants(spec)
 	if err != nil {
 		return ez.Wrap(err)
 	}
@@ -51,28 +51,17 @@ func (api *API) startSandboxListener(record *taskmodels.Sandbox, owner *taskmode
 	})
 }
 
-// Grants are the channels a sandbox of owner may use besides #<task>: the
-// spec's, and the task owner's inbox #<owner> read-write when the task has
-// an owner (ADR 0009 item 5).
-func Grants(owner *taskmodels.Task, spec task.Spec) ([]messaging.Grant, error) {
+// Grants are the channels a sandbox may use besides #<task>: the spec's,
+// as the spec says, and nothing else. The task's owner hears from its
+// manager, not from its agent, so their inbox #<owner> is not granted
+// unless the spec names it (ADR 0009 item 5).
+func Grants(spec task.Spec) ([]messaging.Grant, error) {
 	grants, err := spec.Grants()
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
 
-	if owner.Owner == "" {
-		return grants, nil
-	}
-
-	inbox := "#" + owner.Owner
-	for i := range grants {
-		if grants[i].Channel == inbox {
-			grants[i].ReadOnly = false
-			return grants, nil
-		}
-	}
-
-	return append(grants, messaging.Grant{Channel: inbox}), nil
+	return grants, nil
 }
 
 // startListener serves messaging for the sandbox called name, as caller
