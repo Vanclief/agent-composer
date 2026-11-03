@@ -20,6 +20,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/schedules"
 	"github.com/vanclief/agent-composer/core/resources/skills"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
+	"github.com/vanclief/agent-composer/core/resources/triggers"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
 	"github.com/vanclief/agent-composer/messaging"
 	"github.com/vanclief/agent-composer/runtime"
@@ -53,6 +54,8 @@ type Stack struct {
 	AccountsAPI *accounts.API
 	// Events is the live feed behind GET /api/events.
 	Events *events.Bus
+	// TriggersAPI posts outside events as messages (ADR 0014).
+	TriggersAPI *triggers.API
 	// AccountsUsage keeps the latest usage of every anthropic oauth
 	// account; only agc rest starts it. It lists the accounts through
 	// AccountsAPI, which shows its readings (connectAccountsUsage).
@@ -181,6 +184,7 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		AccountsAPI:   accountsAPI,
 		Events:        bus,
 		AccountsUsage: accountsUsage,
+		TriggersAPI:   triggers.NewAPI(ctrl, msg, secretsPath, home),
 	}, nil
 }
 
@@ -207,6 +211,8 @@ func connectAccountsUsage(api *accounts.API, poller *usage.Poller) {
 }
 
 // StartScheduler blocks while the scheduler runs until the context is canceled.
+// Only agc rest calls it, so it also starts the trigger polling (ADR 0014).
 func (s *Stack) StartScheduler(ctx context.Context) {
+	go s.TriggersAPI.Start(ctx)
 	s.Scheduler.Start(ctx)
 }

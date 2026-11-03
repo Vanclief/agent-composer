@@ -1,0 +1,7 @@
+# Outside events become messages in channels (ADR 0014).
+decisions:
+  - id: outside-events-become-messages
+    decision: "Events from outside agc are posted by agc as plain messages, routed by code to #<task> when a pull request's head branch is agc/<task> and the task exists, else to #main; GitHub is polled, with a cursor file under the agc home, because the rig has no inbound entrance."
+    because: [rig-is-on-home-lan-without-firewall, llms-are-parsers-not-sensors, recurring-work-arrives-as-items]
+    adr: docs/decisions/0014-triggers.md
+    decided: { who: franco, when: 2026-11-02 }
