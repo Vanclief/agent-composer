@@ -44,6 +44,12 @@ type AgentRecord struct {
 	Human     bool      `json:"human"`
 	Body      string    `json:"body"`
 	CreatedAt time.Time `json:"created_at"`
+	// Images are the local paths of the message's images (ADR 0005
+	// "Images"), downloaded when the turn is taken.
+	Images []string `json:"images,omitempty"`
+
+	// message is the message as read, for its images.
+	message msgmodels.Message
 }
 
 func newAgentRecord(m msgmodels.Message) AgentRecord {
@@ -55,12 +61,13 @@ func newAgentRecord(m msgmodels.Message) AgentRecord {
 		Human:     m.Human,
 		Body:      m.Body,
 		CreatedAt: m.CreatedAt,
+		message:   m,
 	}
 }
 
 // RenderRecords prints records one per line as
 // `@from in #channel [kind] (id): body`, a multi-line body indented under
-// its first line.
+// its first line, then a line `  image: <path>` per image.
 func RenderRecords(records []AgentRecord) string {
 	var b strings.Builder
 	for _, r := range records {
@@ -71,6 +78,7 @@ func RenderRecords(records []AgentRecord) string {
 
 		body := strings.ReplaceAll(strings.TrimSpace(r.Body), "\n", "\n  ")
 		fmt.Fprintf(&b, "@%s in %s [%s] (%d): %s\n", r.From, r.Channel, kind, r.ID, body)
+		b.WriteString(imageLines(r.Images))
 	}
 
 	return b.String()
@@ -99,6 +107,7 @@ type homeMessenger interface {
 	WaitChannels(ctx context.Context, channels []string, after int64, timeout time.Duration) (*httpapi.MessagesResponse, error)
 	Agent(ctx context.Context) (*msgclient.AgentResponse, error)
 	Sleep(ctx context.Context) error
+	Image(ctx context.Context, messageID int64, name string) ([]byte, error)
 }
 
 // homeLoop is `agc agent run --agent <name>` (ADR 0016 items 5–7): the
@@ -113,7 +122,9 @@ type homeLoop struct {
 	brief   string
 	// dir holds the sessions and cursor files: the kept volume.
 	dir string
-	log io.Writer
+	// images is where a turn's images are put, empty for defaultImagesDir.
+	images string
+	log    io.Writer
 	// prior is the participant an earlier run saved, released before
 	// joining so the agent keeps its name after a hard stop.
 	prior *msgState
@@ -510,6 +521,10 @@ func (l *homeLoop) fetchParent(ctx context.Context, channel string, id int64) (i
 // thread.
 func (l *homeLoop) take(ctx context.Context, t homeTurn) {
 	session := l.sessions.Get(t.key)
+
+	for i := range t.records {
+		t.records[i].Images = imagePaths(ctx, l.msg, l.images, t.records[i].message)
+	}
 
 	var prompt string
 	if l.role == mainRole {

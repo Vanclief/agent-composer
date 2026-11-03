@@ -106,6 +106,7 @@ func serveTaskRoutes(t *testing.T, rt sandboxes.Runtime, secretsPath string) *ta
 	bus := events.New()
 	msg := messaging.NewService(db)
 	msg.SetEvents(bus)
+	msg.SetImagesDir(filepath.Join(t.TempDir(), "images"))
 	specs := task.Store{Dir: filepath.Join(t.TempDir(), "specs")}
 	sandboxesAPI := sandboxes.NewAPI(context.Background(), ctrl, msg, rt, secretsPath, socketDir)
 	msg.SetPresence(sandboxesAPI)

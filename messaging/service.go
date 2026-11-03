@@ -93,6 +93,9 @@ type Service struct {
 
 	// events gets message.posted for every stored message, nil drops them.
 	events *events.Bus
+
+	// imagesDir keeps messages' images, empty refuses them.
+	imagesDir string
 }
 
 // PostedEvent is the data of message.posted.
@@ -363,7 +366,19 @@ func (s *Service) Leave(ctx context.Context, caller Caller, participantID string
 // Post appends a message of kind, message or question; empty is message.
 // Sender fields come from the participant row, never from the input.
 func (s *Service) Post(ctx context.Context, caller Caller, participantID, channel, body string, replyTo *int64, kind string) (*msgmodels.Message, error) {
+	return s.PostImages(ctx, caller, participantID, channel, body, replyTo, kind, nil)
+}
+
+// PostImages is Post with images (ADR 0005 "Images"): at most four, each a
+// PNG, JPEG, GIF or WebP of at most 5 MB, kept under the images directory.
+// A message with images may have an empty body.
+func (s *Service) PostImages(ctx context.Context, caller Caller, participantID, channel, body string, replyTo *int64, kind string, uploads []msgmodels.ImageUpload) (*msgmodels.Message, error) {
 	err := checkCaller(caller)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	pending, err := s.prepareImages(uploads)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -427,7 +442,7 @@ func (s *Service) Post(ctx context.Context, caller Caller, participantID, channe
 		}
 	}
 
-	return s.insert(ctx, p, channel, body, replyTo, kind)
+	return s.insert(ctx, p, channel, body, replyTo, kind, pending)
 }
 
 // inboxPost is the inbox rule (ADR 0005 "Inbox"): in an inbox #<name>, a
@@ -482,8 +497,10 @@ func (s *Service) isInbox(ctx context.Context, channel string) (bool, error) {
 	return exists, nil
 }
 
-// insert stores a message from p, wakes the waiters and runs the hooks.
-func (s *Service) insert(ctx context.Context, p *msgmodels.Participant, channel, body string, replyTo *int64, kind string) (*msgmodels.Message, error) {
+// insert stores a message from p with its images, wakes the waiters and
+// runs the hooks. The image files are written before anyone hears of the
+// message, so a reader can always fetch them.
+func (s *Service) insert(ctx context.Context, p *msgmodels.Participant, channel, body string, replyTo *int64, kind string, pending []pendingImage) (*msgmodels.Message, error) {
 	m := &msgmodels.Message{
 		Channel:       channel,
 		From:          p.Name,
@@ -496,8 +513,20 @@ func (s *Service) insert(ctx context.Context, p *msgmodels.Participant, channel,
 		Kind:          kind,
 	}
 
+	for _, image := range pending {
+		m.Images = append(m.Images, image.image)
+	}
+
 	err := m.Insert(ctx, s.db)
 	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	m.FillImageURLs()
+
+	err = s.writeImages(m.ID, pending)
+	if err != nil {
+		_, _ = s.db.NewDelete().Model((*msgmodels.Message)(nil)).Where("id = ?", m.ID).Exec(ctx)
 		return nil, ez.Wrap(err)
 	}
 
@@ -572,7 +601,7 @@ func (s *Service) PostAsSystem(ctx context.Context, channel, body string) (*msgm
 		return nil, ez.Wrap(err)
 	}
 
-	return s.insert(ctx, p, channel, body, nil, msgmodels.KindMessage)
+	return s.insert(ctx, p, channel, body, nil, msgmodels.KindMessage, nil)
 }
 
 // systemParticipant returns agc's active participant, joining it the first
