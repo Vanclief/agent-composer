@@ -31,7 +31,10 @@ that mock a backend and settles what it left open.
    `agents/<role>.yaml` under the agc home (`AGC_AGENTS_DIR` overrides, like
    the knowledge dir in ADR 0006): `harness`, `model`, `sandbox` (the spec
    of ADR 0008, `disk` included), `idle` (default `15m`), `reads` (channel
-   patterns the agent watches besides its own; `main` lists `*`), and
+   patterns the agent watches besides its own; `main` lists `*`), `rules`
+   (ids of rules in the knowledge dir of ADR 0006, checked on every read of
+   the template, so an unknown id fails create and wake naming it and the
+   known ids, and shown in the agent view as `rules: [{ id, rule }]`), and
    `instructions`, the text the agent gets as its AGENT.md the way a task
    gets TASK.md (ADR 0009 item 3). `POST /api/agents { role }` creates
    `<role>-<n>`, `n` the next number for that role, never reused even after
@@ -124,7 +127,12 @@ that mock a backend and settles what it left open.
    0015 for `main`). When no channel it reads has had
    a message for `idle`, the loop exits and agc stops the sandbox. Every
    state change publishes `agent.state { agent }` on the event bus
-   (`core/events`), which the panel already consumes.
+   (`core/events`), which the panel already consumes. The AGENT.md the
+   home reads is the template's `instructions` ending, when the template
+   names `rules`, with a "Rules you follow" section: each rule as
+   `agc rules show` says it, with its id, in template order, then a line
+   asking the agent to check its work against them before it answers or
+   delivers.
 
 7. **A thread is a session.** For an agent talked to in a DM, each thread
    root (ADR 0011) is one harness session, resumed by root id on every turn

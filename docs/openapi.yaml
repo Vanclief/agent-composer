@@ -4497,6 +4497,18 @@ components:
           description: Omitted keeps the role.
       required:
         - name
+    AgentRule:
+      type: object
+      description: A rule an agent follows, from the knowledge directory (ADR 0006).
+      properties:
+        id:
+          type: string
+        rule:
+          type: string
+          description: The rule's text as written.
+      required:
+        - id
+        - rule
     AgentTask:
       type: object
       properties:
@@ -4548,6 +4560,13 @@ components:
           type: string
           nullable: true
           description: The home sandbox's name; null before the first wake.
+        rules:
+          type: array
+          description: >
+            The rules its template names (ADR 0016 item 2), in template order, read from the
+            knowledge directory on the request; [] when it names none or they cannot be read.
+          items:
+            $ref: '#/components/schemas/AgentRule'
         tasks:
           type: array
           description: The tasks whose manager is the agent.
@@ -4577,6 +4596,7 @@ components:
         - owner
         - state
         - home
+        - rules
         - tasks
         - conversations
         - last_active_at
