@@ -29,7 +29,7 @@ the harness provider blocks the request.
 
 When you need an answer, `ask` instead of `post`: the message has
 `"kind": "question"` and shows up as waiting on the people who read the
-channel (in `#<task>`, the manager and the owner) until someone other than
+channel (in `#<task>`, the manager) until someone other than
 you replies to it with `--reply-to <its id>`. Keep working on what does not
 depend on the answer, and `wait` for the reply. A persistent agent's loop
 hears a reply in a thread it started in any channel, even one it does not
@@ -41,11 +41,12 @@ question with `agc msg post <#channel> <text> --reply-to <id>`.
 Your Task's own channel (`#<task name>`) is always open to you, and you may
 also use the channels listed in the Task spec, some of them read-only; any
 other channel is refused with an error naming it, so tell the user instead
-of guessing. When the task has an owner, their inbox (`#<owner>`, e.g.
-`#franco`) is open to you too: ask there (`agc msg ask`) only for a decision
-only the owner can make, and say so in the task's channel. An inbox takes only
-questions and replies in their threads from you; a plain post there is refused,
-so post notes in `#<task>`. Names are unique while held: if
+of guessing. You talk to your manager, in `#<task>`: when something needs a
+decision only the task's owner can make, ask your manager there and say it is
+for the owner; your manager raises it. Keep working on what does not depend on
+the answer. A person's inbox takes only questions and replies in their threads
+from an agent granted it; a plain post there is refused, so post notes in
+`#<task>`. Names are unique while held: if
 `join` says a name is in use, pick another, and agc fills in who sent each
 message, so you cannot post as anyone else. `@agc` is agc itself (it opens
 the task's channel) and no one else can take that name; every message says

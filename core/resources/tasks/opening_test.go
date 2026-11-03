@@ -27,8 +27,8 @@ func TestOpeningMessage(t *testing.T) {
 			want: "@orchestrator (manager), @franco (owner): task `fix-login` is open: Fix login.\n" +
 				"Agent: claude_code (claude-opus-5-5) on sandbox `fix-login`, starting.\n" +
 				"The agent's instructions are the next message. Reply here to talk to it;\n" +
-				"it escalates to #franco when only the owner can decide. Post /accept\n" +
-				"to accept the task, /reject <why> to send it back.",
+				"its manager raises to franco what only the owner can decide.\n" +
+				"Post /accept to accept the task, /reject <why> to send it back.",
 		},
 		{
 			name:   "person without a sandbox",
@@ -86,8 +86,8 @@ func TestCreateAppliesDefaultsAndOpensTheChannel(t *testing.T) {
 	opening := "@orchestrator (manager), @franco (owner): task `fix-login` is open: Fix login.\n" +
 		"Agent: claude_code (claude-opus-5-5) on sandbox `fix-login`, starting.\n" +
 		"The agent's instructions are the next message. Reply here to talk to it;\n" +
-		"it escalates to #franco when only the owner can decide. Post /accept\n" +
-		"to accept the task, /reject <why> to send it back."
+		"its manager raises to franco what only the owner can decide.\n" +
+		"Post /accept to accept the task, /reject <why> to send it back."
 	t.Logf("opening message:\n%s", messages[0].Body)
 	t.Logf("instructions:\n%s", messages[1].Body)
 

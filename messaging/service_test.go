@@ -565,6 +565,16 @@ func TestInboxTakesOnlyQuestionsAndAnswersFromAgents(t *testing.T) {
 
 	// A granted channel no person is named after is not an inbox.
 	post(t, svc, review, join(t, svc, review, "reviewer"), "#releases", "shipped")
+
+	// A task's agent is not granted its owner's inbox (ADR 0009 item 5):
+	// even a question there is refused, it asks its manager in #<task>.
+	ungranted := Caller{Task: "review-43"}
+	worker := join(t, svc, ungranted, "worker")
+	_, err = svc.Post(ctx, ungranted, worker.ID, "#franco", "Accept review-43?", nil, msgmodels.KindQuestion)
+	wantCode(t, err, ez.ENOTAUTHORIZED)
+	if ez.ErrorMessage(err) != "channel #franco is not available to task review-43" {
+		t.Fatalf("unexpected message %q", ez.ErrorMessage(err))
+	}
 }
 
 func TestAnAgentsInboxTakesOnlyQuestionsAndAnswersFromOtherAgents(t *testing.T) {

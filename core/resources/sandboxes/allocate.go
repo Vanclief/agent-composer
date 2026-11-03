@@ -337,7 +337,7 @@ func workDir(spec task.Spec) string {
 // with one bullet per criterion when it has any (ADR 0010 item 1), then
 // the standing instructions of ADR 0009 item 3 filled in, ending with how
 // to deliver. Without an owner it says "no owner is set" and drops the
-// escalation line; without a repo it says so.
+// line on decisions only the owner can make (asked of the manager); without a repo it says so.
 func Instructions(owner *taskmodels.Task, spec task.Spec) string {
 	var b strings.Builder
 
@@ -389,9 +389,9 @@ func Instructions(owner *taskmodels.Task, spec task.Spec) string {
 	b.WriteString("  working on what does not depend on the answer.\n")
 
 	if owner.Owner != "" {
-		b.WriteString("- If something needs a decision only " + owner.Owner + " can make, ask it in\n")
-		b.WriteString("  `#" + owner.Owner + "` (their inbox) with `agc msg ask '#" + owner.Owner + "' <question>` so it\n")
-		b.WriteString("  shows up as waiting on them, and say so in `#" + name + "`; do not wait idle.\n")
+		b.WriteString("- If something needs a decision only " + owner.Owner + " can make, ask your manager\n")
+		b.WriteString("  in `#" + name + "` and say it is for the owner; your manager raises it.\n")
+		b.WriteString("  Keep working on what does not depend on the answer.\n")
 	}
 
 	b.WriteString("- Do not modify files outside the repository, and never print secret values.\n")

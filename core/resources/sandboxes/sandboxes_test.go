@@ -832,7 +832,12 @@ func socketClient(path string) *msgclient.Client {
 func TestListenerServesMessagingAsTheTask(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := context.Background()
-	insertTask(t, env.db, "review-42")
+	owned := insertTask(t, env.db, "review-42")
+	owned.Owner = "franco"
+	_, err := env.db.NewUpdate().Model(owned).Column("owner").WherePK().Exec(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	sb := task.Sandbox{Spec: task.Spec{Channels: []string{"#alerts:read"}}}
 	for i := 0; i < 2; i++ {
@@ -862,6 +867,13 @@ func TestListenerServesMessagingAsTheTask(t *testing.T) {
 	_, err = client.Post(ctx, p.ID, "#alerts", "no", nil)
 	if ez.ErrorCode(err) != ez.ENOTAUTHORIZED {
 		t.Fatalf("expected ENOTAUTHORIZED posting to a read-only grant, got %v", err)
+	}
+
+	// The owner's inbox is not granted: the agent asks its manager in
+	// #<task>, who raises it to the owner (ADR 0009 item 5).
+	_, err = client.Ask(ctx, p.ID, "#franco", "Merge it?")
+	if ez.ErrorCode(err) != ez.ENOTAUTHORIZED {
+		t.Fatalf("expected ENOTAUTHORIZED asking in the owner's inbox, got %v", err)
 	}
 }
 

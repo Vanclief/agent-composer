@@ -56,7 +56,7 @@ export type QuestionsParams = {
   // 1: only questions nobody answered yet.
   open?: 1
   // Only questions addressed to this person: in their inbox, or in task
-  // channels they manage or own.
+  // channels they manage (not those they only own).
   for?: string
 }
 
