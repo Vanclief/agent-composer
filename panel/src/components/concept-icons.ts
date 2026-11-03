@@ -28,6 +28,7 @@ import { Inbox, ListChecks, PackageCheck } from 'lucide-react'
 import { MessageCircleQuestionMark, MessageSquareReply } from 'lucide-react'
 import { Gauge, IdCard } from 'lucide-react'
 import { Sparkles } from 'lucide-react'
+import { ImageIcon } from 'lucide-react'
 
 export const conceptIcons = {
   // A Task: a VM agents work in.
@@ -91,6 +92,8 @@ export const conceptIcons = {
   usage: Gauge,
   // A skill an agent has: a markdown file of know-how (sandbox-skills).
   skill: Sparkles,
+  // A picture a message carries (ADR 0005 "Images"); not the OCI image.
+  picture: ImageIcon,
 } satisfies Record<string, LucideIcon>
 
 export type Concept = keyof typeof conceptIcons
@@ -291,4 +294,6 @@ export const conceptColors = {
   usage: zinc,
   // Know-how, like code: the code family's blue.
   skill: blue,
+  // Carried by messages: the messaging pink.
+  picture: pink,
 } satisfies Record<Concept, ConceptColor>

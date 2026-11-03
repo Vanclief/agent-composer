@@ -117,6 +117,8 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	tasksAPI.SetEvents(bus)
 	// Delivered screenshots, <home>/shots/<task>/<label>.png (ADR 0010).
 	tasksAPI.SetShotsDir(filepath.Join(home, "shots"))
+	// Messages' images, <home>/images/<message id>/<name> (ADR 0005).
+	msg.SetImagesDir(filepath.Join(home, "images"))
 	schedulesAPI := schedules.NewAPI(ctrl, tasksAPI, secretsPath)
 	schedulesAPI.SetEvents(bus)
 

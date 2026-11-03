@@ -1177,9 +1177,29 @@ export interface paths {
         put?: never;
         /**
          * Post a message or a question
-         * @description Appends a message to a channel as the given participant, which must belong to the caller; agc fills in `from`, `task` and `human`. `kind` is `message` (the default) or `question`; anything else is 400. A reply (`reply_to`) to a question from someone other than its asker answers it. Inside a sandbox `agc msg post` and `agc msg ask` reach the same call over the sandbox's socket, limited to the task's channels.
+         * @description Appends a message to a channel as the given participant, which must belong to the caller; agc fills in `from`, `task` and `human`. `kind` is `message` (the default) or `question`; anything else is 400. A reply (`reply_to`) to a question from someone other than its asker answers it. Inside a sandbox `agc msg post` and `agc msg ask` reach the same call over the sandbox's socket, limited to the task's channels. A post may carry up to 4 `images` (PNG, JPEG, GIF or WebP, sniffed from the bytes, at most 5 MB each; the body may then be empty), kept on the agc host under `<agc home>/images/<message id>/<name>` and listed on the message with their URLs (ADR 0005 "Images"); `agc msg post --image <file>` sends them. The request body is at most 28 MB.
          */
         post: operations["postMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/msg/images/{id}/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a message's image
+         * @description One of the images a message carries, as it was posted, with its type (ADR 0005 "Images"; `messages.API.OpenImage`). The `url` of each of a message's `images` points here. A sandbox reads the same image at `/images/{id}/{name}` on its socket, only for messages in channels it may read (403 otherwise, as messaging errors). 404 when the message or the image is absent.
+         */
+        get: operations["getMessageImage"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1712,6 +1732,8 @@ export interface components {
             /** Format: int64 */
             reply_to?: number;
             body: string;
+            /** @description The images the message carries (ADR 0005 "Images"); absent for a text-only message. */
+            images?: components["schemas"]["MsgImage"][];
             /** Format: date-time */
             created_at: string;
         };
@@ -2484,7 +2506,7 @@ export interface components {
             participant_id: string;
             /** @description `#` followed by 1-64 lowercase letters, digits, _ or -. */
             channel: string;
-            /** @description Plain text, at most 64 KiB. */
+            /** @description Plain text, at most 64 KiB; may be empty when the post carries images. */
             body: string;
             /**
              * Format: int64
@@ -2492,6 +2514,32 @@ export interface components {
              */
             reply_to?: number;
             kind?: components["schemas"]["MsgKind"];
+            /** @description Up to 4 images (ADR 0005 "Images"). */
+            images?: components["schemas"]["MsgImageUpload"][];
+        };
+        /** @description An image as a post sends it. */
+        MsgImageUpload: {
+            /** @description The file name; agc keeps letters, digits, dots, dashes and underscores, adds the extension of the sniffed type and makes it unique within the message. */
+            name: string;
+            /**
+             * Format: byte
+             * @description The bytes, base64; a PNG, JPEG, GIF or WebP of at most 5 MB.
+             */
+            data: string;
+        };
+        /** @description An image a message carries (ADR 0005 "Images"). */
+        MsgImage: {
+            /** @description The stored file name. */
+            name: string;
+            /** @enum {string} */
+            type: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+            /**
+             * Format: int64
+             * @description Bytes.
+             */
+            size: number;
+            /** @description Where it is served, `/api/msg/images/{id}/{name}`. */
+            url: string;
         };
         MsgMessage: {
             /**
@@ -2512,6 +2560,8 @@ export interface components {
             reply_to?: number;
             body: string;
             kind: components["schemas"]["MsgKind"];
+            /** @description The images the message carries; absent for a text-only message. */
+            images?: components["schemas"]["MsgImage"][];
             /** Format: date-time */
             created_at: string;
         };
@@ -4733,6 +4783,36 @@ export interface operations {
             401: components["responses"]["MsgError"];
             404: components["responses"]["MsgError"];
             500: components["responses"]["MsgError"];
+        };
+    };
+    getMessageImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The message's id. */
+                id: number;
+                /** @description The image's stored name, as the message lists it. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The image. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/jpeg": string;
+                    "image/gif": string;
+                    "image/webp": string;
+                };
+            };
+            404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
         };
     };
     waitMessages: {

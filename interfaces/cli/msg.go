@@ -14,6 +14,7 @@ import (
 	"github.com/vanclief/ez"
 
 	msgclient "github.com/vanclief/agent-composer/messaging/client"
+	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 )
 
 const (
@@ -45,10 +46,11 @@ func msgCommand() *cli.Command {
 			},
 			{
 				Name:      "post",
-				Usage:     "Post a message to a channel",
-				ArgsUsage: "<#channel> <text...>",
+				Usage:     "Post a message to a channel, with up to 4 images (PNG, JPEG, GIF or WebP, 5 MB each)",
+				ArgsUsage: "<#channel> [text...]",
 				Flags: []cli.Flag{
 					&cli.Int64Flag{Name: "reply-to", Usage: "Id of the message this replies to"},
+					&cli.StringSliceFlag{Name: "image", Usage: "An image file to attach (repeatable)"},
 				},
 				Action: msgPost,
 			},
@@ -129,9 +131,18 @@ func msgLeave(c *cli.Context) error {
 }
 
 func msgPost(c *cli.Context) error {
-	args, err := msgArgs(c, 2)
+	args, err := msgArgs(c, 1)
 	if err != nil {
 		return err
+	}
+
+	images, err := readImages(c.StringSlice("image"))
+	if err != nil {
+		return err
+	}
+
+	if len(args) < 2 && len(images) == 0 {
+		return ez.New(ez.EINVALID, "usage: agc msg post <#channel> <text...> (or --image <file>)", nil)
 	}
 
 	state, err := loadMsgState()
@@ -147,12 +158,41 @@ func msgPost(c *cli.Context) error {
 
 	body := strings.Join(args[1:], " ")
 
-	m, err := newMsgClient().Post(c.Context, state.ParticipantID, msgChannel(args[0]), body, replyTo)
+	m, err := newMsgClient().PostImages(c.Context, state.ParticipantID, msgChannel(args[0]), body, replyTo, images)
 	if err != nil {
 		return err
 	}
 
 	return printJSON(m)
+}
+
+// readImages reads the files --image names, refusing one over the limit
+// before anything is sent; agc checks the rest.
+func readImages(paths []string) ([]msgmodels.ImageUpload, error) {
+	if len(paths) > msgmodels.MaxImages {
+		return nil, ez.New(ez.EINVALID, "a message carries at most "+strconv.Itoa(msgmodels.MaxImages)+" images", nil)
+	}
+
+	images := []msgmodels.ImageUpload{}
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, ez.New(ez.EINVALID, "cannot read image "+path, err)
+		}
+
+		if info.Size() > msgmodels.MaxImageBytes {
+			return nil, ez.New(ez.EINVALID, "image "+path+" is larger than 5 MB", nil)
+		}
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, ez.New(ez.EINVALID, "cannot read image "+path, err)
+		}
+
+		images = append(images, msgmodels.ImageUpload{Name: filepath.Base(path), Data: data})
+	}
+
+	return images, nil
 }
 
 // msgAsk is msgPost for a question, over the same transport. Answer it

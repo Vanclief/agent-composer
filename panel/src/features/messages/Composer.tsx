@@ -1,6 +1,10 @@
-// The post box: who you post as, the draft, and one Send button. Enter
-// sends, Shift+Enter is a new line.
-import { useState, type KeyboardEvent } from 'react'
+// The post box: who you post as, the draft, the images it holds, and one
+// Send button. Enter sends, Shift+Enter is a new line. Drop an image on the
+// box or paste one and it waits above the draft as a thumbnail with ✕;
+// while a file is dragged over it the box is framed orange with
+// "Drop image". Over the server's limits Send says why in its label.
+import { useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from 'react'
+import { X } from 'lucide-react'
 
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { ErrorText } from '@/components/error-text'
@@ -9,8 +13,31 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 
+import { attachmentProblem, dragHasFiles, imageFiles, toUploads, useAttachments, type Attachment } from './attachments'
 import type { Identity } from './identity'
 import { useSend } from './send'
+
+function Thumbnails({ attachments, onRemove }: { attachments: Attachment[]; onRemove: (key: string) => void }) {
+  return (
+    <ul data-testid="composer-images" aria-label="Images to send" className="flex flex-wrap gap-2">
+      {attachments.map((a) => (
+        <li key={a.key} data-testid="composer-image" data-name={a.file.name} className="relative size-16">
+          <img src={a.url} alt={a.file.name || 'image'} className="size-16 object-cover" />
+          <button
+            type="button"
+            aria-label={`Remove ${a.file.name || 'image'}`}
+            title="Remove"
+            data-testid="composer-image-remove"
+            onClick={() => onRemove(a.key)}
+            className="absolute top-0 right-0 flex size-5 items-center justify-center bg-black/70 text-white hover:bg-black"
+          >
+            <X className="size-3.5" />
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 function IdentityChip({
   identity,
@@ -87,28 +114,91 @@ export function Composer({ channel, identity, replyTo }: { channel: string; iden
   const post = useSend(identity)
   const [draft, setDraft] = useState('')
   const [editing, setEditing] = useState(false)
+  const { attachments, add, remove, clear } = useAttachments()
+  const [dragging, setDragging] = useState(false)
+  const [reading, setReading] = useState(false)
+  const depth = useRef(0)
   const thread = replyTo !== undefined
   const box = thread ? 'Reply in thread' : `Message ${channel}`
 
   const joined = Boolean(identity.participantID)
-  const empty = draft.trim() === ''
+  const empty = draft.trim() === '' && attachments.length === 0
+  const problem = attachmentProblem(attachments)
+  const busy = post.isPending || reading
   let label = 'Send'
   if (!joined) {
     label = identity.joining ? 'Send: joining' : 'Send: join first'
   } else if (empty) {
     label = 'Send: empty'
-  } else if (post.isPending) {
+  } else if (problem) {
+    label = problem
+  } else if (busy) {
     label = 'Sending'
   }
-  const disabled = !joined || empty || post.isPending
+  const disabled = !joined || empty || Boolean(problem) || busy
 
   async function send() {
     if (disabled) {
       return
     }
-    const posted = await post.send({ channel, body: draft, reply_to: replyTo })
+    let images
+    if (attachments.length > 0) {
+      setReading(true)
+      try {
+        images = await toUploads(attachments)
+      } finally {
+        setReading(false)
+      }
+    }
+    const posted = await post.send({ channel, body: draft, reply_to: replyTo, images })
     if (posted) {
       setDraft('')
+      clear()
+    }
+  }
+
+  // The drag events of the box and everything in it: depth counts enters
+  // and leaves so moving between children keeps the frame up.
+  function onDragEnter(e: DragEvent<HTMLDivElement>) {
+    if (!dragHasFiles(e.dataTransfer.types)) {
+      return
+    }
+    e.preventDefault()
+    depth.current += 1
+    setDragging(true)
+  }
+
+  function onDragOver(e: DragEvent<HTMLDivElement>) {
+    if (!dragHasFiles(e.dataTransfer.types)) {
+      return
+    }
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }
+
+  function onDragLeave() {
+    depth.current = Math.max(0, depth.current - 1)
+    if (depth.current === 0) {
+      setDragging(false)
+    }
+  }
+
+  function onDrop(e: DragEvent<HTMLDivElement>) {
+    if (!dragHasFiles(e.dataTransfer.types)) {
+      return
+    }
+    e.preventDefault()
+    depth.current = 0
+    setDragging(false)
+    add(imageFiles(e.dataTransfer.files))
+  }
+
+  // A pasted image is attached; pasted text stays the textarea's.
+  function onPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
+    const files = imageFiles(e.clipboardData.items)
+    if (files.length > 0) {
+      e.preventDefault()
+      add(files)
     }
   }
 
@@ -120,7 +210,27 @@ export function Composer({ channel, identity, replyTo }: { channel: string; iden
   }
 
   return (
-    <div data-slot="composer" className="flex shrink-0 flex-col gap-2 border-t border-border p-3">
+    <div
+      data-slot="composer"
+      data-dragging={dragging || undefined}
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      className={cn(
+        'relative flex shrink-0 flex-col gap-2 border-t border-border p-3',
+        dragging && 'outline-2 outline-[var(--eva)]',
+      )}
+    >
+      {dragging && (
+        <div
+          data-testid="drop-label"
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 bg-black/60 font-semibold tracking-[0.18em] text-[var(--eva)] uppercase"
+        >
+          <conceptIcons.picture className="size-4" /> Drop image
+        </div>
+      )}
       {identity.error && !thread && (
         <div className="flex items-start gap-2">
           <ErrorText error={identity.error} className="flex-1" />
@@ -132,11 +242,13 @@ export function Composer({ channel, identity, replyTo }: { channel: string; iden
         </div>
       )}
       <ErrorText error={post.error} />
+      {attachments.length > 0 && <Thumbnails attachments={attachments} onRemove={remove} />}
       <Textarea
         aria-label={box}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={onKeyDown}
+        onPaste={onPaste}
         placeholder={box}
         rows={2}
         className="max-h-48 min-h-14 resize-none"

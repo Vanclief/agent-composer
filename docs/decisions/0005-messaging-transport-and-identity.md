@@ -177,3 +177,33 @@ behind for good, and the channel list grows with every task ever done.
   `0` turns archiving off.
 - Re-opening an archived channel is not possible yet; a route to un-archive
   is a later change.
+
+## Images
+
+Added 2026-11-03 (task `talk-image-attachments`). Franco sends screenshots
+to agents the way he does in Claude Code: dropped or pasted into the post
+box, and the agent he writes to opens them.
+
+- What: a post may carry up to 4 images, PNG, JPEG, GIF or WebP (sniffed
+  from the bytes, never trusted from the name or a header), at most 5 MB
+  each; a message with images may have an empty body. They travel base64 in
+  the post's `images` (`[{name, data}]`, a request of at most 28 MB), over
+  agc's REST API and a sandbox's socket alike; `agc msg post --image <file>`
+  (repeatable) sends them.
+- Where: kept on the agc host under `<agc home>/images/<message id>/<name>`,
+  the name cleaned to letters, digits, dots, dashes and underscores, with
+  the extension of its type, unique within the message. The message row
+  lists them in `images` (`[{name, type, size}]`, jsonb, null for text-only);
+  `url` is filled in from the id on every read, never stored.
+- Served: `GET /api/msg/images/{id}/{name}` for people (`core/resources/messages`:
+  `GetImageRequest` and `API.OpenImage`, as task shots), `/images/{id}/{name}`
+  on a sandbox's socket, only for messages in channels the caller may read
+  (`messaging.Service.OpenImage`), as posted, with their type. `agc msg read`
+  prints each image's `url`.
+- Agents: the task loop and the home loop (`agc agent run`) download a
+  turn's images into the sandbox, `/home/agent/.agc/images/<message id>/<name>`,
+  and the prompt lists each path under its message's line (`image: <path>`),
+  so Claude Code or Codex reads it as a file; an image that cannot be fetched
+  is listed by its URL and why.
+- Not yet: other files than images, and removing an image from a posted
+  message; images are kept as long as their message is.

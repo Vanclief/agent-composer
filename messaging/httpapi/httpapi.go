@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -42,7 +43,18 @@ type PostRequest struct {
 	ReplyTo       *int64 `json:"reply_to,omitempty"`
 	// Kind is message (the default when empty) or question.
 	Kind string `json:"kind,omitempty"`
+	// Images are the images the message carries (ADR 0005 "Images"), at
+	// most four, each base64 in JSON.
+	Images []msgmodels.ImageUpload `json:"images,omitempty"`
 }
+
+// MaxPostBytes bounds a post's body: the text and four 5 MB images,
+// base64.
+const MaxPostBytes = 28 << 20
+
+// ImagePath is the route a message's image is served at, under /api/msg
+// on agc's REST API and at the root of a sandbox's socket.
+const ImagePath = "/images/{id}/{name}"
 
 // MessagesResponse answers read and wait. Cursor is the id to pass as
 // after next time: the last message id, or the given after when empty.
@@ -131,6 +143,7 @@ func New(svc *messaging.Service, caller func(*http.Request) (messaging.Caller, e
 	mux.HandleFunc("GET /participants", a.participants)
 	mux.HandleFunc("GET /participants/{id}", a.getParticipant)
 	mux.HandleFunc("GET /questions", a.questions)
+	mux.HandleFunc("GET "+ImagePath, a.image)
 
 	return mux
 }
@@ -174,13 +187,19 @@ func (a *api) leave(w http.ResponseWriter, r *http.Request) {
 func (a *api) post(w http.ResponseWriter, r *http.Request) {
 	var req PostRequest
 
-	caller, err := a.decode(w, r, &req)
+	caller, err := a.caller(r)
 	if err != nil {
 		WriteError(w, err)
 		return
 	}
 
-	m, err := a.svc.Post(r.Context(), caller, req.ParticipantID, req.Channel, req.Body, req.ReplyTo, req.Kind)
+	err = DecodeBodyLimit(w, r, &req, MaxPostBytes)
+	if err != nil {
+		WriteError(w, err)
+		return
+	}
+
+	m, err := a.svc.PostImages(r.Context(), caller, req.ParticipantID, req.Channel, req.Body, req.ReplyTo, req.Kind, req.Images)
 	if err != nil {
 		WriteError(w, err)
 		return
@@ -343,6 +362,55 @@ func (a *api) questions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteJSON(w, http.StatusOK, QuestionsResponse{Questions: questions})
+}
+
+// image serves one of a message's images as it was posted.
+func (a *api) image(w http.ResponseWriter, r *http.Request) {
+	caller, err := a.caller(r)
+	if err != nil {
+		WriteError(w, err)
+		return
+	}
+
+	ServeImage(w, r, a.svc, caller, r.PathValue("id"), r.PathValue("name"))
+}
+
+// ServeImage answers the image called name of message id, as caller may
+// read it, on a sandbox's socket.
+func ServeImage(w http.ResponseWriter, r *http.Request, svc *messaging.Service, caller messaging.Caller, id string, name string) {
+	messageID, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		WriteError(w, ez.New(ez.ENOTFOUND, "no message "+id, nil))
+		return
+	}
+
+	file, image, err := svc.OpenImage(r.Context(), caller, messageID, name)
+	if err != nil {
+		WriteError(w, err)
+		return
+	}
+	defer file.Close()
+
+	err = WriteImage(w, r, file, image)
+	if err != nil {
+		WriteError(w, err)
+	}
+}
+
+// WriteImage sends an opened image as it was posted, with its type; agc's
+// REST route uses it too.
+func WriteImage(w http.ResponseWriter, r *http.Request, file *os.File, image *msgmodels.Image) error {
+	info, err := file.Stat()
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	w.Header().Set("Content-Type", image.Type)
+	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	http.ServeContent(w, r, image.Name, info.ModTime(), file)
+
+	return nil
 }
 
 // decode resolves the caller and reads a JSON body into dst.

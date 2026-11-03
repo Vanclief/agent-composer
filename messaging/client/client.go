@@ -50,6 +50,65 @@ func (c *Client) Post(ctx context.Context, participantID, channel, body string, 
 	return c.post(ctx, httpapi.PostRequest{ParticipantID: participantID, Channel: channel, Body: body, ReplyTo: replyTo})
 }
 
+// PostImages is Post with images (ADR 0005 "Images"); body may be empty
+// when there are images.
+func (c *Client) PostImages(ctx context.Context, participantID, channel, body string, replyTo *int64, images []msgmodels.ImageUpload) (*msgmodels.Message, error) {
+	return c.post(ctx, httpapi.PostRequest{ParticipantID: participantID, Channel: channel, Body: body, ReplyTo: replyTo, Images: images})
+}
+
+// Image downloads the image called name of message messageID, as the
+// caller may read it.
+func (c *Client) Image(ctx context.Context, messageID int64, name string) ([]byte, error) {
+	path := strings.Replace(httpapi.ImagePath, "{id}", strconv.FormatInt(messageID, 10), 1)
+	path = strings.Replace(path, "{name}", url.PathEscape(name), 1)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(c.BaseURL, "/")+path, nil)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	res, err := c.httpClient().Do(req)
+	if err != nil {
+		return nil, ez.New(ez.EUNAVAILABLE, "agc messaging is unreachable at "+c.BaseURL, err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return nil, responseError(res)
+	}
+
+	data, err := io.ReadAll(io.LimitReader(res.Body, msgmodels.MaxImageBytes+1))
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	if len(data) > msgmodels.MaxImageBytes {
+		return nil, ez.New(ez.EINVALID, "image "+name+" is larger than 5 MB", nil)
+	}
+
+	return data, nil
+}
+
+func (c *Client) httpClient() *http.Client {
+	if c.HTTP == nil {
+		return http.DefaultClient
+	}
+
+	return c.HTTP
+}
+
+// responseError turns an error answer into an ez error with the code the
+// status maps to.
+func responseError(res *http.Response) error {
+	failure := httpapi.ErrorResponse{}
+	_ = json.NewDecoder(res.Body).Decode(&failure)
+	if failure.Error == "" {
+		failure.Error = res.Status
+	}
+
+	return ez.New(ez.HTTPStatusToError(res.StatusCode), failure.Error, nil)
+}
+
 // Ask posts body in channel as a question, which waits on whoever reads
 // the channel until someone else replies to it.
 func (c *Client) Ask(ctx context.Context, participantID, channel, body string) (*msgmodels.Message, error) {
@@ -279,25 +338,14 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	httpClient := c.HTTP
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
-
-	res, err := httpClient.Do(req)
+	res, err := c.httpClient().Do(req)
 	if err != nil {
 		return ez.New(ez.EUNAVAILABLE, "agc messaging is unreachable at "+c.BaseURL, err)
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode > 299 {
-		failure := httpapi.ErrorResponse{}
-		_ = json.NewDecoder(res.Body).Decode(&failure)
-		if failure.Error == "" {
-			failure.Error = res.Status
-		}
-
-		return ez.New(ez.HTTPStatusToError(res.StatusCode), failure.Error, nil)
+		return responseError(res)
 	}
 
 	// A home's sleep answers 204 with no body.

@@ -57,6 +57,8 @@ type agentMessenger interface {
 	Channels(ctx context.Context, archived bool) (*httpapi.ChannelsResponse, error)
 	// Deliver is agc task deliver on the sandbox's socket.
 	Deliver(ctx context.Context, summary string, report json.RawMessage, files map[string][]byte, out any) error
+	// Image downloads a message's image (ADR 0005 "Images").
+	Image(ctx context.Context, messageID int64, name string) ([]byte, error)
 }
 
 // agentLoop is `agc agent run` (ADR 0009 item 2, ADR 0010): it joins
@@ -77,6 +79,8 @@ type agentLoop struct {
 	log     io.Writer
 	// joined is called with the participant once joined.
 	joined func(p *msgmodels.Participant) error
+	// images is where a turn's images are put, empty for defaultImagesDir.
+	images string
 }
 
 func agentCommand() *cli.Command {
@@ -249,7 +253,7 @@ func (l *agentLoop) run(ctx context.Context) error {
 				continue
 			}
 
-			prompt := "@" + m.From + " in " + l.channel() + ":\n\n" + m.Body
+			prompt := messagePrompt(m, l.channel(), imagePaths(ctx, l.msg, l.images, m))
 			if session == "" {
 				// The first turn failed, so the brief was never read.
 				prompt = l.brief + "\n\n---\n\n" + prompt
@@ -259,6 +263,17 @@ func (l *agentLoop) run(ctx context.Context) error {
 			session = l.turn(ctx, p, prompt, session)
 		}
 	}
+}
+
+// messagePrompt is the prompt for a message in the task's channel: who
+// wrote it where, its body, and the local path of each of its images.
+func messagePrompt(m msgmodels.Message, channel string, images []string) string {
+	prompt := "@" + m.From + " in " + channel + ":\n\n" + m.Body
+	if len(images) > 0 {
+		prompt += "\n\nImages (read each file to see it):\n" + imageLines(images)
+	}
+
+	return prompt
 }
 
 // isTurn reports whether m, not the loop's own, is the agent's next turn.

@@ -662,3 +662,52 @@
   border-color: oklch(0.78 0.12 220);
   color: oklch(0.78 0.12 220);
 }
+
+/* ---------- images: the post box's thumbnails, the drop frame, a message's plates ---------- */
+/* While a file is dragged over the post box: an orange frame and a
+   condensed uppercase "DROP IMAGE" over the box. */
+.dark [data-slot='composer'][data-dragging] {
+  border-color: var(--eva);
+  box-shadow: 0 0 0 1px var(--eva);
+  outline: none;
+}
+.dark [data-slot='composer'] > [data-testid='drop-label'] {
+  margin: 0;
+  background: oklch(0.1 0.005 60 / 85%);
+  color: var(--eva);
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+/* Thumbnails waiting to be sent and a message's images: chamfered plates,
+   the frame one pixel of orange following the cut. */
+.dark [data-testid='composer-image'],
+.dark [data-testid='message-image'] {
+  position: relative;
+  padding: 1px;
+  background: var(--eva-dim);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+.dark [data-testid='message-image']:hover,
+.dark [data-testid='message-image']:focus-visible {
+  background: var(--eva);
+  outline: none;
+}
+.dark [data-testid='composer-image'] img,
+.dark [data-testid='message-image'] img {
+  background: var(--card);
+  clip-path: polygon(0 0, calc(100% - 7.5px) 0, 100% 7.5px, 100% 100%, 7.5px 100%, 0 calc(100% - 7.5px));
+}
+.dark [data-testid='composer-image-remove'] {
+  top: 1px;
+  right: 9px;
+  background: var(--eva-ink);
+  color: var(--eva);
+  border-radius: 0;
+}
+.dark [data-testid='composer-image-remove']:hover {
+  background: var(--eva);
+  color: var(--eva-ink);
+}

@@ -135,5 +135,8 @@ func addAPIRoutes(e *echo.Echo, h *handler.Handler) {
 	skills.GET("", h.ListSkills)
 	skills.GET("/:name", h.GetSkill)
 
+	// A message's image (ADR 0005 "Images"), served as stored; the same
+	// route the messaging handler serves on a sandbox's socket.
+	api.GET("/msg/images/:id/:name", h.GetMessageImage)
 	api.Any("/msg/*", echo.WrapHandler(h.Messaging()))
 }
