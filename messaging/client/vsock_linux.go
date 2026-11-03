@@ -53,9 +53,34 @@ func dialVsock(port uint32) (net.Conn, error) {
 	return &vsockConn{File: file, port: port}, nil
 }
 
+// maxVsockWrite is the most one write hands the guest kernel. The
+// microsandbox forwarder loses a write larger than 32 KiB whole: measured
+// in a sandbox, 32768 bytes in one write() reach the host and 32769 never
+// do (the host's header timeout closes the connection). io.Copy writes
+// 32 KiB, which hid it; a caller that writes its buffer at once would not.
+const maxVsockWrite = 16 << 10
+
 type vsockConn struct {
 	*os.File
 	port uint32
+}
+
+// Write writes b in pieces of at most maxVsockWrite. The deadline set on
+// the file holds for each piece, so a write the host never takes fails
+// at the deadline instead of blocking.
+func (c *vsockConn) Write(b []byte) (int, error) {
+	written := 0
+	for written < len(b) {
+		end := min(written+maxVsockWrite, len(b))
+
+		n, err := c.File.Write(b[written:end])
+		written += n
+		if err != nil {
+			return written, err
+		}
+	}
+
+	return written, nil
 }
 
 func (c *vsockConn) LocalAddr() net.Addr {

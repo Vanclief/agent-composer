@@ -82,6 +82,26 @@ type ParticipantsResponse struct {
 // handler here does not.
 const DeliverPath = "/task/deliver"
 
+// ShotPiecePath is where a sandbox's socket takes a delivery's shots
+// before POST DeliverPath, a pattern: {label} is the shot's label, the
+// query's offset where the piece starts (0 starts the shot over), the
+// body raw PNG bytes, at most MaxShotPieceBytes. The delivery then takes
+// the shot its report names from what was sent here (ADR 0010, "Delivery
+// report"). The vsock forwarder of a sandbox lets the guest send only 256
+// KiB before the host answers, so no request body may be larger than that
+// and a shot goes in pieces (ADR 0005 item 2).
+const ShotPiecePath = "/task/shots/{label}"
+
+// MaxShotPieceBytes is the largest piece of a shot one request carries,
+// well under the forwarder's 256 KiB.
+const MaxShotPieceBytes = 192 << 10
+
+// ShotPieceResponse answers a shot piece: the bytes the shot has so far.
+type ShotPieceResponse struct {
+	Label string `json:"label"`
+	Size  int    `json:"size"`
+}
+
 // The routes an agent's home serves on its socket besides messaging (ADR
 // 0016); only home sockets serve them. The agent loop reads AgentPath on
 // every wait cycle and posts AgentSleepPath once idle. agc task create,
@@ -111,12 +131,14 @@ type DeliverRequest struct {
 	Summary string          `json:"summary"`
 	Report  json.RawMessage `json:"report,omitempty"`
 	// Files holds the PNG of each of the report's shots under its label,
-	// base64 in JSON.
+	// base64 in JSON. A sandbox sends its shots as pieces to
+	// ShotPiecePath instead, since a body this large cannot cross vsock.
 	Files map[string][]byte `json:"files,omitempty"`
 }
 
 // MaxDeliverBytes bounds a delivery's body: the report and up to eight
-// 2 MB shots, base64.
+// 2 MB shots, base64. Over vsock no body larger than 256 KiB gets through
+// (ShotPiecePath), so this bound holds only for callers on the host.
 const MaxDeliverBytes = 24 << 20
 
 type ErrorResponse struct {
