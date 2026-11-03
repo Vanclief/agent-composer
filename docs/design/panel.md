@@ -61,10 +61,10 @@ outlined and dim. Every text color meets AA on its ground.
   frame color; a pseudo-element one pixel inside is the fill).
 - A list is a column of plates, each with a two-digit index. A plate's left
   edge carries its status as a tab fused into the frame, top to bottom.
-  A plate's frame is its status color (Franco, 2026-11-03: "the outline is
-  the same as the status"): the color of its tab, steady even when the tab
-  blinks. A row waiting on you says so with its orange mark and acts, not
-  with its frame.
+  A plate's frame is its status color (Franco, 2026-11-03: "I want to
+  change the outline so it is the same as the status."): the color of its
+  tab, steady even when the tab blinks. A row waiting on you says so with
+  its orange mark and acts, not with its frame.
 - Frames are one pixel. Rulers (a line with a tick every 24px, or every
   12px for a finer one) close the top bar and a list's header strip.
 - The page title and the current area header are filled orange tabs. Pages
