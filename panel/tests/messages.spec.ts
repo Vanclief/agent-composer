@@ -601,3 +601,82 @@ test('a text-only message renders no image strip', async ({ page, request }) => 
   await expect(message).toBeVisible()
   await expect(message.getByTestId('message-images')).toHaveCount(0)
 })
+
+// A made-up 1x1 PNG the mock keeps and serves as a delivered shot.
+const SHOT_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+
+test("agc's Delivered message shows its Before and After lines as labelled images", async ({ page, request }) => {
+  const created = await request.post('/api/tasks', {
+    data: { title: `Shots ${uniqueName('t')}`, brief: 'b', assignee: 'claude_code', manager: 'reviewer-1' },
+  })
+  const task = (await created.json()) as { name: string }
+  const report = {
+    criteria: [],
+    checks: [{ name: 'npm run check', passed: true, note: '' }],
+    left_out: [],
+    needs: [],
+    shots: [
+      { label: 'before', file: '/tmp/before.png' },
+      { label: 'after', file: '/tmp/after.png' },
+    ],
+  }
+  const delivered = await request.post(`/api/tasks/${task.name}/deliver`, {
+    data: { summary: 'Shots shown.', report, files: { before: SHOT_PNG, after: SHOT_PNG } },
+  })
+  expect(delivered.ok()).toBeTruthy()
+  await actAs(page, uniqueName())
+  await page.goto(`/panel/messages/${task.name}`)
+
+  const line = page.locator('[data-system="delivered"]')
+  await expect(line).toContainText('Delivered: Shots shown.')
+  const images = line.getByTestId('shot-images')
+  await expect(images.locator('figcaption')).toHaveText(['Before', 'After'])
+  for (const label of ['before', 'after']) {
+    const url = `/api/tasks/${task.name}/shots/${label}.png`
+    const img = images.locator(`img[src="${url}"]`)
+    await expect(img).toBeVisible()
+    // The root-relative url loads from the panel's own origin.
+    await expect.poll(() => img.evaluate((el) => (el as unknown as { naturalWidth: number }).naturalWidth)).toBe(1)
+    await expect(img.locator('xpath=..')).toHaveAttribute('target', '_blank')
+  }
+  await expect(line).not.toContainText(`/api/tasks/${task.name}/shots/before.png`)
+})
+
+test("a person's Before:/After: png lines are images; a missing one shows its url, other lines stay text", async ({
+  page,
+  request,
+}) => {
+  const channel = `#${uniqueName('c')}`
+  const author = await joinAs(request)
+  await postAs(
+    request,
+    author.id,
+    channel,
+    [
+      'Look at this:',
+      'Before: /api/tasks/made-up-missing/shots/before.png',
+      'After: https://img.example.com/after.png',
+      'Before: the old list',
+      '```',
+      'After: /api/tasks/made-up-missing/shots/after.png',
+      '```',
+    ].join('\n'),
+  )
+  await page.route('https://img.example.com/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from(SHOT_PNG, 'base64') }),
+  )
+  await actAs(page, uniqueName())
+  await page.goto(`/panel/messages/${channel.slice(1)}`)
+
+  const message = page.getByTestId('message').filter({ hasText: 'Look at this:' })
+  const images = message.getByTestId('shot-images')
+  await expect(images.locator('figure')).toHaveCount(2)
+  const missing = images.locator('[data-image="Before"]')
+  await expect(missing).toHaveAttribute('data-broken', 'true')
+  await expect(missing.getByRole('img')).toHaveCount(0)
+  await expect(missing).toContainText('/api/tasks/made-up-missing/shots/before.png')
+  await expect(images.locator('[data-image="After"]').getByRole('img', { name: 'After' })).toBeVisible()
+  // Not an image url, and inside a code fence: text as before.
+  await expect(message).toContainText('Before: the old list')
+  await expect(message.getByTestId('code-block')).toContainText('After: /api/tasks/made-up-missing/shots/after.png')
+})

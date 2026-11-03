@@ -34,14 +34,24 @@ const ROW_RE = new RegExp(`^(${ROW_LABELS.join('|')}):\\s*(.*)$`)
 // A bare URL, <url>, or a markdown link [text](url) standing alone.
 const URL_RE = /^(?:<(https?:\/\/\S+)>|(https?:\/\/\S+)|\[[^\]]*\]\((https?:\/\/[^)\s]+)\))$/
 const ACCEPT_RE = /^Accept\s+[`#]?([a-z0-9][a-z0-9_-]{0,63})`?\s*\?$/
-// An http(s) URL whose path ends in an image extension.
-const IMAGE_RE = /^https?:\/\/[^?#\s]+\.(?:png|jpe?g|gif|webp|avif|svg)(?:[?#]\S*)?$/i
+// An http(s) URL, or a root-relative /api/ path on the panel's own origin
+// (agc's shot urls without AGC_PUBLIC_URL), whose path ends in an image
+// extension.
+const IMAGE_RE = /^(?:https?:\/\/|\/api\/)[^?#\s]+\.(?:png|jpe?g|gif|webp|avif|svg)(?:[?#]\S*)?$/i
+// A root-relative image path standing alone, bare or as <path>.
+const LOCAL_IMAGE_RE = /^<?(\/api\/[^\s<>]+)>?$/
 const FENCE_RE = /^\s*(```|~~~)/
 
 // The URL a value is made of, or '' when it is anything else.
 export function urlOf(value: string) {
   const match = value.trim().match(URL_RE)
   return match ? (match[1] ?? match[2] ?? match[3]) : ''
+}
+
+// The image URL a Before/After value is made of, or ''.
+export function imageURLOf(value: string) {
+  const url = urlOf(value) || (value.trim().match(LOCAL_IMAGE_RE)?.[1] ?? '')
+  return isImageURL(url) ? url : ''
 }
 
 // Whether url points at an image.
@@ -90,9 +100,9 @@ export function parseQuestion(body: string): QuestionShape {
       flush()
       const value = row[2].trim()
       const label = row[1] as RowLabel
-      const url = urlOf(value)
-      const image = (label === 'Before' || label === 'After') && isImageURL(url)
-      parts.push({ type: 'row', label, value, url: url || undefined, image: image || undefined })
+      const shot = label === 'Before' || label === 'After' ? imageURLOf(value) : ''
+      const url = shot || urlOf(value)
+      parts.push({ type: 'row', label, value, url: url || undefined, image: shot ? true : undefined })
       continue
     }
     const url = urlOf(line)
@@ -106,4 +116,47 @@ export function parseQuestion(body: string): QuestionShape {
   flush()
 
   return { title, parts, accept: acceptTask(title) }
+}
+
+// ---------- shots in any message ----------
+
+// A message body cut where it has Before:/After: lines whose value is an
+// image URL (agc's Delivered message ends with them): the text between as
+// markdown, each run of such lines (blank lines between them allowed) as
+// one row of labelled images. Lines inside a code fence are always text.
+export type BodyPart = { type: 'text'; text: string } | { type: 'shots'; shots: { label: string; url: string }[] }
+
+const SHOT_RE = /^(Before|After):\s*(.*)$/
+
+export function splitShots(body: string): BodyPart[] {
+  const parts: BodyPart[] = []
+  let text: string[] = []
+  let fenced = false
+  const flush = () => {
+    if (text.join('').trim() !== '') {
+      parts.push({ type: 'text', text: text.join('\n') })
+    }
+    text = []
+  }
+  for (const line of body.replace(/\r\n/g, '\n').split('\n')) {
+    if (FENCE_RE.test(line)) {
+      fenced = !fenced
+    }
+    const match = fenced ? null : line.trim().match(SHOT_RE)
+    const url = match ? imageURLOf(match[2]) : ''
+    if (!match || !url) {
+      text.push(line)
+      continue
+    }
+    const last = parts.at(-1)
+    if (last?.type === 'shots' && text.join('').trim() === '') {
+      text = []
+      last.shots.push({ label: match[1], url })
+      continue
+    }
+    flush()
+    parts.push({ type: 'shots', shots: [{ label: match[1], url }] })
+  }
+  flush()
+  return parts
 }
