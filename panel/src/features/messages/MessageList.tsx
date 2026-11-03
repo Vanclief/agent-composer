@@ -24,8 +24,9 @@ const BOTTOM_SLACK = 32
 // The longest pause that still continues a group.
 const GROUP_GAP_MS = 5 * 60_000
 // The feed's reading column, shared with the composer under it: at most
-// 72ch at text-base (the time column included), left-aligned.
-export const FEED_COLUMN = 'w-full max-w-[72ch] text-base'
+// 72ch at text-base (the time column included), left-aligned. No w-full:
+// the composer's dark margins would push a full-width box past its column.
+export const FEED_COLUMN = 'max-w-[72ch] text-base'
 
 type Item =
   | { type: 'day'; key: string; label: string }

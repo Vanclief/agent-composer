@@ -24,7 +24,7 @@ import { MarkdownText, MessageBody } from './MessageBody'
 import type { QuestionPart, QuestionShape } from './questionShape'
 import { useSend } from './send'
 
-// One step larger than a message (text-sm), with room between lines.
+// The same size as a message body, with room between lines.
 const BODY = 'text-base leading-7'
 
 const LABEL = 'w-16 shrink-0 text-[11px] font-medium tracking-wide text-muted-foreground uppercase'
