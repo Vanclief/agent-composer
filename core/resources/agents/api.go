@@ -300,7 +300,7 @@ func (api *API) viewWith(ctx context.Context, record *agent.Agent, state string)
 
 	skills := []string{}
 
-	tmpl, err := LoadTemplate(api.dir, record.Role)
+	tmpl, err := LoadTemplate(api.dir, record.Role, api.rules)
 	if err == nil && len(tmpl.Sandbox.Skills) > 0 {
 		skills = tmpl.Sandbox.Skills
 	}

@@ -1271,4 +1271,15 @@ func TestShippedTemplatesLoad(t *testing.T) {
 	if !reflect.DeepEqual(main.Reads, []string{"*"}) || main.Instructions == "" {
 		t.Fatalf("main = %+v", main)
 	}
+
+	designer, err := LoadTemplate(dir, "designer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if designer.Harness != "claude_code" || designer.Model != "claude-opus-5-5" || len(designer.Reads) != 0 || designer.Sandbox.Disk != "20G" {
+		t.Fatalf("designer = %+v", designer)
+	}
+	if !reflect.DeepEqual(designer.Sandbox.Secrets, []string{"GITHUB_TOKEN"}) || !strings.Contains(designer.Instructions, "## When a task you manage delivers") {
+		t.Fatalf("designer = %+v", designer)
+	}
 }

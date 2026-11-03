@@ -48,6 +48,12 @@ that mock a backend and settles what it left open.
    `sandbox.skills` names skills of agc's skills repository, written into
    the home on every boot and wake (ADR 0008 "Skills"); the agent view
    carries them as `skills`, read from the template on every request.
+   The repo ships `agents/reviewer.yaml` (reviews code and manages code
+   tasks, merging what it may), `agents/main.yaml` (reads every channel,
+   ADR 0015), `agents/developer.yaml` (an agc developer that manages its
+   own tasks) and `agents/designer.yaml` (a UI/UX designer for the panel
+   who proposes changes to Franco, makes the agreed ones into tasks it
+   manages, and merges them only after Franco accepts).
 
 3. **Keeping names it.** `POST /api/agents/{name}/keep { name, role? }` sets
    `kept`, renames the row and may change the role. The home sandbox and the
