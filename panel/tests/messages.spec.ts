@@ -278,7 +278,7 @@ test('a long body shows in full, with no fade and no Show more', async ({ page, 
   await page.goto(`/panel/messages/${slug}`)
   const body = page.getByTestId('message-body')
   await expect(body).toContainText('row 30')
-  // 30 lines at 20px: far past the old 12-line (240px) cap.
+  // 30 lines at 28px (leading-7): far past the old 12-line (240px) cap.
   expect((await body.boundingBox())!.height).toBeGreaterThan(500)
   const box = await body.evaluate((el) => {
     const style = el.ownerDocument.defaultView!.getComputedStyle(el)
