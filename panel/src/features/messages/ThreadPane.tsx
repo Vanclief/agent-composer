@@ -65,9 +65,9 @@ export function ThreadPane({ id, onClose }: { id: number; onClose: () => void })
       </div>
       {parent ? (
         <>
-          <div data-testid="thread-messages" className="min-h-0 flex-1 overflow-y-auto px-3 py-3 text-sm">
+          <div data-testid="thread-messages" className="min-h-0 flex-1 overflow-y-auto px-3 py-3 text-base">
             <Parent message={parent} />
-            <div className="flex items-center gap-2 py-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+            <div className="flex items-center gap-2 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               <span>{replies.length === 1 ? '1 reply' : `${replies.length} replies`}</span>
               <span className="h-px flex-1 bg-border" />
             </div>
