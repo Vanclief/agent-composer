@@ -12,6 +12,7 @@ import (
 	"github.com/vanclief/ez"
 
 	taskmodels "github.com/vanclief/agent-composer/models/task"
+	"github.com/vanclief/agent-composer/skills"
 	"github.com/vanclief/agent-composer/task"
 )
 
@@ -76,6 +77,15 @@ func (api *API) Start(ctx context.Context, requester interface{}, request *Start
 		spec = bound
 	}
 
+	// A skill removed from the repository since the allocate is refused
+	// before the VM boots, as on allocate.
+	repo := api.skillsRepo()
+
+	err = repo.Check(spec.Skills)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
 	err = api.startSandboxListener(record, owner, spec)
 	if err != nil {
 		return nil, ez.Wrap(err)
@@ -86,11 +96,15 @@ func (api *API) Start(ctx context.Context, requester interface{}, request *Start
 		return nil, ez.Wrap(err)
 	}
 
-	// A start boots the disk but not the job, so the job runs again here
-	// (ADR 0008 item 4, ADR 0016 item 4). Allocate discards a sandbox whose
+	// A start boots the disk but not the job, so the skills are written
+	// again (an edit since the last boot reaches a wake) and the job runs
+	// again here (ADR 0008 item 4, ADR 0016 item 4). Allocate discards a sandbox whose
 	// job cannot start; a start must not remove a kept disk, so it fails
 	// with the same error and stops the VM again, leaving it stopped.
-	err = api.relaunchJob(ctx, record, spec)
+	err = api.rewriteSkills(ctx, record, spec, repo)
+	if err == nil {
+		err = api.relaunchJob(ctx, record, spec)
+	}
 	if err != nil {
 		api.stopListener(record.Name)
 		stopErr := api.rt.Stop(context.WithoutCancel(ctx), record.Name)
@@ -115,6 +129,28 @@ func (api *API) Start(ctx context.Context, requester interface{}, request *Start
 	api.publish(view)
 
 	return view, nil
+}
+
+// rewriteSkills writes the spec's skills into the started sandbox again,
+// as prepare does on the first boot (ADR 0008 "Skills").
+func (api *API) rewriteSkills(ctx context.Context, record *taskmodels.Sandbox, spec task.Spec, repo skills.Repo) error {
+	if len(spec.Skills) == 0 {
+		return nil
+	}
+
+	sb, err := api.rt.Connect(ctx, record.Name)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	defer func() {
+		detachErr := sb.Detach(context.WithoutCancel(ctx))
+		if detachErr != nil {
+			log.Warn().Err(detachErr).Str("sandbox", record.Name).Msg("cannot release sandbox handle")
+		}
+	}()
+
+	return writeSkills(ctx, sb, repo, spec.Skills)
 }
 
 // relaunchJob starts the sandbox's command as allocate does on the first

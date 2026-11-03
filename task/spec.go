@@ -23,6 +23,7 @@ import (
 	"github.com/vanclief/agent-composer/messaging"
 	msgmodels "github.com/vanclief/agent-composer/models/messaging"
 	"github.com/vanclief/agent-composer/secrets"
+	"github.com/vanclief/agent-composer/skills"
 )
 
 const (
@@ -66,6 +67,9 @@ type Spec struct {
 	Env      map[string]string `yaml:"env" json:"env"`           // plain, readable by agents
 	Volumes  []string          `yaml:"volumes" json:"volumes"`   // "NAME:DEST[:rw]" or "host:PATH:DEST[:rw]"
 	Channels []string          `yaml:"channels" json:"channels"` // "#name" or "#name:read"
+	// Skills names skills of the skills repository (package skills) agc
+	// writes into ~/.claude/skills and ~/.codex/skills on every prepare.
+	Skills []string `yaml:"skills,omitempty" json:"skills,omitempty"`
 }
 
 // Sandbox is the sandbox: block of a task.yaml and the body of an
@@ -241,6 +245,13 @@ func (s Spec) Validate() error {
 
 		if name == EnvTask || name == EnvSandbox || name == EnvMsgVsockPort {
 			return ez.New(ez.EINVALID, fmt.Sprintf("env %s is set by agc and cannot be overridden", name), nil)
+		}
+	}
+
+	for _, name := range s.Skills {
+		err := skills.ValidateName(name)
+		if err != nil {
+			return ez.Wrap(err)
 		}
 	}
 

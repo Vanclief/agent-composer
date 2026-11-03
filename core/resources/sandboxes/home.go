@@ -102,6 +102,11 @@ func (api *API) AllocateHome(ctx context.Context, request HomeRequest) (*Sandbox
 		return nil, ez.New(ez.EINVALID, "a home needs its agent's name", nil)
 	}
 
+	err = api.skillsRepo().Check(request.Sandbox.Skills)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
 	spec := request.Sandbox.Spec
 	env := map[string]string{}
 	for k, v := range spec.Env {

@@ -144,8 +144,11 @@ type AgentView struct {
 	// Conversations are the DM with the owner, then #<task> for each
 	// task, then any other channel the agent has posted in.
 	Conversations []Conversation `json:"conversations"`
-	LastActiveAt  *time.Time     `json:"last_active_at"`
-	CreatedAt     time.Time      `json:"created_at"`
+	// Skills are the template's sandbox.skills, read on every request;
+	// empty when the template names none or cannot be read.
+	Skills       []string   `json:"skills"`
+	LastActiveAt *time.Time `json:"last_active_at"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 // DMChannel is the agent's direct message channel with its owner,
@@ -268,6 +271,13 @@ func (api *API) viewWith(ctx context.Context, record *agent.Agent, state string)
 		home = &name
 	}
 
+	skills := []string{}
+
+	tmpl, err := LoadTemplate(api.dir, record.Role)
+	if err == nil && len(tmpl.Sandbox.Skills) > 0 {
+		skills = tmpl.Sandbox.Skills
+	}
+
 	return &AgentView{
 		Name:          record.Name,
 		Role:          record.Role,
@@ -279,6 +289,7 @@ func (api *API) viewWith(ctx context.Context, record *agent.Agent, state string)
 		Home:          home,
 		Tasks:         agentTasks,
 		Conversations: conversations,
+		Skills:        skills,
 		LastActiveAt:  lastActive,
 		CreatedAt:     record.CreatedAt,
 	}, nil
