@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/uptrace/bun"
 	"github.com/vanclief/ez"
 
@@ -246,12 +247,13 @@ func (s *Service) Join(ctx context.Context, caller Caller, name string) (*msgmod
 
 	// A persistent agent's home joins as the agent's name whatever the
 	// home is called (ADR 0016 item 6), so it takes the name over from a
-	// participant left behind by a home that is gone or stopped.
-	took, err := s.takeStale(ctx, name)
+	// participant left behind by a home that is gone or stopped, or by
+	// its own previous process.
+	from, err := s.takeStale(ctx, caller, name)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
-	if !took {
+	if from == nil {
 		return nil, joinErr
 	}
 
@@ -259,48 +261,56 @@ func (s *Service) Join(ctx context.Context, caller Caller, name string) (*msgmod
 	if err != nil {
 		return nil, s.joinError(ctx, name, err)
 	}
+	log.Info().Str("name", name).Str("from_home", from.Agent).Str("home", caller.Agent).Msg("messaging: a home took the name over")
 
 	return p, nil
 }
 
-// takeStale releases name from the active participant holding it when
-// that participant is an agent presence says is absent: its sandbox is
-// gone or not running. A human's name, agc's and a running agent's are
-// never taken; without presence nothing is.
-func (s *Service) takeStale(ctx context.Context, name string) (bool, error) {
+// takeStale releases name from the active participant holding it and
+// returns that holder, nil when it keeps the name. An agent holder from
+// the caller's own home (same Agent) is released whatever presence says:
+// one process runs the loop in a home, so a second join from it means
+// the first is gone (a crash, a reboot, a home re-created under the same
+// name). Another agent is released only when presence says it is absent:
+// its sandbox is gone or not running. A human's name and agc's are never
+// taken; without presence only the caller's own home's is.
+func (s *Service) takeStale(ctx context.Context, caller Caller, name string) (*msgmodels.Participant, error) {
 	s.mu.Lock()
 	presence := s.presence
 	s.mu.Unlock()
-
-	if presence == nil {
-		return false, nil
-	}
 
 	holder := &msgmodels.Participant{}
 
 	err := s.db.NewSelect().Model(holder).Where("active_name = ?", name).Scan(ctx)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+		return nil, nil
 	}
 	if err != nil {
-		return false, ez.Wrap(err)
+		return nil, ez.Wrap(err)
 	}
 
 	if holder.Human || isSystem(holder) {
-		return false, nil
+		return nil, nil
 	}
 
-	now := s.now()
-	if s.online(ctx, presence, holder, now, now) {
-		return false, nil
+	own := holder.Agent != "" && holder.Agent == caller.Agent
+	if !own {
+		if presence == nil {
+			return nil, nil
+		}
+
+		now := s.now()
+		if s.online(ctx, presence, holder, now, now) {
+			return nil, nil
+		}
 	}
 
 	err = holder.Leave(ctx, s.db)
 	if err != nil {
-		return false, ez.Wrap(err)
+		return nil, ez.Wrap(err)
 	}
 
-	return true, nil
+	return holder, nil
 }
 
 // joinError tells a taken name from any other insert failure. The
