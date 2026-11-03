@@ -1272,7 +1272,7 @@ func TestShippedTemplatesLoad(t *testing.T) {
 		t.Fatalf("main = %+v", main)
 	}
 
-	designer, err := LoadTemplate(dir, "designer")
+	designer, err := LoadTemplate(dir, "designer", rules)
 	if err != nil {
 		t.Fatal(err)
 	}
