@@ -42,8 +42,7 @@ func isGlob(pattern string) bool {
 }
 
 // MatchChannel reports whether channel matches pattern: * matches every
-// channel, otherwise a glob on the whole name (* does not cross the / of a
-// DM channel).
+// channel, otherwise a glob on the whole name (* does not cross a /).
 func MatchChannel(pattern string, channel string) bool {
 	if pattern == Every {
 		return true
@@ -61,14 +60,12 @@ func MatchChannel(pattern string, channel string) bool {
 var validChannel = msgmodels.ValidateChannel
 
 // Reads is every channel pattern the agent reads (ADR 0016 item 6): its
-// DM channel, #<task> for each task it manages, then the template's
+// inbox #<name>, #<task> for each task it manages, then the template's
 // reads. It is the one list behind GET /agent, the wake hook and the
 // home's messaging access.
 //
-// A channel messaging rejects is left out: messaging only knows # names
-// until direct-message channels land (ADR 0011), and one name it rejects
-// fails the home loop's whole wait on every channel. The DM channel
-// @<owner>/<name> joins the list once messaging accepts it.
+// A channel messaging rejects is left out: one name it rejects fails the
+// home loop's whole wait on every channel.
 func (api *API) Reads(ctx context.Context, record *agent.Agent, tmpl *Template) ([]string, error) {
 	patterns := []string{}
 

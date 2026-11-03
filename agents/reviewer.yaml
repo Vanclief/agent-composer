@@ -8,7 +8,7 @@ model: ""
 # effort: ""
 # How long the agent waits for a message before its home sleeps.
 idle: 15m
-# Nothing besides its DM channel and the channels of its tasks.
+# Nothing besides its inbox #<name> and the channels of its tasks.
 reads: []
 # Rules from the knowledge directory (rules/repo.yaml) it checks a change
 # against; AGENT.md lists them after the instructions.

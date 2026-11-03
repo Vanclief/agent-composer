@@ -168,7 +168,7 @@ type AgentView struct {
 	Rules []AgentRule `json:"rules"`
 	// Tasks are the tasks whose manager is the agent.
 	Tasks []AgentTask `json:"tasks"`
-	// Conversations are the DM with the owner, then #<task> for each
+	// Conversations are the agent's inbox #<name>, then #<task> for each
 	// task, then any other channel the agent has posted in.
 	Conversations []Conversation `json:"conversations"`
 	// Skills are the template's sandbox.skills, read on every request;
@@ -178,14 +178,15 @@ type AgentView struct {
 	CreatedAt    time.Time  `json:"created_at"`
 }
 
-// DMChannel is the agent's direct message channel with its owner,
-// @<owner>/<name> (ADR 0011), empty when it has no owner.
+// DMChannel is the agent's inbox #<name>, where its owner talks to it,
+// an inbox like a person's (ADR 0005 "Inbox", ADR 0016 item 6); empty when
+// it has no owner.
 func DMChannel(record *agent.Agent) string {
 	if record.Owner == "" {
 		return ""
 	}
 
-	return "@" + record.Owner + "/" + record.Name
+	return "#" + record.Name
 }
 
 // stateOf maps the home sandbox's status to the agent's state.
