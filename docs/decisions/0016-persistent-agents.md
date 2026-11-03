@@ -202,7 +202,9 @@ that mock a backend and settles what it left open.
    with `agc task create` from its home, and shown on the agent page. The work
    still runs in task sandboxes with task agents; a persistent agent is the
    one who briefs, answers questions, accepts or rejects (ADR 0010), and
-   talks to Franco about it. Unlike a task sandbox (ADR 0009 item 5), a home
+   talks to Franco about it. A reviewer accepts a pull request review task
+   by checking the review comment and the label on the pull request with
+   `gh pr view`, with no merge and no question to the owner. Unlike a task sandbox (ADR 0009 item 5), a home
    may post in its owner's inbox `#<owner>`, to ask there; the inbox is not
    in its channels, so a post there does not wake it. Whether an act needs
    a human yes is a gate of ADR 0007, settled per role in ADR 0015 for

@@ -224,6 +224,10 @@ is not granted `#<owner>` (ADR 0009 item 5), so a question it has for the
 owner goes to its manager in `#<task>`, and the manager raises it in
 `#<owner>` as item 3 does.
 
+The rule applies to merges into our repositories only: a task that only
+posts on a pull request elsewhere (a review, a label) has no branch to
+merge, so its manager accepts it without asking the owner.
+
 `accept` itself is unchanged: it still only sets `done_at` and
 `accepted_by` and stops the task's sandboxes; merging is the manager's act
 around it, and deploying to the rig stays a hand step (`make rig-deploy`).
