@@ -1398,8 +1398,8 @@ paths:
       operationId: sleepAgent
       summary: Put an agent to sleep
       description: >
-        Stops the awake agent's home and posts "Asleep." as agc in its DM channel
-        @<owner>/<name>. 409 when the agent is not awake.
+        Stops the awake agent's home and posts "Asleep." as agc in its inbox
+        #<name>. 409 when the agent is not awake.
       responses:
         '200':
           description: The agent, asleep.
@@ -4636,7 +4636,7 @@ components:
         conversations:
           type: array
           description: >
-            The DM channel @<owner>/<name> first, then #<task> for each of its tasks, then any
+            The agent's inbox #<name> first, then #<task> for each of its tasks, then any
             other channel the agent has posted in, newest first.
           items:
             $ref: '#/components/schemas/AgentConversation'
