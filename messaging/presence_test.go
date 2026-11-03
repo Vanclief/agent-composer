@@ -1,10 +1,14 @@
 package messaging
 
 import (
+	"bytes"
 	"context"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/vanclief/ez"
 )
 
@@ -209,5 +213,51 @@ func TestOnlyAHomeTakesOverAStaleName(t *testing.T) {
 	}
 	if onlyView(t, svc, stale.ID).LeftAt == nil {
 		t.Fatal("the stale participant should have left")
+	}
+}
+
+// A home retakes the name its own previous process held even while
+// presence reports that home running, since it is the new home itself
+// (a crash or a reboot, then a home re-created under the same name).
+func TestAHomeRetakesItsOwnName(t *testing.T) {
+	svc := newTestService(t)
+	svc.SetPresence(fakePresence{sandboxes: map[string]bool{"designer-1-2": true}, tasks: map[string]bool{}})
+
+	stale := join(t, svc, Caller{Agent: "designer-1-2"}, "designer-1")
+
+	logged := &bytes.Buffer{}
+	before := log.Logger
+	log.Logger = zerolog.New(logged)
+	t.Cleanup(func() {
+		log.Logger = before
+	})
+
+	p := join(t, svc, Caller{Agent: "designer-1-2"}, "designer-1")
+	if p.ID == stale.ID || p.Agent != "designer-1-2" {
+		t.Fatalf("joined = %+v", p)
+	}
+	line := logged.String()
+	if !strings.Contains(line, `"level":"info"`) || !strings.Contains(line, `"name":"designer-1"`) || !strings.Contains(line, `"from_home":"designer-1-2"`) || !strings.Contains(line, `"home":"designer-1-2"`) {
+		t.Fatalf("log = %q", line)
+	}
+	if onlyView(t, svc, stale.ID).LeftAt == nil {
+		t.Fatal("the previous process's participant should have left")
+	}
+}
+
+// A holder from a different home that presence reports running keeps the
+// name.
+func TestARunningOtherHomeKeepsTheName(t *testing.T) {
+	svc := newTestService(t)
+	svc.SetPresence(fakePresence{sandboxes: map[string]bool{"designer-1-2": true, "designer-1-3": true}, tasks: map[string]bool{}})
+
+	holder := join(t, svc, Caller{Agent: "designer-1-2"}, "designer-1")
+
+	_, err := svc.Join(context.Background(), Caller{Agent: "designer-1-3"}, "designer-1")
+	if ez.ErrorCode(err) != ez.ECONFLICT {
+		t.Fatalf("join err = %v", err)
+	}
+	if onlyView(t, svc, holder.ID).LeftAt != nil {
+		t.Fatal("the running home's participant should keep the name")
 	}
 }
