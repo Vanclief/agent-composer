@@ -566,3 +566,51 @@ func TestInboxTakesOnlyQuestionsAndAnswersFromAgents(t *testing.T) {
 	// A granted channel no person is named after is not an inbox.
 	post(t, svc, review, join(t, svc, review, "reviewer"), "#releases", "shipped")
 }
+
+func TestAnAgentsInboxTakesOnlyQuestionsAndAnswersFromOtherAgents(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+
+	designer := Caller{Agent: "designer-1", Grants: []Grant{{Channel: "#designer-1"}, {Channel: "#reviewer-1"}}}
+	reviewer := Caller{Agent: "reviewer-1", Grants: []Grant{{Channel: "#designer-1"}, {Channel: "#fix-login"}}}
+	worker := Caller{Task: "fix-login", Grants: []Grant{{Channel: "#designer-1"}}}
+	self := join(t, svc, designer, "designer-1")
+	other := join(t, svc, reviewer, "reviewer-1")
+	task := join(t, svc, worker, "fix-login")
+	franco := join(t, svc, human, "franco")
+
+	// Another agent's or a task's plain note is refused.
+	_, err := svc.Post(ctx, reviewer, other.ID, "#designer-1", "FYI, merged.", nil, "")
+	wantCode(t, err, ez.ENOTAUTHORIZED)
+	_, err = svc.Post(ctx, worker, task.ID, "#designer-1", "FYI, merged.", nil, "")
+	wantCode(t, err, ez.ENOTAUTHORIZED)
+
+	// A question, and a reply in a thread there, go through.
+	q, err := svc.Post(ctx, reviewer, other.ID, "#designer-1", "Which icon for stop?", nil, msgmodels.KindQuestion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	answer, err := svc.Post(ctx, designer, self.ID, "#designer-1", "The square.", &q.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = svc.Post(ctx, reviewer, other.ID, "#designer-1", "Thanks.", &answer.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The agent itself, its owner and agc post freely.
+	post(t, svc, designer, self, "#designer-1", "Working on the sidebar.")
+	post(t, svc, human, franco, "#designer-1", "Look at the agents page.")
+	_, err = svc.PostAsSystem(ctx, "#designer-1", "Asleep.")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The agent's inbox is its own: it is still held to the rule in another agent's.
+	_, err = svc.Post(ctx, designer, self.ID, "#reviewer-1", "note", nil, "")
+	wantCode(t, err, ez.ENOTAUTHORIZED)
+
+	// #<task> is not an inbox, though a task participant is named after it.
+	post(t, svc, reviewer, other, "#fix-login", "note")
+}
