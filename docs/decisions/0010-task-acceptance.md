@@ -163,9 +163,19 @@ by reading code. A report may carry `shots`, at most 8 of
 `{ label, file }`: `label` a slug unique in the report (`before` and
 `after` for a UI change), `file` the PNG's path where the agent took it.
 The PNG travels with the delivery in `files`, base64 under its label, in
-the same JSON body on `POST /api/tasks/{id}/deliver` and on the socket's
-`POST /task/deliver` (whose body cap is raised to 24 MB for it); `agc task
-deliver --report` reads each file and sends it. Each must be a PNG (by its
+the same JSON body on `POST /api/tasks/{id}/deliver` (whose body cap is
+raised to 24 MB for it); `agc task deliver --report` reads each file and
+sends it. Inside a sandbox no request body over 256 KiB crosses the vsock
+socket (ADR 0005 item 2), so there `agc task deliver` first sends each shot
+as raw PNG pieces of at most 192 KiB to the socket's `POST
+/task/shots/{label}?offset=<n>` (offset 0 starts the shot over; the socket
+keeps them in memory, at most 8 of 2 MB), then `POST /task/deliver` with
+no `files`, which takes the shots its report names from those, and forgets
+them once delivered (added 2026-11-03). A request that makes no progress
+for 60 seconds, sending or awaiting the answer, fails naming the step and
+the size (`sending shot before (1.5 MB, piece at 0 B) to the sandbox
+socket: no answer for 1m0s`), and the socket logs a body that takes longer
+than 10 seconds to read. Each must be a PNG (by its
 signature) of at most 2 MB, one per shot and no other, else `EINVALID`.
 agc keeps them on the host under `<agc home>/shots/<task>/<label>.png`
 (files 0600, directories 0700), never reads them through the VM again,
