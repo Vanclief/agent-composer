@@ -145,6 +145,9 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	}
 	agentsAPI := agents.NewAPI(ctrl, tasksAPI, msg, agentsDir)
 	agentsAPI.SetEvents(bus)
+	// Templates name rules from the knowledge directory; AGENT.md lists
+	// them (ADR 0016 item 2).
+	agentsAPI.SetRules(knowledgeAPI)
 
 	accountsUsage := usage.NewPoller(usage.NoAccounts{}, secretsPath)
 

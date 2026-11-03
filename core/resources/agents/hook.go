@@ -85,7 +85,7 @@ func (api *API) toWake(ctx context.Context, m *msgmodels.Message) []agent.Agent 
 			continue
 		}
 
-		tmpl, err := LoadTemplate(api.dir, record.Role)
+		tmpl, err := api.template(record.Role)
 		if err != nil {
 			log.Warn().Err(err).Str("agent", record.Name).Msg("the wake hook cannot read the agent's template; it reads only its own channels")
 			tmpl = nil

@@ -94,15 +94,20 @@ func TestAgentRoutes(t *testing.T) {
 		{http.MethodPost, "/api/agents", `{}`, http.StatusBadRequest, "role is required"},
 		{http.MethodPost, "/api/agents", `{"role":"Writer"}`, http.StatusBadRequest, "writer.yaml"},
 		{http.MethodPost, "/api/agents", `{"role":"Reviewer","harness":"vim"}`, http.StatusBadRequest, "unknown harness vim"},
-		{http.MethodPost, "/api/agents", `{"role":"Reviewer"}`, http.StatusCreated, `"name":"reviewer-1","role":"Reviewer","kept":false,"harness":"claude_code","model":"claude-opus-5-5","owner":"franco","state":"asleep","home":null,"tasks":[],"conversations":[{"channel":"@franco/reviewer-1"`},
+		{http.MethodPost, "/api/agents", `{"role":"Reviewer"}`, http.StatusCreated, `"name":"reviewer-1","role":"Reviewer","kept":false,"harness":"claude_code","model":"claude-opus-5-5","owner":"franco","state":"asleep","home":null,"rules":[{"id":"go-no-explicit-semicolons","rule":"Never write an explicit`},
 		{http.MethodPost, "/api/agents", `{"role":"reviewer","harness":"codex_cli","model":"gpt-5"}`, http.StatusCreated, `"name":"reviewer-2","role":"reviewer","kept":false,"harness":"codex_cli","model":"gpt-5"`},
 		{http.MethodGet, "/api/agents", "", http.StatusOK, `"name":"reviewer-2"`},
 		{http.MethodGet, "/api/agents/reviewer-1", "", http.StatusOK, `"last_active_at":null`},
+		// The rules its template names, read from the knowledge dir now.
+		{http.MethodGet, "/api/agents/reviewer-1", "", http.StatusOK, `{"id":"merge-needs-franco-for-ui-or-breaking","rule":"A delivered branch is merged into its base`},
+		{http.MethodGet, "/api/agents/reviewer-1", "", http.StatusOK, `"tasks":[],"conversations":[{"channel":"@franco/reviewer-1"`},
+		{http.MethodGet, "/api/agents", "", http.StatusOK, `"rules":[{"id":"go-no-explicit-semicolons"`},
 		{http.MethodGet, "/api/agents/nobody", "", http.StatusNotFound, "agent nobody not found"},
 
 		{http.MethodPost, "/api/agents/reviewer-1/keep", `{"name":"Ada"}`, http.StatusBadRequest, "lowercase letters, digits and dashes"},
 		{http.MethodPost, "/api/agents/reviewer-1/keep", `{"name":"reviewer-2"}`, http.StatusConflict, "agent reviewer-2 already exists"},
 		{http.MethodPost, "/api/agents/reviewer-1/keep", `{"name":"ada","role":"main"}`, http.StatusOK, `"name":"ada","role":"main","kept":true`},
+		{http.MethodGet, "/api/agents/ada", "", http.StatusOK, `"home":null,"rules":[],"tasks":[]`},
 		{http.MethodGet, "/api/agents/reviewer-1", "", http.StatusNotFound, ""},
 		{http.MethodPost, "/api/agents", `{"role":"main"}`, http.StatusCreated, `"name":"main-1"`},
 
