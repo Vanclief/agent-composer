@@ -16,10 +16,10 @@ import type { Message } from '@/api/msg'
 
 function Parent({ message }: { message: Message }) {
   if (isSystem(message)) {
-    return <SystemLine message={message} />
+    return <SystemLine message={message} inThread />
   }
   if (isQuestion(message)) {
-    return <QuestionCard message={message} />
+    return <QuestionCard message={message} inThread />
   }
   return <MessageRow message={message} first inThread />
 }

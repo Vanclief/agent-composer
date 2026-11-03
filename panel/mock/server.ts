@@ -125,6 +125,8 @@ type Message = {
   created_at: string
   // A person posted it, as models/messaging.Message.Human.
   human: boolean
+  // The persistent agents it is a turn for (ADR 0016 item 6); absent when none.
+  turn_for?: string[]
 }
 
 type MessageImage = { name: string; type: string; size: number; url: string }
@@ -772,6 +774,20 @@ function createState() {
     const designer = join('designer-1', '', false)
     post('#designer-1', franco, '@designer-1 can you sketch the Talk sidebar split into Asks, DMs and Channels?')
     post('#designer-1', designer, 'Sketch is up: Asks first, then DMs with each agent, then Channels.')
+    // #talk-who-answers: turn_for as agc's wake hook sets it (ADR 0016
+    // item 6). orchestrator-1 (awake) still owes an answer to a top-level
+    // message; designer-1 already answered sam's question in its
+    // thread; writer-1 (waking) owes one to a later reply in that thread.
+    // Posted by another person, so franco's sidebar does not follow it.
+    const sam = join('sam', '', true)
+    join('orchestrator-1', '', false)
+    join('writer-1', '', false)
+    post('#talk-who-answers', sam, 'Who is on the Talk rework?')
+    const colors = post('#talk-who-answers', sam, '@designer-1 which color for an agent that will answer?')
+    colors.turn_for = ['designer-1']
+    post('#talk-who-answers', designer, 'None: the state pill is the only color on that row.', colors.id)
+    post('#talk-who-answers', sam, '@writer-1 write the release note for it.', colors.id).turn_for = ['writer-1']
+    post('#talk-who-answers', sam, '@orchestrator-1 when does it ship?').turn_for = ['orchestrator-1']
     // The seeded human has left, so the panel can join as @franco.
     franco.left_at = iso()
   }

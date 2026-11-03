@@ -202,3 +202,40 @@ test("DMs list a followed agent's inbox as @agent with its state light, and my D
   await expect(page.getByTestId('message-list').getByText('Sketch is up')).toBeVisible()
   await expect(designer.getByTestId('unread-badge')).toHaveCount(0)
 })
+
+// turn_for (seeded in #talk-who-answers): who will answer, until they do.
+test('a message names the agent that will answer, with its state, until it replies in the thread', async ({ page }) => {
+  await page.goto('/panel/messages/talk-who-answers')
+  const feed = page.getByTestId('message-list')
+  const ship = feed.getByTestId('message').filter({ hasText: 'when does it ship?' })
+  const awake = ship.getByTestId('will-answer')
+  await expect(awake).toHaveCount(1)
+  await expect(awake).toHaveAttribute('data-agent', 'orchestrator-1')
+  await expect(awake).toContainText(/will answer/i)
+  await expect(awake.getByRole('link', { name: 'orchestrator-1' })).toHaveAttribute(
+    'href',
+    '/panel/agents/orchestrator-1',
+  )
+  await expect(awake.locator('[data-status]')).toHaveText('awake')
+
+  // designer-1 already answered in the thread; writer-1, asked in a reply,
+  // shows on the thread's top-level message.
+  const colors = feed.getByTestId('message').filter({ hasText: 'which color for an agent' })
+  await expect(colors.locator('[data-testid="will-answer"][data-agent="designer-1"]')).toHaveCount(0)
+  const waking = colors.locator('[data-testid="will-answer"][data-agent="writer-1"]')
+  await expect(waking).toHaveCount(1)
+  await expect(waking.locator('[data-status]')).toHaveText('waking')
+
+  // No turn_for, no row.
+  await expect(
+    feed.getByTestId('message').filter({ hasText: 'Who is on the Talk rework?' }).getByTestId('will-answer'),
+  ).toHaveCount(0)
+
+  // In the thread pane, each message carries only its own rows.
+  await colors.getByTestId('thread-footer').click()
+  const pane = page.getByTestId('thread-pane')
+  await expect(pane.locator('[data-testid="will-answer"][data-agent="designer-1"]')).toHaveCount(0)
+  const reply = pane.getByTestId('message').filter({ hasText: 'release note' })
+  await expect(reply.locator('[data-testid="will-answer"][data-agent="writer-1"]')).toHaveCount(1)
+  await expect(pane.getByTestId('will-answer')).toHaveCount(1)
+})
