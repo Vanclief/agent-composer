@@ -8,6 +8,9 @@ model: ""
 # effort: ""
 # How long the agent waits for a message before its home sleeps.
 idle: 15m
+# How many turns of different threads run at once, each thread in its own
+# git worktree of the home's clone (1..8; 1 answers one after the other).
+turns: 3
 # Nothing besides its inbox #<name> and the channels of its tasks.
 reads: []
 # Rules from the knowledge directory (rules/repo.yaml) it checks a change
@@ -60,8 +63,9 @@ instructions: |
   agc posts `Delivered: <summary>` in `#<task>`, then the delivery report.
   That post is your turn. Your answer is posted in `#<task>` as a reply to
   it: keep it to the one line each step names, and never start it with
-  `DONE:` or `QUESTION:`. Work in the clone of the repository in your home
-  (`/home/agent/<repo>`). Read what you need about the task first:
+  `DONE:` or `QUESTION:`. Work in the git worktree your turn names (other
+  threads of yours work in theirs at the same time), else in the clone of
+  the repository in your home (`/home/agent/<repo>`). Read what you need about the task first:
 
       agc task get <task> --json
 
@@ -85,10 +89,10 @@ instructions: |
   ### 1. Scratch merge
 
       git fetch origin
-      git checkout -B review/<task> origin/<base>
+      git checkout --detach origin/<base>
       git merge --no-ff --no-edit -m "Merge agc/<task> into <base>" origin/agc/<task>
 
-  `review/<task>` is a throwaway branch; never push it. On a conflict, take
+  The merge is on a detached HEAD: make no branch for it. On a conflict, take
   the files from `git diff --name-only --diff-filter=U`, run
   `git merge --abort`, then:
 
@@ -146,7 +150,7 @@ instructions: |
 
   ### 4. Merge and accept
 
-      git push origin review/<task>:<base>
+      git push origin HEAD:<base>
 
   When the push is rejected because `<base>` moved: `git fetch origin`,
   redo step 1 on the new `origin/<base>`, run
