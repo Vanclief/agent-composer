@@ -163,8 +163,8 @@ export function AgentCard({
           />
         </div>
         <p data-agent-hint className="text-xs text-muted-foreground">
-          The manager answers the agent in #{name || '<name>'}; the agent escalates to #
-          {agent.owner.trim() || '<owner>'} when only the owner can decide.
+          The manager answers the agent in #{name || '<name>'} and raises to {agent.owner.trim() || '<owner>'} what only
+          the owner can decide.
         </p>
       </div>
     </Card>

@@ -2184,7 +2184,8 @@ paths:
           in: query
           description: >
             Only questions in the channels this person reads: their inbox `#<name>` and `#<task>`
-            for every task they manage or own.
+            for every task they manage (not those they only own; a task's manager raises to its
+            owner in their inbox).
           schema:
             type: string
       responses:
@@ -3059,8 +3060,8 @@ components:
         owner:
           type: string
           description: >
-            The human the task answers to, a messaging name. Defaults to the configured owner; its
-            sandboxes may post in #<owner>.
+            The human the task answers to, a messaging name. Defaults to the configured owner; the
+            task's manager, not its sandboxes, raises to them what only they can decide.
         for:
           type: string
         notify:

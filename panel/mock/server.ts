@@ -304,8 +304,9 @@ function createState() {
       `  \`agc msg post '#${task.name}' <text>\`; your manager reads that channel and\n` +
       `  answers there. Ask your manager there too, then keep working on what\n` +
       `  does not depend on the answer.\n` +
-      `- If something needs a decision only ${task.owner} can make, post it in\n` +
-      `  \`#${task.owner}\` (their inbox) and say so in \`#${task.name}\`; do not wait idle.\n` +
+      `- If something needs a decision only ${task.owner} can make, ask your manager\n` +
+      `  in \`#${task.name}\` and say it is for the owner; your manager raises it.\n` +
+      `  Keep working on what does not depend on the answer.\n` +
       `- Do not modify files outside the repository, and never print secret values.\n`
     )
   }
@@ -635,8 +636,9 @@ function createState() {
       agc,
       '@agent-composer-da (manager), @franco (owner): task `review-42` is open: Review 42.\n' +
         'Agent: claude_code (claude-opus-5-5) on sandbox `review-42`, starting.\n' +
-        "The agent's instructions are the next message. Reply here to talk to it; " +
-        'it escalates to #franco when only the owner can decide. Post /accept to accept the task, /reject <why> to send it back.',
+        "The agent's instructions are the next message. Reply here to talk to it;\n" +
+        'its manager raises to franco what only the owner can decide.\n' +
+        'Post /accept to accept the task, /reject <why> to send it back.',
     ).created_at = opened
     post('#review-42', agc, sandboxes.get('review-42')?.instructions ?? '').created_at = opened
     const first = post('#review-42', reviewer, 'Cloned the repo and ran the tests. 3 failures in workflow/.')

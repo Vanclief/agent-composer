@@ -197,6 +197,11 @@ owner, unless the rule `merge-needs-franco-for-ui-or-breaking`
    it. The owner's reject sends the task back to the agent with the reason,
    as in item 5, and nothing is merged.
 
+The manager is the owner's only interlocutor for a task: the task's agent
+is not granted `#<owner>` (ADR 0009 item 5), so a question it has for the
+owner goes to its manager in `#<task>`, and the manager raises it in
+`#<owner>` as item 3 does.
+
 `accept` itself is unchanged: it still only sets `done_at` and
 `accepted_by` and stops the task's sandboxes; merging is the manager's act
 around it, and deploying to the rig stays a hand step (`make rig-deploy`).
