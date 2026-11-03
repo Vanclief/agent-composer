@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/vanclief/ez"
@@ -114,7 +115,10 @@ type homeMessenger interface {
 // loop of a persistent agent inside its home sandbox. It waits on every
 // channel the agent reads, takes one turn per thread root with the new
 // messages of that thread, answers in the thread, and puts the VM to sleep
-// when nothing has needed a turn for the agent's idle time.
+// when no turn runs and nothing has needed one for the agent's idle time.
+// Turns of different threads run at once, up to GET /agent's turns
+// (turnRunner), each thread in its own git worktree of the home's clone
+// when it has one (threadWorktree).
 type homeLoop struct {
 	harness agentHarness
 	msg     homeMessenger
@@ -124,7 +128,11 @@ type homeLoop struct {
 	dir string
 	// images is where a turn's images are put, empty for defaultImagesDir.
 	images string
-	log    io.Writer
+	// repo is the home's clone, "" without one; threads holds the
+	// threads' worktrees of it, defaultThreadsDir when empty.
+	repo    string
+	threads string
+	log     io.Writer
 	// prior is the participant an earlier run saved, released before
 	// joining so the agent keeps its name after a hard stop.
 	prior *msgState
@@ -138,6 +146,11 @@ type homeLoop struct {
 	me       *msgmodels.Participant
 	role     string
 	sessions *sessionStore
+	// mu guards parents and heads, which turns running at once update;
+	// logMu the log; gitMu adding worktrees.
+	mu    sync.Mutex
+	logMu sync.Mutex
+	gitMu sync.Mutex
 	// parents maps a message id to the id it replies to, 0 for none.
 	parents map[int64]int64
 	// heads keeps who posted each message seen (its body dropped), to
@@ -163,9 +176,14 @@ type homeTurn struct {
 }
 
 func (l *homeLoop) logf(format string, args ...any) {
-	if l.log != nil {
-		fmt.Fprintf(l.log, "agc agent: "+format+"\n", args...)
+	if l.log == nil {
+		return
 	}
+
+	l.logMu.Lock()
+	defer l.logMu.Unlock()
+
+	fmt.Fprintf(l.log, "agc agent: "+format+"\n", args...)
 }
 
 func (l *homeLoop) clock() time.Time {
@@ -184,6 +202,7 @@ func (l *homeLoop) run(ctx context.Context) error {
 
 	l.role = info.Agent.Role
 	idle := parseIdle(info.Idle)
+	limit := turnsLimit(info.Turns)
 
 	sessions, err := loadSessionStore(l.dir)
 	if err != nil {
@@ -214,6 +233,14 @@ func (l *homeLoop) run(ctx context.Context) error {
 	l.me = p
 	defer l.leave()
 
+	if l.repo != "" {
+		// Worktrees whose directory is gone (a new disk) are forgotten.
+		err = git(ctx, l.repo, "worktree", "prune")
+		if err != nil {
+			l.logf("%s", ez.ErrorMessage(err))
+		}
+	}
+
 	if l.joined != nil {
 		err = l.joined(p)
 		if err != nil {
@@ -239,7 +266,10 @@ func (l *homeLoop) run(ctx context.Context) error {
 		l.logf("and the replies to its threads in %s", strings.Join(info.Asked, ", "))
 	}
 
-	lastTurn := l.clock()
+	// Leaving waits for the turns still running (defers run last first).
+	runner := newTurnRunner(l.take, l.clock, limit)
+	defer runner.wait()
+
 	lastFailure := ""
 	delay := homeRetryMin
 
@@ -254,20 +284,29 @@ func (l *homeLoop) run(ctx context.Context) error {
 		} else {
 			info = fresh
 			idle = parseIdle(info.Idle)
+			limit = turnsLimit(info.Turns)
+			runner.setLimit(ctx, limit)
 		}
 
-		quiet := l.clock().Sub(lastTurn)
-		if quiet >= idle {
+		// Quiet counts from the end of the last turn, and the VM never
+		// sleeps under a running turn.
+		busy := runner.active()
+		quiet := l.clock().Sub(runner.lastEnd())
+		if quiet >= idle && !busy {
 			return l.sleep(ctx, quiet)
 		}
 
 		channels := l.waitChannels(info)
 		if len(channels) == 0 {
 			l.logf("the agent reads no channel")
-			return l.sleep(ctx, quiet)
+			runner.wait()
+			return l.sleep(ctx, l.clock().Sub(runner.lastEnd()))
 		}
 
-		timeout := min(agentWaitTimeout, idle-quiet)
+		timeout := agentWaitTimeout
+		if !busy {
+			timeout = min(timeout, idle-quiet)
+		}
 
 		res, err := l.wait(ctx, channels, cursor, timeout)
 		if ctx.Err() != nil {
@@ -298,14 +337,20 @@ func (l *homeLoop) run(ctx context.Context) error {
 
 		turns := l.plan(ctx, res.Messages, since)
 		for _, t := range turns {
-			l.take(ctx, t)
-			lastTurn = l.clock()
+			runner.dispatch(ctx, t)
 		}
 
+		// The cursor moves once the batch is dispatched, not answered: a
+		// VM that dies mid-turn loses that turn (ADR 0016 item 7).
 		cursor = res.Messages[len(res.Messages)-1].ID
 		err = l.saveCursor(cursor)
 		if err != nil {
 			l.logf("cannot save the cursor: %s", ez.ErrorMessage(err))
+		}
+
+		if limit == 1 {
+			// One at a time: answer the batch before waiting again.
+			runner.wait()
 		}
 	}
 }
@@ -378,7 +423,7 @@ func (l *homeLoop) isAnswer(m msgmodels.Message, root int64, since time.Time) bo
 		return false
 	}
 
-	head, ok := l.heads[root]
+	head, ok := l.head(root)
 	if !ok {
 		return false
 	}
@@ -388,10 +433,40 @@ func (l *homeLoop) isAnswer(m msgmodels.Message, root int64, since time.Time) bo
 
 // remember keeps m's parent and who posted it.
 func (l *homeLoop) remember(m msgmodels.Message) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.parents == nil {
+		l.parents = map[int64]int64{}
+	}
+	if l.heads == nil {
+		l.heads = map[int64]msgmodels.Message{}
+	}
+
 	l.parents[m.ID] = parentOf(m)
 
 	m.Body = ""
 	l.heads[m.ID] = m
+}
+
+// head is the message id as remember kept it.
+func (l *homeLoop) head(id int64) (msgmodels.Message, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	m, ok := l.heads[id]
+
+	return m, ok
+}
+
+// parent is the id the message id replies to, as remember kept it.
+func (l *homeLoop) parent(id int64) (int64, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	parent, ok := l.parents[id]
+
+	return parent, ok
 }
 
 // isContext reports whether m, not a turn, is another agent's plain post
@@ -414,10 +489,6 @@ func (l *homeLoop) isContext(m msgmodels.Message, since time.Time) bool {
 // context and shown with the next turn in its thread. A reply in a thread
 // the agent started is a turn in any channel (isAnswer).
 func (l *homeLoop) plan(ctx context.Context, messages []msgmodels.Message, since time.Time) []homeTurn {
-	if l.heads == nil {
-		l.heads = map[int64]msgmodels.Message{}
-	}
-
 	for _, m := range messages {
 		l.remember(m)
 	}
@@ -485,7 +556,7 @@ func parentOf(m msgmodels.Message) int64 {
 func (l *homeLoop) root(ctx context.Context, m msgmodels.Message) int64 {
 	id := m.ID
 	for depth := 0; depth < maxThreadDepth; depth++ {
-		parent, ok := l.parents[id]
+		parent, ok := l.parent(id)
 		if !ok {
 			parent, ok = l.fetchParent(ctx, m.Channel, id)
 			if !ok {
@@ -517,8 +588,9 @@ func (l *homeLoop) fetchParent(ctx context.Context, channel string, id int64) (i
 
 // take runs one turn and posts the answer as a reply to the thread's
 // root. A new thread (or main's first turn ever) starts a session on the
-// brief; a known one resumes. A failing harness is reported in the
-// thread.
+// brief; a known one resumes. A thread's harness runs in its worktree
+// when the home has a clone. A failing harness is reported in the thread.
+// Turns of different threads call it at once (turnRunner).
 func (l *homeLoop) take(ctx context.Context, t homeTurn) {
 	session := l.sessions.Get(t.key)
 
@@ -534,13 +606,18 @@ func (l *homeLoop) take(ctx context.Context, t homeTurn) {
 		prompt = threadPrompt(t.records, t.channel, t.root)
 	}
 
+	worktree := l.threadWorktree(ctx, t, session)
+	if worktree != "" {
+		prompt += worktreeLine(worktree, l.repo)
+	}
+
 	if session == "" {
 		prompt = l.brief + "\n\n---\n\n" + prompt
 	}
 
 	l.logf("turn on %s with %d new message(s)", t.key, len(t.records))
 
-	answer, next, err := l.harness.Run(ctx, prompt, session)
+	answer, next, err := l.harness.Run(withHarnessDir(ctx, worktree), prompt, session)
 	if next != "" && next != session {
 		saveErr := l.sessions.Set(t.key, next)
 		if saveErr != nil {

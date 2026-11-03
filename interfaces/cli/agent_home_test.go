@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,6 +27,8 @@ type homeHarness struct {
 	turns   []homeHarnessTurn
 	answers map[int]string
 	failAt  map[int]bool
+	// dirs is the directory each turn ran in, "" for the loop's own.
+	dirs []string
 }
 
 type homeHarnessTurn struct {
@@ -35,6 +38,7 @@ type homeHarnessTurn struct {
 
 func (h *homeHarness) Run(ctx context.Context, prompt string, session string) (string, string, error) {
 	h.turns = append(h.turns, homeHarnessTurn{session: session, prompt: prompt})
+	h.dirs = append(h.dirs, harnessDir(ctx))
 	n := len(h.turns)
 
 	next := session
@@ -65,6 +69,8 @@ type homePost struct {
 // one batch per call; when it runs out it cancels the loop, or, with
 // idle set, advances the clock by the timeout and returns nothing.
 type fakeHomeMessenger struct {
+	// mu guards everything below against the turns running at once.
+	mu       sync.Mutex
 	agent    msgclient.AgentResponse
 	script   [][]msgmodels.Message
 	stored   map[int64]msgmodels.Message
@@ -82,6 +88,9 @@ type fakeHomeMessenger struct {
 	// strict rejects a wait naming a channel messaging's check rejects,
 	// as the home socket does.
 	strict bool
+	// onWait, when set, runs at the start of wait n (from 1), unlocked.
+	onWait func(n int)
+	waited int
 }
 
 func (m *fakeHomeMessenger) Join(ctx context.Context, name string) (*msgmodels.Participant, error) {
@@ -89,6 +98,9 @@ func (m *fakeHomeMessenger) Join(ctx context.Context, name string) (*msgmodels.P
 }
 
 func (m *fakeHomeMessenger) Leave(ctx context.Context, participantID string) (*httpapi.LeaveResponse, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.left = append(m.left, participantID)
 
 	return &httpapi.LeaveResponse{ParticipantID: participantID, Left: true}, nil
@@ -103,6 +115,9 @@ func (m *fakeHomeMessenger) AskReply(ctx context.Context, participantID, channel
 }
 
 func (m *fakeHomeMessenger) store(channel, body string, replyTo *int64, question bool) *msgmodels.Message {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.nextID++
 
 	post := homePost{channel: channel, body: body, question: question}
@@ -115,6 +130,9 @@ func (m *fakeHomeMessenger) store(channel, body string, replyTo *int64, question
 }
 
 func (m *fakeHomeMessenger) Read(ctx context.Context, channel string, after int64, limit int) (*httpapi.MessagesResponse, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	found, ok := m.stored[after+1]
 	if !ok || found.Channel != channel {
 		return &httpapi.MessagesResponse{Messages: []msgmodels.Message{}}, nil
@@ -124,6 +142,18 @@ func (m *fakeHomeMessenger) Read(ctx context.Context, channel string, after int6
 }
 
 func (m *fakeHomeMessenger) WaitChannels(ctx context.Context, channels []string, after int64, timeout time.Duration) (*httpapi.MessagesResponse, error) {
+	m.mu.Lock()
+	m.waited++
+	n := m.waited
+	m.mu.Unlock()
+
+	if m.onWait != nil {
+		m.onWait(n)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.waits = append(m.waits, fmt.Sprintf("%s after %d", strings.Join(channels, ","), after))
 	m.timeouts = append(m.timeouts, timeout)
 
@@ -159,12 +189,18 @@ func (m *fakeHomeMessenger) WaitChannels(ctx context.Context, channels []string,
 }
 
 func (m *fakeHomeMessenger) Agent(ctx context.Context) (*msgclient.AgentResponse, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	agent := m.agent
 
 	return &agent, nil
 }
 
 func (m *fakeHomeMessenger) Sleep(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.slept = true
 
 	return nil
@@ -192,6 +228,9 @@ func newHomeLoop(t *testing.T, msg *fakeHomeMessenger, harness *homeHarness) (*h
 		brief:   "# Reviewer\n",
 		dir:     t.TempDir(),
 		now: func() time.Time {
+			msg.mu.Lock()
+			defer msg.mu.Unlock()
+
 			return clock
 		},
 	}
@@ -225,7 +264,7 @@ func TestHomeLoopTakesOneTurnPerThread(t *testing.T) {
 	msg := &fakeHomeMessenger{
 		cancel: cancel,
 		nextID: 100,
-		agent:  msgclient.AgentResponse{Agent: msgclient.AgentView{Name: "reviewer-1", Role: "reviewer"}, Channels: []string{"#dm", "#b"}, Idle: "15m"},
+		agent:  msgclient.AgentResponse{Agent: msgclient.AgentView{Name: "reviewer-1", Role: "reviewer"}, Channels: []string{"#dm", "#b"}, Idle: "15m", Turns: 1},
 		// 5 replies to 3, which starts the thread; neither is in a batch.
 		stored: map[int64]msgmodels.Message{
 			3: homeMsg(3, "#b", "alice", 0, "old root"),

@@ -1081,7 +1081,7 @@ func TestHomeSocketServesTheAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Agent.Name != "reviewer-1" || got.Idle != "20m" || !reflect.DeepEqual(got.Channels, []string{"#reviewer-1", "#review-42"}) || len(got.Asked) != 0 {
+	if got.Agent.Name != "reviewer-1" || got.Idle != "20m" || got.Turns != DefaultTurns || !reflect.DeepEqual(got.Channels, []string{"#reviewer-1", "#review-42"}) || len(got.Asked) != 0 {
 		t.Fatalf("GET /agent = %+v", got)
 	}
 
@@ -1280,5 +1280,32 @@ func TestShippedTemplatesLoad(t *testing.T) {
 	}
 	if !reflect.DeepEqual(designer.Sandbox.Secrets, []string{"GITHUB_TOKEN"}) || !strings.Contains(designer.Instructions, "## When a task you manage delivers") {
 		t.Fatalf("designer = %+v", designer)
+	}
+
+	// Both run three threads at once and merge from a detached worktree.
+	for _, tmpl := range []*Template{reviewer, designer} {
+		if tmpl.Turns != 3 {
+			t.Fatalf("turns = %d, want 3", tmpl.Turns)
+		}
+		if !strings.Contains(tmpl.Instructions, "git checkout --detach origin/<base>") || !strings.Contains(tmpl.Instructions, "git push origin HEAD:<base>") || strings.Contains(tmpl.Instructions, "review/<task>") {
+			t.Fatalf("the merge steps do not work from a detached worktree:\n%s", tmpl.Instructions)
+		}
+	}
+}
+
+func TestTemplateTurns(t *testing.T) {
+	cases := map[int]int{0: DefaultTurns, 1: 1, 8: 8}
+	for turns, want := range cases {
+		got, err := Template{Turns: turns}.TurnsLimit()
+		if err != nil || got != want {
+			t.Errorf("turns %d: %d, %v, want %d", turns, got, err, want)
+		}
+	}
+
+	for _, turns := range []int{-1, 9} {
+		err := Template{Turns: turns}.Validate()
+		if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), "between 1 and 8") {
+			t.Errorf("turns %d: %v, want EINVALID", turns, err)
+		}
 	}
 }

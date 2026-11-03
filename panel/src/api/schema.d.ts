@@ -2269,6 +2269,8 @@ export interface components {
             last_active_at: string | null;
             /** @description The template's sandbox.skills, read on every request; empty when it names none or cannot be read (ADR 0016 item 2). */
             skills: string[];
+            /** @description How many turns of different threads its home runs at once: the template's turns, read on every request, 3 when it sets none or cannot be read (ADR 0016 items 2 and 7). GET /agent on the home's socket carries it too. */
+            turns: number;
             /** Format: date-time */
             created_at: string;
         };

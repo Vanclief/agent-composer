@@ -102,6 +102,7 @@ func agentCommand() *cli.Command {
 					&cli.StringFlag{Name: "owner", Usage: "Messaging name of the task's owner, who may post /accept and /reject"},
 					&cli.StringFlag{Name: "agent", Usage: "Persistent agent to run as, in its home sandbox (default $AGC_AGENT when no task is given)"},
 					&cli.StringFlag{Name: "sessions", Usage: "With --agent, directory of the sessions and cursor files (the kept volume)", Value: defaultHarnessDir},
+					&cli.StringFlag{Name: "repo", Usage: "With --agent, the home's clone, where each thread gets its own git worktree (default the current directory when it is the top of a git repository)"},
 				},
 				Action: agentRun,
 			},
@@ -173,12 +174,22 @@ func agentHomeRun(c *cli.Context, name string) error {
 		return err
 	}
 
+	repo := c.String("repo")
+	if repo == "" {
+		// The home's job runs in its clone (sandboxes.workDir).
+		cwd, err := os.Getwd()
+		if err == nil {
+			repo = homeRepo(c.Context, cwd)
+		}
+	}
+
 	loop := &homeLoop{
 		harness: harness,
 		msg:     newMsgClient(),
 		name:    name,
 		brief:   string(brief),
 		dir:     c.String("sessions"),
+		repo:    repo,
 		log:     os.Stdout,
 		joined: func(p *msgmodels.Participant) error {
 			return saveMsgState(msgState{ParticipantID: p.ID, Name: p.Name})
@@ -461,11 +472,14 @@ func newAgentHarness(harness string, model string, effort string) (agentHarness,
 	return nil, ez.New(ez.EINVALID, "agc agent run supports --harness claude_code or codex_cli, not "+harness, nil)
 }
 
-// runHarness runs name with args in the current directory. stderr goes to
+// runHarness runs name with args in the directory withHarnessDir put in
+// ctx, else the current one (Claude Code's and Codex's tools run in the
+// process's directory). stderr goes to
 // this process's stderr, the terminal log, as well as into the error; a
 // harness that says nothing on stderr is quoted from stdout.
 func runHarness(ctx context.Context, name string, args []string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = harnessDir(ctx)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

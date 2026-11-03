@@ -23,6 +23,13 @@ import (
 // when its template does not say.
 const DefaultIdle = 15 * time.Minute
 
+// DefaultTurns is how many turns of different threads the home loop runs
+// at once when the template does not say; MaxTurns bounds it.
+const (
+	DefaultTurns = 3
+	MaxTurns     = 8
+)
+
 // roleRegex is a role: a template's file name without .yaml, in any case.
 var roleRegex = regexp.MustCompile(`^[A-Za-z0-9]+([_-][A-Za-z0-9]+)*$`)
 
@@ -38,6 +45,9 @@ type Template struct {
 	Sandbox task.Sandbox `yaml:"sandbox"`
 	// Idle is a Go duration, 15m when empty.
 	Idle string `yaml:"idle"`
+	// Turns is how many turns of different threads run at once, 1..8,
+	// DefaultTurns when 0; 1 answers one thread after the other.
+	Turns int `yaml:"turns"`
 	// Reads are channel patterns the agent watches besides its own: a
 	// channel name, a glob on it, or * for every channel.
 	Reads []string `yaml:"reads"`
@@ -101,6 +111,19 @@ func (t Template) IdleDuration() (time.Duration, error) {
 	return idle, nil
 }
 
+// TurnsLimit is the template's turns, DefaultTurns when unset.
+func (t Template) TurnsLimit() (int, error) {
+	if t.Turns == 0 {
+		return DefaultTurns, nil
+	}
+
+	if t.Turns < 1 || t.Turns > MaxTurns {
+		return 0, ez.New(ez.EINVALID, fmt.Sprintf("turns %d is not between 1 and %d", t.Turns, MaxTurns), nil)
+	}
+
+	return t.Turns, nil
+}
+
 // Validate checks what can be checked before a wake.
 func (t Template) Validate() error {
 	if t.Harness != "" {
@@ -116,6 +139,11 @@ func (t Template) Validate() error {
 	}
 
 	_, err = t.IdleDuration()
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
+	_, err = t.TurnsLimit()
 	if err != nil {
 		return ez.Wrap(err)
 	}

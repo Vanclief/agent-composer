@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/vanclief/ez"
 )
@@ -34,8 +35,10 @@ func taskSessionKey(name string) string {
 
 // sessionStore is the sessions file: load it once, Get from memory, Set
 // writes through. Every key is optional and nobody owns the whole file.
+// It is safe for concurrent callers: the home loop's turns run at once.
 type sessionStore struct {
 	path     string
+	mu       sync.Mutex
 	sessions map[string]string
 }
 
@@ -76,12 +79,20 @@ func readSessions(path string) (map[string]string, error) {
 
 // Get is the session saved under key, empty when there is none.
 func (s *sessionStore) Get(key string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	return s.sessions[key]
 }
 
 // Set saves id under key. It reads the file again first, so keys another
-// loop wrote since the load are kept, then replaces it atomically.
+// loop wrote since the load are kept, then replaces it atomically; one
+// lock around the read, merge and write keeps concurrent Sets in one
+// process from losing each other's keys.
 func (s *sessionStore) Set(key string, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	current, err := readSessions(s.path)
 	if err == nil {
 		for k, v := range current {
@@ -94,10 +105,17 @@ func (s *sessionStore) Set(key string, id string) error {
 
 	s.sessions[key] = id
 
-	return s.Save()
+	return s.save()
 }
 
 // Save writes the store to its file.
 func (s *sessionStore) Save() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.save()
+}
+
+func (s *sessionStore) save() error {
 	return writeJSONFile(s.path, s.sessions)
 }

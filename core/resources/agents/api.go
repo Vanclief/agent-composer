@@ -173,7 +173,11 @@ type AgentView struct {
 	Conversations []Conversation `json:"conversations"`
 	// Skills are the template's sandbox.skills, read on every request;
 	// empty when the template names none or cannot be read.
-	Skills       []string   `json:"skills"`
+	Skills []string `json:"skills"`
+	// Turns is how many turns of different threads its home runs at once,
+	// the template's turns read on every request; DefaultTurns when the
+	// template cannot be read.
+	Turns        int        `json:"turns"`
 	LastActiveAt *time.Time `json:"last_active_at"`
 	CreatedAt    time.Time  `json:"created_at"`
 }
@@ -300,10 +304,17 @@ func (api *API) viewWith(ctx context.Context, record *agent.Agent, state string)
 	}
 
 	skills := []string{}
+	turns := DefaultTurns
 
 	tmpl, err := LoadTemplate(api.dir, record.Role, api.rules)
 	if err == nil && len(tmpl.Sandbox.Skills) > 0 {
 		skills = tmpl.Sandbox.Skills
+	}
+	if err == nil {
+		limit, limitErr := tmpl.TurnsLimit()
+		if limitErr == nil {
+			turns = limit
+		}
 	}
 
 	return &AgentView{
@@ -320,6 +331,7 @@ func (api *API) viewWith(ctx context.Context, record *agent.Agent, state string)
 		Tasks:         agentTasks,
 		Conversations: conversations,
 		Skills:        skills,
+		Turns:         turns,
 		LastActiveAt:  lastActive,
 		CreatedAt:     record.CreatedAt,
 	}, nil
