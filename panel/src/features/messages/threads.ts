@@ -10,6 +10,8 @@ export type Threads = {
   // A top-level message's replies, oldest first.
   replies: (id: number) => Message[]
   byID: Map<number, Message>
+  // The id of the top-level message a loaded message's thread hangs from.
+  rootOf: (id: number) => number
 }
 
 const NONE: Message[] = []
@@ -48,5 +50,5 @@ export function buildThreads(messages: Message[]): Threads {
       replies.set(r, [m])
     }
   }
-  return { top, replies: (id) => replies.get(id) ?? NONE, byID }
+  return { top, replies: (id) => replies.get(id) ?? NONE, byID, rootOf: (id) => rootOf.get(id) ?? id }
 }

@@ -22,6 +22,7 @@ import { AcceptActions, QuestionBody } from './QuestionParts'
 import { parseQuestion } from './questionShape'
 import { useSend } from './send'
 import { clock, exact, relative } from './time'
+import { WillAnswer } from './WillAnswer'
 
 // The reserved participant agc posts as (ADR 0009).
 export const AGC = 'agc'
@@ -152,6 +153,7 @@ export function MessageRow({ message, first, inThread }: { message: Message; fir
         {first && <Header message={message} time={false} />}
         {message.body.trim() !== '' && <MessageBody body={message.body} />}
         <MessageImages images={message.images} />
+        <WillAnswer message={message} inThread={inThread} />
         {replies.length > 0 && <ThreadFooter message={message} replies={replies} />}
       </div>
       {!inThread && <ReplyAction id={message.id} />}
@@ -202,54 +204,59 @@ const statusIcons = {
 
 // A compact muted line, not a chat bubble. The instructions collapse to
 // "Instructions" until expanded.
-export function SystemLine({ message }: { message: Message }) {
+export function SystemLine({ message, inThread }: { message: Message; inThread?: boolean }) {
   const kind = systemKind(message.body)
   const [open, setOpen] = useState(false)
   const StatusIcon = kind in statusIcons ? statusIcons[kind as keyof typeof statusIcons] : undefined
   return (
-    <div
-      data-testid="message"
-      data-message-id={message.id}
-      className="group relative flex gap-2 rounded-md px-1 py-0.5 text-sm text-muted-foreground"
-    >
-      <div data-slot="stamp" className="flex w-11 shrink-0 justify-end pt-px">
-        <RelativeTime iso={message.created_at} className="text-xs" />
-      </div>
+    <>
       <div
-        data-testid="system-line"
-        data-system={kind}
-        title={`#${message.id}`}
-        className="flex min-w-0 flex-1 items-start gap-1.5"
+        data-testid="message"
+        data-message-id={message.id}
+        className="group relative flex gap-2 rounded-md px-1 py-0.5 text-sm text-muted-foreground"
       >
-        <span data-testid="author" className="sr-only">
-          @{message.from}
-        </span>
-        <AgcMark />
-        {StatusIcon && <StatusIcon aria-hidden data-status-icon={kind} className="mt-0.5 size-3.5 shrink-0" />}
-        {kind === 'instructions' ? (
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <button
-              type="button"
-              aria-expanded={open}
-              onClick={() => setOpen(!open)}
-              className="flex w-fit items-center gap-1 font-medium hover:text-foreground"
-            >
-              <ChevronRight aria-hidden className={cn('size-3.5 transition-transform', open && 'rotate-90')} />
-              <conceptIcons.brief aria-hidden className="size-3.5" />
-              Instructions
-            </button>
-            {open && (
-              <MarkdownText
-                body={message.body}
-                className="rounded-md border border-border bg-zinc-50 p-3 text-foreground dark:bg-zinc-900/60"
-              />
-            )}
-          </div>
-        ) : (
-          <MarkdownText body={message.body} className="flex-1 text-sm leading-5" />
-        )}
+        <div data-slot="stamp" className="flex w-11 shrink-0 justify-end pt-px">
+          <RelativeTime iso={message.created_at} className="text-xs" />
+        </div>
+        <div
+          data-testid="system-line"
+          data-system={kind}
+          title={`#${message.id}`}
+          className="flex min-w-0 flex-1 items-start gap-1.5"
+        >
+          <span data-testid="author" className="sr-only">
+            @{message.from}
+          </span>
+          <AgcMark />
+          {StatusIcon && <StatusIcon aria-hidden data-status-icon={kind} className="mt-0.5 size-3.5 shrink-0" />}
+          {kind === 'instructions' ? (
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <button
+                type="button"
+                aria-expanded={open}
+                onClick={() => setOpen(!open)}
+                className="flex w-fit items-center gap-1 font-medium hover:text-foreground"
+              >
+                <ChevronRight aria-hidden className={cn('size-3.5 transition-transform', open && 'rotate-90')} />
+                <conceptIcons.brief aria-hidden className="size-3.5" />
+                Instructions
+              </button>
+              {open && (
+                <MarkdownText
+                  body={message.body}
+                  className="rounded-md border border-border bg-zinc-50 p-3 text-foreground dark:bg-zinc-900/60"
+                />
+              )}
+            </div>
+          ) : (
+            <MarkdownText body={message.body} className="flex-1 text-sm leading-5" />
+          )}
+        </div>
       </div>
-    </div>
+      <div className="pl-14">
+        <WillAnswer message={message} inThread={inThread} />
+      </div>
+    </>
   )
 }
 
@@ -321,7 +328,7 @@ function AnswerBox({ question }: { question: Message }) {
 // Answer box until someone other than the asker replies; then "Answered by
 // @name" and that first answer. At most 72ch wide, from the message
 // column's left edge.
-export function QuestionCard({ message }: { message: Message }) {
+export function QuestionCard({ message, inThread }: { message: Message; inThread?: boolean }) {
   const { threads, questions } = useChannel()
   const replies = threads.replies(message.id)
   const answer = answerOf(message, replies)
@@ -366,6 +373,7 @@ export function QuestionCard({ message }: { message: Message }) {
         ) : (
           <AnswerBox question={message} />
         )}
+        <WillAnswer message={message} inThread={inThread} />
         {replies.length > 0 && <ThreadFooter message={message} replies={replies} />}
       </div>
       <ReplyAction id={message.id} />
