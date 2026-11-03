@@ -42,7 +42,7 @@ export type AgentView = {
   state: AgentState
   // The home sandbox's name; null before the first wake.
   home: string | null
-  // The rules it follows, in template order; the mock does not serve them yet.
+  // The rules it follows, in template order.
   rules?: AgentRule[]
   // The tasks it manages.
   tasks: AgentTask[]
@@ -50,19 +50,12 @@ export type AgentView = {
   conversations: AgentConversation[]
   last_active_at: string | null
   created_at: string
-  // What it is made of. Optional until the Go side (agent-effort,
-  // sandbox-skills, agent-rules) ships them; read with a fallback.
+  // What it is made of (agent-effort, sandbox-skills); optional so an
+  // older server still renders, read with a fallback.
   // effort: low, medium, high, xhigh or max; empty is the harness default.
   effort?: string
   // Skill names; GET /api/skills/{name} has each one's text.
   skills?: string[]
-  rules?: AgentRule[]
-}
-
-export type AgentRule = {
-  id: string
-  // The rule's sentence.
-  rule: string
 }
 
 export type CreateAgentRequest = {
