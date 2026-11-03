@@ -46,8 +46,11 @@ func (api *API) startSandboxListener(record *taskmodels.Sandbox, owner *taskmode
 		return messaging.Caller{Task: owner.Name, Grants: grants}, nil
 	}
 
+	pieces := newShotPieces()
+
 	return api.startListener(record.Name, caller, func(mux *http.ServeMux) {
-		mux.HandleFunc("POST "+httpapi.DeliverPath, api.serveDeliver(owner.Name))
+		mux.HandleFunc("POST "+httpapi.ShotPiecePath, api.serveShotPiece(record.Name, pieces))
+		mux.HandleFunc("POST "+httpapi.DeliverPath, api.serveDeliver(record.Name, owner.Name, pieces))
 	})
 }
 
@@ -133,7 +136,10 @@ func (api *API) OnDeliver(deliver DeliverFunc) {
 	api.mu.Unlock()
 }
 
-func (api *API) serveDeliver(taskName string) http.HandlerFunc {
+// serveDeliver serves agc task deliver for the task called taskName on
+// the socket of the sandbox called sandboxName; the shots its report
+// names and the request does not carry come from pieces.
+func (api *API) serveDeliver(sandboxName string, taskName string, pieces *shotPieces) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		api.mu.Lock()
 		deliver := api.deliver
@@ -146,17 +152,23 @@ func (api *API) serveDeliver(taskName string) http.HandlerFunc {
 
 		var req httpapi.DeliverRequest
 
+		done := watchBody(r, sandboxName)
 		err := httpapi.DecodeBodyLimit(w, r, &req, httpapi.MaxDeliverBytes)
+		done()
 		if err != nil {
 			httpapi.WriteError(w, err)
 			return
 		}
 
-		view, err := deliver(r.Context(), taskName, req.Summary, req.Report, req.Files)
+		files := pieces.take(req.Report, req.Files)
+
+		view, err := deliver(r.Context(), taskName, req.Summary, req.Report, files)
 		if err != nil {
 			httpapi.WriteError(w, err)
 			return
 		}
+
+		pieces.clear()
 
 		httpapi.WriteJSON(w, http.StatusOK, view)
 	}

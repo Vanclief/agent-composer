@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
+	"slices"
 	"strings"
 
 	cli "github.com/urfave/cli/v2"
@@ -680,8 +682,19 @@ func taskDeliver(c *cli.Context) error {
 			return ez.New(ez.EINVALID, "inside a sandbox agc task deliver delivers only its own task, "+sandboxTask, nil)
 		}
 
+		// A body over 256 KiB never crosses vsock, so the shots go first,
+		// in pieces, and the delivery takes them from there (ADR 0010,
+		// "Delivery report").
+		msg := newMsgClient()
+		for _, label := range slices.Sorted(maps.Keys(files)) {
+			err = msg.SendShot(c.Context, label, files[label])
+			if err != nil {
+				return err
+			}
+		}
+
 		view := &tasks.TaskView{}
-		err = newMsgClient().Deliver(c.Context, summary, report, files, view)
+		err = msg.Deliver(c.Context, summary, report, nil, view)
 		if err != nil {
 			return err
 		}

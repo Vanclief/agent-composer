@@ -29,6 +29,14 @@ able to read or disrupt everything.
    there is no token to bootstrap and no way for a Task to reach another
    Task's socket. The same handlers are mounted on agc's normal REST API for
    the control panel and the `host` executor.
+   The limit that holds on this transport is not agc's body caps but
+   microsandbox's vsock forwarder, measured from a guest on 2026-11-03: it
+   gives the guest 256 KiB of credit (262144 bytes) and returns it only on
+   packets the host sends back, so one request body larger than that stops
+   there for good, and it loses a single `write()` larger than 32 KiB. The
+   guest's `agc` writes at most 16 KiB at a time and sends a delivery's
+   shots in pieces (ADR 0010, "Delivery report"); `agc msg post --image`
+   from a sandbox is bound by the same 256 KiB.
 
 3. **Every Task gets its own channel, and that is all it can reach by
    default.** Creating Task `review-42` creates `#review-42`. Agents in that

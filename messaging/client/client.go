@@ -3,14 +3,16 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/vanclief/ez"
@@ -22,6 +24,10 @@ import (
 type Client struct {
 	BaseURL string
 	HTTP    *http.Client
+	// Stall is how long a request may make no progress before it fails
+	// (DefaultStall when zero): sending its body, and, for a delivery and
+	// its shots, waiting for the answer. It never ends a long poll.
+	Stall time.Duration
 }
 
 func (c *Client) Join(ctx context.Context, name string) (*msgmodels.Participant, error) {
@@ -215,13 +221,53 @@ func (c *Client) Questions(ctx context.Context, channel string, open bool, forNa
 // JSON as is (nil for none), and files, the PNGs of its shots under their
 // labels, on a sandbox's socket (agc task deliver, ADR 0010 item 2,
 // "Delivery report") and decodes the task's view into out.
+//
+// Over vsock a body larger than 256 KiB never gets through, so a sandbox
+// sends its shots first with SendShot and calls Deliver with no files.
 func (c *Client) Deliver(ctx context.Context, summary string, report json.RawMessage, files map[string][]byte, out any) error {
-	err := c.do(ctx, http.MethodPost, httpapi.DeliverPath, nil, httpapi.DeliverRequest{Summary: summary, Report: report, Files: files}, out)
+	err := c.doWatched(ctx, http.MethodPost, httpapi.DeliverPath, nil, httpapi.DeliverRequest{Summary: summary, Report: report, Files: files}, out, true)
 	if err != nil {
 		return ez.Wrap(err)
 	}
 
 	return nil
+}
+
+// SendShot sends the PNG of the shot called label in pieces of at most
+// httpapi.MaxShotPieceBytes, for the delivery that follows to take (ADR
+// 0010, "Delivery report").
+func (c *Client) SendShot(ctx context.Context, label string, data []byte) error {
+	path := strings.Replace(httpapi.ShotPiecePath, "{label}", url.PathEscape(label), 1)
+
+	offset := 0
+	for {
+		end := min(offset+httpapi.MaxShotPieceBytes, len(data))
+
+		call := request{
+			method:      http.MethodPost,
+			path:        path + "?offset=" + strconv.Itoa(offset),
+			body:        data[offset:end],
+			contentType: "image/png",
+			step:        fmt.Sprintf("sending shot %s (%s, piece at %s) to %s", label, Size(len(data)), Size(offset), c.where()),
+			watchAnswer: true,
+		}
+
+		res := &httpapi.ShotPieceResponse{}
+
+		err := c.send(ctx, call, res)
+		if err != nil {
+			return ez.Wrap(err)
+		}
+
+		if res.Size != end {
+			return ez.New(ez.EINTERNAL, fmt.Sprintf("the socket has %d bytes of shot %s, %d were sent", res.Size, label, end), nil)
+		}
+
+		offset = end
+		if offset >= len(data) {
+			return nil
+		}
+	}
 }
 
 // AgentView is the agent row as GET /agent returns it; only the fields
@@ -316,32 +362,108 @@ func taskPath(pattern string, name string) string {
 // do sends one request and decodes the JSON answer into out. Error
 // answers come back as ez errors with the code the status maps to.
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, in, out any) error {
-	target := strings.TrimSuffix(c.BaseURL, "/") + path
+	return c.doWatched(ctx, method, path, query, in, out, false)
+}
+
+// doWatched is do; watchAnswer also fails the request when its answer
+// does not come within the stall time once the body is sent.
+func (c *Client) doWatched(ctx context.Context, method, path string, query url.Values, in, out any, watchAnswer bool) error {
+	target := path
 	if query != nil {
 		target += "?" + query.Encode()
 	}
 
-	var body io.Reader
+	call := request{method: method, path: target, watchAnswer: watchAnswer}
+
 	if in != nil {
 		encoded, err := json.Marshal(in)
 		if err != nil {
 			return ez.Wrap(err)
 		}
 
-		body = bytes.NewReader(encoded)
+		call.body = encoded
+		call.contentType = "application/json"
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, target, body)
+	return c.send(ctx, call, out)
+}
+
+// request is one call to the messaging API: path holds the query, body
+// is sent as contentType when it is not nil.
+type request struct {
+	method      string
+	path        string
+	body        []byte
+	contentType string
+	// step says what the request does, for the error when it stalls;
+	// empty, "sending <size> to <where>".
+	step        string
+	watchAnswer bool
+}
+
+// DefaultStall is how long a request may make no progress, sending its
+// body or, when watched, waiting for its answer, before it fails.
+const DefaultStall = 60 * time.Second
+
+func (c *Client) stall() time.Duration {
+	if c.Stall <= 0 {
+		return DefaultStall
+	}
+
+	return c.Stall
+}
+
+// where names the server in errors: the sandbox socket over vsock, else
+// its URL.
+func (c *Client) where() string {
+	if strings.HasPrefix(c.BaseURL, vsockBaseURL) {
+		return "the sandbox socket"
+	}
+
+	return c.BaseURL
+}
+
+// vsockBaseURL is the BaseURL of a client that dials vsock; its host is
+// ignored.
+const vsockBaseURL = "http://vsock"
+
+func (c *Client) send(ctx context.Context, call request, out any) error {
+	target := strings.TrimSuffix(c.BaseURL, "/") + call.path
+
+	watched, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+
+	body := &progress{data: call.body, last: time.Now()}
+
+	var reader io.Reader
+	if call.body != nil {
+		reader = body
+	}
+
+	req, err := http.NewRequestWithContext(watched, call.method, target, reader)
 	if err != nil {
 		return ez.Wrap(err)
 	}
 
-	if in != nil {
-		req.Header.Set("Content-Type", "application/json")
+	if call.body != nil {
+		req.ContentLength = int64(len(call.body))
 	}
 
+	if call.contentType != "" {
+		req.Header.Set("Content-Type", call.contentType)
+	}
+
+	done := make(chan struct{})
+	go c.watch(watched, cancel, body, call, done)
+
 	res, err := c.httpClient().Do(req)
+	close(done)
 	if err != nil {
+		var stalled *stallError
+		if errors.As(context.Cause(watched), &stalled) {
+			return ez.New(ez.EUNAVAILABLE, stalled.what, err)
+		}
+
 		return ez.New(ez.EUNAVAILABLE, "agc messaging is unreachable at "+c.BaseURL, err)
 	}
 	defer res.Body.Close()
@@ -361,4 +483,103 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	}
 
 	return nil
+}
+
+// stallError is the cause of a request the watchdog cancelled: what
+// says which step made no progress.
+type stallError struct {
+	what string
+}
+
+func (e *stallError) Error() string {
+	return e.what
+}
+
+// watch cancels the request when its body stops being read for the
+// stall time, or, when call.watchAnswer, when the answer does not come
+// for the stall time after the body is all read. done closes once the
+// answer's headers are in.
+func (c *Client) watch(ctx context.Context, cancel context.CancelCauseFunc, body *progress, call request, done <-chan struct{}) {
+	stall := c.stall()
+
+	tick := time.NewTicker(max(stall/20, 10*time.Millisecond))
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-done:
+			return
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+
+		sent, last := body.state()
+
+		sending := sent < len(call.body)
+		if !sending && !call.watchAnswer {
+			continue
+		}
+
+		if time.Since(last) < stall {
+			continue
+		}
+
+		step := call.step
+		if step == "" {
+			step = "sending " + Size(len(call.body)) + " to " + c.where()
+		}
+
+		what := fmt.Sprintf("%s: no progress for %s, %s of %s sent (%s %s)", step, stall, Size(sent), Size(len(call.body)), call.method, call.path)
+		if !sending {
+			what = fmt.Sprintf("%s: no answer for %s after the whole body was sent (%s %s)", step, stall, call.method, call.path)
+		}
+
+		cancel(&stallError{what: what})
+
+		return
+	}
+}
+
+// progress is a request body that records how much of it the transport
+// has read, and when it last read.
+type progress struct {
+	mu   sync.Mutex
+	data []byte
+	sent int
+	last time.Time
+}
+
+func (p *progress) Read(b []byte) (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.sent >= len(p.data) {
+		return 0, io.EOF
+	}
+
+	n := copy(b, p.data[p.sent:])
+	p.sent += n
+	p.last = time.Now()
+
+	return n, nil
+}
+
+func (p *progress) state() (int, time.Time) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	return p.sent, p.last
+}
+
+// Size writes a byte count for people: "1.6 MB", "192.0 KB", "512 B".
+func Size(n int) string {
+	switch {
+	case n >= 1000*1000:
+		return fmt.Sprintf("%.1f MB", float64(n)/1e6)
+	case n >= 1000:
+		return fmt.Sprintf("%.1f KB", float64(n)/1e3)
+	default:
+		return fmt.Sprintf("%d B", n)
+	}
 }

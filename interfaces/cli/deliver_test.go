@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -267,14 +268,31 @@ func TestTaskDeliverReadsAReportAfterTheSummary(t *testing.T) {
 }
 
 // Inside a sandbox, --report with shots reads each shot's PNG from its
-// file and sends it with the delivery, in files under its label; a shot
-// whose file cannot be read stops agc before anything is sent.
+// file and sends it first, raw, to the socket's shot route under its
+// label, then the delivery with no files: no body over 256 KiB crosses
+// vsock (ADR 0010, "Delivery report"). A shot whose file cannot be read
+// stops agc before anything is sent.
 func TestTaskDeliverSendsShotsOverTheSocket(t *testing.T) {
 	var got httpapi.DeliverRequest
-	sent := 0
+	var paths []string
+	pieces := map[string][]byte{}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sent++
+		paths = append(paths, r.URL.RequestURI())
+
+		if strings.HasPrefix(r.URL.Path, "/task/shots/") {
+			label := strings.TrimPrefix(r.URL.Path, "/task/shots/")
+			data, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Error(err)
+			}
+			if r.Header.Get("Content-Type") != "image/png" {
+				t.Errorf("shot %s sent as %q", label, r.Header.Get("Content-Type"))
+			}
+			pieces[label] = append(pieces[label], data...)
+			httpapi.WriteJSON(w, http.StatusOK, httpapi.ShotPieceResponse{Label: label, Size: len(pieces[label])})
+			return
+		}
 
 		err := json.NewDecoder(r.Body).Decode(&got)
 		if err != nil {
@@ -308,11 +326,15 @@ func TestTaskDeliverSendsShotsOverTheSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if sent != 1 || string(got.Report) != report || len(got.Files) != 2 {
-		t.Fatalf("sent %d, request %+v", sent, got)
+	want := []string{"/task/shots/after?offset=0", "/task/shots/before?offset=0", "/task/deliver"}
+	if strings.Join(paths, " ") != strings.Join(want, " ") {
+		t.Fatalf("paths %q, want %q", paths, want)
 	}
-	if !bytes.Equal(got.Files["before"], before) || !bytes.Equal(got.Files["after"], after) {
-		t.Fatalf("files %q", got.Files)
+	if string(got.Report) != report || len(got.Files) != 0 {
+		t.Fatalf("request %+v", got)
+	}
+	if !bytes.Equal(pieces["before"], before) || !bytes.Equal(pieces["after"], after) {
+		t.Fatalf("shots %q", pieces)
 	}
 
 	missing := `{"criteria":[{"met":"yes"}],"shots":[{"label":"after","file":"` + filepath.Join(dir, "nope.png") + `"}]}`
@@ -320,7 +342,7 @@ func TestTaskDeliverSendsShotsOverTheSocket(t *testing.T) {
 	if ez.ErrorCode(err) != ez.EINVALID || !strings.Contains(ez.ErrorMessage(err), "cannot read the shot after") {
 		t.Fatalf("err %v", err)
 	}
-	if sent != 1 {
-		t.Fatalf("a shot that cannot be read must not be sent: sent %d", sent)
+	if len(paths) != 3 {
+		t.Fatalf("a shot that cannot be read must not be sent: requests %q", paths)
 	}
 }
