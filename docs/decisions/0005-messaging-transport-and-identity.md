@@ -153,6 +153,7 @@ anyone else only a question or a thread reply (amended 2026-11-03, task `agent-i
 Why: the inbox is what the person reads to find what waits on them, and notes ("merged", "never mind", "conflicts")
 drowned the questions there (22 unread, 12 of them notes). Notes go in `#<task>`, which the manager and the owner read anyway.
 The rule `inbox-holds-only-questions` covers what the server cannot see: whether a question really needs that person.
+When a task is accepted, agc closes the manager's accept questions about it in the owner's inbox, and its agents' questions in `#<task>`, with a `Closed: <task> accepted by <who>.` reply (ADR 0010 item 4), so done tasks leave no open questions in the Inbox.
 
 ## Archived channels
 

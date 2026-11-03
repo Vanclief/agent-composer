@@ -59,3 +59,36 @@ func (api *API) archiveChannels(ctx context.Context, keep time.Duration) ([]stri
 
 	return done, nil
 }
+
+// closeDoneQuestions closes, as accept does, the open agent questions in
+// #<task> of every done task and its manager's accept questions in the
+// owner's inbox (ADR 0010 "Accept"), so the questions of tasks accepted
+// before accept closed them, or whose close failed, go too. It rides the
+// collector's tick, one log line per question closed.
+func (api *API) closeDoneQuestions(ctx context.Context) ([]messaging.Closed, error) {
+	tasks, err := taskmodels.ListTasks(ctx, api.db)
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	closings := []messaging.Closing{}
+	for i := range tasks {
+		record := &tasks[i]
+		if record.DoneAt == nil {
+			continue
+		}
+
+		closing := messaging.Closing{Task: record.Name, Manager: record.Manager, Owner: record.Owner, By: record.AcceptedBy}
+		closings = append(closings, closing)
+	}
+
+	closed, err := api.msg.CloseQuestions(ctx, closings)
+	for _, c := range closed {
+		log.Info().Str("task", c.Task).Str("channel", c.Channel).Int64("question", c.Question).Str("from", c.From).Msg("messaging: closed question")
+	}
+	if err != nil {
+		return closed, ez.Wrap(err)
+	}
+
+	return closed, nil
+}

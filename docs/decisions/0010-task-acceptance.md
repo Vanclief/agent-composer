@@ -55,6 +55,18 @@ task itself persists so what happened can be read later and a VM revived.
    accepted without having been delivered (the owner closing it by hand);
    `delivered_at` stays null then.
 
+   Accepting also closes the task's questions (added 2026-11-03, task
+   `close-done-questions`): agc replies `Closed: <task> accepted by <who>.`
+   in the thread of every open question in `#<task>` and of every open
+   question in `#<owner>` from the task's manager whose body starts with
+   `Accept <task>?` or `<task>:`, which answers each for
+   `GET /api/msg/questions` (`messaging.Service.CloseQuestions`); no column
+   or state is added. A question a person asked is never closed, and
+   rejecting closes nothing. The collector's tick in `agc rest` (ADR 0008
+   "Garbage collection") does the same for every done task, logging a line
+   per question, so questions left open by an accept before this change,
+   or by a failed reply, close on the next tick.
+
 5. **Rejecting sends it back.** `POST /api/tasks/{id}/reject` with
    `{ "by", "why" }`, or `/reject <why>` in `#<task>` by the manager or the
    owner, clears `delivered_at`, posts "Rejected by <name>: <why>" in the
