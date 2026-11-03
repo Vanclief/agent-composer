@@ -306,9 +306,8 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   cards Home (`/compute/<home>`, or "Not woken yet"), Tasks
   (`/tasks/<name>`, status verbatim), Conversations (`/messages/<channel>`,
   the agent's inbox `#<name>` first) and Identity.
-- What an agent is made of (contract of agent-effort, sandbox-skills and
-  agent-rules, hand-typed and optional on `AgentView` until the Go side
-  ships): `effort` (`low medium high xhigh max`, empty for the harness
+- What an agent is made of (agent-effort, sandbox-skills and agent-rules;
+  optional on `AgentView` so an older server still renders): `effort` (`low medium high xhigh max`, empty for the harness
   default), `skills` (names) and `rules` (`{id, rule}`). Identity shows the
   model with the effort as a dim mono chip (`agent-model`, `agent-effort`,
   none when empty); the list's model readout adds `· <effort>` and nothing
