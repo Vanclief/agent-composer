@@ -16,18 +16,18 @@ import { FollowToggle } from './FollowToggle'
 import { useMyName } from './identity'
 import { isDMOf } from './unread'
 
-const INBOX_LINE = 'Your inbox: agents and tasks escalate here'
+const INBOX_LINE = 'Asks: questions and escalations waiting on you'
 
-// #<me> (ADR 0009 item 5): the ordinary channel view under one line.
+// #<me> (ADR 0009 item 5), shown as Asks: the ordinary channel view under one line.
 function InboxHeader() {
-  const Icon = conceptIcons.inbox
+  const Icon = conceptIcons.question
   return (
     <p
       data-testid="inbox-header"
       className="flex items-center gap-1.5 border-b border-border px-4 py-2 text-xs text-muted-foreground"
     >
       <span data-slot="channel-tab" className="inline-flex items-center gap-1.5">
-        <Icon aria-hidden className={cn('size-3.5', conceptColors.inbox.text)} />
+        <Icon aria-hidden className={cn('size-3.5', conceptColors.question.text)} />
         {INBOX_LINE}
       </span>
     </p>
@@ -56,7 +56,7 @@ export function MessagesPage() {
   const me = useMyName()
   const inbox = slug === me
   const dm = channel ? isDMOf(channel, me) : false
-  usePageTitle(channel ? `${inbox ? 'Inbox' : dm ? 'Direct' : 'Messages'} ${channel}` : 'Messages')
+  usePageTitle(channel ? `${inbox ? 'Asks' : dm ? 'Direct' : 'Messages'} ${channel}` : 'Messages')
 
   useEffect(() => {
     if (channel) {
@@ -71,7 +71,7 @@ export function MessagesPage() {
           key={channel}
           channel={channel}
           header={inbox ? <InboxHeader /> : <FollowHeader channel={channel} dm={dm} />}
-          emptyReason={inbox ? 'No messages yet: agents and tasks escalate here' : undefined}
+          emptyReason={inbox ? 'Nothing asked yet: questions waiting on you arrive here' : undefined}
         />
       ) : (
         <div className="flex flex-1 items-center justify-center p-6">

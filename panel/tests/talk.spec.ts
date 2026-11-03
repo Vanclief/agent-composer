@@ -1,4 +1,4 @@
-// Talk as an inbox: #franco pinned first, unread badges from the
+// Talk as an inbox: Asks (#franco) pinned first, unread badges from the
 // read state in localStorage, and toasts only for my inbox and mentions.
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 
@@ -32,13 +32,16 @@ async function openLive(page: Page, path: string) {
   await expect(page.getByTestId('live-status')).toHaveAttribute('data-state', 'connected')
 }
 
-test('the inbox is pinned first with its unread badge in the mention color', async ({ page }) => {
+test('Asks is pinned first with the question icon, its unread badge in the mention color', async ({ page }) => {
   await page.goto('/panel/messages')
   const rows = page.getByTestId('channel-rows').getByRole('link')
   await expect(rows.first()).toHaveAttribute('data-testid', 'inbox-row')
   const inbox = page.getByTestId('inbox-row')
-  await expect(inbox).toContainText('Inbox')
+  await expect(inbox).toHaveText(/^Asks/)
+  await expect(inbox.locator(':scope > svg.lucide-message-circle-question-mark')).toBeVisible()
   await expect(inbox).toHaveAttribute('href', '/panel/messages/franco')
+  // The open questions for me, wherever they were asked.
+  await expect(inbox.getByTestId('question-badge')).toHaveText(/^\d+$/)
   const badge = inbox.getByTestId('unread-badge')
   await expect(badge).toHaveText(/^\d+$/)
   expect(Number(await badge.textContent())).toBeGreaterThanOrEqual(3)
@@ -62,8 +65,8 @@ test('opening the inbox clears its badge, and it stays read after a reload', asy
   await expect(inbox.getByTestId('unread-badge')).toHaveText('2')
   await inbox.click()
   await expect(page).toHaveURL(new RegExp(`/panel/messages/${me}$`))
-  await expect(page.getByTestId('page-title')).toHaveText(`Inbox #${me}`)
-  await expect(page.getByTestId('inbox-header')).toHaveText('Your inbox: agents and tasks escalate here')
+  await expect(page.getByTestId('page-title')).toHaveText(`Asks #${me}`)
+  await expect(page.getByTestId('inbox-header')).toHaveText('Asks: questions and escalations waiting on you')
   await expect(page.getByText(escalation)).toBeVisible()
   await expect(inbox.getByTestId('unread-badge')).toHaveCount(0)
   await expect(inbox).toHaveAttribute('data-unread', 'false')
@@ -121,7 +124,7 @@ test('a message to a followed channel bumps only its badge, with no toast', asyn
   await expect(row.getByTestId('unread-badge')).toHaveAttribute('data-mention', 'false')
   await expect(row).toHaveAttribute('data-unread', 'true')
   await expect(
-    page.getByRole('group', { name: 'Other' }).getByRole('link', { name: new RegExp(`^${channel}\\b`) }),
+    page.getByRole('group', { name: 'Channels' }).getByRole('link', { name: new RegExp(`^${channel}\\b`) }),
   ).toBeVisible()
   await page.waitForTimeout(500)
   await expect(page.locator(`[data-testid="toast-message"][data-id="${message.id}"]`)).toHaveCount(0)
@@ -159,17 +162,43 @@ test('a mention of me in another channel toasts; my own messages never do', asyn
   await expect(page.locator('[data-testid="toast-message"]').filter({ hasText: text })).toHaveCount(0)
 })
 
-test('the Tasks group lists task channels and Other the rest', async ({ page }) => {
+test('Channels lists task channels first, then the rest, and ends with Browse', async ({ page }) => {
   // #review-42 is followed because franco posted there and an agent asks
   // @franco a question there (agc's opening mention alone would not);
-  // #releases once opened.
+  // #releases once opened, so it is newer yet comes after the task.
   await page.goto('/panel/messages/releases')
-  const tasks = page.getByRole('group', { name: 'Tasks' })
-  const other = page.getByRole('group', { name: 'Other' })
-  await expect(tasks.getByRole('link', { name: /^#review-42\b/ })).toBeVisible()
-  await expect(other.getByRole('link', { name: /^#releases\b/ })).toBeVisible()
-  await expect(tasks.getByRole('link', { name: /^#releases\b/ })).toHaveCount(0)
-  // The inbox is its own row, in neither group.
-  await expect(tasks.getByRole('link', { name: /#franco/ })).toHaveCount(0)
-  await expect(other.getByRole('link', { name: /#franco/ })).toHaveCount(0)
+  const channels = page.getByRole('group', { name: 'Channels' })
+  const rows = channels.getByRole('link')
+  await expect(rows.first()).toHaveAttribute('data-channel', '#review-42')
+  await expect(channels.locator('[data-channel="#releases"]')).toBeVisible()
+  const order = await channels
+    .locator('[data-channel]')
+    .evaluateAll((els) => els.map((e) => e.getAttribute('data-channel')))
+  expect(order.indexOf('#review-42')).toBeLessThan(order.indexOf('#releases'))
+  await expect(rows.last()).toHaveAttribute('data-testid', 'browse-link')
+  // Asks is its own row, and agent inboxes and DMs are in DMs.
+  for (const c of ['#franco', '#designer-1', '@franco/yc-pitch']) {
+    await expect(channels.locator(`[data-channel="${c}"]`)).toHaveCount(0)
+  }
+})
+
+test("DMs list a followed agent's inbox as @agent with its state light, and my DMs", async ({ page }) => {
+  // franco wrote to designer-1 in #designer-1, so it is followed.
+  await page.goto('/panel/messages')
+  const dms = page.getByRole('group', { name: 'DMs' })
+  const designer = dms.getByTestId('agent-dm-row').and(dms.locator('[data-channel="#designer-1"]'))
+  await expect(designer).toContainText('@designer-1')
+  await expect(designer).not.toContainText('#designer-1')
+  const led = designer.getByTestId('status-led')
+  await expect(led).toHaveAttribute('data-status', 'awake')
+  await expect(led).toHaveAttribute('aria-label', 'awake')
+  await expect(designer.getByTestId('unread-badge')).toHaveText('1')
+  await expect(dms.getByTestId('dm-row').and(dms.locator('[data-channel="@franco/yc-pitch"]'))).toBeVisible()
+  // Newest activity first: designer-1's answer is the last seeded post.
+  await expect(dms.getByRole('link').first()).toHaveAttribute('data-channel', '#designer-1')
+
+  await designer.click()
+  await expect(page).toHaveURL(/\/panel\/messages\/designer-1$/)
+  await expect(page.getByTestId('message-list').getByText('Sketch is up')).toBeVisible()
+  await expect(designer.getByTestId('unread-badge')).toHaveCount(0)
 })
