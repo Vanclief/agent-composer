@@ -22,7 +22,7 @@ const color = conceptColors.sandbox
 
 export function SandboxPage() {
   const { name = '' } = useParams()
-  usePageTitle(name)
+  usePageTitle('', name)
   const navigate = useNavigate()
   const sandbox = useSandbox(name)
   const task = useTask(sandbox.data?.task)

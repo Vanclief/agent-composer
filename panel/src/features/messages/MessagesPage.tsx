@@ -56,7 +56,7 @@ export function MessagesPage() {
   const me = useMyName()
   const inbox = slug === me
   const dm = channel ? isDMOf(channel, me) : false
-  usePageTitle(channel ? `${inbox ? 'Asks' : dm ? 'Direct' : 'Messages'} ${channel}` : 'Messages')
+  usePageTitle(channel ? (inbox ? 'Asks' : dm ? 'Direct' : 'Messages') : 'Messages', channel)
 
   useEffect(() => {
     if (channel) {

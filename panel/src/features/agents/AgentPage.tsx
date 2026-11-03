@@ -31,7 +31,7 @@ const color = conceptColors.agent
 
 export function AgentPage() {
   const { name = '' } = useParams()
-  usePageTitle(name)
+  usePageTitle('', name)
   const agent = useAgent(name)
 
   if (agent.isPending) {

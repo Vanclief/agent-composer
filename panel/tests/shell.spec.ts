@@ -5,12 +5,12 @@ test('/ redirects to tasks on a first visit', async ({ page }) => {
   await page.goto('/panel/')
   await expect(page).toHaveURL(/\/panel\/tasks$/)
   await expect(page.getByTestId('page-title')).toHaveText('Tasks')
-  await expect(page.getByTestId('page-area')).toHaveText('Work /')
+  await expect(page.getByTestId('page-area')).toHaveText('Work')
 
   await page.getByRole('link', { name: 'Channels', exact: true }).click()
   await expect(page).toHaveURL(/\/panel\/messages$/)
   await expect(page.getByTestId('page-title')).toHaveText('Messages')
-  await expect(page.getByTestId('page-area')).toHaveText('Talk /')
+  await expect(page.getByTestId('page-area')).toHaveText('Talk')
 })
 
 test('unknown paths go to tasks', async ({ page }) => {
@@ -58,7 +58,7 @@ test('the route highlights its page without hiding the other groups', async ({ p
   await expect(header(page, 'think')).toHaveAttribute('data-current', 'false')
   await group(page, 'Think').getByRole('link', { name: 'Rules' }).click()
   await expect(page).toHaveURL(/\/panel\/think\/rules$/)
-  await expect(page.getByTestId('page-area')).toHaveText('Think /')
+  await expect(page.getByTestId('page-area')).toHaveText('Think')
   await expect(group(page, 'Work').getByRole('link')).toHaveText([/^Tasks(\d+)?$/, 'Compute', 'Agents', 'Accounts'])
 })
 
@@ -167,4 +167,31 @@ test('with no stored name the panel is the server owner from GET /api/defaults',
   await page.goto('/panel/tasks')
   await expect(page.getByTestId('me')).toHaveText('@ada')
   await expect(page.getByTestId('me')).not.toHaveAttribute('data-mismatch')
+})
+
+test('the area tab in the top bar links to the area', async ({ page }) => {
+  await page.goto('/panel/messages/designer-1')
+  const area = page.getByTestId('page-area')
+  await expect(area).toHaveText('Talk')
+  await expect(area).toHaveCSS('text-transform', 'uppercase')
+  await expect(page.getByTestId('page-title')).toHaveText('Messages #designer-1')
+  // The identifier is monospace and keeps its case; the page word is shouted.
+  const id = page.getByTestId('page-title').locator('.page-id')
+  await expect(id).toHaveText('#designer-1')
+  await expect(id).toHaveCSS('text-transform', 'none')
+  await expect(page.getByTestId('page-area-chevron')).toBeVisible()
+  await expect(page.locator('main > header')).not.toContainText('/')
+  await area.click()
+  await expect(page).toHaveURL(/\/panel\/messages\/browse$/)
+  await expect(page.getByTestId('page-title')).toHaveText('Browse channels')
+
+  await page.goto('/panel/tasks/review-42')
+  await expect(page.getByTestId('page-area')).toHaveText('Work')
+  await page.getByTestId('page-area').click()
+  await expect(page).toHaveURL(/\/panel\/tasks$/)
+
+  await page.goto('/panel/think/rules')
+  await expect(page.getByTestId('page-area')).toHaveText('Think')
+  await page.getByTestId('page-area').click()
+  await expect(page).toHaveURL(/\/panel\/think\/beliefs$/)
 })

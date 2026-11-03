@@ -21,38 +21,42 @@ type NavItem = { to: string; label: string; concept: Concept }
 
 // Each area's pages. A route belongs to the area one of whose pages shares
 // its first path segment (/tasks/review-42 is Work). concept colors the
-// area's header.
-export const AREAS: Record<Area, { label: string; icon: LucideIcon; concept: Concept; nav: NavItem[] }> = {
-  think: {
-    label: 'Think',
-    icon: conceptIcons.think,
-    concept: 'think',
-    nav: [
-      { to: '/think/beliefs', label: 'Beliefs', concept: 'belief' },
-      { to: '/think/decisions', label: 'Decisions', concept: 'decision' },
-      { to: '/think/rules', label: 'Rules', concept: 'rule' },
-      { to: '/think/actions', label: 'Actions', concept: 'action' },
-      { to: '/think/evidence', label: 'Evidence', concept: 'evidence' },
-    ],
-  },
-  work: {
-    label: 'Work',
-    icon: conceptIcons.work,
-    concept: 'task',
-    nav: [
-      { to: '/tasks', label: 'Tasks', concept: 'task' },
-      { to: '/compute', label: 'Compute', concept: 'sandbox' },
-      { to: '/agents', label: 'Agents', concept: 'agent' },
-      { to: '/accounts', label: 'Accounts', concept: 'account' },
-    ],
-  },
-  talk: {
-    label: 'Talk',
-    icon: conceptIcons.message,
-    concept: 'message',
-    nav: [{ to: '/messages', label: 'Channels', concept: 'message' }],
-  },
-}
+// area's header; home is where the area's tab in the top bar leads.
+export const AREAS: Record<Area, { label: string; icon: LucideIcon; concept: Concept; home: string; nav: NavItem[] }> =
+  {
+    think: {
+      label: 'Think',
+      icon: conceptIcons.think,
+      concept: 'think',
+      home: '/think/beliefs',
+      nav: [
+        { to: '/think/beliefs', label: 'Beliefs', concept: 'belief' },
+        { to: '/think/decisions', label: 'Decisions', concept: 'decision' },
+        { to: '/think/rules', label: 'Rules', concept: 'rule' },
+        { to: '/think/actions', label: 'Actions', concept: 'action' },
+        { to: '/think/evidence', label: 'Evidence', concept: 'evidence' },
+      ],
+    },
+    work: {
+      label: 'Work',
+      icon: conceptIcons.work,
+      concept: 'task',
+      home: '/tasks',
+      nav: [
+        { to: '/tasks', label: 'Tasks', concept: 'task' },
+        { to: '/compute', label: 'Compute', concept: 'sandbox' },
+        { to: '/agents', label: 'Agents', concept: 'agent' },
+        { to: '/accounts', label: 'Accounts', concept: 'account' },
+      ],
+    },
+    talk: {
+      label: 'Talk',
+      icon: conceptIcons.message,
+      concept: 'message',
+      home: '/messages/browse',
+      nav: [{ to: '/messages', label: 'Channels', concept: 'message' }],
+    },
+  }
 
 export const AREA_ORDER = Object.keys(AREAS) as Area[]
 

@@ -22,7 +22,7 @@ export function TaskPage() {
   const task = useTask(name)
   const actions = useTaskActions()
   const navigate = useNavigate()
-  usePageTitle(task.data?.title ?? name)
+  usePageTitle(task.data?.title ?? '', task.data?.title ? undefined : name)
 
   if (!task.data) {
     if (task.error) {

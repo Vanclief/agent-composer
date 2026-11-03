@@ -168,6 +168,52 @@
 .dark h1[data-testid='page-title'] > * {
   color: oklch(0.1 0 0 / 65%);
 }
+/* An identifier in the title (#designer-1, @franco/yc-pitch, review-42):
+   monospace, lowercase as sent, a step smaller. */
+.dark h1[data-testid='page-title'] > .page-id {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+/* The area before the title: an outlined tab cut at the top right and the
+   bottom left, linking to the area's first page. The frame is the link's
+   background, the fill a pseudo-element one pixel inside. */
+.dark main > header a[data-testid='page-area'] {
+  --cut: 8px;
+  position: relative;
+  isolation: isolate;
+  padding: 3px 14px 2px 12px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: var(--eva);
+  background: var(--eva);
+  outline: none;
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+}
+.dark main > header a[data-testid='page-area']::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  background: var(--sidebar);
+  clip-path: polygon(0 0, calc(100% - var(--cut) + 1px) 0, 100% calc(var(--cut) - 1px), 100% 100%, calc(var(--cut) - 1px) 100%, 0 calc(100% - var(--cut) + 1px));
+}
+.dark main > header a[data-testid='page-area']:hover::before {
+  background: linear-gradient(var(--eva-faint), var(--eva-faint)), var(--sidebar);
+}
+.dark main > header a[data-testid='page-area']:focus-visible {
+  background: var(--eva-cyan);
+}
+.dark main > header a[data-testid='page-area']:focus-visible::before {
+  inset: 2px;
+}
+.dark main > header [data-testid='page-area-chevron'] {
+  color: var(--eva-dim);
+}
 .dark [data-testid='live-status'],
 .dark [data-testid='me'] {
   color: var(--muted-foreground);
