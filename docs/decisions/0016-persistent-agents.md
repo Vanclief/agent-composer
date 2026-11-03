@@ -30,7 +30,9 @@ that mock a backend and settles what it left open.
 2. **Templates are files; the role is the template's name.** A template is
    `agents/<role>.yaml` under the agc home (`AGC_AGENTS_DIR` overrides, like
    the knowledge dir in ADR 0006): `harness`, `model`, `sandbox` (the spec
-   of ADR 0008, `disk` included), `idle` (default `15m`), `reads` (channel
+   of ADR 0008, `disk` included), `idle` (default `15m`), `turns` (how
+   many turns of different threads run at once, 1..8, default 3, item 7;
+   carried as `turns` on the agent view and in `GET /agent`), `reads` (channel
    patterns the agent watches besides its own; `main` lists `*`), `rules`
    (ids of rules in the knowledge dir of ADR 0006, checked on every read of
    the template, so an unknown id fails create and wake naming it and the
@@ -156,6 +158,36 @@ that mock a backend and settles what it left open.
    `main` may do with it, is ADR 0015. Merging two threads into one is not
    modeled: nothing here prevents it, and a thread's transcript is a file
    that can be read into another session later.
+
+   Turns of different threads run at once (task `home-parallel-turns`,
+   2026-11-03). The loop keeps waiting while turns run and hands each one
+   to its thread's queue (the session key, `<channel>:<root>` or `main`):
+   a thread's turns run in order, and a turn queued behind a running one
+   gets the messages that arrived meanwhile folded in, one prompt, so a
+   thread never runs two harness processes; different threads run
+   concurrently, at most the template's `turns` at a time, which the loop
+   reads from `GET /agent` every cycle like `idle` (`1` answers one batch
+   after the other, as before; an agc that sends no `turns` gets that
+   too). The cursor advances when a batch is dispatched, not answered: a
+   VM that dies mid-turn loses that turn, as a crash in the middle of a
+   turn always did, in exchange for not re-running every finished turn of
+   the batch on the next wake. Idle counts from the end of the last turn,
+   and the loop never sleeps while a turn runs. The sessions file is
+   written under one lock (read, merge, write), so concurrent turns keep
+   each other's keys. When the home has a repository (the loop's working
+   directory is the clone, `--repo` overrides), every thread but `main`
+   runs its harness in its own git worktree,
+   `/home/agent/threads/<channel without #>-<root>`, added with
+   `git worktree add --detach <path> HEAD` on the thread's first turn and
+   reused after (`git worktree prune` at loop start forgets the ones whose
+   directory is gone); its prompt says so in one line, and that branch
+   names are shared between threads, so a thread fetches, works detached or
+   on a branch named after itself and pushes `HEAD:<branch>`. Claude Code
+   and Codex run their tools in the process's directory, so the worktree is
+   where they work. A thread whose session started before it had a
+   worktree keeps the clone: Claude Code resumes a session only in the
+   directory it started in. `main` and a home without a repository run
+   where the loop runs.
 
 8. **An agent manages tasks; it does not do them.** An agent's tasks are the
    rows whose `manager` is the agent's name (ADR 0009), created by the agent
