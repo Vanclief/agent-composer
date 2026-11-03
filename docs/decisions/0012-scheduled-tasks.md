@@ -71,5 +71,9 @@ a task like any other and is out of scope here.
   `POST /api/schedules/{id}/run`, `GET /api/schedules/{id}/items`. CLI:
   `agc schedule create|list|show|run|enable|disable|delete`, local or
   against `AGC_SERVER`. Example: `docs/schedules/pr-reviews.yaml`.
+- `docs/schedules/pr-reviews.yaml` is the production review schedule
+  (`Vanclief/compose` first): each task, managed by `reviewer-1` with the
+  `pr-review` skill, posts the review itself as one comment with `gh` and
+  moves the pull request's label, replacing prwatch.
 - Every tick publishes `schedule.ran {schedule, created}` on the events bus
   (`GET /api/events`).

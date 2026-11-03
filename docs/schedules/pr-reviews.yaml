@@ -20,10 +20,46 @@ poll:
 task:
   title: Review {{.title}}
   brief: |
-    Review the pull request {{.url}} and post the review on it.
+    Review the pull request {{.url}} ({{.title}}) and post the review on it
+    as one comment. Nothing in our repository changes: the clone in the
+    sandbox is github.com/Vanclief/compose, the repository of the pull
+    request, and you only read it.
+
+    1. Claim it, so nobody else picks it up:
+       gh pr edit {{.url}} --remove-label ready-for-review --add-label reviewing
+    2. Review it with the pr-review skill. Read the description, base and
+       head with gh pr view {{.url}} and the change with gh pr diff {{.url}}.
+       Fetch the head and the base into the clone and compare them with
+       git diff <base>...<head>. Run the repository's existing checks on the
+       head when they run in the sandbox; say which you ran and which you
+       could not.
+    3. Write the skill's report to a file outside the clone (its first line
+       is "Reviewed <head> against <base>. Blockers: <x>. Should fix: <y>.
+       Scope: <paths>.") and post it as one comment:
+       gh pr comment {{.url}} --body-file <file>
+       Posting this comment is the task's step, not the skill's: the skill
+       itself publishes nothing.
+    4. Set the outcome label and always remove reviewing, with
+       gh pr edit {{.url}} --remove-label reviewing --add-label <outcome>:
+       - needs-human-review when the change touches auth, secrets, money,
+         data migrations or anything you cannot judge;
+       - else needs-work when there is a Blocker or a Should fix;
+       - else ready-for-merge: no actionable findings and the checks pass.
+    5. Deliver with agc task deliver "<the review's first line>" --report <file>:
+       the summary is the review's first line, changes.branch is empty
+       (nothing in our repository changes), and checks lists the comment's
+       URL and each check you ran on the head.
+
+    Never push to the pull request, never approve or request changes with
+    gh pr review (a comment only), and never edit files in the clone beyond
+    what the checks create.
   accept:
-    - a review of {{.url}} is posted
-  # manager: defaults to your messaging name (agc msg join) on create.
+    - a review comment by the agent is on {{.url}} and follows the pr-review skill's report format
+    - the label on {{.url}} is one of needs-work, ready-for-merge, needs-human-review, and neither ready-for-review nor reviewing remains
+    - the delivery's summary is the first line of the review posted on {{.url}}
+  manager: reviewer-1
+  owner: franco
   sandbox:
     repo: github.com/Vanclief/compose
     secrets: [GITHUB_TOKEN]
+    skills: [pr-review]
