@@ -43,7 +43,8 @@ export function RowBadges({ count, mention, questions }: { count: number; mentio
   )
 }
 
-// The Talk group header: every unread message and every question waiting.
+// The Talk group header: the open questions for me and the unread messages
+// in the channels I follow (useFollow), nothing else.
 export function TalkBadges({ count, mention }: { count: number; mention: boolean }) {
   const questions = useOpenQuestions()
   return <RowBadges count={count} mention={mention} questions={questions.total} />

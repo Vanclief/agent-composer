@@ -418,38 +418,57 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   "You are @test here, the server's owner is @franco".
 - **Sidebar** (`ChannelRows`), followed channels only: a pinned first row
   "Inbox" (inbox icon, `data-testid="inbox-row"`) for `#<me>`, shown even
-  before it has a message; then the groups "Direct" (my DMs, `data-testid="dm-row"`,
+  before it has a message, its badges every open question for me wherever
+  it was asked plus the inbox's unread; then the groups "Direct" (my DMs, `data-testid="dm-row"`,
   each `@<other>` with the task name dim; `<other>` is the newest participant
   neither me nor `agc`, else the task), "Tasks" (channels named after a task
   from `useTasks`) and "Other" (`role="group"`, `aria-label` the group name);
-  last a dim "Browse channels…" row (`data-testid="browse-link"`) to
+  Tasks and Other list newest activity first (highest `last_id`), at most 8
+  (`ROW_LIMIT`), then one dim "N more…" row (`data-testid="more-row"`) to
+  Browse; last a dim "Browse channels…" row (`data-testid="browse-link"`) to
   `/messages/browse`. Each row has an
   `UnreadBadge` (`data-testid="unread-badge"`, `data-mention`) and is bold
   while unread (`data-unread`); the badge is pink when an unread message
-  mentions `@<me>` (whole word). The Talk group header shows the total
-  (`area-badge-talk`), pink when any unread message mentions me, also
-  while Talk is collapsed.
+  mentions `@<me>` (whole word). The Talk group header (`area-badge-talk`)
+  shows only two counts, also while Talk is collapsed: the open questions
+  for me (`question-badge`) and the unread messages in the channels I follow
+  (inbox and DMs included; `unread-badge`). Never a channel's total
+  message count, never unread of an unfollowed channel.
 - **DMs:** a channel named `@<me>/<task>` is a direct message of mine (the
   backend's DM channels, `isDMOf` in `unread.ts`). Its page is titled
   "Direct @<me>/<task>". The mock seeds `@franco/yc-pitch` (one unread
   message from @pitcher) and `@franco/review-42` (read: franco answered last)
   and accepts `@<human>/<task>` names.
-- **Following** (`src/features/messages/follow.ts`, `useFollow()`):
-  localStorage `agc.panel.follow` maps a channel to `{ on, at }`, `at` being
-  the newest message id the decision covers. A channel is followed when I
-  opened it (`MessagesPage` and a task's Messages tab), or a message newer
-  than `at` is mine, is in my inbox or a DM of mine, or mentions `@<me>`
-  (`addressesMe` in `unread.ts`); those follow from `message.posted` (wired
-  in the shell) and from the unread scan. `#<me>` is always followed; a DM
-  is followed until unfollowed. Unfollow with the outlined "Following"
-  toggle (`FollowToggle`, `data-testid="follow-toggle"`) on the channel
-  header (`data-testid="channel-header"`) or a Browse row; it sets `at` to
-  the channel's last id, so only a newer mention or DM follows it again.
+- **Following** (`src/features/messages/follow.ts`, `useFollow()`, the
+  rule commented at its top): localStorage `agc.panel.follow` maps a
+  channel to `{ on, at, done }`, `at` being the newest message id the
+  decision covers. A channel follows itself only when I open it
+  (`MessagesPage` and a task's Messages tab) or post in it, a person
+  (`human`) posts there mentioning `@<me>`, or an agent asks me a question
+  (`kind: question` mentioning `@<me>`, or in my inbox or a DM of mine),
+  newer than `at` (`followsMe`); from `message.posted` (wired in the shell)
+  and from the unread scan. Nothing `agc` posts follows a channel (every
+  task's opening message names its owner), nor an agent's plain mention
+  (it still toasts). `#<me>` is always followed; a DM is followed until
+  unfollowed. When a task's status is `done` (tasks query, refreshed by
+  `task.done`) its channel is unfollowed once (`done: true`), unless an
+  open question for me waits there; opening it follows it again. Unfollow
+  with the outlined "Following" toggle (`FollowToggle`,
+  `data-testid="follow-toggle"`) on the channel header
+  (`data-testid="channel-header"`) or a Browse row; it sets `at` to the
+  channel's last id.
 - **Browse** (`BrowsePage`, `/messages/browse`): every channel as a flat row
-  (`data-testid="browse-row"`, `data-channel`): kind icon (inbox, DM,
-  task, other), name, kind, last activity (`browse-last`, from the newest
-  message, `queryKeys.lastMessage`) and the toggle ("Inbox: always",
-  disabled, on `#<me>`). The filter box filters by name as you type.
+  (`data-testid="browse-row"`, `data-channel`) in groups (`role="group"`,
+  `data-testid="browse-group"`, `data-group`): "Questions for you" (an open
+  question for me there), "Running tasks" (a task not `done`), "Done tasks"
+  (collapsed by default, `browse-group-toggle` with `aria-expanded`) and
+  "Other"; each header counts its rows, each group newest activity first.
+  A row: kind icon (inbox, DM, task, other), name, the task's `StatusPill`
+  (else the kind), last activity (`browse-last`, from the newest message,
+  `queryKeys.lastMessage`), unread and open-question badges and the toggle
+  ("Inbox: always", disabled, on `#<me>`). The filter box filters by name
+  as you type. Archived channels get their own group behind a toggle once
+  `GET /api/msg/channels` offers them; it does not yet.
 - **Read state** (`src/features/messages/unread.ts`, `useUnread()`,
   `markRead`): localStorage `agc.panel.read` maps `#channel` → last read
   message id. `ChannelView` (Talk page and a task's Messages tab) marks every
@@ -458,7 +477,7 @@ role?}`, hand-typed from the proposal and served only by the mock. Hooks:
   `message.posted` (which refreshes channels) bumps counts without a reload.
   A message of mine reads everything before it in that channel. A
   never-opened channel counts all its messages after my last one. The Talk
-  badge counts only followed channels, my DMs and unread mentions of me.
+  badge counts only followed channels (my inbox and DMs are followed).
 - **Notifications** (`src/features/messages/notifications.tsx`, wired next
   to the task ones in the shell): a top-right toast "Inbox" or "Mentioned
   you" or "Direct" (`data-testid="toast-message"`, `data-id`, `data-channel`) with the

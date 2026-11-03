@@ -2,9 +2,12 @@
 // (src/shell/layout.tsx). Only followed channels (follow.ts): Inbox (#<me>)
 // pinned first, even before it has a message; then Direct (my DMs,
 // @<me>/<task>), then Tasks (channels named after a task), then Other; last
-// "Browse channels…" to every channel. Each row has its unread badge, the
-// questions waiting for me (QuestionBadge), and is bold while unread.
-import { Compass, Lock } from 'lucide-react'
+// "Browse channels…" to every channel. Tasks and Other list the newest
+// activity first, at most ROW_LIMIT, then one "N more…" row to Browse. Each
+// row has its unread badge, the questions waiting for me (QuestionBadge),
+// and is bold while unread. The Inbox row counts every open question for me,
+// wherever it was asked (franco, 2026-11-02), plus the inbox's unread.
+import { Compass, Lock, MoreHorizontal } from 'lucide-react'
 import { NavLink } from 'react-router'
 
 import { useParticipants, useTasks } from '@/api/hooks'
@@ -17,6 +20,9 @@ import { channelPath, dmTask, useFollow } from './follow'
 import { RowBadges } from './QuestionBadge'
 import { useOpenQuestions } from './questions'
 import { type ChannelUnread } from './unread'
+
+// The most followed channels a group lists before its "N more…" row.
+export const ROW_LIMIT = 8
 
 function rowClass(isActive: boolean, unread: boolean) {
   return cn(
@@ -93,6 +99,23 @@ function DMRow({
   )
 }
 
+// The followed channels past ROW_LIMIT, one dim row to Browse.
+function MoreRow({ count, label }: { count: number; label: string }) {
+  return (
+    <li>
+      <NavLink
+        to="/messages/browse"
+        data-testid="more-row"
+        title={`${count} more followed ${label} channels in Browse`}
+        className={cn(rowClass(false, false), 'text-muted-foreground')}
+      >
+        <MoreHorizontal aria-hidden className="size-3.5 shrink-0" />
+        <span className="truncate">{count} more…</span>
+      </NavLink>
+    </li>
+  )
+}
+
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <li role="group" aria-label={label} data-testid="channel-group" className="mt-2">
@@ -111,7 +134,10 @@ export function ChannelRows() {
   const inboxUnread = unread.of(inbox)
 
   const taskNames = new Set((tasks.data ?? []).map((t) => `#${t.name}`))
-  const rest = unread.channels.filter((c) => c.channel !== inbox && following(c.channel))
+  // Newest activity first: message ids grow across every channel.
+  const rest = unread.channels
+    .filter((c) => c.channel !== inbox && following(c.channel))
+    .sort((a, b) => b.last_id - a.last_id)
   const direct = rest.filter((c) => c.channel.startsWith(`@${me}/`))
   const taskChannels = rest.filter((c) => taskNames.has(c.channel))
   const other = rest.filter((c) => !taskNames.has(c.channel) && !c.channel.startsWith(`@${me}/`))
@@ -129,7 +155,7 @@ export function ChannelRows() {
         >
           <InboxIcon aria-hidden className={cn('size-3.5 shrink-0', conceptColors.inbox.text)} />
           <span className="truncate">Inbox</span>
-          <RowBadges count={inboxUnread.count} mention={inboxUnread.mention} questions={questions.of(inbox).length} />
+          <RowBadges count={inboxUnread.count} mention={inboxUnread.mention} questions={questions.total} />
         </NavLink>
       </li>
       {channelsQuery.isPending ? (
@@ -158,7 +184,7 @@ export function ChannelRows() {
           )}
           {taskChannels.length > 0 && (
             <Group label="Tasks">
-              {taskChannels.map((c) => (
+              {taskChannels.slice(0, ROW_LIMIT).map((c) => (
                 <ChannelRow
                   key={c.channel}
                   channel={c.channel}
@@ -167,11 +193,12 @@ export function ChannelRows() {
                   questions={questions.of(c.channel).length}
                 />
               ))}
+              {taskChannels.length > ROW_LIMIT && <MoreRow count={taskChannels.length - ROW_LIMIT} label="task" />}
             </Group>
           )}
           {other.length > 0 && (
             <Group label="Other">
-              {other.map((c) => (
+              {other.slice(0, ROW_LIMIT).map((c) => (
                 <ChannelRow
                   key={c.channel}
                   channel={c.channel}
@@ -180,6 +207,7 @@ export function ChannelRows() {
                   questions={questions.of(c.channel).length}
                 />
               ))}
+              {other.length > ROW_LIMIT && <MoreRow count={other.length - ROW_LIMIT} label="other" />}
             </Group>
           )}
         </>
