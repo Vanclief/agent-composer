@@ -97,6 +97,7 @@ func newApp() *cli.App {
 			taskCommand(),
 			sandboxCommand(),
 			scheduleCommand(),
+			skillCommand(),
 			rulesCommand(),
 			beliefsCommand(),
 			evidenceCommand(),
@@ -396,7 +397,7 @@ func runServer(ctx context.Context, project string) error {
 	}
 
 	group, gctx := errgroup.WithContext(ctx)
-	app := restserver.New(gctx, stack.Controller, stack.HooksAPI, stack.WorkflowAPI, stack.TasksAPI, stack.SchedulesAPI, stack.KnowledgeAPI, stack.AgentsAPI, stack.AccountsAPI, stack.Messaging, stack.Events)
+	app := restserver.New(gctx, stack.Controller, stack.HooksAPI, stack.WorkflowAPI, stack.TasksAPI, stack.SchedulesAPI, stack.KnowledgeAPI, stack.SkillsAPI, stack.AgentsAPI, stack.AccountsAPI, stack.Messaging, stack.Events)
 
 	group.Go(func() error {
 		stack.StartScheduler(gctx)

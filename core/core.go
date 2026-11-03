@@ -18,6 +18,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/knowledge"
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/schedules"
+	"github.com/vanclief/agent-composer/core/resources/skills"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
 	"github.com/vanclief/agent-composer/messaging"
@@ -44,6 +45,8 @@ type Stack struct {
 	// scheduler (ADR 0012).
 	SchedulesAPI *schedules.API
 	KnowledgeAPI *knowledge.API
+	// SkillsAPI is the skills repository (ADR 0008 "Skills").
+	SkillsAPI *skills.API
 	// AgentsAPI is persistent agents (ADR 0016).
 	AgentsAPI *agents.API
 	// AccountsAPI is provider accounts and their defaults (ADR 0018).
@@ -149,6 +152,11 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 	// them (ADR 0016 item 2).
 	agentsAPI.SetRules(knowledgeAPI)
 
+	// The skills directory holds <name>/SKILL.md, the skills a spec names
+	// and agc writes into every sandbox it prepares (ADR 0008 "Skills").
+	skillsAPI := skills.NewAPI(SkillsDir(home))
+	sandboxesAPI.SetSkillsDir(skillsAPI.Dir())
+
 	accountsUsage := usage.NewPoller(usage.NoAccounts{}, secretsPath)
 
 	// Accounts are rows plus secrets.env lines; a running sandbox naming
@@ -166,11 +174,22 @@ func NewStack(rootCtx context.Context, opts StackOptions) (*Stack, error) {
 		TasksAPI:      tasksAPI,
 		SchedulesAPI:  schedulesAPI,
 		KnowledgeAPI:  knowledgeAPI,
+		SkillsAPI:     skillsAPI,
 		AgentsAPI:     agentsAPI,
 		AccountsAPI:   accountsAPI,
 		Events:        bus,
 		AccountsUsage: accountsUsage,
 	}, nil
+}
+
+// SkillsDir is the skills repository: AGC_SKILLS_DIR, else <home>/skills.
+func SkillsDir(home string) string {
+	dir := os.Getenv("AGC_SKILLS_DIR")
+	if dir == "" {
+		dir = filepath.Join(home, "skills")
+	}
+
+	return dir
 }
 
 // connectAccountsUsage makes poller list the accounts through api and read

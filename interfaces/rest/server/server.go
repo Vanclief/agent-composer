@@ -17,6 +17,7 @@ import (
 	"github.com/vanclief/agent-composer/core/resources/sandboxes"
 	"github.com/vanclief/agent-composer/core/resources/schedules"
 	settingsapi "github.com/vanclief/agent-composer/core/resources/settings"
+	skillsapi "github.com/vanclief/agent-composer/core/resources/skills"
 	"github.com/vanclief/agent-composer/core/resources/tasks"
 	workflowapi "github.com/vanclief/agent-composer/core/resources/workflow"
 	workflowconversations "github.com/vanclief/agent-composer/core/resources/workflow/conversations"
@@ -43,6 +44,8 @@ type Server struct {
 	SandboxesAPI  *sandboxes.API
 	SchedulesAPI  *schedules.API
 	KnowledgeAPI  *knowledgeapi.API
+	// SkillsAPI is the skills repository (ADR 0008 "Skills").
+	SkillsAPI *skillsapi.API
 	// TurnsAPI reads agent and sandbox turns from their volumes.
 	TurnsAPI  *agents.TurnsAPI
 	AgentsAPI *agents.API
@@ -53,7 +56,7 @@ type Server struct {
 	Events *events.Bus
 }
 
-func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API, tasksAPI *tasks.API, schedulesAPI *schedules.API, knowledgeAPI *knowledgeapi.API, agentsAPI *agents.API, accountsAPI *accounts.API, msg *messaging.Service, bus *events.Bus) *Server {
+func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.API, workflowAPI *workflowapi.API, tasksAPI *tasks.API, schedulesAPI *schedules.API, knowledgeAPI *knowledgeapi.API, skillsAPI *skillsapi.API, agentsAPI *agents.API, accountsAPI *accounts.API, msg *messaging.Service, bus *events.Bus) *Server {
 	if rootCtx == nil {
 		rootCtx = context.Background()
 	}
@@ -73,6 +76,7 @@ func New(rootCtx context.Context, ctrl *controller.Controller, hooksAPI *hooks.A
 		SandboxesAPI:  tasksAPI.Sandboxes,
 		SchedulesAPI:  schedulesAPI,
 		KnowledgeAPI:  knowledgeAPI,
+		SkillsAPI:     skillsAPI,
 		TurnsAPI:      agents.NewTurnsAPI(tasksAPI.Sandboxes.VolumeRootDir(), tasksAPI.Sandboxes),
 		AgentsAPI:     agentsAPI,
 		AccountsAPI:   accountsAPI,
@@ -319,6 +323,10 @@ func (s *Server) handleRequest(request requests.Request) (interface{}, error) {
 		return s.KnowledgeAPI.Doubt(request.GetContext(), nil, body)
 	case *knowledgeapi.ConflictsRequest:
 		return s.KnowledgeAPI.Conflicts(request.GetContext(), nil, body)
+	case *skillsapi.ListRequest:
+		return s.SkillsAPI.List(request.GetContext(), nil, body)
+	case *skillsapi.GetRequest:
+		return s.SkillsAPI.Get(request.GetContext(), nil, body)
 
 	default:
 		return nil, ez.New(ez.EINVALID, "Unsupported request type", nil)

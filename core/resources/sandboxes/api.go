@@ -25,6 +25,7 @@ import (
 	"github.com/vanclief/agent-composer/models/agent"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/secrets"
+	"github.com/vanclief/agent-composer/skills"
 	"github.com/vanclief/agent-composer/task"
 )
 
@@ -110,6 +111,25 @@ type API struct {
 	collecting sync.Mutex
 	// now is the clock, replaced in tests.
 	now func() time.Time
+
+	// skills is the skills repository the specs' skills come from, read
+	// on every allocate, start and prepare (ADR 0008 "Skills").
+	skills skills.Repo
+}
+
+// SetSkillsDir makes dir the skills repository: <dir>/<name>/SKILL.md.
+// Call it before allocating; until then a spec naming a skill is refused.
+func (api *API) SetSkillsDir(dir string) {
+	api.mu.Lock()
+	api.skills = skills.Repo{Dir: dir}
+	api.mu.Unlock()
+}
+
+func (api *API) skillsRepo() skills.Repo {
+	api.mu.Lock()
+	defer api.mu.Unlock()
+
+	return api.skills
 }
 
 // StatusEvent is the data of sandbox.status.

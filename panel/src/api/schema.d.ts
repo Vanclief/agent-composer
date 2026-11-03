@@ -1032,6 +1032,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the skills in the skills repository
+         * @description The directories of the skills directory (~/.agent_composer/skills, or AGC_SKILLS_DIR) whose name is a slug, sorted, read on every request. A missing directory lists nothing.
+         */
+        get: operations["listSkills"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/skills/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a skill's SKILL.md */
+        get: operations["getSkill"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/knowledge": {
         parameters: {
             query?: never;
@@ -1471,6 +1508,8 @@ export interface components {
             volumes?: string[];
             /** @description #name or #name:read. */
             channels?: string[];
+            /** @description Names of skills in agc's skills repository (GET /skills). Each is written into ~/.claude/skills/<name>/ and ~/.codex/skills/<name>/ on every boot and start, replacing what was there; a name that is not in the repository is refused before boot (ADR 0008 "Skills"). */
+            skills?: string[];
         };
         Task: {
             /** Format: uuid */
@@ -2206,8 +2245,20 @@ export interface components {
              * @description The newest message among its conversations, or its last wake.
              */
             last_active_at: string | null;
+            /** @description The template's sandbox.skills, read on every request; empty when it names none or cannot be read (ADR 0016 item 2). */
+            skills: string[];
             /** Format: date-time */
             created_at: string;
+        };
+        /** @description A skill of the skills repository (ADR 0008 "Skills"). */
+        Skill: {
+            /** @description The directory's name, a slug such as rtsdesign. */
+            name: string;
+            /** @description The description in the SKILL.md frontmatter; empty when absent. */
+            description: string;
+        };
+        SkillList: {
+            skills: components["schemas"]["Skill"][];
         };
         AgentList: {
             agents: components["schemas"]["Agent"][];
@@ -4487,6 +4538,51 @@ export interface operations {
             };
             400: components["responses"]["Error"];
             403: components["responses"]["Error"];
+            500: components["responses"]["Error"];
+        };
+    };
+    listSkills: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The skills. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillList"];
+                };
+            };
+            500: components["responses"]["Error"];
+        };
+    };
+    getSkill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The skill's SKILL.md, as it is on disk. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/markdown": string;
+                };
+            };
+            404: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };
     };

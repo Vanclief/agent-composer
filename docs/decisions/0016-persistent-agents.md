@@ -45,6 +45,9 @@ that mock a backend and settles what it left open.
    harness's default) is copied to the row like `model` (`POST /api/agents`
    may override it) and reaches the harness through `agc agent run
    --effort`: Claude Code's `--effort`, Codex's `model_reasoning_effort`.
+   `sandbox.skills` names skills of agc's skills repository, written into
+   the home on every boot and wake (ADR 0008 "Skills"); the agent view
+   carries them as `skills`, read from the template on every request.
 
 3. **Keeping names it.** `POST /api/agents/{name}/keep { name, role? }` sets
    `kept`, renames the row and may change the role. The home sandbox and the

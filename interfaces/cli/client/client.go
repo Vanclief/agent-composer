@@ -283,42 +283,9 @@ type errorBody struct {
 // do sends one request and decodes the JSON answer into out. A non-2xx
 // answer becomes an ez error carrying the server's error.message verbatim.
 func (c *Client) do(ctx context.Context, method string, path string, in any, out any) error {
-	var body io.Reader
-	if in != nil {
-		encoded, err := json.Marshal(in)
-		if err != nil {
-			return ez.Wrap(err)
-		}
-		body = bytes.NewReader(encoded)
-	}
-
-	request, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, body)
+	data, err := c.send(ctx, method, path, in, "application/json")
 	if err != nil {
-		return ez.New(ez.EINVALID, "bad server URL "+c.BaseURL, err)
-	}
-	request.Header.Set("Accept", "application/json")
-	if in != nil {
-		request.Header.Set("Content-Type", "application/json")
-	}
-
-	httpClient := c.HTTP
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
-
-	response, err := httpClient.Do(request)
-	if err != nil {
-		return ez.New(ez.EUNAVAILABLE, "cannot reach the agc server at "+c.BaseURL+": "+err.Error(), err)
-	}
-	defer response.Body.Close() // nolint:errcheck // Close errors are not actionable here.
-
-	data, err := io.ReadAll(response.Body)
-	if err != nil {
-		return ez.New(ez.EUNAVAILABLE, "cannot read the answer from "+c.BaseURL, err)
-	}
-
-	if response.StatusCode < 200 || response.StatusCode > 299 {
-		return ez.New(ez.HTTPStatusToError(response.StatusCode), errorMessage(response, data), nil)
+		return err
 	}
 
 	if out == nil {
@@ -331,6 +298,50 @@ func (c *Client) do(ctx context.Context, method string, path string, in any, out
 	}
 
 	return nil
+}
+
+// send makes the request, asking for accept, and returns the body of a 2xx
+// answer, or the server's error.
+func (c *Client) send(ctx context.Context, method string, path string, in any, accept string) ([]byte, error) {
+	var body io.Reader
+	if in != nil {
+		encoded, err := json.Marshal(in)
+		if err != nil {
+			return nil, ez.Wrap(err)
+		}
+		body = bytes.NewReader(encoded)
+	}
+
+	request, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, body)
+	if err != nil {
+		return nil, ez.New(ez.EINVALID, "bad server URL "+c.BaseURL, err)
+	}
+	request.Header.Set("Accept", accept)
+	if in != nil {
+		request.Header.Set("Content-Type", "application/json")
+	}
+
+	httpClient := c.HTTP
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+
+	response, err := httpClient.Do(request)
+	if err != nil {
+		return nil, ez.New(ez.EUNAVAILABLE, "cannot reach the agc server at "+c.BaseURL+": "+err.Error(), err)
+	}
+	defer response.Body.Close() // nolint:errcheck // Close errors are not actionable here.
+
+	data, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, ez.New(ez.EUNAVAILABLE, "cannot read the answer from "+c.BaseURL, err)
+	}
+
+	if response.StatusCode < 200 || response.StatusCode > 299 {
+		return nil, ez.New(ez.HTTPStatusToError(response.StatusCode), errorMessage(response, data), nil)
+	}
+
+	return data, nil
 }
 
 func errorMessage(response *http.Response, data []byte) string {

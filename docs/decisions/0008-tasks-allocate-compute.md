@@ -164,6 +164,32 @@ volume.
   spec's, default 20G) and `disk_mib` per sandbox, and `agc sandbox list`
   prints a DISK column and the total.
 
+## Skills
+
+Added 2026-11-03 (task `sandbox-skills`). A skill (a Claude Code `SKILL.md`
+folder) lived only on one person's machine, so no agent in a sandbox had
+it, and a copy an agent kept on its own volume would drift from the source.
+
+- agc owns a skills repository: `<agc home>/skills/<name>/SKILL.md` plus
+  any files beside it (`AGC_SKILLS_DIR` overrides, like `AGC_AGENTS_DIR`;
+  the rig points it at the checkout's `skills/`). `<name>` is a slug
+  (`[a-z0-9]+(-[a-z0-9]+)*`). The repo ships `skills/rtsdesign`. It is
+  files on disk read on every request: no table, no cache.
+- The spec gains `skills` (task.yaml `skills:`, the REST `sandbox` block,
+  a template's `sandbox.skills`): names of skills. Allocate, home allocate
+  and start refuse, before booting, a name that is not a directory of the
+  repository, naming it and the known skills.
+- `prepare` writes each named skill's files to
+  `/home/agent/.claude/skills/<name>/` and `/home/agent/.codex/skills/<name>/`
+  after the agent config and before TASK.md (or AGENT.md), removing what
+  was there first: both links point into the kept harness volume, so an
+  earlier copy is there and is never the source. `start` writes them again,
+  so an edit to a skill reaches the next sandbox and the next wake.
+- `GET /api/skills` answers `{ skills: [ { name, description } ] }`,
+  `description` from the `SKILL.md` frontmatter (empty when absent);
+  `GET /api/skills/{name}` answers the `SKILL.md` as `text/markdown`, 404
+  when absent. `agc skill list|show <name>`, in process or with `--server`.
+
 ## Rationale
 
 - Creating a task is now a row insert, which ends the create timeout without

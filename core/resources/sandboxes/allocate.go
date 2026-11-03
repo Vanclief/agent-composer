@@ -17,6 +17,7 @@ import (
 	"github.com/vanclief/agent-composer/models/agent"
 	taskmodels "github.com/vanclief/agent-composer/models/task"
 	"github.com/vanclief/agent-composer/secrets"
+	"github.com/vanclief/agent-composer/skills"
 	"github.com/vanclief/agent-composer/task"
 )
 
@@ -77,6 +78,11 @@ func (api *API) Allocate(ctx context.Context, requester interface{}, request *Al
 // a terminal. A failure sets boot_error and discards the VM.
 func (api *API) AllocateFor(ctx context.Context, owner *taskmodels.Task, request task.Sandbox) (*SandboxView, error) {
 	err := request.Validate()
+	if err != nil {
+		return nil, ez.Wrap(err)
+	}
+
+	err = api.skillsRepo().Check(request.Skills)
 	if err != nil {
 		return nil, ez.Wrap(err)
 	}
@@ -271,7 +277,7 @@ func (api *API) bootSandbox(ctx context.Context, record *taskmodels.Sandbox, own
 		return ez.Wrap(err)
 	}
 
-	err = prepare(ctx, sb, spec, briefPath(record), record.Instructions)
+	err = prepare(ctx, sb, spec, briefPath(record), record.Instructions, api.skillsRepo())
 	if err != nil {
 		return api.discard(ctx, name, sb, err)
 	}
@@ -482,11 +488,12 @@ func AgentCommand(owner *taskmodels.Task) string {
 
 // prepare gives the sandbox user the home disk (a fresh ext4 disk belongs
 // to root), lays out the home (homeScript), clones the repo, writes the
-// agent config and the instructions at brief (TASK.md, or AGENT.md in an
-// agent's home), and runs the setup script,
-// as the sandbox user. Setup runs in the repo, or in the home directory
-// when there is no repo, and can still change the agent config.
-func prepare(ctx context.Context, sb Sandbox, spec task.Spec, brief string, instructions string) error {
+// agent config, the spec's skills from repo (writeSkills) and the
+// instructions at brief (TASK.md, or AGENT.md in an agent's home), and
+// runs the setup script, as the sandbox user. Setup runs in the repo, or
+// in the home directory when there is no repo, and can still change the
+// agent config.
+func prepare(ctx context.Context, sb Sandbox, spec task.Spec, brief string, instructions string, repo skills.Repo) error {
 	err := run(ctx, sb, executor.Command{Name: "chown", Args: []string{guestUser + ":" + guestUser, task.HomeDir}, User: "root"}, "chown "+task.HomeDir)
 	if err != nil {
 		return ez.Wrap(err)
@@ -536,6 +543,11 @@ func prepare(ctx context.Context, sb Sandbox, spec task.Spec, brief string, inst
 		return ez.Wrap(err)
 	}
 
+	err = writeSkills(ctx, sb, repo, spec.Skills)
+	if err != nil {
+		return ez.Wrap(err)
+	}
+
 	err = sb.WriteFile(ctx, brief, []byte(instructions))
 	if err != nil {
 		return ez.Wrap(err)
@@ -545,6 +557,76 @@ func prepare(ctx context.Context, sb Sandbox, spec task.Spec, brief string, inst
 		err = run(ctx, sb, executor.Command{Name: "bash", Args: []string{"-lc", spec.Setup}, Dir: dir}, "setup")
 		if err != nil {
 			return ez.Wrap(err)
+		}
+	}
+
+	return nil
+}
+
+// SkillDirs are where a skill is written in a sandbox, <dir>/<name>: the
+// skills directories of Claude Code and Codex. Both are under the links
+// into the harness volume, so a copy from an earlier home is there and is
+// replaced.
+var SkillDirs = []string{task.HomeDir + "/.claude/skills", task.HomeDir + "/.codex/skills"}
+
+// writeSkills writes each named skill's files from repo into every one of
+// SkillDirs, after removing what the directory held: agc's repository is
+// the source, never the copy on the volume (ADR 0008 "Skills").
+func writeSkills(ctx context.Context, sb Sandbox, repo skills.Repo, names []string) error {
+	for _, name := range names {
+		files, err := repo.Files(name)
+		if err != nil {
+			return ez.Wrap(err)
+		}
+
+		roots := []string{}
+		for _, dir := range SkillDirs {
+			roots = append(roots, path.Join(dir, name))
+		}
+
+		err = run(ctx, sb, executor.Command{Name: "rm", Args: append([]string{"-rf"}, roots...)}, "remove skill "+name)
+		if err != nil {
+			return ez.Wrap(err)
+		}
+
+		dirs := []string{}
+		seen := map[string]bool{}
+		for _, root := range roots {
+			for _, file := range files {
+				dir := path.Dir(path.Join(root, file.Path))
+				if !seen[dir] {
+					seen[dir] = true
+					dirs = append(dirs, dir)
+				}
+			}
+		}
+
+		err = run(ctx, sb, executor.Command{Name: "mkdir", Args: append([]string{"-p"}, dirs...)}, "skill "+name+" directories")
+		if err != nil {
+			return ez.Wrap(err)
+		}
+
+		executables := []string{}
+		for _, root := range roots {
+			for _, file := range files {
+				target := path.Join(root, file.Path)
+
+				err = sb.WriteFile(ctx, target, file.Data)
+				if err != nil {
+					return ez.Wrap(err)
+				}
+
+				if file.Executable {
+					executables = append(executables, target)
+				}
+			}
+		}
+
+		if len(executables) > 0 {
+			err = run(ctx, sb, executor.Command{Name: "chmod", Args: append([]string{"+x"}, executables...)}, "skill "+name+" executables")
+			if err != nil {
+				return ez.Wrap(err)
+			}
 		}
 	}
 
