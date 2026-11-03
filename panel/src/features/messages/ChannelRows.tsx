@@ -1,18 +1,20 @@
-// The Talk group's channel list under Channels, mounted by the shell
-// (src/shell/layout.tsx). Only followed channels (follow.ts): Inbox (#<me>)
-// pinned first, even before it has a message; then Direct (my DMs,
-// @<me>/<task>), then Tasks (channels named after a task), then Other; last
-// "Browse channels…" to every channel. Tasks and Other list the newest
-// activity first, at most ROW_LIMIT, then one "N more…" row to Browse. Each
-// row has its unread badge, the questions waiting for me (QuestionBadge),
-// and is bold while unread. The Inbox row counts every open question for me,
-// wherever it was asked (franco, 2026-11-02), plus the inbox's unread.
+// The Talk group's channel list, mounted by the shell (src/shell/layout.tsx).
+// Only followed channels (follow.ts): Asks (my inbox #<me>, where questions
+// waiting on me arrive) pinned first, even before it has a message; then DMs
+// (each agent's inbox #<agent> as @<agent> with its state light, and my DMs
+// @<me>/<task>, newest activity first); then Channels (task channels first,
+// then the rest, at most ROW_LIMIT, then one "N more…" row to Browse), and
+// "Browse channels…" last. Each row has its unread badge, the questions
+// waiting for me (QuestionBadge), and is bold while unread. The Asks row
+// counts every open question for me, wherever it was asked (franco,
+// 2026-11-02), plus the inbox's unread.
 import { Compass, Lock, MoreHorizontal } from 'lucide-react'
 import { NavLink } from 'react-router'
 
-import { useParticipants, useTasks } from '@/api/hooks'
+import { useAgents, useParticipants, useTasks } from '@/api/hooks'
 import { conceptColors, conceptIcons } from '@/components/concept-icons'
 import { ErrorText } from '@/components/error-text'
+import { StatusLed } from '@/components/status-pill'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
@@ -21,7 +23,7 @@ import { RowBadges } from './QuestionBadge'
 import { useOpenQuestions } from './questions'
 import { type ChannelUnread } from './unread'
 
-// The most followed channels a group lists before its "N more…" row.
+// The most followed channels Channels lists before its "N more…" row.
 export const ROW_LIMIT = 8
 
 function rowClass(isActive: boolean, unread: boolean) {
@@ -99,14 +101,49 @@ function DMRow({
   )
 }
 
+// A persistent agent's inbox #<agent> (ADR 0016), as a DM with it: its
+// state light (the word verbatim from the backend), then @<agent>.
+function AgentDMRow({
+  channel,
+  state,
+  unread,
+  questions,
+}: {
+  channel: string
+  state: string
+  unread: ChannelUnread
+  questions: number
+}) {
+  const agent = channel.replace(/^#/, '')
+  return (
+    <li>
+      <NavLink
+        to={channelPath(channel)}
+        title={`Direct with @${agent} (${state}), ${channel}`}
+        data-testid="agent-dm-row"
+        data-channel={channel}
+        data-agent={agent}
+        data-unread={unread.count > 0}
+        className={({ isActive }) => rowClass(isActive, unread.count > 0)}
+      >
+        <span className="flex size-3.5 shrink-0 items-center justify-center">
+          <StatusLed status={state} />
+        </span>
+        <span className="truncate font-mono">@{agent}</span>
+        <RowBadges count={unread.count} mention={unread.mention} questions={questions} />
+      </NavLink>
+    </li>
+  )
+}
+
 // The followed channels past ROW_LIMIT, one dim row to Browse.
-function MoreRow({ count, label }: { count: number; label: string }) {
+function MoreRow({ count }: { count: number }) {
   return (
     <li>
       <NavLink
         to="/messages/browse"
         data-testid="more-row"
-        title={`${count} more followed ${label} channels in Browse`}
+        title={`${count} more followed channels in Browse`}
         className={cn(rowClass(false, false), 'text-muted-foreground')}
       >
         <MoreHorizontal aria-hidden className="size-3.5 shrink-0" />
@@ -129,32 +166,37 @@ export function ChannelRows() {
   const { unread, following } = useFollow()
   const questions = useOpenQuestions()
   const tasks = useTasks()
+  const agents = useAgents()
   const { channelsQuery, inbox, me } = unread
-  const InboxIcon = conceptIcons.inbox
+  const AsksIcon = conceptIcons.question
   const inboxUnread = unread.of(inbox)
 
   const taskNames = new Set((tasks.data ?? []).map((t) => `#${t.name}`))
+  const agentStates = new Map((agents.data ?? []).map((a) => [`#${a.name}`, a.state]))
   // Newest activity first: message ids grow across every channel.
   const rest = unread.channels
     .filter((c) => c.channel !== inbox && following(c.channel))
     .sort((a, b) => b.last_id - a.last_id)
-  const direct = rest.filter((c) => c.channel.startsWith(`@${me}/`))
-  const taskChannels = rest.filter((c) => taskNames.has(c.channel))
-  const other = rest.filter((c) => !taskNames.has(c.channel) && !c.channel.startsWith(`@${me}/`))
+  const isDM = (channel: string) => channel.startsWith(`@${me}/`) || agentStates.has(channel)
+  const dms = rest.filter((c) => isDM(c.channel))
+  const channels = [
+    ...rest.filter((c) => !isDM(c.channel) && taskNames.has(c.channel)),
+    ...rest.filter((c) => !isDM(c.channel) && !taskNames.has(c.channel)),
+  ]
 
   return (
     <ul data-testid="channel-rows" className="mt-0.5 flex flex-col gap-0.5 pl-6">
       <li>
         <NavLink
           to={`/messages/${encodeURIComponent(unread.me)}`}
-          title={`Your inbox, ${inbox}`}
+          title={`Asks: questions and escalations waiting on you, ${inbox}`}
           data-testid="inbox-row"
           data-channel={inbox}
           data-unread={inboxUnread.count > 0}
           className={({ isActive }) => rowClass(isActive, inboxUnread.count > 0)}
         >
-          <InboxIcon aria-hidden className={cn('size-3.5 shrink-0', conceptColors.inbox.text)} />
-          <span className="truncate">Inbox</span>
+          <AsksIcon aria-hidden className={cn('size-3.5 shrink-0', conceptColors.question.text)} />
+          <span className="truncate">Asks</span>
           <RowBadges count={inboxUnread.count} mention={inboxUnread.mention} questions={questions.total} />
         </NavLink>
       </li>
@@ -168,10 +210,19 @@ export function ChannelRows() {
           <ErrorText error={channelsQuery.error} className="px-2 py-1.5 text-xs" />
         </li>
       ) : (
-        <>
-          {direct.length > 0 && (
-            <Group label="Direct">
-              {direct.map((c) => (
+        dms.length > 0 && (
+          <Group label="DMs">
+            {dms.map((c) => {
+              const state = agentStates.get(c.channel)
+              return state !== undefined ? (
+                <AgentDMRow
+                  key={c.channel}
+                  channel={c.channel}
+                  state={state}
+                  unread={unread.of(c.channel)}
+                  questions={questions.of(c.channel).length}
+                />
+              ) : (
                 <DMRow
                   key={c.channel}
                   channel={c.channel}
@@ -179,49 +230,36 @@ export function ChannelRows() {
                   unread={unread.of(c.channel)}
                   questions={questions.of(c.channel).length}
                 />
-              ))}
-            </Group>
-          )}
-          {taskChannels.length > 0 && (
-            <Group label="Tasks">
-              {taskChannels.slice(0, ROW_LIMIT).map((c) => (
-                <ChannelRow
-                  key={c.channel}
-                  channel={c.channel}
-                  readOnly={c.read_only}
-                  unread={unread.of(c.channel)}
-                  questions={questions.of(c.channel).length}
-                />
-              ))}
-              {taskChannels.length > ROW_LIMIT && <MoreRow count={taskChannels.length - ROW_LIMIT} label="task" />}
-            </Group>
-          )}
-          {other.length > 0 && (
-            <Group label="Other">
-              {other.slice(0, ROW_LIMIT).map((c) => (
-                <ChannelRow
-                  key={c.channel}
-                  channel={c.channel}
-                  readOnly={c.read_only}
-                  unread={unread.of(c.channel)}
-                  questions={questions.of(c.channel).length}
-                />
-              ))}
-              {other.length > ROW_LIMIT && <MoreRow count={other.length - ROW_LIMIT} label="other" />}
-            </Group>
-          )}
-        </>
+              )
+            })}
+          </Group>
+        )
       )}
-      <li className="mt-2">
-        <NavLink
-          to="/messages/browse"
-          data-testid="browse-link"
-          className={({ isActive }) => cn(rowClass(isActive, false), !isActive && 'text-muted-foreground')}
-        >
-          <Compass aria-hidden className="size-3.5 shrink-0" />
-          <span className="truncate">Browse channels…</span>
-        </NavLink>
-      </li>
+      <Group label="Channels">
+        {channelsQuery.isSuccess &&
+          channels
+            .slice(0, ROW_LIMIT)
+            .map((c) => (
+              <ChannelRow
+                key={c.channel}
+                channel={c.channel}
+                readOnly={c.read_only}
+                unread={unread.of(c.channel)}
+                questions={questions.of(c.channel).length}
+              />
+            ))}
+        {channelsQuery.isSuccess && channels.length > ROW_LIMIT && <MoreRow count={channels.length - ROW_LIMIT} />}
+        <li>
+          <NavLink
+            to="/messages/browse"
+            data-testid="browse-link"
+            className={({ isActive }) => cn(rowClass(isActive, false), !isActive && 'text-muted-foreground')}
+          >
+            <Compass aria-hidden className="size-3.5 shrink-0" />
+            <span className="truncate">Browse channels…</span>
+          </NavLink>
+        </li>
+      </Group>
     </ul>
   )
 }

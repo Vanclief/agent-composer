@@ -96,13 +96,13 @@ test('a fresh browser shows the inbox and no task channels until one is opened',
   await page.goto('/panel/messages')
   await expect(page.getByTestId('inbox-row')).toBeVisible()
   await expect(page.getByTestId('browse-link')).toBeVisible()
-  await expect(page.getByRole('group', { name: 'Tasks' })).toHaveCount(0)
-  await expect(page.getByRole('group', { name: 'Other' })).toHaveCount(0)
+  await expect(page.getByRole('group', { name: 'DMs' })).toHaveCount(0)
+  await expect(page.getByRole('group', { name: 'Channels' }).locator('[data-channel]')).toHaveCount(0)
   await expect(row(page, '#review-42')).toHaveCount(0)
   await expect(row(page, '#releases')).toHaveCount(0)
 
   await page.goto('/panel/messages/flaky-ci')
-  await expect(page.getByRole('group', { name: 'Tasks' }).locator('[data-channel="#flaky-ci"]')).toBeVisible()
+  await expect(page.getByRole('group', { name: 'Channels' }).locator('[data-channel="#flaky-ci"]')).toBeVisible()
   await expect(page.getByTestId('follow-toggle')).toHaveText('Following')
   await expect(row(page, '#review-42')).toHaveCount(0)
   // It stays followed after a reload.
@@ -112,7 +112,7 @@ test('a fresh browser shows the inbox and no task channels until one is opened',
 
 test('franco sees his DMs and the task that tagged him, nothing else', async ({ page }) => {
   await page.goto('/panel/messages')
-  const direct = page.getByRole('group', { name: 'Direct' })
+  const direct = page.getByRole('group', { name: 'DMs' })
   const pitch = direct.locator('[data-channel="@franco/yc-pitch"]')
   await expect(pitch).toContainText('@pitcher')
   await expect(pitch).toContainText('yc-pitch')
@@ -121,7 +121,7 @@ test('franco sees his DMs and the task that tagged him, nothing else', async ({ 
   await expect(review).toContainText('@reviewer')
   await expect(review.getByTestId('unread-badge')).toHaveCount(0)
   // franco posted in #review-42 and an agent asks @franco a question there.
-  await expect(page.getByRole('group', { name: 'Tasks' }).locator('[data-channel="#review-42"]')).toBeVisible()
+  await expect(page.getByRole('group', { name: 'Channels' }).locator('[data-channel="#review-42"]')).toBeVisible()
   for (const channel of ['#docs-pass', '#boot-fail']) {
     await expect(row(page, channel)).toHaveCount(0)
   }
@@ -236,7 +236,7 @@ test("agc's opening message does not follow a new task's channel; an agent's que
 
   await expect(page.getByTestId('live-status')).toHaveAttribute('data-state', 'connected')
   await post(request, agent.id, channel, `@${me} should I squash?`, { kind: 'question' })
-  await expect(page.getByRole('group', { name: 'Tasks' }).locator(`[data-channel="${channel}"]`)).toBeVisible()
+  await expect(page.getByRole('group', { name: 'Channels' }).locator(`[data-channel="${channel}"]`)).toBeVisible()
 })
 
 test("a person's mention follows a channel; an agent's question in my inbox needs no mention", async ({
@@ -354,14 +354,14 @@ test('the Talk badge counts open questions for me and unread in followed channel
   await expect(page.getByTestId('sidebar').getByText('5', { exact: true })).toHaveCount(0)
 })
 
-test('Tasks and Other list at most 8 followed channels, newest first, then "N more…" to Browse', async ({
+test('Channels lists at most 8 followed channels, tasks first, newest first, then "N more…" to Browse', async ({
   page,
   request,
 }) => {
   const me = await actAs(page)
   const agent = await joinAgent(request)
   const tasks: string[] = []
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 3; i++) {
     const task = await createTask(request, me, `many${i}`)
     await post(request, agent.id, `#${task}`, `update ${i}`)
     tasks.push(`#${task}`)
@@ -376,15 +376,17 @@ test('Tasks and Other list at most 8 followed channels, newest first, then "N mo
   await page.addInitScript((map) => localStorage.setItem('agc.panel.follow', JSON.stringify(map)), follows)
   await page.goto('/panel/messages')
 
-  const group = page.getByRole('group', { name: 'Tasks' })
-  await expect(group.locator('[data-channel]')).toHaveCount(8)
-  // Newest activity first: the last task posted in leads, the first two are cut.
-  await expect(group.locator('[data-channel]').first()).toHaveAttribute('data-channel', tasks[9])
-  await expect(group.locator(`[data-channel="${tasks[0]}"]`)).toHaveCount(0)
-  await expect(group.getByTestId('more-row')).toHaveText('2 more…')
-  const other = page.getByRole('group', { name: 'Other' })
-  await expect(other.locator('[data-channel]')).toHaveCount(8)
-  await expect(other.getByTestId('more-row')).toHaveText('1 more…')
+  const group = page.getByRole('group', { name: 'Channels' })
+  const listed = group.locator('[data-channel]')
+  await expect(listed).toHaveCount(8)
+  // The tasks first, newest first, though every other channel is newer.
+  await expect(listed.nth(0)).toHaveAttribute('data-channel', tasks[2])
+  await expect(listed.nth(2)).toHaveAttribute('data-channel', tasks[0])
+  // Then the others, newest first: the first four posted are cut.
+  await expect(listed.nth(3)).toHaveAttribute('data-channel', others[8])
+  await expect(group.locator(`[data-channel="${others[3]}"]`)).toHaveCount(0)
+  await expect(group.getByTestId('more-row')).toHaveText('4 more…')
+  await expect(group.getByRole('link').last()).toHaveAttribute('data-testid', 'browse-link')
 
   await group.getByTestId('more-row').click()
   await expect(page).toHaveURL(/\/panel\/messages\/browse$/)
