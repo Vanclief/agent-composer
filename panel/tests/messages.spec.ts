@@ -268,7 +268,7 @@ test('a body renders as markdown: a code block with copy, a channel chip link, a
   await expect(page).toHaveURL(/\/panel\/messages\/releases$/)
 })
 
-test('a long body clamps with Show more', async ({ page, request }) => {
+test('a long body shows in full, with no fade and no Show more', async ({ page, request }) => {
   const slug = uniqueName('c')
   const agent = await joinAs(request)
   const lines = Array.from({ length: 30 }, (_, i) => `row ${i + 1}`).join('\n')
@@ -276,11 +276,16 @@ test('a long body clamps with Show more', async ({ page, request }) => {
   await actAs(page, uniqueName())
   await page.goto(`/panel/messages/${slug}`)
   const body = page.getByTestId('message-body')
-  await expect(body).toHaveAttribute('data-clamped', 'true')
-  expect((await body.boundingBox())!.height).toBeLessThanOrEqual(240)
-  await page.getByRole('button', { name: 'Show more' }).click()
-  await expect(body).toHaveAttribute('data-clamped', 'false')
-  await expect(page.getByRole('button', { name: 'Show less' })).toBeVisible()
+  await expect(body).toContainText('row 30')
+  // 30 lines at 20px: far past the old 12-line (240px) cap.
+  expect((await body.boundingBox())!.height).toBeGreaterThan(500)
+  const box = await body.evaluate((el) => {
+    const style = el.ownerDocument.defaultView!.getComputedStyle(el)
+    return { mask: style.maskImage || style.webkitMaskImage || 'none', overflow: el.scrollHeight - el.clientHeight }
+  })
+  expect(box.mask).toBe('none')
+  expect(box.overflow).toBeLessThanOrEqual(1)
+  await expect(page.getByRole('button', { name: /Show (more|less)/ })).toHaveCount(0)
 })
 
 test('agc posts are compact system lines; the instructions collapse and expand', async ({ page }) => {
@@ -391,6 +396,27 @@ test('a question shows an Answer box; answering sends reply_to and the card flip
   await expect(card.getByRole('textbox')).toHaveCount(0)
   // The answer is a reply: in the thread, not in the feed.
   await expect(card.getByTestId('thread-footer')).toContainText('1 reply')
+})
+
+test('a long question and its long answer show in full, with no Show more', async ({ page, request }) => {
+  const slug = uniqueName('c')
+  const agent = await joinAs(request)
+  const other = await joinAs(request)
+  const ask = ['Which rows?', ...Array.from({ length: 30 }, (_, i) => `ask ${i + 1}`)].join('\n')
+  const question = await postAs(request, agent.id, `#${slug}`, ask, { kind: 'question' })
+  const reply = Array.from({ length: 30 }, (_, i) => `reply ${i + 1}`).join('\n')
+  await postAs(request, other.id, `#${slug}`, reply, { reply_to: question.id })
+  await actAs(page, uniqueName())
+  await page.goto(`/panel/messages/${slug}`)
+  const card = page.getByTestId('question-card')
+  await expect(card).toHaveAttribute('data-state', 'answered')
+  await expect(card).toContainText('ask 30')
+  await expect(card.getByTestId('answer')).toContainText('reply 30')
+  for (const body of await card.getByTestId('message-body').all()) {
+    expect(await body.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1)
+  }
+  expect((await card.getByTestId('answer').boundingBox())!.height).toBeGreaterThan(500)
+  await expect(page.getByRole('button', { name: /Show (more|less)/ })).toHaveCount(0)
 })
 
 test('open questions for me are pinned as "Waiting for you" and counted on the channel row', async ({

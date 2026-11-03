@@ -510,8 +510,9 @@ Messages tab) provides the channel context (`context.ts`) every piece reads.
   blocks are mono with a copy button (`data-testid="code-block"`), links open
   in a new tab, `@name` is a chip (`mention-chip`, solid pink when it is me)
   and `#name` (a letter first, so `PR #42` stays text) a channel chip
-  (`channel-chip`, the `#` is its icon) linking to `/messages/<name>`. Bodies
-  clamp at about 12 lines (`max-h-60`, `data-clamped`) with "Show more".
+  (`channel-chip`, the `#` is its icon) linking to `/messages/<name>`. Every
+  body (`message-body`), question cards included, shows in full: no height
+  cap, no fade, no "Show more". Only the agc Instructions line folds.
 - **Feed** (`MessageList.tsx`): top-level messages only. Day separators
   (`day-separator`: Today, Yesterday, then the date); headers show relative
   times ("3 min ago", exact on hover) and the gutter the clock on hover. An

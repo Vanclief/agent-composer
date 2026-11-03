@@ -1,9 +1,9 @@
 // A message body as markdown (GFM; raw HTML is never rendered, it shows
 // as the literal text, so `/reject <why>` keeps its `<why>`): code blocks in mono with a
 // copy button, links in a new tab, @name and #channel as chips (a channel
-// chip opens /messages/<name>). Long bodies clamp at about 12 lines with
-// "Show more".
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+// chip opens /messages/<name>). Every body shows in full: no height cap,
+// no fade, no "Show more".
+import { useMemo, useState, type ReactNode } from 'react'
 import { Check, Copy } from 'lucide-react'
 import Markdown, { type Components } from 'react-markdown'
 import { Link } from 'react-router'
@@ -224,45 +224,11 @@ export function MarkdownText({ body, className }: { body: string; className?: st
   )
 }
 
-// A body clamped at about 12 lines (max-h-60) until "Show more".
+// A message body, always in full (Talk, threads, question cards).
 export function MessageBody({ body, className }: { body: string; className?: string }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [open, setOpen] = useState(false)
-  const [overflows, setOverflows] = useState(false)
-
-  useLayoutEffect(() => {
-    const el = ref.current
-    if (!el || open) {
-      return
-    }
-    const observer = new ResizeObserver(() => setOverflows(el.scrollHeight > el.clientHeight + 1))
-    observer.observe(el)
-    if (el.firstElementChild) {
-      observer.observe(el.firstElementChild)
-    }
-    return () => observer.disconnect()
-  }, [open, body])
-
-  const clamped = !open && overflows
   return (
-    <div className="min-w-0">
-      <div
-        ref={ref}
-        data-testid="message-body"
-        data-clamped={clamped}
-        className={cn('relative', !open && 'max-h-60 overflow-hidden', clamped && 'mask-b-from-80% mask-b-to-100%')}
-      >
-        <MarkdownText body={body} className={className} />
-      </div>
-      {(overflows || open) && (
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          className="mt-0.5 text-xs font-medium text-muted-foreground hover:text-foreground"
-        >
-          {open ? 'Show less' : 'Show more'}
-        </button>
-      )}
+    <div data-testid="message-body" className="min-w-0">
+      <MarkdownText body={body} className={className} />
     </div>
   )
 }
