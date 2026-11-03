@@ -27,7 +27,8 @@ func TestDescription(t *testing.T) {
 	}
 }
 
-// The shipped rtsdesign skill is in the repository with a description.
+// The shipped skills, pr-review and rtsdesign, are in the repository with
+// a description.
 func TestShippedSkills(t *testing.T) {
 	repo := Repo{Dir: "."}
 
@@ -35,16 +36,21 @@ func TestShippedSkills(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 1 || list[0].Name != "rtsdesign" || !strings.HasPrefix(list[0].Description, "Design UI the way") {
+	if len(list) != 2 || list[0].Name != "pr-review" || list[1].Name != "rtsdesign" {
+		t.Fatalf("list = %+v", list)
+	}
+	if !strings.HasPrefix(list[0].Description, "Read-only review of pull requests") || !strings.HasPrefix(list[1].Description, "Design UI the way") {
 		t.Fatalf("list = %+v", list)
 	}
 
-	files, err := repo.Files("rtsdesign")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(files) != 1 || files[0].Path != FileName {
-		t.Fatalf("files = %+v", files)
+	for _, name := range []string{"pr-review", "rtsdesign"} {
+		files, err := repo.Files(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(files) != 1 || files[0].Path != FileName {
+			t.Fatalf("%s files = %+v", name, files)
+		}
 	}
 }
 
