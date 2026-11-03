@@ -30,11 +30,12 @@ import (
 var testNow = time.Date(2026, 11, 2, 9, 30, 0, 0, time.UTC)
 
 type testEnv struct {
-	api   *API
-	tasks *tasks.API
-	db    *bun.DB
-	msg   *messaging.Service
-	dir   string
+	api       *API
+	tasks     *tasks.API
+	sandboxes *sandboxes.API
+	db        *bun.DB
+	msg       *messaging.Service
+	dir       string
 }
 
 func newTestEnv(t *testing.T) *testEnv {
@@ -97,7 +98,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		_ = os.RemoveAll(socketDir)
 	})
 
-	return &testEnv{api: api, tasks: tasksAPI, db: db, msg: msg, dir: dir}
+	return &testEnv{api: api, tasks: tasksAPI, sandboxes: sandboxesAPI, db: db, msg: msg, dir: dir}
 }
 
 // script writes an executable shell script and returns its path.
